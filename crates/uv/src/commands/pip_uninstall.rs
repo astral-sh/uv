@@ -6,10 +6,11 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};
-use pep508_rs::{Requirement, RequirementsTxtRequirement, UnnamedRequirement};
-use uv_auth::KeyringProvider;
+use pep508_rs::{Requirement, UnnamedRequirement};
+use requirements_txt::RequirementsTxtRequirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
+use uv_configuration::KeyringProviderType;
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 
@@ -27,14 +28,14 @@ pub(crate) async fn pip_uninstall(
     cache: Cache,
     connectivity: Connectivity,
     native_tls: bool,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring_provider(keyring_provider);
+        .keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;

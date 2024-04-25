@@ -5,22 +5,24 @@ use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+
 use itertools::Itertools;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
+use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_configuration::KeyringProviderType;
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
-use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::ExitStatus;
@@ -32,14 +34,15 @@ use crate::shell::Shell;
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
+    link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
@@ -47,6 +50,7 @@ pub(crate) async fn venv(
     match venv_impl(
         path,
         python_request,
+        link_mode,
         index_locations,
         index_strategy,
         keyring_provider,
@@ -93,14 +97,15 @@ enum VenvError {
 async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
+    link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
@@ -114,6 +119,11 @@ async fn venv_impl(
     } else {
         find_default_python(cache).into_diagnostic()?
     };
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     writeln!(
         printer.stderr(),
@@ -130,30 +140,21 @@ async fn venv_impl(
     )
     .into_diagnostic()?;
 
-    // Extra cfg for pyvenv.cfg to specify uv version
-    let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
-
     // Create the virtual environment.
-    let venv =
-        uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, extra_cfg)
-            .map_err(VenvError::Creation)?;
+    let venv = uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages)
+        .map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {
         // Extract the interpreter.
         let interpreter = venv.interpreter();
 
-        // Add all authenticated sources to the store.
-        for url in index_locations.urls() {
-            GLOBAL_AUTH_STORE.save_from_url(url);
-        }
-
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone())
             .native_tls(native_tls)
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
-            .keyring_provider(keyring_provider)
+            .keyring(keyring_provider)
             .connectivity(connectivity)
             .markers(interpreter.markers())
             .platform(interpreter.platform())
@@ -197,6 +198,7 @@ async fn venv_impl(
             SetupPyStrategy::default(),
             &config_settings,
             BuildIsolation::Isolated,
+            link_mode,
             &NoBuild::All,
             &NoBinary::None,
         )

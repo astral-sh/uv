@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anstream::println;
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
+
 use clap::{Parser, ValueEnum};
 use fs_err::File;
 use itertools::Itertools;
@@ -17,7 +17,7 @@ use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
-use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, Resolver};
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, Options, Resolver};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 #[derive(ValueEnum, Default, Clone)]
@@ -42,7 +42,7 @@ pub(crate) struct ResolveCliArgs {
     #[command(flatten)]
     cache_args: CacheArgs,
     #[arg(long)]
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
@@ -91,6 +91,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         SetupPyStrategy::default(),
         &config_settings,
         BuildIsolation::Isolated,
+        install_wheel_rs::linker::LinkMode::default(),
         &no_build,
         &NoBinary::None,
     );

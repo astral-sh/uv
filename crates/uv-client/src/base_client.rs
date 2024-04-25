@@ -9,7 +9,8 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::Path;
 use tracing::debug;
-use uv_auth::{AuthMiddleware, KeyringProvider};
+use uv_auth::AuthMiddleware;
+use uv_configuration::KeyringProviderType;
 use uv_fs::Simplified;
 use uv_version::version;
 use uv_warnings::warn_user_once;
@@ -21,7 +22,7 @@ use crate::Connectivity;
 /// A builder for an [`BaseClient`].
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
-    keyring_provider: KeyringProvider,
+    keyring: KeyringProviderType,
     native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
@@ -39,7 +40,7 @@ impl Default for BaseClientBuilder<'_> {
 impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
         Self {
-            keyring_provider: KeyringProvider::default(),
+            keyring: KeyringProviderType::default(),
             native_tls: false,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -52,8 +53,8 @@ impl BaseClientBuilder<'_> {
 
 impl<'a> BaseClientBuilder<'a> {
     #[must_use]
-    pub fn keyring_provider(mut self, keyring_provider: KeyringProvider) -> Self {
-        self.keyring_provider = keyring_provider;
+    pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
+        self.keyring = keyring_type;
         self
     }
 
@@ -111,7 +112,7 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let default_timeout = 5 * 60;
+        let default_timeout = 30;
         let timeout = env::var("UV_HTTP_TIMEOUT")
             .or_else(|_| env::var("UV_REQUEST_TIMEOUT"))
             .or_else(|_| env::var("HTTP_TIMEOUT"))
@@ -124,7 +125,7 @@ impl<'a> BaseClientBuilder<'a> {
                     })
             })
             .unwrap_or(default_timeout);
-        debug!("Using registry request timeout of {}s", timeout);
+        debug!("Using registry request timeout of {timeout}s");
 
         // Initialize the base client.
         let client = self.client.clone().unwrap_or_else(|| {
@@ -144,7 +145,7 @@ impl<'a> BaseClientBuilder<'a> {
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
-                .timeout(std::time::Duration::from_secs(timeout))
+                .read_timeout(std::time::Duration::from_secs(timeout))
                 .tls_built_in_root_certs(false);
 
             // Configure TLS.
@@ -169,7 +170,8 @@ impl<'a> BaseClientBuilder<'a> {
                 let client = client.with(retry_strategy);
 
                 // Initialize the authentication middleware to set headers.
-                let client = client.with(AuthMiddleware::new(self.keyring_provider));
+                let client =
+                    client.with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
 
                 client.build()
             }

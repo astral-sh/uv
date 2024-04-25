@@ -440,9 +440,12 @@ fn installed_satisfies_requirement(
         // If the requirement comes from a direct URL, check by URL.
         Some(VersionOrUrl::Url(url)) => {
             if let InstalledDist::Url(installed) = &distribution {
-                if &installed.url == url.raw() {
+                if !installed.editable && &installed.url == url.raw() {
                     // If the requirement came from a local path, check freshness.
-                    if let Ok(archive) = url.to_file_path() {
+                    if let Some(archive) = (url.scheme() == "file")
+                        .then(|| url.to_file_path().ok())
+                        .flatten()
+                    {
                         if ArchiveTimestamp::up_to_date_with(
                             &archive,
                             ArchiveTarget::Install(distribution),

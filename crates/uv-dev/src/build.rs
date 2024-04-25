@@ -73,6 +73,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         setup_py,
         &config_settings,
         BuildIsolation::Isolated,
+        install_wheel_rs::linker::LinkMode::default(),
         &NoBuild::None,
         &NoBinary::None,
     );

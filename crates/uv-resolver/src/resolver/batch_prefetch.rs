@@ -1,5 +1,6 @@
 use std::cmp::min;
 
+use itertools::Itertools;
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
@@ -158,6 +159,10 @@ impl BatchPrefetcher {
 
     /// Each time we tried a version for a package, we register that here.
     pub(crate) fn version_tried(&mut self, package: PubGrubPackage) {
+        // Only track base packages, no virtual packages from extras.
+        if matches!(package, PubGrubPackage::Package(_, Some(_), _, _)) {
+            return;
+        }
         *self.tried_versions.entry(package).or_default() += 1;
     }
 
@@ -172,5 +177,24 @@ impl BatchPrefetcher {
             || (num_tried >= 20 && previous_prefetch < 20)
             || (num_tried >= 20 && num_tried - previous_prefetch >= 20);
         (num_tried, do_prefetch)
+    }
+
+    /// Log stats about how many versions we tried.
+    ///
+    /// Note that they may be inflated when we count the same version repeatedly during
+    /// backtracking.
+    pub(crate) fn log_tried_versions(&self) {
+        let total_versions: usize = self.tried_versions.values().sum();
+        let mut tried_versions: Vec<_> = self.tried_versions.iter().collect();
+        tried_versions.sort_by(|(p1, c1), (p2, c2)| {
+            c1.cmp(c2)
+                .reverse()
+                .then(p1.to_string().cmp(&p2.to_string()))
+        });
+        let counts = tried_versions
+            .iter()
+            .map(|(package, count)| format!("{package} {count}"))
+            .join(", ");
+        debug!("Tried {total_versions} versions: {counts}");
     }
 }

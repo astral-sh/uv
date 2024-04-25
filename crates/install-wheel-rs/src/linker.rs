@@ -8,6 +8,7 @@ use std::time::SystemTime;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use reflink_copy as reflink;
+use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
@@ -201,8 +202,10 @@ fn parse_scripts(
     scripts_from_ini(extras, python_minor, ini)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum LinkMode {
     /// Clone (i.e., copy-on-write) packages from the wheel into the site packages.
     Clone,

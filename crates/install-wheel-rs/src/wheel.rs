@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{instrument, warn};
 use walkdir::WalkDir;
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
 use pypi_types::DirectUrl;
@@ -190,7 +190,8 @@ pub(crate) fn windows_script_launcher(
         // We're using the zip writer, but with stored compression
         // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
         // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-        let stored = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let stored =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         let mut archive = ZipWriter::new(Cursor::new(&mut payload));
         let error_msg = "Writing to Vec<u8> should never fail";
         archive.start_file("__main__.py", stored).expect(error_msg);
@@ -731,10 +732,10 @@ mod test {
     use std::io::Cursor;
     use std::path::Path;
 
-    use crate::Error;
     use indoc::{formatdoc, indoc};
 
     use crate::wheel::format_shebang;
+    use crate::Error;
 
     use super::{parse_key_value_file, parse_wheel_file, read_record_file, relative_to, Script};
 

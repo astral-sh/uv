@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::hash::BuildHasherDefault;
+use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -35,6 +36,12 @@ use crate::{Manifest, ResolveError};
 /// package.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(deny_unknown_fields, rename_all = "kebab-case")
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum AnnotationStyle {
     /// Render the annotations on a single, comma-separated line.
     Line,
@@ -67,8 +74,8 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
-        packages: &OnceMap<PackageName, VersionsResponse>,
-        distributions: &OnceMap<VersionId, MetadataResponse>,
+        packages: &OnceMap<PackageName, Arc<VersionsResponse>>,
+        distributions: &OnceMap<VersionId, Arc<MetadataResponse>>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,
@@ -777,7 +784,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // `# from https://pypi.org/simple`).
             if self.include_index_annotation {
                 if let Some(index) = node.index() {
-                    writeln!(f, "{}", format!("    # from {index}").green())?;
+                    let url = index.redacted();
+                    writeln!(f, "{}", format!("    # from {url}").green())?;
                 }
             }
         }

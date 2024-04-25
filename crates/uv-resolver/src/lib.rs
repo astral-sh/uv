@@ -1,5 +1,6 @@
 pub use dependency_mode::DependencyMode;
 pub use error::ResolveError;
+pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::FlatIndex;
 pub use manifest::Manifest;
@@ -24,6 +25,7 @@ mod dependency_mode;
 mod dependency_provider;
 mod editables;
 mod error;
+mod exclude_newer;
 mod exclusions;
 mod flat_index;
 mod manifest;

@@ -7,6 +7,7 @@ use tracing::{debug, instrument};
 
 use uv_cache::Cache;
 use uv_toolchain::PythonVersion;
+use uv_warnings::warn_user_once;
 
 use crate::interpreter::InterpreterInfoError;
 use crate::python_environment::{detect_python_executable, detect_virtual_env};
@@ -42,17 +43,44 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
             // SAFETY: Guaranteed by the Ok(versions) guard
             _ => unreachable!(),
         };
-        find_python(selector, cache)
-    } else if !request.contains(std::path::MAIN_SEPARATOR) {
-        // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        let Some(executable) = find_executable(request)? else {
-            return Ok(None);
-        };
-        Interpreter::query(executable, cache).map(Some)
+        let interpreter = find_python(selector, cache)?;
+        interpreter
+            .as_ref()
+            .inspect(|inner| warn_on_unsupported_python(inner));
+        Ok(interpreter)
     } else {
-        // `-p /home/ferris/.local/bin/python3.10`
-        let executable = uv_fs::absolutize_path(request.as_ref())?;
-        Interpreter::query(executable, cache).map(Some)
+        match fs_err::metadata(request) {
+            Ok(metadata) => {
+                // Map from user-provided path to an executable.
+                let path = uv_fs::absolutize_path(request.as_ref())?;
+                let executable = if metadata.is_dir() {
+                    // If the user provided a directory, assume it's a virtual environment.
+                    // `-p /home/ferris/.venv`
+                    if cfg!(windows) {
+                        Cow::Owned(path.join("Scripts/python.exe"))
+                    } else {
+                        Cow::Owned(path.join("bin/python"))
+                    }
+                } else {
+                    // Otherwise, assume it's a Python executable.
+                    // `-p /home/ferris/.local/bin/python3.10`
+                    path
+                };
+                Interpreter::query(executable, cache)
+                    .inspect(warn_on_unsupported_python)
+                    .map(Some)
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
+                let Some(executable) = find_executable(request)? else {
+                    return Ok(None);
+                };
+                Interpreter::query(executable, cache)
+                    .inspect(warn_on_unsupported_python)
+                    .map(Some)
+            }
+            Err(err) => return Err(err.into()),
+        }
     }
 }
 
@@ -63,13 +91,15 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
 #[instrument(skip_all)]
 pub fn find_default_python(cache: &Cache) -> Result<Interpreter, Error> {
     debug!("Starting interpreter discovery for default Python");
-    try_find_default_python(cache)?.ok_or(if cfg!(windows) {
-        Error::NoPythonInstalledWindows
-    } else if cfg!(unix) {
-        Error::NoPythonInstalledUnix
-    } else {
-        unreachable!("Only Unix and Windows are supported")
-    })
+    try_find_default_python(cache)?
+        .ok_or(if cfg!(windows) {
+            Error::NoPythonInstalledWindows
+        } else if cfg!(unix) {
+            Error::NoPythonInstalledUnix
+        } else {
+            unreachable!("Only Unix and Windows are supported")
+        })
+        .inspect(warn_on_unsupported_python)
 }
 
 /// Same as [`find_default_python`] but returns `None` if no python is found instead of returning an `Err`.
@@ -393,6 +423,16 @@ impl PythonVersionSelector {
     }
 }
 
+fn warn_on_unsupported_python(interpreter: &Interpreter) {
+    // Warn on usage with an unsupported Python version
+    if interpreter.python_tuple() < (3, 8) {
+        warn_user_once!(
+            "uv is only compatible with Python 3.8+, found Python {}.",
+            interpreter.python_version()
+        );
+    }
+}
+
 /// Find a matching Python or any fallback Python.
 ///
 /// If no Python version is provided, we will use the first available interpreter.
@@ -406,6 +446,7 @@ impl PythonVersionSelector {
 #[instrument(skip_all, fields(?python_version))]
 pub fn find_best_python(
     python_version: Option<&PythonVersion>,
+    system: bool,
     cache: &Cache,
 ) -> Result<Interpreter, Error> {
     if let Some(python_version) = python_version {
@@ -418,7 +459,8 @@ pub fn find_best_python(
     }
 
     // First, check for an exact match (or the first available version if no Python version was provided)
-    if let Some(interpreter) = find_version(python_version, cache)? {
+    if let Some(interpreter) = find_version(python_version, system, cache)? {
+        warn_on_unsupported_python(&interpreter);
         return Ok(interpreter);
     }
 
@@ -426,14 +468,17 @@ pub fn find_best_python(
         // If that fails, and a specific patch version was requested try again allowing a
         // different patch version
         if python_version.patch().is_some() {
-            if let Some(interpreter) = find_version(Some(&python_version.without_patch()), cache)? {
+            if let Some(interpreter) =
+                find_version(Some(&python_version.without_patch()), system, cache)?
+            {
+                warn_on_unsupported_python(&interpreter);
                 return Ok(interpreter);
             }
         }
     }
 
     // If a Python version was requested but cannot be fulfilled, just take any version
-    if let Some(interpreter) = find_version(None, cache)? {
+    if let Some(interpreter) = find_version(None, system, cache)? {
         return Ok(interpreter);
     }
 
@@ -458,6 +503,7 @@ pub fn find_best_python(
 /// we will return [`None`].
 fn find_version(
     python_version: Option<&PythonVersion>,
+    system: bool,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
     let version_matches = |interpreter: &Interpreter| -> bool {
@@ -471,14 +517,16 @@ fn find_version(
     };
 
     // Check if the venv Python matches.
-    if let Some(venv) = detect_virtual_env()? {
-        let executable = detect_python_executable(venv);
-        let interpreter = Interpreter::query(executable, cache)?;
+    if !system {
+        if let Some(venv) = detect_virtual_env()? {
+            let executable = detect_python_executable(venv);
+            let interpreter = Interpreter::query(executable, cache)?;
 
-        if version_matches(&interpreter) {
-            return Ok(Some(interpreter));
-        }
-    };
+            if version_matches(&interpreter) {
+                return Ok(Some(interpreter));
+            }
+        };
+    }
 
     // Look for the requested version with by search for `python{major}.{minor}` in `PATH` on
     // Unix and `py --list-paths` on Windows.
@@ -713,19 +761,15 @@ mod windows {
         #[cfg_attr(not(windows), ignore)]
         fn no_such_python_path() {
             let result =
-                find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap());
-            insta::with_settings!({
-                filters => vec![
-                    // The exact message is host language dependent
-                    (r"Caused by: .* \(os error 3\)", "Caused by: The system cannot find the path specified. (os error 3)")
-                ]
-            }, {
-                assert_snapshot!(
-                    format_err(result), @r###"
-        failed to canonicalize path `C:\does\not\exists\python3.12`
-          Caused by: The system cannot find the path specified. (os error 3)
-        "###);
-            });
+                find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap())
+                    .unwrap()
+                    .ok_or(Error::RequestedPythonNotFound(
+                        r"C:\does\not\exists\python3.12".to_string(),
+                    ));
+            assert_snapshot!(
+                format_err(result),
+                @"Failed to locate Python interpreter at `C:\\does\\not\\exists\\python3.12`"
+            );
         }
     }
 }
@@ -775,11 +819,12 @@ mod tests {
     #[test]
     #[cfg_attr(not(unix), ignore)]
     fn no_such_python_path() {
-        let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap());
+        let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap())
+            .unwrap()
+            .ok_or(Error::RequestedPythonNotFound(
+                "/does/not/exists/python3.12".to_string(),
+            ));
         assert_snapshot!(
-            format_err(result), @r###"
-        failed to canonicalize path `/does/not/exists/python3.12`
-          Caused by: No such file or directory (os error 2)
-        "###);
+            format_err(result), @"Failed to locate Python interpreter at `/does/not/exists/python3.12`");
     }
 }

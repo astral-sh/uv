@@ -45,10 +45,14 @@ use pep440_rs::{TrackedFromStr, Version, VersionSpecifier, VersionSpecifiers};
 use uv_fs::normalize_url_path;
 // Parity with the crates.io version of pep508_rs
 use crate::verbatim_url::VerbatimUrlError;
+#[cfg(feature = "non-pep508-extensions")]
+pub use unnamed::UnnamedRequirement;
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use verbatim_url::{expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl};
 
 mod marker;
+#[cfg(feature = "non-pep508-extensions")]
+mod unnamed;
 mod verbatim_url;
 
 /// Error with a span attached. Not that those aren't `String` but `Vec<char>` indices.
@@ -121,88 +125,6 @@ create_exception!(
     pyo3::exceptions::PyValueError,
     "A PEP 508 parser error with span information"
 );
-
-/// A requirement specifier in a `requirements.txt` file.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum RequirementsTxtRequirement {
-    /// A PEP 508-compliant dependency specifier.
-    Pep508(Requirement),
-    /// A PEP 508-like, direct URL dependency specifier.
-    Unnamed(UnnamedRequirement),
-}
-
-impl Display for RequirementsTxtRequirement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pep508(requirement) => write!(f, "{requirement}"),
-            Self::Unnamed(requirement) => write!(f, "{requirement}"),
-        }
-    }
-}
-
-/// A PEP 508-like, direct URL dependency specifier without a package name.
-///
-/// In a `requirements.txt` file, the name of the package is optional for direct URL
-/// dependencies. This isn't compliant with PEP 508, but is common in `requirements.txt`, which
-/// is implementation-defined.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
-pub struct UnnamedRequirement {
-    /// The direct URL that defines the version specifier.
-    pub url: VerbatimUrl,
-    /// The list of extras such as `security`, `tests` in
-    /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
-    pub extras: Vec<ExtraName>,
-    /// The markers such as `python_version > "3.8"` in
-    /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
-    /// Those are a nested and/or tree.
-    pub marker: Option<MarkerTree>,
-}
-
-impl Display for UnnamedRequirement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.url)?;
-        if !self.extras.is_empty() {
-            write!(
-                f,
-                "[{}]",
-                self.extras
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )?;
-        }
-        if let Some(marker) = &self.marker {
-            write!(f, " ; {}", marker)?;
-        }
-        Ok(())
-    }
-}
-
-/// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for UnnamedRequirement {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
-    }
-}
-
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-#[cfg(feature = "serde")]
-impl Serialize for UnnamedRequirement {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.collect_str(self)
-    }
-}
 
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
@@ -501,69 +423,6 @@ impl Requirement {
     }
 }
 
-impl UnnamedRequirement {
-    /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate(env, extras)
-        } else {
-            true
-        }
-    }
-}
-
-impl RequirementsTxtRequirement {
-    /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        match self {
-            Self::Pep508(requirement) => requirement.evaluate_markers(env, extras),
-            Self::Unnamed(requirement) => requirement.evaluate_markers(env, extras),
-        }
-    }
-
-    /// Returns the extras for the requirement.
-    pub fn extras(&self) -> &[ExtraName] {
-        match self {
-            Self::Pep508(requirement) => requirement.extras.as_slice(),
-            Self::Unnamed(requirement) => requirement.extras.as_slice(),
-        }
-    }
-
-    /// Returns the markers for the requirement.
-    pub fn markers(&self) -> Option<&MarkerTree> {
-        match self {
-            Self::Pep508(requirement) => requirement.marker.as_ref(),
-            Self::Unnamed(requirement) => requirement.marker.as_ref(),
-        }
-    }
-
-    /// Return the version specifier or URL for the requirement.
-    pub fn version_or_url(&self) -> Option<VersionOrUrlRef> {
-        match self {
-            Self::Pep508(requirement) => match requirement.version_or_url.as_ref() {
-                Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
-                    Some(VersionOrUrlRef::VersionSpecifier(specifiers))
-                }
-                Some(VersionOrUrl::Url(url)) => Some(VersionOrUrlRef::Url(url)),
-                None => None,
-            },
-            Self::Unnamed(requirement) => Some(VersionOrUrlRef::Url(&requirement.url)),
-        }
-    }
-}
-
-impl From<Requirement> for RequirementsTxtRequirement {
-    fn from(requirement: Requirement) -> Self {
-        Self::Pep508(requirement)
-    }
-}
-
-impl From<UnnamedRequirement> for RequirementsTxtRequirement {
-    fn from(requirement: UnnamedRequirement) -> Self {
-        Self::Unnamed(requirement)
-    }
-}
-
 impl TrackedFromStr for Requirement {
     type Err = Pep508Error;
 
@@ -593,67 +452,6 @@ impl Requirement {
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, Pep508Error> {
         parse_pep508_requirement(&mut Cursor::new(input), source, Some(working_dir.as_ref()))
-    }
-}
-
-impl FromStr for UnnamedRequirement {
-    type Err = Pep508Error;
-
-    /// Parse a PEP 508-like direct URL requirement without a package name.
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse_unnamed_requirement(&mut Cursor::new(input), None)
-    }
-}
-
-impl UnnamedRequirement {
-    /// Parse a PEP 508-like direct URL requirement without a package name.
-    pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
-        parse_unnamed_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
-    }
-}
-
-impl TrackedFromStr for RequirementsTxtRequirement {
-    type Err = Pep508Error;
-
-    /// Parse a requirement as seen in a `requirements.txt` file.
-    fn tracked_from_str(
-        input: &str,
-        source: Option<&Path>,
-        working_dir: Option<&Path>,
-    ) -> Result<Self, Self::Err> {
-        match Requirement::tracked_from_str(input, source, working_dir) {
-            Ok(requirement) => Ok(Self::Pep508(requirement)),
-            Err(err) => match err.message {
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    Ok(Self::Unnamed(UnnamedRequirement::from_str(input)?))
-                }
-                _ => Err(err),
-            },
-        }
-    }
-}
-
-impl RequirementsTxtRequirement {
-    /// Parse a requirement as seen in a `requirements.txt` file.
-    pub fn parse(
-        input: &str,
-        source: Option<&Path>,
-        working_dir: impl AsRef<Path>,
-    ) -> Result<Self, Pep508Error> {
-        // Attempt to parse as a PEP 508-compliant requirement.
-        match Requirement::parse(input, source, &working_dir) {
-            Ok(requirement) => Ok(Self::Pep508(requirement)),
-            Err(err) => match err.message {
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    // If that fails, attempt to parse as a direct URL requirement.
-                    Ok(Self::Unnamed(UnnamedRequirement::parse(
-                        input,
-                        &working_dir,
-                    )?))
-                }
-                _ => Err(err),
-            },
-        }
     }
 }
 
@@ -844,8 +642,8 @@ fn parse_name(cursor: &mut Cursor) -> Result<PackageName, Pep508Error> {
             } else {
                 Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                    "Expected package name starting with an alphanumeric character, found '{char}'"
-                )),
+                        "Expected package name starting with an alphanumeric character, found '{char}'"
+                    )),
                     start: index,
                     len: char.len_utf8(),
                     input: cursor.to_string(),
@@ -954,7 +752,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
             (Some((pos, other)), false) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(
-                        format!("Expected either ',' (separating extras) or ']' (ending the extras section), found '{other}'",)
+                        format!("Expected either ',' (separating extras) or ']' (ending the extras section), found '{other}'")
                     ),
                     start: pos,
                     len: 1,
@@ -1589,8 +1387,9 @@ fn parse_unnamed_requirement(
 #[cfg(feature = "pyo3")]
 #[pymodule]
 #[pyo3(name = "pep508_rs")]
-pub fn python_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+pub fn python_module(py: Python<'_>, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
     // Allowed to fail if we embed this module in another
+
     #[allow(unused_must_use)]
     {
         pyo3_log::try_init();
@@ -1601,7 +1400,7 @@ pub fn python_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<Requirement>()?;
     m.add_class::<MarkerEnvironment>()?;
-    m.add("Pep508Error", py.get_type::<PyPep508Error>())?;
+    m.add("Pep508Error", py.get_type_bound::<PyPep508Error>())?;
     Ok(())
 }
 

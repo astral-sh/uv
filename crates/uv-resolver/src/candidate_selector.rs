@@ -1,10 +1,10 @@
 use pubgrub::range::Range;
+use tracing::debug;
 
 use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use tracing::debug;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
@@ -32,11 +32,13 @@ impl CandidateSelector {
                 options.resolution_mode,
                 manifest,
                 markers,
+                options.dependency_mode,
             ),
             prerelease_strategy: PreReleaseStrategy::from_mode(
                 options.prerelease_mode,
                 manifest,
                 markers,
+                options.dependency_mode,
             ),
         }
     }

@@ -47,8 +47,9 @@ use url::Url;
 
 use pep508_rs::{
     expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Requirement,
-    RequirementsTxtRequirement, Scheme, VerbatimUrl,
+    Scheme, VerbatimUrl,
 };
+pub use requirement::RequirementsTxtRequirement;
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
@@ -56,6 +57,8 @@ use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
+
+mod requirement;
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -1298,6 +1301,7 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
     use unscanny::Scanner;
+
     use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 

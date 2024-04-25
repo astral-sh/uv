@@ -115,6 +115,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     setup_py,
                     &config_settings,
                     BuildIsolation::Isolated,
+                    install_wheel_rs::linker::LinkMode::default(),
                     &no_build,
                     &NoBinary::None,
                 );

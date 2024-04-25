@@ -41,6 +41,25 @@ impl FromStr for PythonVersion {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PythonVersion {
+    fn schema_name() -> String {
+        String::from("PythonVersion")
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        <String>::json_schema(gen)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for PythonVersion {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        PythonVersion::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 impl Display for PythonVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)

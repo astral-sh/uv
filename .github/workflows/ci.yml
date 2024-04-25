@@ -40,12 +40,16 @@ jobs:
         run: pipx run ruff check .
 
   cargo-clippy:
-    name: "cargo clippy"
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: "ubuntu"
+            runner: "ubuntu-latest"
+          - os: "windows"
+            runner: "windows-latest-large"
       fail-fast: false
-    runs-on: ${{ matrix.os }}
+    runs-on: ["${{ matrix.runner }}"]
+    name: "cargo clippy | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
@@ -56,16 +60,17 @@ jobs:
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-  cargo-test:
+  cargo-test-unix:
     strategy:
       matrix:
         include:
           # We use the large GitHub actions runners
           # For Ubuntu and Windows, this requires Organization-level configuration
           # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
-          - { os: "ubuntu", runner: "ubuntu-latest-large" }
-          - { os: "windows", runner: "windows-latest-large" }
-          - { os: "macos", runner: "macos-14" }
+          - os: "ubuntu"
+            runner: "ubuntu-latest-large"
+          - os: "macos"
+            runner: "macos-14"
       fail-fast: false
     runs-on:
       labels: ${{ matrix.runner }}
@@ -75,8 +80,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - if: ${{ matrix.os != 'windows' }}
-        uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
 
@@ -91,17 +95,55 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+          cargo nextest run \
+            --workspace \
+            --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
-      - name: "Smoke test (unix)"
-        if: ${{ matrix.os != 'windows' }}
+      - name: "Smoke test"
         run: |
           uv="./target/debug/uv"
           $uv venv
           $uv pip install ruff
 
-      - name: "Smoke test (windows)"
-        if: ${{ matrix.os == 'windows' }}
+  cargo-test-windows:
+    strategy:
+      matrix:
+        include:
+          - os: "windows"
+            runner: "windows-latest-large"
+      fail-fast: false
+    runs-on:
+      labels: ${{ matrix.runner }}
+    name: "cargo test | ${{ matrix.os }}"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      # We do not test with Python patch versions on Windows
+      # so we can use `setup-python` instead of our bootstrapping code
+      # this is much faster on the extremely slow GitHub Windows runners.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.8
+            3.9
+            3.10
+            3.11
+            3.12
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        run: |
+          cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+
+      - name: "Smoke test"
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv
@@ -176,7 +218,7 @@ jobs:
 
   build-binary-macos-x86_64:
     runs-on:
-      labels: macos-latest-large
+      labels: macos-14-large
     name: "build binary | macos x86_64"
     steps:
       - uses: actions/checkout@v4
@@ -396,20 +438,30 @@ jobs:
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv
 
-  # Note: rockylinux:8 is a 1-1 code compatible distro to rhel-8
-  # rockylinux:8 mimics centos-8 but with added maintenance stability
+  # Note: rockylinux is a 1-1 code compatible distro to rhel
+  # rockylinux mimics centos but with added maintenance stability
   # and avoids issues with centos stream uptime concerns
   system-test-rocky-linux:
     needs: build-binary-linux
-    name: "check system | python on rocky linux"
+    name: "check system | python on rocky linux ${{ matrix.rocky-version }}"
     runs-on: ubuntu-latest
-    container: rockylinux:8
+    container: rockylinux:${{ matrix.rocky-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        rocky-version: ["8", "9"]
     steps:
       - uses: actions/checkout@v4
 
       - name: "Install Python"
+        if: matrix.rocky-version == '8'
         run: |
           dnf install python39 python39-pip which -y
+
+      - name: "Install Python"
+        if: matrix.rocky-version == '9'
+        run: |
+          dnf install python3.9 python3.9-pip which -y
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -547,7 +599,7 @@ jobs:
   system-test-macos-x86_64:
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
-    runs-on: macos-latest
+    runs-on: macos-12
     steps:
       - uses: actions/checkout@v4
 
@@ -772,3 +824,37 @@ jobs:
 
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv
+
+  system-test-windows-embedded-python-310:
+    needs: build-binary-windows
+    name: "check system | embedded python3.10 on windows"
+    runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      # Download embedded Python.
+      - name: "Download embedded Python"
+        run: curl -LsSf https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-amd64.zip -o python-3.11.8-embed-amd64.zip
+
+      - name: "Unzip embedded Python"
+        run: 7z x python-3.11.8-embed-amd64.zip -oembedded-python
+
+      - name: "Show embedded Python contents"
+        run: ls embedded-python
+
+      - name: "Set PATH"
+        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate embedded Python install"
+        run: python ./scripts/check_embedded_python.py --uv ./uv.exe

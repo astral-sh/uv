@@ -1,0 +1,31 @@
+[package]
+name = "uv-workspace"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+distribution-types = { workspace = true, features = ["schemars"] }
+install-wheel-rs = { workspace = true, features = ["schemars"] }
+uv-configuration = { workspace = true, features = ["schemars", "serde"] }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true, features = ["schemars"] }
+uv-resolver = { workspace = true, features = ["schemars", "serde"] }
+uv-toolchain = { workspace = true, features = ["schemars", "serde"] }
+uv-warnings = { workspace = true }
+
+dirs-sys = { workspace = true }
+fs-err = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }

@@ -4,8 +4,9 @@ use rustc_hash::FxHashMap;
 use url::Url;
 
 use distribution_types::{DistributionMetadata, HashPolicy, PackageId};
-use pep508_rs::{MarkerEnvironment, RequirementsTxtRequirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, VersionOrUrl};
 use pypi_types::{HashDigest, HashError};
+use requirements_txt::RequirementsTxtRequirement;
 use uv_normalize::PackageName;
 
 #[derive(Debug, Clone)]
@@ -122,7 +123,7 @@ impl HashStrategy {
                         None => {
                             return Err(HashStrategyError::UnpinnedRequirement(
                                 requirement.to_string(),
-                            ))
+                            ));
                         }
                     }
                 }

@@ -21,6 +21,67 @@ impl FromStr for PackageNameSpecifier {
     }
 }
 
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for PackageNameSpecifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = PackageNameSpecifier;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a package name or `:all:` or `:none:`")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                // Accept the special values `:all:` and `:none:`.
+                match value {
+                    ":all:" => Ok(PackageNameSpecifier::All),
+                    ":none:" => Ok(PackageNameSpecifier::None),
+                    _ => {
+                        // Otherwise, parse the value as a package name.
+                        match PackageName::from_str(value) {
+                            Ok(name) => Ok(PackageNameSpecifier::Package(name)),
+                            Err(err) => Err(E::custom(err)),
+                        }
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PackageNameSpecifier {
+    fn schema_name() -> String {
+        "PackageNameSpecifier".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            string: Some(Box::new(schemars::schema::StringValidation {
+                // See: https://packaging.python.org/en/latest/specifications/name-normalization/#name-format
+                pattern: Some(
+                    r"^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
+                        .to_string(),
+                ),
+                ..schemars::schema::StringValidation::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
+    }
+}
+
 /// Package name specification.
 ///
 /// Consumes both package names and selection directives for compatibility with pip flags

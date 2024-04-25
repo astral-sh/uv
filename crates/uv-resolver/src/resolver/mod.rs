@@ -14,11 +14,11 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+use tracing::{debug, enabled, info_span, instrument, trace, warn, Instrument, Level};
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, Name, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrl,
+    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrl,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -166,7 +166,7 @@ impl<
             flat_index,
             tags,
             PythonRequirement::new(interpreter, markers),
-            AllowedYanks::from_manifest(&manifest, markers),
+            AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
             build_context.no_binary(),
@@ -210,8 +210,8 @@ impl<
             visited: DashSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(&manifest, markers)?,
-            locals: Locals::from_manifest(&manifest, markers),
+            urls: Urls::from_manifest(&manifest, markers, options.dependency_mode)?,
+            locals: Locals::from_manifest(&manifest, markers, options.dependency_mode),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
@@ -316,13 +316,13 @@ impl<
             }
 
             // Choose a package version.
-            let Some(highest_priority_pkg) =
-                state
-                    .partial_solution
-                    .pick_highest_priority_pkg(|package, _range| {
-                        priorities.get(package).unwrap_or_default()
-                    })
+            let Some(highest_priority_pkg) = state
+                .partial_solution
+                .pick_highest_priority_pkg(|package, _range| priorities.get(package))
             else {
+                if enabled!(Level::DEBUG) {
+                    prefetcher.log_tried_versions();
+                }
                 let selection = state.partial_solution.extract_solution();
                 return ResolutionGraph::from_state(
                     &selection,
@@ -482,6 +482,9 @@ impl<
                             .iter()
                             .any(|(dependency, _)| dependency == package) =>
                     {
+                        if enabled!(Level::DEBUG) {
+                            prefetcher.log_tried_versions();
+                        }
                         return Err(PubGrubError::SelfDependency {
                             package: package.clone(),
                             version: version.clone(),
@@ -517,12 +520,12 @@ impl<
     async fn visit_package(
         &self,
         package: &PubGrubPackage,
-        priorities: &mut PubGrubPriorities,
         request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
+            PubGrubPackage::Extra(_, _, _) => {}
             PubGrubPackage::Package(name, _extra, None, _) => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_package(name) {
@@ -531,7 +534,6 @@ impl<
 
                 // Emit a request to fetch the metadata for this package.
                 if self.index.packages.register(name.clone()) {
-                    priorities.add(name.clone());
                     request_sink.send(Request::Package(name.clone())).await?;
                 }
             }
@@ -544,7 +546,6 @@ impl<
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.version_id()) {
-                    priorities.add(dist.name().clone());
                     request_sink.send(Request::Dist(dist)).await?;
                 }
             }
@@ -561,7 +562,7 @@ impl<
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package(package_name, _extra, None, _source) = package else {
+            let PubGrubPackage::Package(package_name, None, None, _) = package else {
                 continue;
             };
             request_sink
@@ -604,16 +605,9 @@ impl<
                 }
             }
 
-            PubGrubPackage::Package(package_name, extra, Some(url), _source) => {
-                if let Some(extra) = extra {
-                    debug!(
-                        "Searching for a compatible version of {package_name}[{extra}] @ {url} ({range})",
-                    );
-                } else {
-                    debug!(
-                        "Searching for a compatible version of {package_name} @ {url} ({range})"
-                    );
-                }
+            PubGrubPackage::Extra(package_name, _, Some(url))
+            | PubGrubPackage::Package(package_name, _, Some(url), _) => {
+                debug!("Searching for a compatible version of {package} @ {url} ({range})");
 
                 // If the dist is an editable, return the version from the editable metadata.
                 if let Some((_local, metadata)) = self.editables.get(package_name) {
@@ -702,7 +696,8 @@ impl<
                 Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
-            PubGrubPackage::Package(package_name, extra, None, _source) => {
+            PubGrubPackage::Extra(package_name, _, None)
+            | PubGrubPackage::Package(package_name, _, None, _) => {
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
@@ -732,13 +727,7 @@ impl<
                     }
                 };
 
-                if let Some(extra) = extra {
-                    debug!(
-                        "Searching for a compatible version of {package_name}[{extra}] ({range})",
-                    );
-                } else {
-                    debug!("Searching for a compatible version of {package_name} ({range})");
-                }
+                debug!("Searching for a compatible version of {package} ({range})");
 
                 // Find a version.
                 let Some(candidate) = self.selector.select(
@@ -770,22 +759,13 @@ impl<
                     }
                     ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
                 };
-                if let Some(extra) = extra {
-                    debug!(
-                        "Selecting: {}[{}]=={} ({})",
-                        candidate.name(),
-                        extra,
-                        candidate.version(),
-                        filename,
-                    );
-                } else {
-                    debug!(
-                        "Selecting: {}=={} ({})",
-                        candidate.name(),
-                        candidate.version(),
-                        filename,
-                    );
-                }
+
+                debug!(
+                    "Selecting: {}=={} ({})",
+                    package,
+                    candidate.version(),
+                    filename,
+                );
 
                 // We want to return a package pinned to a specific version; but we _also_ want to
                 // store the exact file that we selected to satisfy that version.
@@ -794,13 +774,16 @@ impl<
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions.register(candidate.version_id()) {
-                    let request = match dist.for_resolution() {
-                        ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
-                        ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
-                    };
-                    request_sink.send(request).await?;
+                if matches!(package, PubGrubPackage::Package(_, _, _, _)) {
+                    if self.index.distributions.register(candidate.version_id()) {
+                        let request = match dist.for_resolution() {
+                            ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
+                            ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
+                        };
+                        request_sink.send(request).await?;
+                    }
                 }
+
                 Ok(Some(ResolverVersion::Available(version)))
             }
         }
@@ -839,22 +822,26 @@ impl<
                 for (package, version) in constraints.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
+                    // Update the package priorities.
+                    priorities.insert(package, version);
+
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink)
-                        .await?;
+                    self.visit_package(package, request_sink).await?;
                 }
 
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.iter() {
-                    constraints.push(
-                        PubGrubPackage::from_package(
-                            metadata.name.clone(),
-                            None,
-                            vec![],
-                            &self.urls,
-                        ),
-                        Range::singleton(metadata.version.clone()),
-                    );
+                    let package =
+                        PubGrubPackage::from_package(metadata.name.clone(), None, vec![], &self.urls);
+                    let version = Range::singleton(metadata.version.clone());
+
+                    // Update the package priorities.
+                    priorities.insert(&package, &version);
+
+                    // Add the editable as a direct dependency.
+                    constraints.push(package, version);
+
+                    // Add a dependency on each extra.
                     for extra in &editable.extras {
                         constraints.push(
                             PubGrubPackage::from_package(
@@ -878,7 +865,7 @@ impl<
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for reporting diagnostics.
-                    if extra.is_some() {
+                    if extra.is_some() && self.editables.get(package_name).is_none() {
                         // Determine the distribution to lookup.
                         let dist = match url {
                             Some(url) => PubGrubDistribution::from_url(package_name, url),
@@ -900,7 +887,7 @@ impl<
 
                 // Determine if the distribution is editable.
                 if let Some((_local, metadata)) = self.editables.get(package_name) {
-                    let mut constraints = PubGrubDependencies::from_requirements(
+                    let constraints = PubGrubDependencies::from_requirements(
                         &metadata.requires_dist,
                         &self.constraints,
                         &self.overrides,
@@ -912,24 +899,13 @@ impl<
                     )?;
 
                     for (dep_package, dep_version) in constraints.iter() {
-                        debug!("Adding transitive dependency for {package}{version}: {dep_package}{dep_version}");
+                        debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
+
+                        // Update the package priorities.
+                        priorities.insert(dep_package, dep_version);
 
                         // Emit a request to fetch the metadata for this package.
-                        self.visit_package(dep_package, priorities, request_sink)
-                            .await?;
-                    }
-
-                    // If a package has an extra, insert a constraint on the base package.
-                    if extra.is_some() {
-                        constraints.push(
-                            PubGrubPackage::Package(
-                                package_name.clone(),
-                                None,
-                                url.clone(),
-                                vec![],
-                            ),
-                            Range::singleton(version.clone()),
-                        );
+                        self.visit_package(dep_package, request_sink).await?;
                     }
 
                     return Ok(Dependencies::Available(constraints.into()));
@@ -1020,7 +996,7 @@ impl<
                     }
                 };
 
-                let mut constraints = PubGrubDependencies::from_requirements(
+                let constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
                     &self.constraints,
                     &self.overrides,
@@ -1031,24 +1007,30 @@ impl<
                     self.markers,
                 )?;
 
-                for (package, version) in constraints.iter() {
-                    debug!("Adding transitive dependency: {package}{version}");
+                for (dep_package, dep_version) in constraints.iter() {
+                    debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
+
+                    // Update the package priorities.
+                    priorities.insert(dep_package, dep_version);
 
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink)
-                        .await?;
-                }
-
-                // If a package has an extra, insert a constraint on the base package.
-                if extra.is_some() {
-                    constraints.push(
-                        PubGrubPackage::Package(package_name.clone(), None, url.clone(), vec![]),
-                        Range::singleton(version.clone()),
-                    );
+                    self.visit_package(dep_package, request_sink).await?;
                 }
 
                 Ok(Dependencies::Available(constraints.into()))
             }
+
+            // Add a dependency on both the extra and base package.
+            PubGrubPackage::Extra(package_name, extra, url) => Ok(Dependencies::Available(vec![
+                (
+                    PubGrubPackage::Package(package_name.clone(), None, url.clone(), vec![]),
+                    Range::singleton(version.clone()),
+                ),
+                (
+                    PubGrubPackage::Package(package_name.clone(), Some(extra.clone()), url.clone(), vec![]),
+                    Range::singleton(version.clone()),
+                ),
+            ])),
         }
     }
 
@@ -1065,13 +1047,15 @@ impl<
             match response? {
                 Some(Response::Package(package_name, version_map)) => {
                     trace!("Received package metadata for: {package_name}");
-                    self.index.packages.done(package_name, version_map);
+                    self.index
+                        .packages
+                        .done(package_name, Arc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions.done(
                         dist.version_id(),
-                        MetadataResponse::Found(ArchiveMetadata::from(metadata)),
+                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
                     );
                 }
                 Some(Response::Dist {
@@ -1088,7 +1072,9 @@ impl<
                         }
                         _ => {}
                     }
-                    self.index.distributions.done(dist.version_id(), metadata);
+                    self.index
+                        .distributions
+                        .done(dist.version_id(), Arc::new(metadata));
                 }
                 Some(Response::Dist {
                     dist: Dist::Source(dist),
@@ -1104,7 +1090,9 @@ impl<
                         }
                         _ => {}
                     }
-                    self.index.distributions.done(dist.version_id(), metadata);
+                    self.index
+                        .distributions
+                        .done(dist.version_id(), Arc::new(metadata));
                 }
                 None => {}
             }
@@ -1256,7 +1244,8 @@ impl<
             match package {
                 PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Python(_) => {}
-                PubGrubPackage::Package(package_name, _extra, Some(url), _source) => {
+                PubGrubPackage::Extra(_, _, _) => {}
+                PubGrubPackage::Package(package_name, _extra, Some(url), _) => {
                     reporter.on_progress(package_name, &VersionOrUrl::Url(url));
                 }
                 PubGrubPackage::Package(package_name, _extra, None, _source) => {

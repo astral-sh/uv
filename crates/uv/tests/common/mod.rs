@@ -25,7 +25,7 @@ pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub const BUILD_VENDOR_LINKS_URL: &str =
-    "https://raw.githubusercontent.com/astral-sh/packse/0.3.14/vendor/links.html";
+    "https://raw.githubusercontent.com/astral-sh/packse/0.3.15/vendor/links.html";
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
@@ -304,6 +304,16 @@ fn site_packages_path(venv: &Path, python: String) -> PathBuf {
         venv.join("lib").join(python).join("site-packages")
     } else if cfg!(windows) {
         venv.join("Lib").join("site-packages")
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    }
+}
+
+pub fn venv_bin_path(venv: &Path) -> PathBuf {
+    if cfg!(unix) {
+        venv.join("bin")
+    } else if cfg!(windows) {
+        venv.join("Scripts")
     } else {
         unimplemented!("Only Windows and Unix are supported")
     }

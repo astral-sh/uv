@@ -414,7 +414,6 @@ impl SourceBuild {
                 interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                Vec::new(),
             )?,
             BuildIsolation::Shared(venv) => venv.clone(),
         };
@@ -999,6 +998,7 @@ async fn run_python_script(
         .env("PATH", modified_path)
         // Activate the venv
         .env("VIRTUAL_ENV", venv.root())
+        .env("CLICOLOR_FORCE", "1")
         .output()
         .await
         .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))

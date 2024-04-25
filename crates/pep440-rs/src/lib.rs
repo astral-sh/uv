@@ -56,7 +56,10 @@ mod version_specifier;
 #[cfg(feature = "pyo3")]
 #[pyo3::pymodule]
 #[pyo3(name = "_pep440_rs")]
-pub fn python_module(_py: pyo3::Python, module: &pyo3::types::PyModule) -> pyo3::PyResult<()> {
+pub fn python_module(
+    _py: pyo3::Python,
+    module: &pyo3::Bound<'_, pyo3::types::PyModule>,
+) -> pyo3::PyResult<()> {
     module.add_class::<PyVersion>()?;
     module.add_class::<Operator>()?;
     module.add_class::<VersionSpecifier>()?;

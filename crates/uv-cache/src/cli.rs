@@ -14,9 +14,10 @@ pub struct CacheArgs {
         long,
         short,
         alias = "no-cache-dir",
-        env = "UV_NO_CACHE"
+        env = "UV_NO_CACHE",
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
-    no_cache: bool,
+    pub no_cache: bool,
 
     /// Path to the cache directory.
     ///
@@ -24,7 +25,28 @@ pub struct CacheArgs {
     /// Linux, and `$HOME/.cache/<project_path> {FOLDERID_LocalAppData}/<project_path>/cache/uv`
     /// on Windows.
     #[arg(global = true, long, env = "UV_CACHE_DIR")]
-    cache_dir: Option<PathBuf>,
+    pub cache_dir: Option<PathBuf>,
+}
+
+impl Cache {
+    /// Prefer, in order:
+    /// 1. A temporary cache directory, if the user requested `--no-cache`.
+    /// 2. The specific cache directory specified by the user via `--cache-dir` or `UV_CACHE_DIR`.
+    /// 3. The system-appropriate cache directory.
+    /// 4. A `.uv_cache` directory in the current working directory.
+    ///
+    /// Returns an absolute cache dir.
+    pub fn from_settings(no_cache: bool, cache_dir: Option<PathBuf>) -> Result<Self, io::Error> {
+        if no_cache {
+            Cache::temp()
+        } else if let Some(cache_dir) = cache_dir {
+            Cache::from_path(cache_dir)
+        } else if let Some(project_dirs) = ProjectDirs::from("", "", "uv") {
+            Cache::from_path(project_dirs.cache_dir())
+        } else {
+            Cache::from_path(".uv_cache")
+        }
+    }
 }
 
 impl TryFrom<CacheArgs> for Cache {
@@ -38,14 +60,6 @@ impl TryFrom<CacheArgs> for Cache {
     ///
     /// Returns an absolute cache dir.
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        if value.no_cache {
-            Self::temp()
-        } else if let Some(cache_dir) = value.cache_dir {
-            Self::from_path(cache_dir)
-        } else if let Some(project_dirs) = ProjectDirs::from("", "", "uv") {
-            Self::from_path(project_dirs.cache_dir())
-        } else {
-            Self::from_path(".uv_cache")
-        }
+        Cache::from_settings(value.no_cache, value.cache_dir)
     }
 }

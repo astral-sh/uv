@@ -63,6 +63,20 @@ pub enum PubGrubPackage {
         /// only from other libraries
         Vec<SourceName>,
     ),
+    /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
+    ///
+    /// For a given package `black`, and an extra `colorama`, we create a virtual package
+    /// with exactly two dependencies: `PubGrubPackage::Package("black", None)` and
+    /// `PubGrubPackage::Package("black", Some("colorama")`. Both dependencies are pinned to the
+    /// same version, and the virtual package is discarded at the end of the resolution process.
+    ///
+    /// The benefit of the proxy package (versus `PubGrubPackage::Package("black", Some("colorama")`
+    /// on its own) is that it enables us to avoid attempting to retrieve metadata for irrelevant
+    /// versions the extra variants by making it clear to PubGrub that the extra variant must match
+    /// the exact same version of the base variant. Without the proxy package, then when provided
+    /// requirements like `black==23.0.1` and `black[colorama]`, PubGrub may attempt to retrieve
+    /// metadata for `black[colorama]` versions other than `23.0.1`.
+    Extra(PackageName, ExtraName, Option<VerbatimUrl>),
 }
 
 impl PubGrubPackage {
@@ -74,10 +88,16 @@ impl PubGrubPackage {
         urls: &Urls,
     ) -> Self {
         let url = urls.get(&name).cloned();
-        Self::Package(name, extra, url, source)
+        if let Some(extra) = extra {
+            Self::Extra(name, extra, url)
+        } else {
+            Self::Package(name, extra, url, source)
+        }
     }
 }
 
+// Not using the default implementation, because otherwise two deps with different sources
+// are treated as two things
 impl Hash for PubGrubPackage {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
@@ -95,6 +115,12 @@ impl Hash for PubGrubPackage {
                 extra.hash(state);
                 url.hash(state);
             }
+            PubGrubPackage::Extra(name, extra, url) => {
+                "Extra".hash(state);
+                name.hash(state);
+                extra.hash(state);
+                url.hash(state);
+            },
         }
     }
 }
@@ -122,6 +148,14 @@ impl PartialEq for PubGrubPackage {
                 }
                 return false;
             }
+            PubGrubPackage::Extra(name, extra, url) => {
+                if let PubGrubPackage::Extra(other_name, other_extra, other_url) =
+                    other
+                {
+                    return other_name == name && other_extra == extra && other_url == url;
+                }
+                return false;
+            },
         }
     }
 }
@@ -149,6 +183,7 @@ impl std::fmt::Display for PubGrubPackage {
             Self::Package(name, Some(extra), ..) => {
                 write!(f, "{name}[{extra}]")
             }
+            Self::Extra(name, extra, ..) => write!(f, "{name}[{extra}]"),
         }
     }
 }
