@@ -1,3 +1,10 @@
+//! Reading from `pyproject.toml`
+//! * `project.{dependencies,optional-dependencies}`,
+//! * `tool.uv.sources` and
+//! * `tool.uv.workspace`
+//!
+//! and lowering them into a dependency specification.
+
 use std::collections::HashMap;
 use std::io;
 use std::ops::Deref;
@@ -21,7 +28,7 @@ use uv_normalize::{ExtraName, PackageName};
 use crate::ExtrasSpecification;
 
 #[derive(Debug, Error)]
-pub(crate) enum Pep621Error {
+pub enum Pep621Error {
     #[error(transparent)]
     Pep508(#[from] pep508_rs::Pep508Error),
     #[error("You need to specify a `[project]` section to use `[tool.uv.sources]`")]
@@ -35,7 +42,7 @@ pub(crate) enum Pep621Error {
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.
 #[derive(Debug, Error)]
-pub(crate) enum UvSourcesLoweringError {
+pub enum UvSourcesLoweringError {
     #[error("Invalid URL structure")]
     DirectUrl(#[from] Box<ParsedUrlError>),
     #[error("Unsupported path (can't convert to URL): `{}`", _0.user_display())]
@@ -60,11 +67,11 @@ pub(crate) enum UvSourcesLoweringError {
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct PyProjectToml {
+pub struct PyProjectToml {
     /// Project metadata
-    pub(crate) project: Option<Project>,
+    pub project: Option<Project>,
     /// Uv additions
-    pub(crate) tool: Option<Tool>,
+    pub tool: Option<Tool>,
 }
 
 /// PEP 621 project metadata (`project`).
@@ -75,43 +82,57 @@ pub(crate) struct PyProjectToml {
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct Project {
+pub struct Project {
     /// The name of the project
-    pub(crate) name: PackageName,
+    pub name: PackageName,
     /// Project dependencies
-    pub(crate) dependencies: Option<Vec<String>>,
+    pub dependencies: Option<Vec<String>>,
     /// Optional dependencies
-    pub(crate) optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
+    pub optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
-    pub(crate) dynamic: Option<Vec<String>>,
+    pub dynamic: Option<Vec<String>>,
 }
 
 /// `tool`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Tool {
-    pub(crate) uv: Option<Uv>,
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct Tool {
+    pub uv: Option<Uv>,
 }
 
 /// `tool.uv`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Uv {
-    pub(crate) sources: Option<HashMap<PackageName, Source>>,
-    pub(crate) workspace: Option<UvWorkspace>,
+pub struct Uv {
+    pub sources: Option<HashMap<PackageName, Source>>,
+    pub workspace: Option<UvWorkspace>,
 }
 
 /// `tool.uv.workspace`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
-pub(crate) struct UvWorkspace {
-    pub(crate) members: Option<Vec<SerdePattern>>,
-    pub(crate) exclude: Option<Vec<SerdePattern>>,
+pub struct UvWorkspace {
+    pub members: Option<Vec<SerdePattern>>,
+    pub exclude: Option<Vec<SerdePattern>>,
 }
 
 /// (De)serialize globs as strings.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SerdePattern(#[serde(with = "serde_from_and_to_string")] pub(crate) Pattern);
+pub struct SerdePattern(#[serde(with = "serde_from_and_to_string")] pub Pattern);
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for SerdePattern {
+    fn schema_name() -> String {
+        <String as schemars::JsonSchema>::schema_name()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        <String as schemars::JsonSchema>::json_schema(gen)
+    }
+}
 
 impl Deref for SerdePattern {
     type Target = Pattern;
@@ -123,8 +144,9 @@ impl Deref for SerdePattern {
 
 /// A `tool.uv.sources` value.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, deny_unknown_fields)]
-pub(crate) enum Source {
+pub enum Source {
     Git {
         git: String,
         subdirectory: Option<String>,
@@ -168,13 +190,13 @@ pub(crate) enum Source {
 /// The PEP 621 project metadata, with static requirements extracted in advance, joined
 /// with `tool.uv.sources`.
 #[derive(Debug)]
-pub(crate) struct UvMetadata {
+pub struct UvMetadata {
     /// The name of the project.
-    pub(crate) name: PackageName,
+    pub name: PackageName,
     /// The requirements extracted from the project.
-    pub(crate) requirements: Vec<UvRequirement>,
+    pub requirements: Vec<UvRequirement>,
     /// The extras used to collect requirements.
-    pub(crate) used_extras: FxHashSet<ExtraName>,
+    pub used_extras: FxHashSet<ExtraName>,
 }
 
 impl UvMetadata {
@@ -185,7 +207,7 @@ impl UvMetadata {
     /// dependencies and the extras are requested, the requirements cannot be extracted.
     ///
     /// Returns an error if the requirements are not valid PEP 508 requirements.
-    pub(crate) fn try_from(
+    pub fn try_from(
         pyproject: PyProjectToml,
         extras: &ExtrasSpecification,
         project_dir: &Path,
@@ -579,7 +601,7 @@ mod test {
         extras: &ExtrasSpecification,
     ) -> anyhow::Result<RequirementsSpecification> {
         let path = uv_fs::absolutize_path(path.as_ref())?;
-        RequirementsSpecification::parse_direct_pyproject_toml(&contents, extras, path.as_ref())
+        RequirementsSpecification::parse_direct_pyproject_toml(contents, extras, path.as_ref())
             .with_context(|| format!("Failed to parse `{}`", path.user_display()))
     }
 
@@ -589,7 +611,7 @@ mod test {
         let mut message = String::new();
         message.push_str(&format!("error: {}\n", causes.next().unwrap()));
         for err in causes {
-            message.push_str(&format!("  Caused by: {}\n", err));
+            message.push_str(&format!("  Caused by: {err}\n"));
         }
         message
     }
@@ -817,10 +839,10 @@ mod test {
 
     #[test]
     fn missing_project_section() {
-        let input = indoc! {r#"
+        let input = indoc! {"
             [tool.uv.sources]
             tqdm = { workspace = true }
-        "#};
+        "};
 
         assert_snapshot!(format_err(input), @r###"
         error: Failed to parse `pyproject.toml`

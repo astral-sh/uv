@@ -3,11 +3,23 @@ use std::path::PathBuf;
 use anstream::println;
 use anyhow::{bail, Result};
 use pretty_assertions::StrComparison;
-use schemars::schema_for;
+use schemars::{schema_for, JsonSchema};
+use serde::Deserialize;
 
 use uv_workspace::Options;
 
 use crate::ROOT_DIR;
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+// The name is used in the schema
+struct Uv {
+    #[serde(flatten)]
+    options: Options,
+    #[serde(flatten)]
+    dep_spec: uv_requirements::pyproject::Uv,
+}
 
 #[derive(clap::Args)]
 pub(crate) struct GenerateJsonSchemaArgs {
@@ -30,7 +42,7 @@ enum Mode {
 }
 
 pub(crate) fn main(args: &GenerateJsonSchemaArgs) -> Result<()> {
-    let schema = schema_for!(Options);
+    let schema = schema_for!(Uv);
     let schema_string = serde_json::to_string_pretty(&schema).unwrap();
     let filename = "uv.schema.json";
     let schema_path = PathBuf::from(ROOT_DIR).join(filename);

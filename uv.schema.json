@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Options",
+  "title": "Uv",
   "description": "A `[tool.uv]` section.",
   "type": "object",
   "properties": {
@@ -36,6 +36,25 @@
       "type": [
         "boolean",
         "null"
+      ]
+    },
+    "sources": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/definitions/Source"
+      }
+    },
+    "workspace": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/UvWorkspace"
+        },
+        {
+          "type": "null"
+        }
       ]
     }
   },
@@ -573,6 +592,171 @@
         }
       ]
     },
+    "Source": {
+      "description": "A `tool.uv.sources` value.",
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "git"
+          ],
+          "properties": {
+            "branch": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "git": {
+              "type": "string"
+            },
+            "rev": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subdirectory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "url"
+          ],
+          "properties": {
+            "subdirectory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "editable": {
+              "description": "`false` by default.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "index"
+          ],
+          "properties": {
+            "index": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "workspace"
+          ],
+          "properties": {
+            "editable": {
+              "description": "`true` by default.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "workspace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Show a better error message for invalid combinations of options.",
+          "type": "object",
+          "required": [
+            "git",
+            "index",
+            "patch",
+            "url",
+            "workspace"
+          ],
+          "properties": {
+            "branch": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "git": {
+              "type": "string"
+            },
+            "index": {
+              "type": "string"
+            },
+            "patch": {
+              "type": "string"
+            },
+            "rev": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subdirectory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": "string"
+            },
+            "workspace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "String": {
+      "type": "string"
+    },
     "TargetTriple": {
       "description": "The supported target triples. Each triple consists of an architecture, vendor, and operating system.\n\nSee: <https://doc.rust-lang.org/nightly/rustc/platform-support.html>",
       "oneOf": [
@@ -675,6 +859,31 @@
           ]
         }
       ]
+    },
+    "UvWorkspace": {
+      "description": "`tool.uv.workspace`.",
+      "type": "object",
+      "properties": {
+        "exclude": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/String"
+          }
+        },
+        "members": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/String"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
