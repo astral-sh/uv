@@ -1,21 +1,20 @@
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use cache_key::CanonicalUrl;
-use distribution_types::{FlatIndexLocation, IndexUrl};
-use pep508_rs::Requirement;
-use requirements_txt::{
-    EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
-};
+use distribution_types::{FlatIndexLocation, IndexUrl, UvRequirement};
+use requirements_txt::RequirementsTxtRequirement;
+use requirements_txt::{EditableRequirement, FindLink, RequirementEntry, RequirementsTxt};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::pyproject::{Pep621Metadata, PyProjectToml};
+use crate::pyproject::{PyProjectToml, UvMetadata};
 use crate::{ExtrasSpecification, RequirementsSource};
 
 #[derive(Debug, Default)]
@@ -25,7 +24,7 @@ pub struct RequirementsSpecification {
     /// The requirements for the project.
     pub requirements: Vec<RequirementEntry>,
     /// The constraints for the project.
-    pub constraints: Vec<Requirement>,
+    pub constraints: Vec<UvRequirement>,
     /// The overrides for the project.
     pub overrides: Vec<RequirementEntry>,
     /// Package to install as editable installs
@@ -129,70 +128,11 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
-                let contents = uv_fs::read_to_string(path).await?;
-                let pyproject = toml::from_str::<PyProjectToml>(&contents)
-                    .with_context(|| format!("Failed to parse `{}`", path.user_display()))?;
-
-                // Attempt to read metadata from the `pyproject.toml` directly.
-                //
-                // If we fail to extract the PEP 621 metadata, fall back to treating it as a source
-                // tree, as there are some cases where the `pyproject.toml` may not be a valid PEP
-                // 621 file, but might still resolve under PEP 517. (If the source tree doesn't
-                // resolve under PEP 517, we'll catch that later.)
-                //
-                // For example, Hatch's "Context formatting" API is not compliant with PEP 621, as
-                // it expects dynamic processing by the build backend for the static metadata
-                // fields. See: https://hatch.pypa.io/latest/config/context/
-                if let Some(project) = pyproject
-                    .project
-                    .and_then(|project| Pep621Metadata::try_from(project, extras).ok().flatten())
-                {
-                    Self {
-                        project: Some(project.name),
-                        requirements: project
-                            .requirements
-                            .into_iter()
-                            .map(|requirement| RequirementEntry {
-                                requirement: RequirementsTxtRequirement::Pep508(requirement),
-                                hashes: vec![],
-                            })
-                            .collect(),
-                        constraints: vec![],
-                        overrides: vec![],
-                        editables: vec![],
-                        source_trees: vec![],
-                        extras: project.used_extras,
-                        index_url: None,
-                        extra_index_urls: vec![],
-                        no_index: false,
-                        find_links: vec![],
-                        no_binary: NoBinary::default(),
-                        no_build: NoBuild::default(),
-                    }
-                } else {
-                    let path = fs_err::canonicalize(path)?;
-                    let source_tree = path.parent().ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "The file `{}` appears to be a `pyproject.toml` file, which must be in a directory",
-                            path.user_display()
-                        )
-                    })?;
-                    Self {
-                        project: None,
-                        requirements: vec![],
-                        constraints: vec![],
-                        overrides: vec![],
-                        editables: vec![],
-                        source_trees: vec![source_tree.to_path_buf()],
-                        extras: FxHashSet::default(),
-                        index_url: None,
-                        extra_index_urls: vec![],
-                        no_index: false,
-                        find_links: vec![],
-                        no_binary: NoBinary::default(),
-                        no_build: NoBuild::default(),
-                    }
-                }
+                // We need to join relative paths inside pyproject.toml to this.
+                let contents = uv_fs::read_to_string(&path).await?;
+                let path = uv_fs::absolutize_path(path)?;
+                Self::parse_direct_pyproject_toml(&contents, extras, path.as_ref())
+                    .with_context(|| format!("Failed to parse `{}`", path.user_display()))?
             }
             RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
                 let path = fs_err::canonicalize(path)?;
@@ -219,6 +159,62 @@ impl RequirementsSpecification {
                 }
             }
         })
+    }
+
+    /// Attempt to read metadata from the `pyproject.toml` directly.
+    ///
+    /// Since we only use this path for directly included pyproject.toml, we are strict about
+    /// PEP 621.
+    pub(crate) fn parse_direct_pyproject_toml(
+        contents: &str,
+        extras: &ExtrasSpecification,
+        path: &Path,
+    ) -> Result<Self> {
+        let pyproject = toml::from_str::<PyProjectToml>(contents)?;
+
+        let workspace_sources = HashMap::default();
+        let workspace_packages = HashMap::default();
+        let project_dir = path
+            .parent()
+            .context("pyproject.toml has no parent directory")?;
+        match UvMetadata::try_from(
+            pyproject,
+            extras,
+            project_dir,
+            &workspace_sources,
+            &workspace_packages,
+        ) {
+            Ok(Some(project)) => Ok(Self {
+                project: Some(project.name),
+                requirements: project
+                    .requirements
+                    .into_iter()
+                    .map(|requirement| RequirementEntry {
+                        requirement: RequirementsTxtRequirement::Uv(requirement),
+                        hashes: vec![],
+                    })
+                    .collect(),
+                extras: project.used_extras,
+                ..Self::default()
+            }),
+            Ok(None) => {
+                debug!("Dynamic pyproject.toml at: `{}`", path.user_display());
+                let path = fs_err::canonicalize(path)?;
+                let source_tree = path.parent().ok_or_else(|| {
+                    anyhow::anyhow!(
+                                "The file `{}` appears to be a `pyproject.toml` file, which must be in a directory",
+                                path.user_display()
+                            )
+                })?;
+                Ok(Self {
+                    project: None,
+                    requirements: vec![],
+                    source_trees: vec![source_tree.to_path_buf()],
+                    ..Self::default()
+                })
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Read the combined requirements and constraints from a set of sources.
@@ -271,7 +267,7 @@ impl RequirementsSpecification {
             let source = Self::from_source(source, extras, client_builder).await?;
             for entry in source.requirements {
                 match entry.requirement {
-                    RequirementsTxtRequirement::Pep508(requirement) => {
+                    RequirementsTxtRequirement::Uv(requirement) => {
                         spec.constraints.push(requirement);
                     }
                     RequirementsTxtRequirement::Unnamed(requirement) => {

@@ -3,14 +3,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{IndexLocations, InstalledDist, Resolution, SourceDist};
-
-use pep508_rs::{PackageName, Requirement};
+use distribution_types::{IndexLocations, InstalledDist, Resolution, SourceDist, UvRequirement};
+use pep508_rs::PackageName;
 use uv_cache::Cache;
+use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
 use crate::BuildIsolation;
-use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -79,7 +78,7 @@ pub trait BuildContext: Sync {
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
         &'a self,
-        requirements: &'a [Requirement],
+        requirements: &'a [UvRequirement],
     ) -> impl Future<Output = Result<Resolution>> + Send + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must

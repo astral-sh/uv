@@ -5,49 +5,47 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "tqdm",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "4.65.0",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "4.65.0",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "tomli-w",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "1.0.0",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "1.0.0",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],

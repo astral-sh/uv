@@ -377,8 +377,17 @@ pub(crate) fn lower_requirement(
                 _ => return Err(UvSourcesLoweringError::MoreThanOneGitRef),
             };
 
-            // TODO(konsti): Wrong verbatim url
-            let url = VerbatimUrl::from_url(Url::parse(&git)?).with_given(git);
+            let mut url = Url::parse(&format!("git+{git}"))?;
+            let mut given = git;
+            if let Some(rev) = reference.as_str() {
+                url.set_path(&format!("{}@{}", url.path(), rev));
+                given = format!("{given}@{rev}");
+            }
+            if let Some(subdirectory) = &subdirectory {
+                url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
+                given = format!("{given}#subdirectory={subdirectory}");
+            }
+            let url = VerbatimUrl::from_url(url).with_given(given);
             let repository = url.to_url().clone();
             UvSource::Git {
                 url,

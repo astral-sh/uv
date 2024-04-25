@@ -11,7 +11,7 @@ use tracing::debug;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
     BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, SourceUrl,
-    VersionId,
+    UvRequirement, VersionId,
 };
 use pep508_rs::{Requirement, Scheme, UnnamedRequirement, VersionOrUrl};
 use pypi_types::Metadata10;
@@ -61,7 +61,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     }
 
     /// Resolve any unnamed requirements in the specification.
-    pub async fn resolve(self) -> Result<Vec<Requirement>> {
+    pub async fn resolve(self) -> Result<Vec<UvRequirement>> {
         let Self {
             requirements,
             hasher,
@@ -71,9 +71,12 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
         futures::stream::iter(requirements)
             .map(|entry| async {
                 match entry.requirement {
-                    RequirementsTxtRequirement::Pep508(requirement) => Ok(requirement),
+                    RequirementsTxtRequirement::Uv(requirement) => Ok(requirement),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
-                        Self::resolve_requirement(requirement, hasher, index, &database).await
+                        Ok(UvRequirement::from_requirement(
+                            Self::resolve_requirement(requirement, hasher, index, &database)
+                                .await?,
+                        )?)
                     }
                 }
             })

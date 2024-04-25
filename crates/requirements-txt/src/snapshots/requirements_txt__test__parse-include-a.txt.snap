@@ -5,38 +5,42 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "tomli",
                     ),
                     extras: [],
-                    version_or_url: None,
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "numpy",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "1.24.2",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "1.24.2",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],

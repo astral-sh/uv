@@ -18,11 +18,12 @@ use tracing::{debug, enabled, info_span, instrument, trace, warn, Instrument, Le
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrl,
+    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, UvRequirement,
+    VersionOrUrl,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
-use pep508_rs::{MarkerEnvironment, Requirement};
+use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
@@ -112,7 +113,7 @@ pub struct Resolver<
     InstalledPackages: InstalledPackagesProvider + Send + Sync,
 > {
     project: Option<PackageName>,
-    requirements: Vec<Requirement>,
+    requirements: Vec<UvRequirement>,
     constraints: Constraints,
     overrides: Overrides,
     preferences: Preferences,
@@ -610,7 +611,7 @@ impl<
                 debug!("Searching for a compatible version of {package} @ {url} ({range})");
 
                 // If the dist is an editable, return the version from the editable metadata.
-                if let Some((_local, metadata)) = self.editables.get(package_name) {
+                if let Some((_local, metadata, _)) = self.editables.get(package_name) {
                     let version = &metadata.version;
 
                     // The version is incompatible with the requirement.
@@ -830,7 +831,7 @@ impl<
                 }
 
                 // Add a dependency on each editable.
-                for (editable, metadata) in self.editables.iter() {
+                for (editable, metadata, _) in self.editables.iter() {
                     let package =
                         PubGrubPackage::from_package(metadata.name.clone(), None, &self.urls);
                     let version = Range::singleton(metadata.version.clone());
@@ -885,9 +886,16 @@ impl<
                 }
 
                 // Determine if the distribution is editable.
-                if let Some((_local, metadata)) = self.editables.get(package_name) {
+                if let Some((_local, metadata, _)) = self.editables.get(package_name) {
+                    let requirements: Vec<_> = metadata
+                        .requires_dist
+                        .iter()
+                        .cloned()
+                        .map(UvRequirement::from_requirement)
+                        .collect::<Result<_, _>>()
+                        .map_err(Box::new)?;
                     let constraints = PubGrubDependencies::from_requirements(
-                        &metadata.requires_dist,
+                        &requirements,
                         &self.constraints,
                         &self.overrides,
                         Some(package_name),
@@ -995,8 +1003,15 @@ impl<
                     }
                 };
 
+                let requirements: Vec<_> = metadata
+                    .requires_dist
+                    .iter()
+                    .cloned()
+                    .map(UvRequirement::from_requirement)
+                    .collect::<Result<_, _>>()
+                    .map_err(Box::new)?;
                 let constraints = PubGrubDependencies::from_requirements(
-                    &metadata.requires_dist,
+                    &requirements,
                     &self.constraints,
                     &self.overrides,
                     Some(package_name),

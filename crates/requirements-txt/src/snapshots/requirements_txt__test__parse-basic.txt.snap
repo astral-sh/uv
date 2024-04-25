@@ -5,145 +5,139 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "numpy",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "1.24.2",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "1.24.2",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "pandas",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "2.0.0",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "2.0.0",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "python-dateutil",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "2.8.2",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "2.8.2",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "pytz",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "2023.3",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "2023.3",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "six",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "1.16.0",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "1.16.0",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "tzdata",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "2023.3",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "2023.3",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],

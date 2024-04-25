@@ -1,7 +1,8 @@
+use distribution_types::UvSource;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, VersionOrUrl};
+use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
 use crate::{DependencyMode, Manifest, Preference};
@@ -23,11 +24,10 @@ impl AllowedYanks {
             .requirements(markers, dependencies)
             .chain(manifest.preferences.iter().map(Preference::requirement))
         {
-            let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url
-            else {
+            let UvSource::Registry { version, .. } = &requirement.source else {
                 continue;
             };
-            let [specifier] = specifiers.as_ref() else {
+            let [specifier] = version.as_ref() else {
                 continue;
             };
             if matches!(

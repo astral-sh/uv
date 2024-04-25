@@ -5224,7 +5224,8 @@ fn unsupported_scheme() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported scheme `bzr+https` on URL: bzr+https://example.com/anyio (Bazaar is not supported)
+    error: Couldn't parse URL in `requirements.in` at position 0
+      Caused by: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio`
     "###
     );
 
@@ -5961,12 +5962,12 @@ fn compile_pyproject_toml_recursive_extra() -> Result<()> {
 name = "my-project"
 version = "0.0.1"
 dependencies = [
-    "tomli",
+    "tomli>=2,<3",
 ]
 
 [project.optional-dependencies]
 test = [
-    "pep517",
+    "pep517>=0.13,<0.14",
     "my-project[dev]"
 ]
 dev = [

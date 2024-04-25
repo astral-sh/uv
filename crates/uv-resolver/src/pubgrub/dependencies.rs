@@ -1,11 +1,14 @@
+use std::ops::Deref;
+
 use itertools::Itertools;
 use pubgrub::range::Range;
 use rustc_hash::FxHashSet;
 use tracing::warn;
+use url::Url;
 
-use distribution_types::Verbatim;
+use distribution_types::{UvRequirement, UvSource, Verbatim};
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -21,7 +24,7 @@ impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_requirements(
-        requirements: &[Requirement],
+        requirements: &[UvRequirement],
         constraints: &Constraints,
         overrides: &Overrides,
         source_name: Option<&PackageName>,
@@ -63,7 +66,7 @@ impl PubGrubDependencies {
 /// Add a set of requirements to a list of dependencies.
 #[allow(clippy::too_many_arguments)]
 fn add_requirements(
-    requirements: &[Requirement],
+    requirements: &[UvRequirement],
     constraints: &Constraints,
     overrides: &Overrides,
     source_name: Option<&PackageName>,
@@ -180,24 +183,18 @@ impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
 
 /// Convert a [`Requirement`] to a `PubGrub`-compatible package and range.
 fn to_pubgrub(
-    requirement: &Requirement,
+    requirement: &UvRequirement,
     extra: Option<ExtraName>,
     urls: &Urls,
     locals: &Locals,
 ) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
-    match requirement.version_or_url.as_ref() {
-        // The requirement has no specifier (e.g., `flask`).
-        None => Ok((
-            PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
-            Range::full(),
-        )),
-
-        // The requirement has a specifier (e.g., `flask>=1.0`).
-        Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
+    match &requirement.source {
+        UvSource::Registry { version, .. } => {
+            // TODO(konsti): Index
             // If the specifier is an exact version, and the user requested a local version that's
             // more precise than the specifier, use the local version instead.
             let version = if let Some(expected) = locals.get(&requirement.name) {
-                specifiers
+                version
                     .iter()
                     .map(|specifier| {
                         Locals::map(expected, specifier)
@@ -208,7 +205,7 @@ fn to_pubgrub(
                         range.intersection(&specifier.into())
                     })?
             } else {
-                specifiers
+                version
                     .iter()
                     .map(PubGrubSpecifier::try_from)
                     .fold_ok(Range::full(), |range, specifier| {
@@ -221,13 +218,36 @@ fn to_pubgrub(
                 version,
             ))
         }
-
-        // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
-        Some(VersionOrUrl::Url(url)) => {
+        UvSource::Url { url, subdirectory } => {
+            let mut url: Url = url.deref().clone();
+            if let Some(subdirectory) = subdirectory {
+                url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+            }
             let Some(expected) = urls.get(&requirement.name) else {
                 return Err(ResolveError::DisallowedUrl(
                     requirement.name.clone(),
-                    url.verbatim().to_string(),
+                    url.to_string(),
+                ));
+            };
+
+            if !Urls::is_allowed(expected, &VerbatimUrl::from_url(url.clone())) {
+                return Err(ResolveError::ConflictingUrlsTransitive(
+                    requirement.name.clone(),
+                    expected.verbatim().to_string(),
+                    url.to_string(),
+                ));
+            }
+
+            Ok((
+                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
+                Range::full(),
+            ))
+        }
+        UvSource::Git { url, .. } => {
+            let Some(expected) = urls.get(&requirement.name) else {
+                return Err(ResolveError::DisallowedUrl(
+                    requirement.name.clone(),
+                    url.to_string(),
                 ));
             };
 
@@ -235,7 +255,28 @@ fn to_pubgrub(
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
                     expected.verbatim().to_string(),
-                    url.verbatim().to_string(),
+                    url.to_string(),
+                ));
+            }
+
+            Ok((
+                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
+                Range::full(),
+            ))
+        }
+        UvSource::Path { url, .. } => {
+            let Some(expected) = urls.get(&requirement.name) else {
+                return Err(ResolveError::DisallowedUrl(
+                    requirement.name.clone(),
+                    url.to_string(),
+                ));
+            };
+
+            if !Urls::is_allowed(expected, url) {
+                return Err(ResolveError::ConflictingUrlsTransitive(
+                    requirement.name.clone(),
+                    expected.verbatim().to_string(),
+                    url.to_string(),
                 ));
             }
 
