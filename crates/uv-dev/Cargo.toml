@@ -60,8 +60,5 @@ tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
 walkdir = { workspace = true }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(all(any(target_arch = "x86_64", target_arch = "aarch64"), any(target_os = "windows", target_os = "macos", target_os = "linux")))'.dependencies]
 mimalloc = { version = "0.1.39" }
-
-[target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
-tikv-jemallocator = { version = "0.5.4" }

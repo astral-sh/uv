@@ -27,21 +27,12 @@ use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::resolve_cli::ResolveCliArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
 
-#[cfg(target_os = "windows")]
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 #[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "openbsd"),
-    any(
-        target_arch = "x86_64",
-        target_arch = "aarch64",
-        target_arch = "powerpc64"
-    )
+    any(target_arch = "x86_64", target_arch = "aarch64"),
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
 #[global_allocator]
-static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod build;
 mod clear_compile;
