@@ -10,6 +10,7 @@ use std::fmt::{Display, Formatter};
 pub enum Source {
     Requirement(String),
     Constraint(String),
+    Override(String),
 }
 
 impl Source {
@@ -20,6 +21,9 @@ impl Source {
             }
             Source::Constraint(name) => {
                 format!("-c {name}")
+            }
+            Source::Override(name) => {
+                format!("--override {name}")
             }
         }
     }

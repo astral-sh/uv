@@ -24,10 +24,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/basic.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
                     ),
                 },
             ),
@@ -56,10 +54,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/basic.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
                     ),
                 },
             ),
@@ -88,10 +84,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/basic.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
                     ),
                 },
             ),
@@ -120,10 +114,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/basic.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
                     ),
                 },
             ),
@@ -152,10 +144,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/basic.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
                     ),
                 },
             ),
@@ -184,10 +174,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/basic.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
                     ),
                 },
             ),

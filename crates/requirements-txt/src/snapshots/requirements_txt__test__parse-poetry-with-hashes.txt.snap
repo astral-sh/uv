@@ -51,10 +51,8 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
             ),
@@ -112,10 +110,8 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
             ),
@@ -184,10 +180,8 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
             ),
@@ -245,10 +239,8 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
             ),
@@ -307,10 +299,8 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
             ),

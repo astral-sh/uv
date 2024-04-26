@@ -24,10 +24,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/for-poetry.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/for-poetry.txt",
                     ),
                 },
             ),
@@ -56,10 +54,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/for-poetry.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/for-poetry.txt",
                     ),
                 },
             ),
@@ -77,10 +73,8 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/for-poetry.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/for-poetry.txt",
                     ),
                 },
             ),
@@ -117,10 +111,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/for-poetry.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/for-poetry.txt",
                     ),
                 },
             ),

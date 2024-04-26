@@ -24,10 +24,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/small.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/small.txt",
                     ),
                 },
             ),
@@ -56,10 +54,8 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        Requirement(
-                            "<REQUIREMENTS_DIR>/small.txt",
-                        ),
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/small.txt",
                     ),
                 },
             ),

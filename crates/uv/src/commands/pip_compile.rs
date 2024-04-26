@@ -10,7 +10,7 @@ use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tempfile::tempdir_in;
 use tracing::debug;
 
@@ -345,13 +345,15 @@ pub(crate) async fn pip_compile(
     .resolve()
     .await?;
 
-    let mut sources: FxHashMap<PackageName, Vec<Source>> = FxHashMap::default();
+    let mut sources: FxHashMap<PackageName, FxHashSet<Source>> = FxHashMap::default();
 
     let mut insert_source = |package_name: &PackageName, source: Source| {
         if let Some(source_packages) = sources.get_mut(package_name) {
-            source_packages.push(source);
+            source_packages.insert(source);
         } else {
-            sources.insert(package_name.clone(), vec![source]);
+            let mut new_entry = FxHashSet::default();
+            new_entry.insert(source);
+            sources.insert(package_name.clone(), new_entry);
         }
     };
 
@@ -364,6 +366,12 @@ pub(crate) async fn pip_compile(
     for constraint in &constraints {
         if let Some(path) = &constraint.path {
             insert_source(&constraint.name, Source::Constraint(path.clone()));
+        }
+    }
+
+    for ov in &overrides {
+        if let Some(path) = &ov.path {
+            insert_source(&ov.name, Source::Override(path.clone()));
         }
     }
 

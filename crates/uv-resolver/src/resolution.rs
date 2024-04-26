@@ -522,8 +522,8 @@ pub struct DisplayResolutionGraph<'a> {
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
-
-    sources: FxHashMap<PackageName, Vec<Source>>,
+    /// Sources of the packages - requirements, constraints and overrides
+    sources: FxHashMap<PackageName, FxHashSet<Source>>,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
@@ -547,7 +547,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
-        sources: FxHashMap<PackageName, Vec<Source>>,
+        sources: FxHashMap<PackageName, FxHashSet<Source>>,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -703,7 +703,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .map(|edge| &self.resolution.petgraph[edge.source()])
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
-                let source = self.sources.get(node.name()).cloned().unwrap_or(vec![]);
+                let source = self.sources.get(node.name()).cloned().unwrap_or_default();
 
                 match self.annotation_style {
                     AnnotationStyle::Line => {
@@ -729,7 +729,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let separator = "\n";
                             let comment = format!(
                                 "    # via {}",
-                                source.first().unwrap().to_dependency_string()
+                                source.iter().next().unwrap().to_dependency_string()
                             )
                             .green()
                             .to_string();

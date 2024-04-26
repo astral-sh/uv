@@ -1,6 +1,6 @@
 use derivative::Derivative;
+
 use pep508_rs::VerbatimUrl;
-use std::hash::Hash;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolver::Urls;

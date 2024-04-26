@@ -1770,10 +1770,8 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                source: Some(
-                                    Requirement(
-                                        "<REQUIREMENTS_DIR>/subdir/sibling.txt",
-                                    ),
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/subdir/sibling.txt",
                                 ),
                             },
                         ),
@@ -1837,10 +1835,8 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                source: Some(
-                                    Requirement(
-                                        "<REQUIREMENTS_DIR>/requirements.txt",
-                                    ),
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
                         ),
@@ -2032,10 +2028,8 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                source: Some(
-                                    Requirement(
-                                        "<REQUIREMENTS_DIR>/./sibling.txt",
-                                    ),
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/./sibling.txt",
                                 ),
                             },
                         ),
@@ -2064,10 +2058,8 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                source: Some(
-                                    Requirement(
-                                        "<REQUIREMENTS_DIR>/requirements.txt",
-                                    ),
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
                         ),
@@ -2098,10 +2090,8 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                source: Some(
-                                    Requirement(
-                                        "<REQUIREMENTS_DIR>/requirements.txt",
-                                    ),
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
                         ),
@@ -2132,10 +2122,8 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                source: Some(
-                                    Requirement(
-                                        "<REQUIREMENTS_DIR>/requirements.txt",
-                                    ),
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
                         ),
@@ -2164,10 +2152,8 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                source: Some(
-                                    Requirement(
-                                        "<REQUIREMENTS_DIR>/requirements.txt",
-                                    ),
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
                         ),
