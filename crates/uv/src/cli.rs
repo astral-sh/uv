@@ -33,8 +33,13 @@ pub(crate) struct Cli {
     pub(crate) cache_args: CacheArgs,
 
     /// The path to a `pyproject.toml` or `uv.toml` file to use for configuration.
-    #[arg(long, short, env = "UV_CONFIG_FILE", hide = true)]
+    #[arg(long, env = "UV_CONFIG_FILE", hide = true)]
     pub(crate) config_file: Option<PathBuf>,
+
+    /// Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+    /// parent directories.
+    #[arg(long, hide = true)]
+    pub(crate) isolated: bool,
 }
 
 #[derive(Parser, Debug, Clone)]
