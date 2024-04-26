@@ -768,6 +768,11 @@ pub(crate) struct PipSyncArgs {
     #[arg(long, overrides_with("break_system_packages"))]
     pub(crate) no_break_system_packages: bool,
 
+    /// Install packages into the specified directory, rather than into the virtual environment
+    /// or system Python interpreter.
+    #[arg(long)]
+    pub(crate) target: Option<PathBuf>,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[arg(long, overrides_with("no_legacy_setup_py"))]
@@ -1132,6 +1137,11 @@ pub(crate) struct PipInstallArgs {
     #[arg(long, overrides_with("break_system_packages"))]
     pub(crate) no_break_system_packages: bool,
 
+    /// Install packages into the specified directory, rather than into the virtual environment
+    /// or system Python interpreter.
+    #[arg(long)]
+    pub(crate) target: Option<PathBuf>,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[arg(long, overrides_with("no_legacy_setup_py"))]
@@ -1334,6 +1344,11 @@ pub(crate) struct PipUninstallArgs {
 
     #[arg(long, overrides_with("break_system_packages"))]
     pub(crate) no_break_system_packages: bool,
+
+    /// Uninstall packages from the specified directory, rather than from the virtual environment
+    /// or system Python interpreter.
+    #[arg(long)]
+    pub(crate) target: Option<PathBuf>,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(long, overrides_with("no_offline"))]

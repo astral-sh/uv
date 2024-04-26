@@ -1,11 +1,9 @@
 use std::borrow::Cow;
 use std::fmt::Write;
-
 use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
-
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
@@ -33,7 +31,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_interpreter::{Interpreter, PythonEnvironment, Target};
 use uv_normalize::PackageName;
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
@@ -84,6 +82,7 @@ pub(crate) async fn pip_install(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    target: Option<Target>,
     native_tls: bool,
     cache: Cache,
     dry_run: bool,
@@ -133,6 +132,14 @@ pub(crate) async fn pip_install(
         venv.interpreter().python_version(),
         venv.python_executable().user_display().cyan()
     );
+
+    // Apply any `--target` directory.
+    let venv = if let Some(target) = target {
+        target.init()?;
+        venv.with_target(target)
+    } else {
+        venv
+    };
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {

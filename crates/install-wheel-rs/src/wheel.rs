@@ -537,6 +537,7 @@ pub(crate) fn install_data(
                 move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
+                let mut initialized = false;
                 for file in fs::read_dir(path)? {
                     let file = file?;
 
@@ -554,6 +555,12 @@ pub(crate) fn install_data(
                         .any(|script| script.name == match_name)
                     {
                         continue;
+                    }
+
+                    // Create the scripts directory, if it doesn't exist.
+                    if !initialized {
+                        fs::create_dir_all(&layout.scheme.scripts)?;
+                        initialized = true;
                     }
 
                     install_script(layout, site_packages, record, &file)?;

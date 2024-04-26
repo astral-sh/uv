@@ -11,7 +11,6 @@ use distribution_types::{
     IndexLocations, InstalledMetadata, LocalDist, LocalEditable, LocalEditables, Name, ResolvedDist,
 };
 use install_wheel_rs::linker::LinkMode;
-
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
@@ -27,7 +26,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_interpreter::{Interpreter, PythonEnvironment, Target};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
@@ -64,6 +63,7 @@ pub(crate) async fn pip_sync(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    target: Option<Target>,
     native_tls: bool,
     cache: Cache,
     printer: Printer,
@@ -112,6 +112,14 @@ pub(crate) async fn pip_sync(
         venv.interpreter().python_version(),
         venv.python_executable().user_display().cyan()
     );
+
+    // Apply any `--target` directory.
+    let venv = if let Some(target) = target {
+        target.init()?;
+        venv.with_target(target)
+    } else {
+        venv
+    };
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
