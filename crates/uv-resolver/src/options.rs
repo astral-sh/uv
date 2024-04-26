@@ -1,5 +1,6 @@
-use crate::{DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_configuration::IndexStrategy;
+
+use crate::{DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Copy, Clone)]
