@@ -7791,8 +7791,8 @@ requires-python = ">3.8"
     #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in --override overrides.txt --constraint constraints.txt
     anyio @ ./anyio
         # via
-        #   -c constraints.txt
         #   --override overrides.txt
+        #   -c constraints.txt
         #   lib
     example @ ./app
     idna==3.6

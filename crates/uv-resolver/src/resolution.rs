@@ -715,7 +715,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                                 .chain(
                                     source
                                         .into_iter()
-                                        .map(|source| source.to_dependency_string()),
+                                        .map(|source| source.to_dependency_string())
+                                        .sorted(),
                                 )
                                 .collect::<Vec<_>>()
                                 .join(", ");
@@ -745,6 +746,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let deps = source
                                 .into_iter()
                                 .map(|source| source.to_dependency_string())
+                                .sorted()
                                 .chain(
                                     edges
                                         .iter()
