@@ -489,6 +489,8 @@ uv accepts the following command-line arguments as environment variables:
   WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) or
   containerized environments and should be used with caution, as modifying the system Python
   can lead to unexpected behavior.
+- `UV_PYTHON`: Equivalent to the `--python` command-line argument. If set to a path, uv will
+  use this Python interpreter for all operations.
 - `UV_BREAK_SYSTEM_PACKAGES`: Equivalent to the `--break-system-packages` command-line argument. If
   set to `true`, uv will allow the installation of packages that conflict with system-installed
   packages.
