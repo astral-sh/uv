@@ -18,6 +18,26 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  determine_changes:
+    name: "Determine changes"
+    runs-on: ubuntu-latest
+    outputs:
+      # Flag that is raised when any code is changed
+      code: ${{ steps.changed.outputs.code_any_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: tj-actions/changed-files@v44
+        id: changed
+        with:
+          files_yaml: |
+            code:
+              - "**/*"
+              - "!**/*.md"
+              - "!bin/**"
+              - "!assets/**"
   cargo-fmt:
     name: "cargo fmt"
     runs-on: ubuntu-latest
