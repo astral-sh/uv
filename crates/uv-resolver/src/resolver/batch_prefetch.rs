@@ -53,7 +53,7 @@ impl BatchPrefetcher {
         index: &InMemoryIndex,
         selector: &CandidateSelector,
     ) -> anyhow::Result<(), ResolveError> {
-        let PubGrubPackage::Package(package_name, None, None, _source) = &next else {
+        let PubGrubPackage::Package(package_name, None, None) = &next else {
             return Ok(());
         };
 
@@ -160,7 +160,7 @@ impl BatchPrefetcher {
     /// Each time we tried a version for a package, we register that here.
     pub(crate) fn version_tried(&mut self, package: PubGrubPackage) {
         // Only track base packages, no virtual packages from extras.
-        if matches!(package, PubGrubPackage::Package(_, Some(_), _, _)) {
+        if matches!(package, PubGrubPackage::Package(_, Some(_), _)) {
             return;
         }
         *self.tried_versions.entry(package).or_default() += 1;

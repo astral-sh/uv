@@ -64,8 +64,6 @@ pub struct ResolutionGraph {
     editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
     diagnostics: Vec<Diagnostic>,
-    /// Source files for dependencies
-    sources: FxHashMap<PackageName, Vec<Source>>,
 }
 
 impl ResolutionGraph {
@@ -87,24 +85,13 @@ impl ResolutionGraph {
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         let mut extras = FxHashMap::default();
         let mut diagnostics = Vec::new();
-        let mut sources: FxHashMap<PackageName, Vec<Source>> = FxHashMap::default();
-
-        let mut insert_source = |package_name: &PackageName, source_names: &Vec<Source>| {
-            for source_name in source_names {
-                if let Some(source_packages) = sources.get_mut(package_name) {
-                    source_packages.push(source_name.clone());
-                } else {
-                    sources.insert(package_name.clone(), vec![source_name.clone()]);
-                }
-            }
-        };
 
         // Add every package to the graph.
         let mut inverse =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         for (package, version) in selection {
             match package {
-                PubGrubPackage::Package(package_name, None, None, source) => {
+                PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?.into()
@@ -136,10 +123,8 @@ impl ResolutionGraph {
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
-
-                    insert_source(package_name, source);
                 }
-                PubGrubPackage::Package(package_name, None, Some(url), source) => {
+                PubGrubPackage::Package(package_name, None, Some(url)) => {
                     // Create the distribution.
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?
@@ -169,9 +154,8 @@ impl ResolutionGraph {
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(pinned_package.into());
                     inverse.insert(package_name, index);
-                    insert_source(package_name, source);
                 }
-                PubGrubPackage::Package(package_name, Some(extra), None, _) => {
+                PubGrubPackage::Package(package_name, Some(extra), None) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_registry(package_name, version);
 
@@ -225,7 +209,7 @@ impl ResolutionGraph {
                         }
                     }
                 }
-                PubGrubPackage::Package(package_name, Some(extra), Some(url), _) => {
+                PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_url(package_name, url);
 
@@ -300,10 +284,10 @@ impl ResolutionGraph {
                         continue;
                     }
 
-                    let PubGrubPackage::Package(self_package, _, _, _) = self_package else {
+                    let PubGrubPackage::Package(self_package, _, _) = self_package else {
                         continue;
                     };
-                    let PubGrubPackage::Package(dependency_package, _, _, _) = dependency_package
+                    let PubGrubPackage::Package(dependency_package, _, _) = dependency_package
                     else {
                         continue;
                     };
@@ -332,7 +316,6 @@ impl ResolutionGraph {
             extras,
             editables,
             diagnostics,
-            sources,
         })
     }
 
@@ -539,12 +522,15 @@ pub struct DisplayResolutionGraph<'a> {
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
+
+    sources: FxHashMap<PackageName, Vec<Source>>,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
         Self::new(
             resolution,
+            FxHashMap::default(),
             &[],
             false,
             false,
@@ -560,6 +546,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolutionGraph,
+        sources: FxHashMap<PackageName, Vec<Source>>,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -575,6 +562,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             include_annotations,
             include_index_annotation,
             annotation_style,
+            sources,
         }
     }
 }
@@ -714,12 +702,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .map(|edge| &self.resolution.petgraph[edge.source()])
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
-                let source = self
-                    .resolution
-                    .sources
-                    .get(node.name())
-                    .cloned()
-                    .unwrap_or(vec![]);
+                let source = self.sources.get(node.name()).cloned().unwrap_or(vec![]);
 
                 match self.annotation_style {
                     AnnotationStyle::Line => {

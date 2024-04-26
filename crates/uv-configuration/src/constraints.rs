@@ -3,7 +3,7 @@ use std::hash::BuildHasherDefault;
 use rustc_hash::FxHashMap;
 
 use pep508_rs::Requirement;
-use uv_normalize::{PackageName, Source};
+use uv_normalize::PackageName;
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
@@ -14,10 +14,7 @@ impl Constraints {
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
         let mut constraints: FxHashMap<PackageName, Vec<Requirement>> =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
-        for mut requirement in requirements {
-            if let Some(Source::Requirement(ref name)) = requirement.source {
-                requirement.source.replace(Source::Constraint(name.clone()));
-            }
+        for requirement in requirements {
             constraints
                 .entry(requirement.name.clone())
                 .or_default()

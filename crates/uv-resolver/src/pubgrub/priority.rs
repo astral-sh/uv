@@ -28,7 +28,7 @@ impl PubGrubPriorities {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
 
-            PubGrubPackage::Extra(name, _, None) | PubGrubPackage::Package(name, _, None, _) => {
+            PubGrubPackage::Extra(name, _, None) | PubGrubPackage::Package(name, _, None) => {
                 match self.0.entry(name.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
@@ -61,8 +61,7 @@ impl PubGrubPriorities {
                     }
                 }
             }
-            PubGrubPackage::Extra(name, _, Some(_))
-            | PubGrubPackage::Package(name, _, Some(_), _) => {
+            PubGrubPackage::Extra(name, _, Some(_)) | PubGrubPackage::Package(name, _, Some(_)) => {
                 match self.0.entry(name.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
@@ -96,7 +95,7 @@ impl PubGrubPriorities {
             PubGrubPackage::Root(_) => Some(PubGrubPriority::Root),
             PubGrubPackage::Python(_) => Some(PubGrubPriority::Root),
             PubGrubPackage::Extra(name, _, _) => self.0.get(name).copied(),
-            PubGrubPackage::Package(name, _, _, _) => self.0.get(name).copied(),
+            PubGrubPackage::Package(name, _, _) => self.0.get(name).copied(),
         }
     }
 }

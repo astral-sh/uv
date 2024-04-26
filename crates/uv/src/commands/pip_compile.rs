@@ -10,6 +10,7 @@ use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
 use tempfile::tempdir_in;
 use tracing::debug;
 
@@ -29,7 +30,7 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
 use uv_interpreter::{find_best_python, find_requested_python, PythonEnvironment};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, PackageName, Source};
 use uv_requirements::{
     upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
@@ -344,6 +345,28 @@ pub(crate) async fn pip_compile(
     .resolve()
     .await?;
 
+    let mut sources: FxHashMap<PackageName, Vec<Source>> = FxHashMap::default();
+
+    let mut insert_source = |package_name: &PackageName, source: Source| {
+        if let Some(source_packages) = sources.get_mut(package_name) {
+            source_packages.push(source);
+        } else {
+            sources.insert(package_name.clone(), vec![source]);
+        }
+    };
+
+    for requirement in &requirements {
+        if let Some(path) = &requirement.path {
+            insert_source(&requirement.name, Source::Requirement(path.clone()));
+        }
+    }
+
+    for constraint in &constraints {
+        if let Some(path) = &constraint.path {
+            insert_source(&constraint.name, Source::Constraint(path.clone()));
+        }
+    }
+
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
@@ -557,6 +580,7 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
+            sources,
             &no_emit_packages,
             generate_hashes,
             include_extras,

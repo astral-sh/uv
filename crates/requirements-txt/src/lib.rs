@@ -55,7 +55,7 @@ use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
-use uv_normalize::{ExtraName, Source};
+use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
 
 mod requirement;
@@ -495,10 +495,7 @@ impl RequirementsTxt {
                     // _requirements_, but we don't want to support that.
                     for entry in sub_constraints.requirements {
                         match entry.requirement {
-                            RequirementsTxtRequirement::Pep508(mut requirement) => {
-                                if let Some(Source::Requirement(ref name)) = requirement.source {
-                                    requirement.source.replace(Source::Constraint(name.clone()));
-                                }
+                            RequirementsTxtRequirement::Pep508(requirement) => {
                                 data.constraints.push(requirement);
                             }
                             RequirementsTxtRequirement::Unnamed(_) => {
@@ -509,10 +506,7 @@ impl RequirementsTxt {
                             }
                         }
                     }
-                    for mut constraint in sub_constraints.constraints {
-                        if let Some(Source::Requirement(ref name)) = constraint.source {
-                            constraint.source.replace(Source::Constraint(name.clone()));
-                        }
+                    for constraint in sub_constraints.constraints {
                         data.constraints.push(constraint);
                     }
                 }

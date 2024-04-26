@@ -364,7 +364,7 @@ impl<
                         .expect("a package was chosen but we don't have a term.");
 
                     let reason = {
-                        if let PubGrubPackage::Package(ref package_name, _, _, _) = next {
+                        if let PubGrubPackage::Package(ref package_name, _, _) = next {
                             // Check if the decision was due to the package being unavailable
                             self.unavailable_packages
                                 .get(package_name)
@@ -526,7 +526,7 @@ impl<
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
             PubGrubPackage::Extra(_, _, _) => {}
-            PubGrubPackage::Package(name, _extra, None, _) => {
+            PubGrubPackage::Package(name, _extra, None) => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_package(name) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
@@ -537,7 +537,7 @@ impl<
                     request_sink.send(Request::Package(name.clone())).await?;
                 }
             }
-            PubGrubPackage::Package(name, _extra, Some(url), _) => {
+            PubGrubPackage::Package(name, _extra, Some(url)) => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_url(url) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
@@ -562,7 +562,7 @@ impl<
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package(package_name, None, None, _) = package else {
+            let PubGrubPackage::Package(package_name, None, None) = package else {
                 continue;
             };
             request_sink
@@ -606,7 +606,7 @@ impl<
             }
 
             PubGrubPackage::Extra(package_name, _, Some(url))
-            | PubGrubPackage::Package(package_name, _, Some(url), _) => {
+            | PubGrubPackage::Package(package_name, _, Some(url)) => {
                 debug!("Searching for a compatible version of {package} @ {url} ({range})");
 
                 // If the dist is an editable, return the version from the editable metadata.
@@ -697,7 +697,7 @@ impl<
             }
 
             PubGrubPackage::Extra(package_name, _, None)
-            | PubGrubPackage::Package(package_name, _, None, _) => {
+            | PubGrubPackage::Package(package_name, _, None) => {
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
@@ -774,7 +774,7 @@ impl<
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if matches!(package, PubGrubPackage::Package(_, _, _, _)) {
+                if matches!(package, PubGrubPackage::Package(_, _, _)) {
                     if self.index.distributions.register(candidate.version_id()) {
                         let request = match dist.for_resolution() {
                             ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
@@ -831,12 +831,8 @@ impl<
 
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.iter() {
-                    let package = PubGrubPackage::from_package(
-                        metadata.name.clone(),
-                        None,
-                        vec![],
-                        &self.urls,
-                    );
+                    let package =
+                        PubGrubPackage::from_package(metadata.name.clone(), None, &self.urls);
                     let version = Range::singleton(metadata.version.clone());
 
                     // Update the package priorities.
@@ -851,7 +847,6 @@ impl<
                             PubGrubPackage::from_package(
                                 metadata.name.clone(),
                                 Some(extra.clone()),
-                                vec![],
                                 &self.urls,
                             ),
                             Range::singleton(metadata.version.clone()),
@@ -864,7 +859,7 @@ impl<
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
 
-            PubGrubPackage::Package(package_name, extra, url, _source) => {
+            PubGrubPackage::Package(package_name, extra, url) => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
@@ -1027,16 +1022,11 @@ impl<
             // Add a dependency on both the extra and base package.
             PubGrubPackage::Extra(package_name, extra, url) => Ok(Dependencies::Available(vec![
                 (
-                    PubGrubPackage::Package(package_name.clone(), None, url.clone(), vec![]),
+                    PubGrubPackage::Package(package_name.clone(), None, url.clone()),
                     Range::singleton(version.clone()),
                 ),
                 (
-                    PubGrubPackage::Package(
-                        package_name.clone(),
-                        Some(extra.clone()),
-                        url.clone(),
-                        vec![],
-                    ),
+                    PubGrubPackage::Package(package_name.clone(), Some(extra.clone()), url.clone()),
                     Range::singleton(version.clone()),
                 ),
             ])),
@@ -1254,10 +1244,10 @@ impl<
                 PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Python(_) => {}
                 PubGrubPackage::Extra(_, _, _) => {}
-                PubGrubPackage::Package(package_name, _extra, Some(url), _) => {
+                PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                     reporter.on_progress(package_name, &VersionOrUrl::Url(url));
                 }
-                PubGrubPackage::Package(package_name, _extra, None, _source) => {
+                PubGrubPackage::Package(package_name, _extra, None) => {
                     reporter.on_progress(package_name, &VersionOrUrl::Version(version));
                 }
             }

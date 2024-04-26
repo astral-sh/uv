@@ -188,16 +188,7 @@ fn to_pubgrub(
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
-            PubGrubPackage::from_package(
-                requirement.name.clone(),
-                extra,
-                requirement
-                    .source
-                    .as_ref()
-                    .map(|s| vec![s.clone()])
-                    .unwrap_or_default(),
-                urls,
-            ),
+            PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
             Range::full(),
         )),
 
@@ -226,16 +217,7 @@ fn to_pubgrub(
             };
 
             Ok((
-                PubGrubPackage::from_package(
-                    requirement.name.clone(),
-                    extra,
-                    requirement
-                        .source
-                        .as_ref()
-                        .map(|s| vec![s.clone()])
-                        .unwrap_or_default(),
-                    urls,
-                ),
+                PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
                 version,
             ))
         }
@@ -258,16 +240,7 @@ fn to_pubgrub(
             }
 
             Ok((
-                PubGrubPackage::Package(
-                    requirement.name.clone(),
-                    extra,
-                    Some(expected.clone()),
-                    requirement
-                        .source
-                        .as_ref()
-                        .map(|s| vec![s.clone()])
-                        .unwrap_or_default(),
-                ),
+                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
                 Range::full(),
             ))
         }
