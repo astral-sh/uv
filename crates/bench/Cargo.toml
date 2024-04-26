@@ -22,8 +22,18 @@ name = "distribution-filename"
 path = "benches/distribution_filename.rs"
 harness = false
 
+[[bench]]
+name = "uv"
+path = "benches/uv.rs"
+harness = false
+
 [dependencies]
 distribution-filename = { workspace = true }
 platform-tags = { workspace = true }
 
 criterion = { version = "0.5.1", default-features = false }
+codspeed-criterion-compat = { version = "2.6.0", default-features = false, optional = true }
+tempfile = { workspace = true }
+
+[features]
+codspeed = ["codspeed-criterion-compat"]
