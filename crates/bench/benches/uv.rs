@@ -72,7 +72,7 @@ fn install_warm(c: &mut Criterion<WallTime>) {
         );
 
         let venv_dir = Path::new(".venv");
-        env::set_var("VIRTUAL_ENV", &venv_dir);
+        env::set_var("VIRTUAL_ENV", venv_dir);
 
         let temp_dir = tempfile::tempdir().unwrap();
         let cache_dir = Path::new("./.cache");
@@ -83,7 +83,7 @@ fn install_warm(c: &mut Criterion<WallTime>) {
                     let mut command = Command::new("virtualenv");
                     command
                         .args(["--clear", "-p", "3.12"])
-                        .arg(&venv_dir)
+                        .arg(venv_dir)
                         .stdout(Stdio::null())
                         .stderr(Stdio::null());
 
