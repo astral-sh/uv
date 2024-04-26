@@ -85,11 +85,18 @@ pub fn install_wheel(
     )?;
     let mut record = read_record_file(&mut record_file)?;
 
-    debug!(name, "Writing entrypoints");
     let (console_scripts, gui_scripts) =
         parse_scripts(&wheel, &dist_info_prefix, None, layout.python_version.1)?;
-    write_script_entrypoints(layout, site_packages, &console_scripts, &mut record, false)?;
-    write_script_entrypoints(layout, site_packages, &gui_scripts, &mut record, true)?;
+
+    if console_scripts.is_empty() && gui_scripts.is_empty() {
+        debug!(name, "No entrypoints");
+    } else {
+        debug!(name, "Writing entrypoints");
+
+        fs_err::create_dir_all(&layout.scheme.scripts)?;
+        write_script_entrypoints(layout, site_packages, &console_scripts, &mut record, false)?;
+        write_script_entrypoints(layout, site_packages, &gui_scripts, &mut record, true)?;
+    }
 
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
