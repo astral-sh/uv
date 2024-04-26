@@ -1,6 +1,6 @@
 //! Benchmarks uv using criterion.
 //!
-//! The benchmarks in this file assume that the `uv` and `virtualenv` executables are available.
+//! The benchmarks in this file assume that the `uv` executable is available.
 //!
 //! To set up the required environment, run:
 //!
@@ -34,11 +34,9 @@ fn resolve_warm(c: &mut Criterion<WallTime>) {
         let temp_dir = tempfile::tempdir().unwrap();
         let root = env::current_dir().unwrap();
         env::set_current_dir(&temp_dir).unwrap();
-
         let output = "requirements.txt";
 
         let setup = || fs::remove_file(output).ok();
-
         let run = |_| {
             Command::new("uv")
                 .args(["pip", "compile"])
