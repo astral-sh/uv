@@ -1,4 +1,6 @@
-use std::collections::BTreeMap;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
+use std::iter::Peekable;
 
 use pubgrub::range::Range;
 use tracing::debug;
@@ -222,17 +224,26 @@ impl CandidateSelector {
         let highest = self.use_highest_version(package_name);
         let allow_prerelease = self.allow_prereleases(package_name);
 
-        if self.index_strategy == IndexStrategy::UnsafeHighest {
-            // merge all indices together before resolving any candidates
-            let map: BTreeMap<&Version, VersionMapDistHandle> = version_maps
-                .iter()
-                .rev()
-                .flat_map(VersionMap::iter)
-                .collect();
+        if self.index_strategy == IndexStrategy::UnsafeHighestMatch {
             if highest {
-                Self::select_candidate(map.into_iter().rev(), package_name, range, allow_prerelease)
+                Self::select_candidate(
+                    MaxIterator::new(
+                        version_maps
+                            .iter()
+                            .map(|version_map| version_map.iter().rev())
+                            .collect(),
+                    ),
+                    package_name,
+                    range,
+                    allow_prerelease,
+                )
             } else {
-                Self::select_candidate(map.into_iter(), package_name, range, allow_prerelease)
+                Self::select_candidate(
+                    MinIterator::new(version_maps.iter().map(VersionMap::iter).collect()),
+                    package_name,
+                    range,
+                    allow_prerelease,
+                )
             }
         } else {
             if highest {
@@ -272,7 +283,7 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over source distributions.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)> + ExactSizeIterator,
+        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: AllowPreRelease,
@@ -284,8 +295,8 @@ impl CandidateSelector {
         }
 
         let mut prerelease = None;
-        let versions_len = versions.len();
-        for (step, (version, maybe_dist)) in versions.enumerate() {
+
+        for (version, maybe_dist) in versions {
             let candidate = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
@@ -294,11 +305,9 @@ impl CandidateSelector {
                                 continue;
                             };
                             tracing::trace!(
-                                "found candidate for package {:?} with range {:?} \
-                                 after {} steps: {:?} version",
+                                "found candidate for package {:?} with range {:?}: {:?} version",
                                 package_name,
                                 range,
-                                step,
                                 version,
                             );
                             // If pre-releases are allowed, treat them equivalently
@@ -335,11 +344,9 @@ impl CandidateSelector {
                         continue;
                     };
                     tracing::trace!(
-                        "found candidate for package {:?} with range {:?} \
-                         after {} steps: {:?} version",
+                        "found candidate for package {:?} with range {:?}: {:?} version",
                         package_name,
                         range,
-                        step,
                         version,
                     );
                     Candidate::new(package_name, version, dist)
@@ -367,11 +374,9 @@ impl CandidateSelector {
             return Some(candidate);
         }
         tracing::trace!(
-            "exhausted all candidates for package {:?} with range {:?} \
-             after {} steps",
+            "exhausted all candidates for package {:?} with range {:?}",
             package_name,
             range,
-            versions_len,
         );
         match prerelease {
             None => None,
@@ -463,5 +468,102 @@ impl Name for Candidate<'_> {
 impl DistributionMetadata for Candidate<'_> {
     fn version_or_url(&self) -> distribution_types::VersionOrUrl {
         distribution_types::VersionOrUrl::Version(self.version)
+    }
+}
+
+/// An iterator that returns the maximum version from a set of iterators.
+struct MaxIterator<'a, T: Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>> {
+    iterators: Vec<Peekable<T>>,
+    heap: BinaryHeap<(&'a Version, Reverse<usize>)>,
+}
+
+impl<'a, T: Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>> MaxIterator<'a, T> {
+    fn new(iterators: Vec<T>) -> Self {
+        // Convert each iterator into a peekable.
+        let mut iterators = iterators
+            .into_iter()
+            .map(Iterator::peekable)
+            .collect::<Vec<_>>();
+
+        // Create a binary heap to track the maximum version from each iterator, respecting the
+        // order of the indexes.
+        let heap = iterators
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(index, iter)| iter.peek().map(|(version, _)| (*version, Reverse(index))))
+            .collect();
+
+        Self { iterators, heap }
+    }
+}
+
+impl<'a, T: Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>> Iterator
+    for MaxIterator<'a, T>
+{
+    type Item = (&'a Version, VersionMapDistHandle<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Take the maximum version from the heap.
+        let (_, index) = self.heap.pop()?;
+
+        // Advance the iterator and push the next version onto the heap.
+        let next = self.iterators[index.0].next()?;
+
+        // Push the next version onto the heap.
+        if let Some((version, _)) = self.iterators[index.0].peek() {
+            self.heap.push((version, index));
+        }
+
+        Some(next)
+    }
+}
+
+/// An iterator that returns the minimum version from a set of iterators.
+struct MinIterator<'a, T: Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>> {
+    iterators: Vec<Peekable<T>>,
+    heap: BinaryHeap<(Reverse<&'a Version>, Reverse<usize>)>,
+}
+
+impl<'a, T: Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>> MinIterator<'a, T> {
+    fn new(iterators: Vec<T>) -> Self {
+        // Convert each iterator into a peekable.
+        let mut iterators = iterators
+            .into_iter()
+            .map(Iterator::peekable)
+            .collect::<Vec<_>>();
+
+        // Create a binary heap to track the minimum version from each iterator, respecting the
+        // order of the indexes.
+        let heap = iterators
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(index, iter)| {
+                iter.peek()
+                    .map(|(version, _)| (Reverse(*version), Reverse(index)))
+            })
+            .collect();
+
+        Self { iterators, heap }
+    }
+}
+
+impl<'a, T: Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>> Iterator
+    for MinIterator<'a, T>
+{
+    type Item = (&'a Version, VersionMapDistHandle<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Take the minimum version from the heap, skipping duplicates.
+        let (_, index) = self.heap.pop()?;
+
+        // Advance the iterator and push the next version onto the heap.
+        let next = self.iterators[index.0].next()?;
+
+        // Push the next version onto the heap.
+        if let Some((version, _)) = self.iterators[index.0].peek() {
+            self.heap.push((Reverse(version), index));
+        }
+
+        Some(next)
     }
 }
