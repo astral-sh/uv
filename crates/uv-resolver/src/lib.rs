@@ -28,6 +28,7 @@ mod error;
 mod exclude_newer;
 mod exclusions;
 mod flat_index;
+mod iterators;
 mod manifest;
 mod options;
 mod pins;
