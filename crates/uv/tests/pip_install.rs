@@ -4637,6 +4637,7 @@ fn tool_uv_sources() -> Result<()> {
 
     // Install the editable packages.
     uv_snapshot!(context.filters(), windows_filters=false, context.install()
+        .arg("--preview")
         .arg("-r")
         .arg(require_path)
         .arg("--extra")
@@ -4664,6 +4665,7 @@ fn tool_uv_sources() -> Result<()> {
 
     // Re-install the editable packages.
     uv_snapshot!(context.filters(), windows_filters=false, context.install()
+        .arg("--preview")
         .arg("-r")
         .arg(require_path), @r###"
     success: true
@@ -4674,5 +4676,41 @@ fn tool_uv_sources() -> Result<()> {
     Audited 5 packages in [TIME]
     "###
     );
+    Ok(())
+}
+
+#[test]
+fn tool_uv_sources_is_in_preview() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = [
+          "tqdm>4,<=5",
+        ]
+
+        [tool.uv.sources]
+        tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
+    "#})?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.filters(), windows_filters=false, context.install()
+        .arg("-r")
+        .arg("pyproject.toml")
+        .arg("--extra")
+        .arg("utils"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `pyproject.toml`
+      Caused by: Failed to parse entry for: `tqdm`
+      Caused by: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    "###
+    );
+
     Ok(())
 }

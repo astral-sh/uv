@@ -26,8 +26,8 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
-    Upgrade,
+    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, PreviewMode,
+    SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -92,6 +92,7 @@ pub(crate) async fn pip_compile(
     uv_lock: bool,
     native_tls: bool,
     quiet: bool,
+    preview: PreviewMode,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -131,6 +132,7 @@ pub(crate) async fn pip_compile(
         overrides,
         &extras,
         &client_builder,
+        preview,
     )
     .await?;
 

@@ -28,8 +28,8 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
 use uv_configuration::{
-    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, Reinstall,
-    SetupPyStrategy, Upgrade,
+    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, PreviewMode,
+    Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -90,6 +90,7 @@ pub(crate) async fn pip_install(
     target: Option<Target>,
     uv_lock: Option<String>,
     native_tls: bool,
+    preview: PreviewMode,
     cache: Cache,
     dry_run: bool,
     printer: Printer,
@@ -122,6 +123,7 @@ pub(crate) async fn pip_install(
         overrides,
         extras,
         &client_builder,
+        preview,
     )
     .await?;
 
@@ -508,6 +510,7 @@ async fn read_requirements(
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
     client_builder: &BaseClientBuilder<'_>,
+    preview: PreviewMode,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
@@ -525,6 +528,7 @@ async fn read_requirements(
         overrides,
         extras,
         client_builder,
+        preview,
     )
     .await?;
 
