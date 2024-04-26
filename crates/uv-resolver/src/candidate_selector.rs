@@ -1,21 +1,21 @@
 use std::collections::BTreeMap;
 
 use pubgrub::range::Range;
+use tracing::debug;
 
 use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use tracing::debug;
 use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
+use crate::{Exclusions, Manifest, Options};
 use crate::preferences::Preferences;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
-use crate::{Exclusions, Manifest, Options};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_field_names)]
@@ -37,11 +37,13 @@ impl CandidateSelector {
                 options.resolution_mode,
                 manifest,
                 markers,
+                options.dependency_mode,
             ),
             prerelease_strategy: PreReleaseStrategy::from_mode(
                 options.prerelease_mode,
                 manifest,
                 markers,
+                options.dependency_mode,
             ),
             index_strategy: options.index_strategy,
         }

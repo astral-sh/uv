@@ -63,7 +63,7 @@ jobs:
 
   macos-x86_64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: macos-latest
+    runs-on: macos-12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,9 +102,9 @@ jobs:
             *.tar.gz
             *.sha256
 
-  macos-universal:
+  macos-aarch64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -112,16 +112,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64
+          architecture: arm64
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
-      - name: "Build wheels - universal2"
+      - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@v1
         with:
-          args: --release --locked --target universal2-apple-darwin --out dist --features self-update
-      - name: "Test wheel - universal2"
+          target: aarch64
+          args: --release --locked --out dist --features self-update
+      - name: "Test wheel - aarch64"
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
+          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"

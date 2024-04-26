@@ -1,5 +1,98 @@
 # Changelog
 
+## 0.1.38
+
+### Enhancements
+
+- Add alternate manylinux targets to `--python-platform` ([#3229](https://github.com/astral-sh/uv/pull/3229))
+- An enum and backticks for lookahead error ([#3216](https://github.com/astral-sh/uv/pull/3216))
+- Upgrade macOS target to `12.0` ([#3228](https://github.com/astral-sh/uv/pull/3228))
+- Add keyring logs for URL and host fetches ([#3212](https://github.com/astral-sh/uv/pull/3212))
+- Combine unresolvable error dependency clauses with the same root ([#3225](https://github.com/astral-sh/uv/pull/3225))
+
+### CLI
+
+- Gave a better name to the `--color` placeholder ([#3226](https://github.com/astral-sh/uv/pull/3226))
+- Warn when an unsupported Python version is encountered ([#3250](https://github.com/astral-sh/uv/pull/3250))
+
+### Configuration
+
+- Use directory instead of file when searching for `uv.toml` file ([#3203](https://github.com/astral-sh/uv/pull/3203))
+
+### Performance
+
+- Only perform fetches of credentials for a realm and username combination once ([#3237](https://github.com/astral-sh/uv/pull/3237))
+- Unroll self-dependencies via extras ([#3230](https://github.com/astral-sh/uv/pull/3230))
+- Use read-write locks instead of mutexes in authentication handling ([#3210](https://github.com/astral-sh/uv/pull/3210))
+
+### Bug fixes
+
+- Avoid removing quites from requirements markers ([#3214](https://github.com/astral-sh/uv/pull/3214))
+- Avoid adding extras when expanding constraints ([#3232](https://github.com/astral-sh/uv/pull/3232))
+- Reinstall package when editable label is removed ([#3219](https://github.com/astral-sh/uv/pull/3219))
+
+### Documentation
+
+- Add `RAYON_NUM_THREADS` to environment variable docs ([#3223](https://github.com/astral-sh/uv/pull/3223))
+- Document support for HTTP proxy variables ([#3247](https://github.com/astral-sh/uv/pull/3247))
+- Fix documentation for `--python-platfor`m ([#3220](https://github.com/astral-sh/uv/pull/3220))
+
+## 0.1.37
+
+### Enhancements
+
+- Change default HTTP read timeout to 30s ([#3182](https://github.com/astral-sh/uv/pull/3182))
+- Add `--python-platform` to `sync` and `install` commands ([#3154](https://github.com/astral-sh/uv/pull/3154))
+- Add ticks around error messages more consistently ([#3004](https://github.com/astral-sh/uv/pull/3004))
+- Fix Docker publish permissions in release pipeline ([#3195](https://github.com/astral-sh/uv/pull/3195))
+- Improve tracing for keyring provider ([#3207](https://github.com/astral-sh/uv/pull/3207))
+
+### Performance
+
+- Update keyring provider to be async ([#3089](https://github.com/astral-sh/uv/pull/3089))
+
+### Bug fixes
+
+- Fix fetch of credentials when cache is seeded with username ([#3206](https://github.com/astral-sh/uv/pull/3206))
+
+### Documentation
+
+- Improve `--python-platform` documentation ([#3202](https://github.com/astral-sh/uv/pull/3202))
+
+## 0.1.36
+
+### Enhancements
+
+- Add support for embedded Python on Windows ([#3161](https://github.com/astral-sh/uv/pull/3161))
+- Add Docker image publishing to release pipeline ([#3155](https://github.com/astral-sh/uv/pull/3155))
+
+### Configuration
+
+- Add `UV_CONSTRAINT` environment variable to provide value for `--constraint`  ([#3162](https://github.com/astral-sh/uv/pull/3162))
+
+### Bug fixes
+
+- Avoid waiting for metadata for `--no-deps` editables ([#3188](https://github.com/astral-sh/uv/pull/3188))
+- Fix `venvlauncher.exe` reference in venv creation ([#3160](https://github.com/astral-sh/uv/pull/3160))
+- Fix authentication for URLs with a shared realm ([#3130](https://github.com/astral-sh/uv/pull/3130))
+- Restrict observed requirements to direct when `--no-deps` is specified ([#3191](https://github.com/astral-sh/uv/pull/3191))
+
+### Documentation
+
+- Add a versioning policy to the README ([#3151](https://github.com/astral-sh/uv/pull/3151))
+
+## 0.1.35
+
+### Enhancements
+
+- Add a `--python-platform` argument to enable resolving against a target platform ([#3111](https://github.com/astral-sh/uv/pull/3111))
+- Enforce HTTP timeouts on a per-read (rather than per-request) basis ([#3144](https://github.com/astral-sh/uv/pull/3144))
+
+### Bug fixes
+
+- Avoid preferring constrained over unconstrained packages ([#3148](https://github.com/astral-sh/uv/pull/3148))
+- Allow `UV_SYSTEM_PYTHON=1` in addition to `UV_SYSTEM_PYTHON=true` ([#3136](https://github.com/astral-sh/uv/pull/3136))
+
 ## 0.1.34
 
 ### CLI

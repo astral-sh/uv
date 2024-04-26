@@ -11,11 +11,14 @@ use tokio::sync::Notify;
 /// requests for metadata. When multiple tasks start the same query in parallel, e.g. through source
 /// dist builds, we want to wait until the other task is done and get a reference to the same
 /// result.
-pub struct OnceMap<K: Eq + Hash, V> {
+///
+/// Note that this always clones the value out of the underlying map. Because
+/// of this, it's common to wrap the `V` in an `Arc<V>` to make cloning cheap.
+pub struct OnceMap<K, V> {
     items: DashMap<K, Value<V>>,
 }
 
-impl<K: Eq + Hash, V> OnceMap<K, V> {
+impl<K: Eq + Hash, V: Clone> OnceMap<K, V> {
     /// Register that you want to start a job.
     ///
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
@@ -34,8 +37,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
 
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
-        if let Some(Value::Waiting(notify)) = self.items.insert(key, Value::Filled(Arc::new(value)))
-        {
+        if let Some(Value::Waiting(notify)) = self.items.insert(key, Value::Filled(value)) {
             notify.notify_waiters();
         }
     }
@@ -43,7 +45,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     /// Wait for the result of a job that is running.
     ///
     /// Will hang if [`OnceMap::done`] isn't called for this key.
-    pub async fn wait(&self, key: &K) -> Option<Arc<V>> {
+    pub async fn wait(&self, key: &K) -> Option<V> {
         let entry = self.items.get(key)?;
         match entry.value() {
             Value::Filled(value) => Some(value.clone()),
@@ -62,7 +64,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     }
 
     /// Return the result of a previous job, if any.
-    pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<Arc<V>>
+    pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
     {
@@ -84,5 +86,5 @@ impl<K: Eq + Hash + Clone, V> Default for OnceMap<K, V> {
 
 enum Value<V> {
     Waiting(Arc<Notify>),
-    Filled(Arc<V>),
+    Filled(V),
 }

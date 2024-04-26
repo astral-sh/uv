@@ -112,7 +112,7 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let default_timeout = 5 * 60;
+        let default_timeout = 30;
         let timeout = env::var("UV_HTTP_TIMEOUT")
             .or_else(|_| env::var("UV_REQUEST_TIMEOUT"))
             .or_else(|_| env::var("HTTP_TIMEOUT"))
@@ -125,7 +125,7 @@ impl<'a> BaseClientBuilder<'a> {
                     })
             })
             .unwrap_or(default_timeout);
-        debug!("Using registry request timeout of {}s", timeout);
+        debug!("Using registry request timeout of {timeout}s");
 
         // Initialize the base client.
         let client = self.client.clone().unwrap_or_else(|| {
@@ -145,7 +145,7 @@ impl<'a> BaseClientBuilder<'a> {
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
-                .timeout(std::time::Duration::from_secs(timeout))
+                .read_timeout(std::time::Duration::from_secs(timeout))
                 .tls_built_in_root_certs(false);
 
             // Configure TLS.

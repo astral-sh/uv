@@ -11,10 +11,10 @@ use fs_err::File;
 use pypi_types::Scheme;
 use tracing::info;
 
+use crate::{Error, Prompt};
 use uv_fs::Simplified;
 use uv_interpreter::{Interpreter, Virtualenv};
-
-use crate::{Error, Prompt};
+use uv_version::version;
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -47,7 +47,6 @@ pub fn create_bare_venv(
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    extra_cfg: Vec<(String, String)>,
 ) -> Result<Virtualenv, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
@@ -139,6 +138,14 @@ pub fn create_bare_venv(
     // Create a `.gitignore` file to ignore all files in the venv.
     fs::write(location.join(".gitignore"), "*")?;
 
+    // Per PEP 405, the Python `home` is the parent directory of the interpreter.
+    let python_home = base_python.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "The Python interpreter needs to have a parent directory",
+        )
+    })?;
+
     // Different names for the python interpreter
     fs::create_dir(&scripts)?;
     let executable = scripts.join(format!("python{EXE_SUFFIX}"));
@@ -163,55 +170,23 @@ pub fn create_bare_venv(
     }
 
     // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
-    #[cfg(windows)]
-    {
-        // https://github.com/python/cpython/blob/d457345bbc6414db0443819290b04a9a4333313d/Lib/venv/__init__.py#L261-L267
-        // https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/create/via_global_ref/builtin/cpython/cpython3.py#L78-L83
-        // There's two kinds of applications on windows: Those that allocate a console (python.exe) and those that
-        // don't because they use window(s) (pythonw.exe).
-        for python_exe in ["python.exe", "pythonw.exe"] {
-            let shim = interpreter
-                .stdlib()
-                .join("venv")
-                .join("scripts")
-                .join("nt")
-                .join(python_exe);
-            match fs_err::copy(shim, scripts.join(python_exe)) {
-                Ok(_) => {}
-                Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    let launcher = match python_exe {
-                        "python.exe" => "venvwlauncher.exe",
-                        "pythonw.exe" => "venvwlauncher.exe",
-                        _ => unreachable!(),
-                    };
-
-                    // If `python.exe` doesn't exist, try the `venvlaucher.exe` shim.
-                    let shim = interpreter
-                        .stdlib()
-                        .join("venv")
-                        .join("scripts")
-                        .join("nt")
-                        .join(launcher);
-
-                    // If the `venvwlauncher.exe` shim doesn't exist, then on Conda at least, we
-                    // can look for it next to the Python executable itself.
-                    match fs_err::copy(shim, scripts.join(python_exe)) {
-                        Ok(_) => {}
-                        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                            let shim = base_python.with_file_name(launcher);
-                            fs_err::copy(shim, scripts.join(python_exe))?;
-                        }
-                        Err(err) => {
-                            return Err(err.into());
-                        }
-                    }
-                }
-                Err(err) => {
-                    return Err(err.into());
-                }
-            }
-        }
+    if cfg!(windows) {
+        copy_launcher_windows(
+            WindowsExecutable::Python,
+            interpreter,
+            &base_python,
+            &scripts,
+            python_home,
+        )?;
+        copy_launcher_windows(
+            WindowsExecutable::Pythonw,
+            interpreter,
+            &base_python,
+            &scripts,
+            python_home,
+        )?;
     }
+
     #[cfg(not(any(unix, windows)))]
     {
         compile_error!("Only Windows and Unix are supported")
@@ -242,41 +217,16 @@ pub fn create_bare_venv(
         fs::write(scripts.join(name), activator)?;
     }
 
-    // Per PEP 405, the Python `home` is the parent directory of the interpreter.
-    let python_home = base_python
-        .parent()
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                "The Python interpreter needs to have a parent directory",
-            )
-        })?
-        .simplified_display()
-        .to_string();
-
-    // Validate extra_cfg
-    let reserved_keys = [
-        "home",
-        "implementation",
-        "version_info",
-        "include-system-site-packages",
-        "base-prefix",
-        "base-exec-prefix",
-        "base-executable",
-        "prompt",
-    ];
-    for (key, _) in &extra_cfg {
-        if reserved_keys.contains(&key.as_str()) {
-            return Err(Error::ReservedConfigKey(key.to_string()));
-        }
-    }
-
     let mut pyvenv_cfg_data: Vec<(String, String)> = vec![
-        ("home".to_string(), python_home),
+        (
+            "home".to_string(),
+            python_home.simplified_display().to_string(),
+        ),
         (
             "implementation".to_string(),
             interpreter.markers().platform_python_implementation.clone(),
         ),
+        ("uv".to_string(), version().to_string()),
         (
             "version_info".to_string(),
             interpreter.markers().python_full_version.string.clone(),
@@ -289,10 +239,7 @@ pub fn create_bare_venv(
                 "false".to_string()
             },
         ),
-    ]
-    .into_iter()
-    .chain(extra_cfg)
-    .collect();
+    ];
 
     if let Some(prompt) = prompt {
         pyvenv_cfg_data.push(("prompt".to_string(), prompt));
@@ -321,4 +268,154 @@ pub fn create_bare_venv(
         root: location,
         executable,
     })
+}
+
+#[derive(Debug, Copy, Clone)]
+enum WindowsExecutable {
+    /// The `python.exe` executable (or `venvlauncher.exe` launcher shim).
+    Python,
+    /// The `pythonw.exe` executable (or `venvwlauncher.exe` launcher shim).
+    Pythonw,
+}
+
+impl WindowsExecutable {
+    /// The name of the Python executable.
+    fn exe(self) -> &'static str {
+        match self {
+            WindowsExecutable::Python => "python.exe",
+            WindowsExecutable::Pythonw => "pythonw.exe",
+        }
+    }
+
+    /// The name of the launcher shim.
+    fn launcher(self) -> &'static str {
+        match self {
+            WindowsExecutable::Python => "venvlauncher.exe",
+            WindowsExecutable::Pythonw => "venvwlauncher.exe",
+        }
+    }
+}
+
+/// <https://github.com/python/cpython/blob/d457345bbc6414db0443819290b04a9a4333313d/Lib/venv/__init__.py#L261-L267>
+/// <https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/create/via_global_ref/builtin/cpython/cpython3.py#L78-L83>
+///
+/// There's two kinds of applications on windows: Those that allocate a console (python.exe)
+/// and those that don't because they use window(s) (pythonw.exe).
+fn copy_launcher_windows(
+    executable: WindowsExecutable,
+    interpreter: &Interpreter,
+    base_python: &Path,
+    scripts: &Path,
+    python_home: &Path,
+) -> Result<(), Error> {
+    // First priority: the `python.exe` and `pythonw.exe` shims.
+    let shim = interpreter
+        .stdlib()
+        .join("venv")
+        .join("scripts")
+        .join("nt")
+        .join(executable.exe());
+    match fs_err::copy(shim, scripts.join(executable.exe())) {
+        Ok(_) => return Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(err.into());
+        }
+    }
+
+    // Second priority: the `venvlauncher.exe` and `venvwlauncher.exe` shims.
+    // These are equivalent to the `python.exe` and `pythonw.exe` shims, which were
+    // renamed in Python 3.13.
+    let shim = interpreter
+        .stdlib()
+        .join("venv")
+        .join("scripts")
+        .join("nt")
+        .join(executable.launcher());
+    match fs_err::copy(shim, scripts.join(executable.exe())) {
+        Ok(_) => return Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(err.into());
+        }
+    }
+
+    // Third priority: on Conda at least, we can look for the launcher shim next to
+    // the Python executable itself.
+    let shim = base_python.with_file_name(executable.launcher());
+    match fs_err::copy(shim, scripts.join(executable.exe())) {
+        Ok(_) => return Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(err.into());
+        }
+    }
+
+    // Fourth priority: if the launcher shim doesn't exist, assume this is
+    // an embedded Python. Copy the Python executable itself, along with
+    // the DLLs, `.pyd` files, and `.zip` files in the same directory.
+    match fs_err::copy(
+        base_python.with_file_name(executable.exe()),
+        scripts.join(executable.exe()),
+    ) {
+        Ok(_) => {
+            // Copy `.dll` and `.pyd` files from the top-level, and from the
+            // `DLLs` subdirectory (if it exists).
+            for directory in [
+                python_home,
+                interpreter.base_prefix().join("DLLs").as_path(),
+            ] {
+                let entries = match fs_err::read_dir(directory) {
+                    Ok(read_dir) => read_dir,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                        continue;
+                    }
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                };
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path();
+                    if path.extension().is_some_and(|ext| {
+                        ext.eq_ignore_ascii_case("dll") || ext.eq_ignore_ascii_case("pyd")
+                    }) {
+                        if let Some(file_name) = path.file_name() {
+                            fs_err::copy(&path, scripts.join(file_name))?;
+                        }
+                    }
+                }
+            }
+
+            // Copy `.zip` files from the top-level.
+            match fs_err::read_dir(python_home) {
+                Ok(entries) => {
+                    for entry in entries {
+                        let entry = entry?;
+                        let path = entry.path();
+                        if path
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+                        {
+                            if let Some(file_name) = path.file_name() {
+                                fs_err::copy(&path, scripts.join(file_name))?;
+                            }
+                        }
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => {
+                    return Err(err.into());
+                }
+            };
+
+            return Ok(());
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(err.into());
+        }
+    }
+
+    Err(Error::NotFound(base_python.user_display().to_string()))
 }

@@ -202,15 +202,13 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
         external2: &External<PubGrubPackage, Range<Version>>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
-        let external1 = self.format_external(external1);
-        let external2 = self.format_external(external2);
+        let external = self.format_both_external(external1, external2);
         let terms = self.format_terms(current_terms);
 
         format!(
-            "Because {}and {}we can conclude that {}",
-            Padded::from_string("", &external1, " "),
-            Padded::from_string("", &external2, ", "),
-            Padded::from_string("", &terms, ".")
+            "Because {}we can conclude that {}",
+            Padded::from_string("", &external, ", "),
+            Padded::from_string("", &terms, "."),
         )
     }
 
@@ -305,13 +303,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
         external: &External<PubGrubPackage, Range<Version>>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
-        let prior_external = self.format_external(prior_external);
-        let external = self.format_external(external);
+        let external = self.format_both_external(prior_external, external);
         let terms = self.format_terms(current_terms);
 
         format!(
-            "And because {}and {}we can conclude that {}",
-            Padded::from_string("", &prior_external, " "),
+            "And because {}we can conclude that {}",
             Padded::from_string("", &external, ", "),
             Padded::from_string("", &terms, "."),
         )
@@ -319,6 +315,59 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
 }
 
 impl PubGrubReportFormatter<'_> {
+    /// Format two external incompatibilities, combining them if possible.
+    fn format_both_external(
+        &self,
+        external1: &External<PubGrubPackage, Range<Version>>,
+        external2: &External<PubGrubPackage, Range<Version>>,
+    ) -> String {
+        match (external1, external2) {
+            (
+                External::FromDependencyOf(package1, package_set1, dependency1, dependency_set1),
+                External::FromDependencyOf(package2, _, dependency2, dependency_set2),
+            ) if package1 == package2 => {
+                let dependency_set1 = self.simplify_set(dependency_set1, dependency1);
+                let dependency1 = PackageRange::dependency(dependency1, &dependency_set1);
+
+                let dependency_set2 = self.simplify_set(dependency_set2, dependency2);
+                let dependency2 = PackageRange::dependency(dependency2, &dependency_set2);
+
+                match package1 {
+                    PubGrubPackage::Root(Some(name)) => format!(
+                        "{name} depends on {}and {}",
+                        Padded::new("", &dependency1, " "),
+                        dependency2,
+                    ),
+                    PubGrubPackage::Root(None) => format!(
+                        "you require {}and {}",
+                        Padded::new("", &dependency1, " "),
+                        dependency2,
+                    ),
+                    _ => {
+                        let package_set = self.simplify_set(package_set1, package1);
+
+                        format!(
+                            "{}",
+                            PackageRange::compatibility(package1, &package_set)
+                                .depends_on(dependency1.package, &dependency_set1)
+                                .and(dependency2.package, &dependency_set2),
+                        )
+                    }
+                }
+            }
+            _ => {
+                let external1 = self.format_external(external1);
+                let external2 = self.format_external(external2);
+
+                format!(
+                    "{}and {}",
+                    Padded::from_string("", &external1, " "),
+                    &external2,
+                )
+            }
+        }
+    }
+
     /// Simplify a [`Range`] of versions using the available versions for a package.
     fn simplify_set<'a>(
         &self,
@@ -806,34 +855,57 @@ impl PackageRange<'_> {
             kind: PackageRangeKind::Available,
         }
     }
+
     fn depends_on<'a>(
         &'a self,
         package: &'a PubGrubPackage,
         range: &'a Range<Version>,
     ) -> DependsOn<'a> {
         DependsOn {
-            first: self,
-            second: PackageRange::dependency(package, range),
+            package: self,
+            dependency1: PackageRange::dependency(package, range),
+            dependency2: None,
         }
     }
 }
 
-/// A representation of A depends on B.
+/// A representation of A depends on B (and C).
 #[derive(Debug)]
 struct DependsOn<'a> {
-    first: &'a PackageRange<'a>,
-    second: PackageRange<'a>,
+    package: &'a PackageRange<'a>,
+    dependency1: PackageRange<'a>,
+    dependency2: Option<PackageRange<'a>>,
+}
+
+impl<'a> DependsOn<'a> {
+    /// Adds an additional dependency.
+    ///
+    /// Note this overwrites previous calls to `DependsOn::and`.
+    fn and(mut self, package: &'a PubGrubPackage, range: &'a Range<Version>) -> DependsOn<'a> {
+        self.dependency2 = Some(PackageRange::dependency(package, range));
+        self
+    }
 }
 
 impl std::fmt::Display for DependsOn<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", Padded::new("", self.first, " "))?;
-        if self.first.plural() {
+        write!(f, "{}", Padded::new("", self.package, " "))?;
+        if self.package.plural() {
             write!(f, "depend on ")?;
         } else {
             write!(f, "depends on ")?;
         };
-        write!(f, "{}", self.second)?;
+
+        match self.dependency2 {
+            Some(ref dependency2) => write!(
+                f,
+                "{}and{}",
+                Padded::new("", &self.dependency1, " "),
+                Padded::new(" ", &dependency2, "")
+            )?,
+            None => write!(f, "{}", self.dependency1)?,
+        }
+
         Ok(())
     }
 }

@@ -58,7 +58,7 @@ impl<'a> Installer<'a> {
                     wheel.path(),
                     wheel.filename(),
                     wheel
-                        .direct_url()?
+                        .parsed_url()?
                         .as_ref()
                         .map(pypi_types::DirectUrl::try_from)
                         .transpose()?

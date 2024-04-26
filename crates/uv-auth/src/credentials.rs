@@ -12,26 +12,74 @@ use url::Url;
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Credentials {
     /// The name of the user for authentication.
-    ///
-    /// Unlike `reqwest`, empty usernames should be encoded as `None` instead of an empty string.
-    username: Option<String>,
+    username: Username,
     /// The password to use for authentication.
     password: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub(crate) struct Username(Option<String>);
+
+impl Username {
+    /// Create a new username.
+    ///
+    /// Unlike `reqwest`, empty usernames are be encoded as `None` instead of an empty string.
+    pub fn new(value: Option<String>) -> Self {
+        // Ensure empty strings are `None`
+        if let Some(value) = value {
+            if value.is_empty() {
+                Self(None)
+            } else {
+                Self(Some(value))
+            }
+        } else {
+            Self(value)
+        }
+    }
+
+    pub fn none() -> Self {
+        Self::new(None)
+    }
+
+    pub fn is_none(&self) -> bool {
+        self.0.is_none()
+    }
+
+    pub fn is_some(&self) -> bool {
+        self.0.is_some()
+    }
+
+    pub fn as_deref(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+}
+
+impl From<String> for Username {
+    fn from(value: String) -> Self {
+        Self::new(Some(value))
+    }
+}
+
+impl From<Option<String>> for Username {
+    fn from(value: Option<String>) -> Self {
+        Self::new(value)
+    }
+}
+
 impl Credentials {
     pub fn new(username: Option<String>, password: Option<String>) -> Self {
-        debug_assert!(
-            username.is_none()
-                || username
-                    .as_ref()
-                    .is_some_and(|username| !username.is_empty())
-        );
-        Self { username, password }
+        Self {
+            username: Username::new(username),
+            password,
+        }
     }
 
     pub fn username(&self) -> Option<&str> {
         self.username.as_deref()
+    }
+
+    pub fn to_username(&self) -> Username {
+        self.username.clone()
     }
 
     pub fn password(&self) -> Option<&str> {
@@ -58,7 +106,7 @@ impl Credentials {
         };
 
         Some(Credentials {
-            username: Some(entry.login.clone()),
+            username: Username::new(Some(entry.login.clone())),
             password: Some(entry.password.clone()),
         })
     }
@@ -81,7 +129,8 @@ impl Credentials {
                         .expect("An encoded username should always decode")
                         .into_owned(),
                 )
-            },
+            }
+            .into(),
             password: url.password().map(|password| {
                 urlencoding::decode(password)
                     .expect("An encoded password should always decode")

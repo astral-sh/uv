@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -8,7 +9,7 @@ use clap::{Args, Parser, Subcommand};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
@@ -16,7 +17,6 @@ use uv_toolchain::PythonVersion;
 
 use crate::commands::{extra_name_with_clap_error, ListFormat, VersionFormat};
 use crate::compat;
-use crate::target::TargetTriple;
 
 #[derive(Parser)]
 #[command(author, version, long_version = crate::version::version(), about)]
@@ -61,7 +61,8 @@ pub(crate) struct GlobalArgs {
         long,
         value_enum,
         default_value = "auto",
-        conflicts_with = "no_color"
+        conflicts_with = "no_color",
+        value_name = "COLOR_CHOICE"
     )]
     pub(crate) color: ColorChoice,
 
@@ -79,6 +80,13 @@ pub(crate) struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
     pub(crate) no_native_tls: bool,
+
+    /// Whether to enable experimental, preview features.
+    #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
+    pub(crate) preview: bool,
+
+    #[arg(global = true, long, overrides_with("preview"), hide = true)]
+    pub(crate) no_preview: bool,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -224,6 +232,18 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
     }
 }
 
+/// Parse a string into a [`PathBuf`], mapping the empty string to `None`.
+fn parse_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match PathBuf::from_str(input) {
+            Ok(path) => Ok(Maybe::Some(path)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PipCompileArgs {
@@ -240,8 +260,8 @@ pub(crate) struct PipCompileArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short)]
-    pub(crate) constraint: Vec<PathBuf>,
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -350,7 +370,7 @@ pub(crate) struct PipCompileArgs {
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
-    pub(crate) refresh_package: Option<Vec<PackageName>>,
+    pub(crate) refresh_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -439,6 +459,7 @@ pub(crate) struct PipCompileArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
@@ -454,7 +475,7 @@ pub(crate) struct PipCompileArgs {
     /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
     /// file.
     #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Option<Vec<PackageName>>,
+    pub(crate) upgrade_package: Vec<PackageName>,
 
     /// Include distribution hashes in the output file.
     #[arg(long, overrides_with("no_generate_hashes"))]
@@ -527,7 +548,7 @@ pub(crate) struct PipCompileArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aaarch64-apple-darwin`.
     #[arg(long)]
-    pub(crate) platform: Option<TargetTriple>,
+    pub(crate) python_platform: Option<TargetTriple>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -747,6 +768,11 @@ pub(crate) struct PipSyncArgs {
     #[arg(long, overrides_with("break_system_packages"))]
     pub(crate) no_break_system_packages: bool,
 
+    /// Install packages into the specified directory, rather than into the virtual environment
+    /// or system Python interpreter.
+    #[arg(long)]
+    pub(crate) target: Option<PathBuf>,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[arg(long, overrides_with("no_legacy_setup_py"))]
@@ -833,6 +859,28 @@ pub(crate) struct PipSyncArgs {
     #[arg(long, short = 'C', alias = "config-settings")]
     pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// The minimum Python version that should be supported by the requirements (e.g.,
+    /// `3.7` or `3.7.9`).
+    ///
+    /// If a patch version is omitted, the most recent known patch version for that minor version
+    /// is assumed. For example, `3.7` is mapped to `3.7.17`.
+    #[arg(long)]
+    pub(crate) python_version: Option<PythonVersion>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aaarch64-apple-darwin`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub(crate) python_platform: Option<TargetTriple>,
+
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
     #[arg(long, overrides_with("no_strict"))]
@@ -868,8 +916,8 @@ pub(crate) struct PipInstallArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short)]
-    pub(crate) constraint: Vec<PathBuf>,
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -900,7 +948,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Allow upgrade of a specific package.
     #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Option<Vec<PackageName>>,
+    pub(crate) upgrade_package: Vec<PackageName>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
     #[arg(long, alias = "force-reinstall")]
@@ -908,7 +956,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[arg(long)]
-    pub(crate) reinstall_package: Option<Vec<PackageName>>,
+    pub(crate) reinstall_package: Vec<PackageName>,
 
     #[arg(
         global = true,
@@ -928,7 +976,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
-    pub(crate) refresh_package: Option<Vec<PackageName>>,
+    pub(crate) refresh_package: Vec<PackageName>,
 
     /// Ignore package dependencies, instead only installing those packages explicitly listed
     /// on the command line or in the requirements files.
@@ -1089,6 +1137,11 @@ pub(crate) struct PipInstallArgs {
     #[arg(long, overrides_with("break_system_packages"))]
     pub(crate) no_break_system_packages: bool,
 
+    /// Install packages into the specified directory, rather than into the virtual environment
+    /// or system Python interpreter.
+    #[arg(long)]
+    pub(crate) target: Option<PathBuf>,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[arg(long, overrides_with("no_legacy_setup_py"))]
@@ -1174,6 +1227,28 @@ pub(crate) struct PipInstallArgs {
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
     pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// The minimum Python version that should be supported by the requirements (e.g.,
+    /// `3.7` or `3.7.9`).
+    ///
+    /// If a patch version is omitted, the most recent known patch version for that minor version
+    /// is assumed. For example, `3.7` is mapped to `3.7.17`.
+    #[arg(long)]
+    pub(crate) python_version: Option<PythonVersion>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aaarch64-apple-darwin`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub(crate) python_platform: Option<TargetTriple>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
@@ -1269,6 +1344,11 @@ pub(crate) struct PipUninstallArgs {
 
     #[arg(long, overrides_with("break_system_packages"))]
     pub(crate) no_break_system_packages: bool,
+
+    /// Uninstall packages from the specified directory, rather than from the virtual environment
+    /// or system Python interpreter.
+    #[arg(long)]
+    pub(crate) target: Option<PathBuf>,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(long, overrides_with("no_offline"))]
@@ -1627,15 +1707,38 @@ pub(crate) struct VenvArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
     /// The command to run.
-    pub(crate) command: String,
+    pub(crate) target: Option<String>,
 
     /// The arguments to the command.
     #[arg(allow_hyphen_values = true)]
-    pub(crate) args: Vec<String>,
+    pub(crate) args: Vec<OsString>,
 
-    /// Always use a new virtual environment.
+    /// Always use a new virtual environment for execution.
     #[arg(long)]
     pub(crate) isolated: bool,
+
+    /// Run with the given packages installed.
+    #[arg(long)]
+    pub(crate) with: Vec<String>,
+
+    /// The Python interpreter to use to build the run environment.
+    ///
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
+    /// option allows you to specify a different interpreter.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    pub(crate) python: Option<String>,
+
+    /// Run without the current workspace installed.
+    #[arg(long)]
+    pub(crate) no_workspace: bool,
+    // TODO(zanieb): Consider alternative names like `--no-project` or `--without-project`
 }
 
 #[derive(Args)]

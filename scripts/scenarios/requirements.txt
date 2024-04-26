@@ -6,11 +6,11 @@ charset-normalizer==3.3.2
     # via requests
 chevron-blue==0.2.1
     # via packse
-docutils==0.21.post1
+docutils==0.21.2
     # via readme-renderer
-hatchling==1.22.5
+hatchling==1.24.2
     # via packse
-idna==3.6
+idna==3.7
     # via requests
 importlib-metadata==7.1.0
     # via twine
@@ -18,7 +18,7 @@ jaraco-classes==3.4.0
     # via keyring
 jaraco-context==5.3.0
     # via keyring
-jaraco-functools==4.0.0
+jaraco-functools==4.0.1
     # via keyring
 keyring==25.1.0
     # via twine
@@ -36,17 +36,19 @@ nh3==0.2.17
     # via readme-renderer
 packaging==24.0
     # via hatchling
-packse==0.3.14
+packse==0.3.15
 pathspec==0.12.1
     # via hatchling
 pkginfo==1.10.0
     # via twine
-pluggy==1.4.0
+pluggy==1.5.0
     # via hatchling
 pygments==2.17.2
     # via
     #   readme-renderer
     #   rich
+pyyaml==6.0.1
+    # via packse
 readme-renderer==43.0
     # via twine
 requests==2.31.0
@@ -59,7 +61,7 @@ rfc3986==2.0.0
     # via twine
 rich==13.7.1
     # via twine
-setuptools==69.2.0
+setuptools==69.5.1
     # via packse
 trove-classifiers==2024.4.10
     # via hatchling

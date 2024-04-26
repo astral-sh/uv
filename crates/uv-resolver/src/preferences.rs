@@ -1,19 +1,18 @@
 use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
+use tracing::trace;
 
 use pep440_rs::{Operator, Version};
-use pep508_rs::{
-    MarkerEnvironment, Requirement, RequirementsTxtRequirement, UnnamedRequirement, VersionOrUrl,
-};
+use pep508_rs::UnnamedRequirement;
+use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::{HashDigest, HashError};
-use requirements_txt::RequirementEntry;
-use tracing::trace;
+use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_normalize::PackageName;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
-    #[error("direct URL requirements without package names are not supported: {0}")]
+    #[error("direct URL requirements without package names are not supported: `{0}`")]
     Bare(UnnamedRequirement),
     #[error(transparent)]
     Hash(#[from] HashError),
@@ -33,7 +32,7 @@ impl Preference {
             requirement: match entry.requirement {
                 RequirementsTxtRequirement::Pep508(requirement) => requirement,
                 RequirementsTxtRequirement::Unnamed(requirement) => {
-                    return Err(PreferenceError::Bare(requirement))
+                    return Err(PreferenceError::Bare(requirement));
                 }
             },
             hashes: entry
@@ -99,27 +98,27 @@ impl Preferences {
                     }
                     match requirement.version_or_url.as_ref() {
                         Some(VersionOrUrl::VersionSpecifier(version_specifiers)) =>
-                         {
-                            let [version_specifier] = version_specifiers.as_ref() else {
-                                trace!(
+                            {
+                                let [version_specifier] = version_specifiers.as_ref() else {
+                                    trace!(
                                     "Excluding {requirement} from preferences due to multiple version specifiers."
                                 );
-                                return None;
-                            };
-                            if *version_specifier.operator() != Operator::Equal {
-                                trace!(
+                                    return None;
+                                };
+                                if *version_specifier.operator() != Operator::Equal {
+                                    trace!(
                                     "Excluding {requirement} from preferences due to inexact version specifier."
                                 );
-                                return None;
+                                    return None;
+                                }
+                                Some((
+                                    requirement.name,
+                                    Pin {
+                                        version: version_specifier.version().clone(),
+                                        hashes,
+                                    },
+                                ))
                             }
-                            Some((
-                                requirement.name,
-                                Pin {
-                                    version: version_specifier.version().clone(),
-                                    hashes,
-                                },
-                            ))
-                        }
                         Some(VersionOrUrl::Url(_)) => {
                             trace!(
                                 "Excluding {requirement} from preferences due to URL dependency."
@@ -127,10 +126,9 @@ impl Preferences {
                             None
                         }
                         _ => {
-                        None
+                            None
+                        }
                     }
-                    }
-
                 })
                 .collect(),
         )

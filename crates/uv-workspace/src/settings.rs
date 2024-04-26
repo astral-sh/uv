@@ -4,7 +4,9 @@ use serde::Deserialize;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
-use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier};
+use uv_configuration::{
+    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
@@ -31,6 +33,7 @@ pub(crate) struct Tools {
 pub struct Options {
     pub native_tls: Option<bool>,
     pub no_cache: Option<bool>,
+    pub preview: Option<bool>,
     pub cache_dir: Option<PathBuf>,
     pub pip: Option<PipOptions>,
 }
@@ -44,6 +47,7 @@ pub struct PipOptions {
     pub python: Option<String>,
     pub system: Option<bool>,
     pub break_system_packages: Option<bool>,
+    pub target: Option<PathBuf>,
     pub offline: Option<bool>,
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
@@ -70,6 +74,7 @@ pub struct PipOptions {
     pub legacy_setup_py: Option<bool>,
     pub config_settings: Option<ConfigSettings>,
     pub python_version: Option<PythonVersion>,
+    pub python_platform: Option<TargetTriple>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub no_emit_package: Option<Vec<PackageName>>,
     pub emit_index_url: Option<bool>,

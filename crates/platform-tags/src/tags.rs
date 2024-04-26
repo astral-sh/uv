@@ -11,11 +11,11 @@ use crate::{Arch, Os, Platform, PlatformError};
 pub enum TagsError {
     #[error(transparent)]
     PlatformError(#[from] PlatformError),
-    #[error("Unsupported implementation: {0}")]
+    #[error("Unsupported implementation: `{0}`")]
     UnsupportedImplementation(String),
-    #[error("Unknown implementation: {0}")]
+    #[error("Unknown implementation: `{0}`")]
     UnknownImplementation(String),
-    #[error("Invalid priority: {0}")]
+    #[error("Invalid priority: `{0}`")]
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
     #[error("Only CPython can be freethreading, not: {0}")]
     GilIsACpythonProblem(String),
@@ -36,7 +36,7 @@ pub enum TagCompatibility {
 }
 
 impl Ord for TagCompatibility {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
         match (self, other) {
             (Self::Compatible(p_self), Self::Compatible(p_other)) => p_self.cmp(p_other),
             (Self::Incompatible(_), Self::Compatible(_)) => cmp::Ordering::Less,

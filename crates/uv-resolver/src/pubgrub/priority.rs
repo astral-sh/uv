@@ -33,9 +33,8 @@ impl PubGrubPriorities {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
                         let index = match entry.get() {
+                            PubGrubPriority::Unspecified(Reverse(index)) => *index,
                             PubGrubPriority::Singleton(Reverse(index)) => *index,
-                            PubGrubPriority::Unconstrained(Reverse(index)) => *index,
-                            PubGrubPriority::Constrained(Reverse(index)) => *index,
                             PubGrubPriority::DirectUrl(Reverse(index)) => *index,
                             PubGrubPriority::Root => next,
                         };
@@ -43,10 +42,8 @@ impl PubGrubPriorities {
                         // Compute the priority.
                         let priority = if version.as_singleton().is_some() {
                             PubGrubPriority::Singleton(Reverse(index))
-                        } else if version == &Range::full() {
-                            PubGrubPriority::Unconstrained(Reverse(index))
                         } else {
-                            PubGrubPriority::Constrained(Reverse(index))
+                            PubGrubPriority::Unspecified(Reverse(index))
                         };
 
                         // Take the maximum of the new and existing priorities.
@@ -58,10 +55,8 @@ impl PubGrubPriorities {
                         // Insert the priority.
                         entry.insert(if version.as_singleton().is_some() {
                             PubGrubPriority::Singleton(Reverse(next))
-                        } else if version == &Range::full() {
-                            PubGrubPriority::Unconstrained(Reverse(next))
                         } else {
-                            PubGrubPriority::Constrained(Reverse(next))
+                            PubGrubPriority::Unspecified(Reverse(next))
                         });
                     }
                 }
@@ -71,9 +66,8 @@ impl PubGrubPriorities {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
                         let index = match entry.get() {
+                            PubGrubPriority::Unspecified(Reverse(index)) => *index,
                             PubGrubPriority::Singleton(Reverse(index)) => *index,
-                            PubGrubPriority::Unconstrained(Reverse(index)) => *index,
-                            PubGrubPriority::Constrained(Reverse(index)) => *index,
                             PubGrubPriority::DirectUrl(Reverse(index)) => *index,
                             PubGrubPriority::Root => next,
                         };
@@ -112,10 +106,10 @@ pub(crate) enum PubGrubPriority {
     ///
     /// As such, its priority is based on the order in which the packages were added (FIFO), such
     /// that the first package we visit is prioritized over subsequent packages.
-    Unconstrained(Reverse<usize>),
-
-    /// The version range is constrained in some way (e.g., with a `<=` or `>` operator).
-    Constrained(Reverse<usize>),
+    ///
+    /// TODO(charlie): Prefer constrained over unconstrained packages, if they're at the same depth
+    /// in the dependency graph.
+    Unspecified(Reverse<usize>),
 
     /// The version range is constrained to a single version (e.g., with the `==` operator).
     Singleton(Reverse<usize>),

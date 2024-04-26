@@ -11,21 +11,21 @@ use crate::resolver::provider::{MetadataResponse, VersionsResponse};
 pub struct InMemoryIndex {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
-    pub(crate) packages: OnceMap<PackageName, VersionsResponse>,
+    pub(crate) packages: OnceMap<PackageName, Arc<VersionsResponse>>,
 
     /// A map from package ID to metadata for that distribution.
-    pub(crate) distributions: OnceMap<VersionId, MetadataResponse>,
+    pub(crate) distributions: OnceMap<VersionId, Arc<MetadataResponse>>,
 }
 
 impl InMemoryIndex {
     /// Insert a [`VersionsResponse`] into the index.
     pub fn insert_package(&self, package_name: PackageName, response: VersionsResponse) {
-        self.packages.done(package_name, response);
+        self.packages.done(package_name, Arc::new(response));
     }
 
     /// Insert a [`Metadata23`] into the index.
     pub fn insert_metadata(&self, version_id: VersionId, response: MetadataResponse) {
-        self.distributions.done(version_id, response);
+        self.distributions.done(version_id, Arc::new(response));
     }
 
     /// Get the [`VersionsResponse`] for a given package name, without waiting.

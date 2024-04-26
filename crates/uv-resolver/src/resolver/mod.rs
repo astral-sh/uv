@@ -166,7 +166,7 @@ impl<
             flat_index,
             tags,
             PythonRequirement::new(interpreter, markers),
-            AllowedYanks::from_manifest(&manifest, markers),
+            AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
             build_context.no_binary(),
@@ -210,8 +210,8 @@ impl<
             visited: DashSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(&manifest, markers)?,
-            locals: Locals::from_manifest(&manifest, markers),
+            urls: Urls::from_manifest(&manifest, markers, options.dependency_mode)?,
+            locals: Locals::from_manifest(&manifest, markers, options.dependency_mode),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
@@ -864,7 +864,7 @@ impl<
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for reporting diagnostics.
-                    if extra.is_some() {
+                    if extra.is_some() && self.editables.get(package_name).is_none() {
                         // Determine the distribution to lookup.
                         let dist = match url {
                             Some(url) => PubGrubDistribution::from_url(package_name, url),
@@ -1046,13 +1046,15 @@ impl<
             match response? {
                 Some(Response::Package(package_name, version_map)) => {
                     trace!("Received package metadata for: {package_name}");
-                    self.index.packages.done(package_name, version_map);
+                    self.index
+                        .packages
+                        .done(package_name, Arc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions.done(
                         dist.version_id(),
-                        MetadataResponse::Found(ArchiveMetadata::from(metadata)),
+                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
                     );
                 }
                 Some(Response::Dist {
@@ -1069,7 +1071,9 @@ impl<
                         }
                         _ => {}
                     }
-                    self.index.distributions.done(dist.version_id(), metadata);
+                    self.index
+                        .distributions
+                        .done(dist.version_id(), Arc::new(metadata));
                 }
                 Some(Response::Dist {
                     dist: Dist::Source(dist),
@@ -1085,7 +1089,9 @@ impl<
                         }
                         _ => {}
                     }
-                    self.index.distributions.done(dist.version_id(), metadata);
+                    self.index
+                        .distributions
+                        .done(dist.version_id(), Arc::new(metadata));
                 }
                 None => {}
             }

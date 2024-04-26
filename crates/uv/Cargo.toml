@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.34"
+version = "0.1.38"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -33,7 +33,7 @@ uv-normalize = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-toolchain = { workspace = true }
-uv-types = { workspace = true, features = ["clap"] }
+uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true, features = ["schemars"] }

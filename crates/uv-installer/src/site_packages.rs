@@ -9,8 +9,8 @@ use url::Url;
 
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::{Requirement, RequirementsTxtRequirement, VerbatimUrl};
-use requirements_txt::{EditableRequirement, RequirementEntry};
+use pep508_rs::{Requirement, VerbatimUrl};
+use requirements_txt::{EditableRequirement, RequirementEntry, RequirementsTxtRequirement};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
@@ -393,6 +393,10 @@ impl<'a> SitePackages<'a> {
                                 return Ok(false);
                             };
 
+                            if installed.editable {
+                                return Ok(false);
+                            }
+
                             if &installed.url != url.raw() {
                                 return Ok(false);
                             }
@@ -437,6 +441,10 @@ impl<'a> SitePackages<'a> {
                                 let InstalledDist::Url(installed) = &distribution else {
                                     return Ok(false);
                                 };
+
+                                if installed.editable {
+                                    return Ok(false);
+                                }
 
                                 if &installed.url != url.raw() {
                                     return Ok(false);
@@ -570,14 +578,14 @@ impl Diagnostic {
             } => format!(
                 "The package `{package}` requires `{requirement}`, but `{version}` is installed."
             ),
-            Self::DuplicatePackage { package, paths} => {
+            Self::DuplicatePackage { package, paths } => {
                 let mut paths = paths.clone();
                 paths.sort();
                 format!(
                     "The package `{package}` has multiple installed distributions:{}",
                     paths.iter().fold(String::new(), |acc, path| acc + &format!("\n  - {}", path.display()))
                 )
-            },
+            }
         }
     }
 

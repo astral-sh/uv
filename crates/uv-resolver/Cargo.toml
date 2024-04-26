@@ -52,7 +52,7 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

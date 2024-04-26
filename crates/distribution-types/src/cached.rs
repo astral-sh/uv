@@ -7,11 +7,9 @@ use pep508_rs::VerbatimUrl;
 use pypi_types::HashDigest;
 use uv_normalize::PackageName;
 
-use crate::direct_url::{DirectUrl, LocalFileUrl};
-use crate::hash::Hashed;
 use crate::{
-    BuiltDist, Dist, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, SourceDist,
-    VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
+    ParsedLocalFileUrl, ParsedUrl, SourceDist, VersionOrUrl,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
@@ -104,19 +102,19 @@ impl CachedDist {
         }
     }
 
-    /// Return the [`DirectUrl`] of the distribution, if it exists.
-    pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
+    /// Return the [`ParsedUrl`] of the distribution, if it exists.
+    pub fn parsed_url(&self) -> Result<Option<ParsedUrl>> {
         match self {
             Self::Registry(_) => Ok(None),
             Self::Url(dist) => {
                 if dist.editable {
                     assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
-                    Ok(Some(DirectUrl::LocalFile(LocalFileUrl {
+                    Ok(Some(ParsedUrl::LocalFile(ParsedLocalFileUrl {
                         url: dist.url.raw().clone(),
                         editable: dist.editable,
                     })))
                 } else {
-                    DirectUrl::try_from(dist.url.raw()).map(Some)
+                    Ok(Some(ParsedUrl::try_from(dist.url.raw())?))
                 }
             }
         }

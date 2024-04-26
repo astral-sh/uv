@@ -6,16 +6,17 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};
-use pep508_rs::{Requirement, RequirementsTxtRequirement, UnnamedRequirement};
+use pep508_rs::{Requirement, UnnamedRequirement};
+use requirements_txt::RequirementsTxtRequirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::KeyringProviderType;
 use uv_fs::Simplified;
-use uv_interpreter::PythonEnvironment;
+use uv_interpreter::{PythonEnvironment, Target};
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Uninstall packages from the current environment.
 #[allow(clippy::too_many_arguments)]
@@ -24,6 +25,7 @@ pub(crate) async fn pip_uninstall(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    target: Option<Target>,
     cache: Cache,
     connectivity: Connectivity,
     native_tls: bool,
@@ -52,6 +54,14 @@ pub(crate) async fn pip_uninstall(
         venv.interpreter().python_version(),
         venv.python_executable().user_display().cyan(),
     );
+
+    // Apply any `--target` directory.
+    let venv = if let Some(target) = target {
+        target.init()?;
+        venv.with_target(target)
+    } else {
+        venv
+    };
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
