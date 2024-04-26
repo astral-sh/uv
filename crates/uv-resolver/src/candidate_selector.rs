@@ -295,8 +295,9 @@ impl CandidateSelector {
         }
 
         let mut prerelease = None;
-
+        let mut step = 0;
         for (version, maybe_dist) in versions {
+            step += 1;
             let candidate = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
@@ -305,9 +306,11 @@ impl CandidateSelector {
                                 continue;
                             };
                             tracing::trace!(
-                                "found candidate for package {:?} with range {:?}: {:?} version",
+                                "found candidate for package {:?} with range {:?} \
+                                 after {} steps: {:?} version",
                                 package_name,
                                 range,
+                                step,
                                 version,
                             );
                             // If pre-releases are allowed, treat them equivalently
@@ -344,9 +347,11 @@ impl CandidateSelector {
                         continue;
                     };
                     tracing::trace!(
-                        "found candidate for package {:?} with range {:?}: {:?} version",
+                        "found candidate for package {:?} with range {:?} \
+                         after {} steps: {:?} version",
                         package_name,
                         range,
+                        step,
                         version,
                     );
                     Candidate::new(package_name, version, dist)
@@ -374,9 +379,11 @@ impl CandidateSelector {
             return Some(candidate);
         }
         tracing::trace!(
-            "exhausted all candidates for package {:?} with range {:?}",
+            "exhausted all candidates for package {:?} with range {:?} \
+             after {} steps",
             package_name,
             range,
+            step,
         );
         match prerelease {
             None => None,
