@@ -210,7 +210,8 @@ pub enum IndexStrategy {
     /// While this differs from pip's behavior, it's the default index strategy as it's the most
     /// secure.
     #[default]
-    FirstMatch,
+    #[cfg_attr(feature = "clap", clap(alias = "first-match"))]
+    FirstIndex,
     /// Search for every package name across all indexes, exhausting the versions from the first
     /// index before moving on to the next.
     ///
@@ -222,7 +223,8 @@ pub enum IndexStrategy {
     /// versions with different ABI tags or Python version constraints).
     ///
     /// See: https://peps.python.org/pep-0708/
-    UnsafeAnyMatch,
+    #[cfg_attr(feature = "clap", clap(alias = "unsafe-any-match"))]
+    UnsafeFirstMatch,
     /// Search for every package name across all indexes, preferring the "best" version found. If a
     /// package version is in multiple indexes, only look at the entry for the first index.
     ///
@@ -236,7 +238,7 @@ pub enum IndexStrategy {
     /// the intended internal package.
     ///
     /// See: https://peps.python.org/pep-0708/
-    UnsafeClosestMatch,
+    UnsafeBestMatch,
 }
 
 #[cfg(test)]
