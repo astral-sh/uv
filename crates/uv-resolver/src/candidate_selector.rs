@@ -17,7 +17,6 @@ use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options};
 
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PreReleaseStrategy,
@@ -292,9 +291,9 @@ impl CandidateSelector {
         }
 
         let mut prerelease = None;
-        let mut step = 0;
+        let mut steps = 0usize;
         for (version, maybe_dist) in versions {
-            step += 1;
+            steps += 1;
             let candidate = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
@@ -307,7 +306,7 @@ impl CandidateSelector {
                                  after {} steps: {:?} version",
                                 package_name,
                                 range,
-                                step,
+                                steps,
                                 version,
                             );
                             // If pre-releases are allowed, treat them equivalently
@@ -348,7 +347,7 @@ impl CandidateSelector {
                          after {} steps: {:?} version",
                         package_name,
                         range,
-                        step,
+                        steps,
                         version,
                     );
                     Candidate::new(package_name, version, dist)
@@ -380,7 +379,7 @@ impl CandidateSelector {
              after {} steps",
             package_name,
             range,
-            step,
+            steps,
         );
         match prerelease {
             None => None,
