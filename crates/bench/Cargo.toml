@@ -34,6 +34,7 @@ platform-tags = { workspace = true }
 criterion = { version = "0.5.1", default-features = false }
 codspeed-criterion-compat = { version = "2.6.0", default-features = false, optional = true }
 tempfile = { workspace = true }
+fs-err = "2.11.0"
 
 [features]
 codspeed = ["codspeed-criterion-compat"]

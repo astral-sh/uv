@@ -397,6 +397,7 @@ dependencies = [
  "codspeed-criterion-compat",
  "criterion",
  "distribution-filename",
+ "fs-err",
  "platform-tags",
  "tempfile",
 ]

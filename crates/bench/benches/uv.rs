@@ -1,11 +1,13 @@
+use std::env;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::{env, fs};
 
 use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
 use criterion::BatchSize;
 
-const REQUIREMENTS: [&'static str; 4] = [
+use fs_err as fs;
+
+const REQUIREMENTS: [&str; 4] = [
     "../../scripts/requirements/trio.in",
     "../../scripts/requirements/boto3.in",
     "../../scripts/requirements/black.in",
@@ -33,7 +35,7 @@ fn resolve_warm(c: &mut Criterion<WallTime>) {
                         .args(["pip", "compile"])
                         .arg(&requirements)
                         .arg("--cache-dir")
-                        .arg(&cache_dir)
+                        .arg(cache_dir)
                         .arg("--output-file")
                         .arg(output_file)
                         .current_dir(&temp_dir)
@@ -43,7 +45,7 @@ fn resolve_warm(c: &mut Criterion<WallTime>) {
                     command.status().unwrap();
                 },
                 BatchSize::SmallInput,
-            )
+            );
         });
     }
 }
@@ -56,7 +58,7 @@ fn install_warm(c: &mut Criterion<WallTime>) {
             requirements.file_stem().unwrap().to_string_lossy()
         );
 
-        let venv_dir = std::fs::canonicalize("./.venv").unwrap();
+        let venv_dir = fs::canonicalize("./.venv").unwrap();
         env::set_var("VIRTUAL_ENV", &venv_dir);
 
         let temp_dir = tempfile::tempdir().unwrap();
@@ -80,7 +82,7 @@ fn install_warm(c: &mut Criterion<WallTime>) {
                         .args(["pip", "sync"])
                         .arg(&requirements)
                         .arg("--cache-dir")
-                        .arg(&cache_dir)
+                        .arg(cache_dir)
                         .current_dir(&temp_dir)
                         .stdout(Stdio::null())
                         .stderr(Stdio::null());
@@ -88,7 +90,7 @@ fn install_warm(c: &mut Criterion<WallTime>) {
                     command.status().unwrap();
                 },
                 BatchSize::SmallInput,
-            )
+            );
         });
     }
 }
