@@ -76,7 +76,7 @@ fn install_warm(c: &mut Criterion<WallTime>) {
                 .unwrap();
         };
 
-        let run = |_| {
+        let run = |()| {
             Command::new("uv")
                 .args(["pip", "sync"])
                 .arg(&input)
