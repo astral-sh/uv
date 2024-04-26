@@ -224,7 +224,7 @@ impl CandidateSelector {
         let highest = self.use_highest_version(package_name);
         let allow_prerelease = self.allow_prereleases(package_name);
 
-        if self.index_strategy == IndexStrategy::UnsafeHighestMatch {
+        if self.index_strategy == IndexStrategy::UnsafeClosestMatch {
             if highest {
                 Self::select_candidate(
                     MaxIterator::new(

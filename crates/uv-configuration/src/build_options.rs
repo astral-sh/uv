@@ -236,7 +236,7 @@ pub enum IndexStrategy {
     /// the intended internal package.
     ///
     /// See: https://peps.python.org/pep-0708/
-    UnsafeHighestMatch,
+    UnsafeClosestMatch,
 }
 
 #[cfg(test)]
