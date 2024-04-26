@@ -21,7 +21,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::HashDigest;
 use uv_distribution::to_precise;
-use uv_normalize::{ExtraName, PackageName, SourceName};
+use uv_normalize::{ExtraName, PackageName, Source};
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
@@ -65,7 +65,7 @@ pub struct ResolutionGraph {
     /// Any diagnostics that were encountered while building the graph.
     diagnostics: Vec<Diagnostic>,
     /// Source files for dependencies
-    sources: FxHashMap<PackageName, Vec<SourceName>>,
+    sources: FxHashMap<PackageName, Vec<Source>>,
 }
 
 impl ResolutionGraph {
@@ -87,9 +87,9 @@ impl ResolutionGraph {
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         let mut extras = FxHashMap::default();
         let mut diagnostics = Vec::new();
-        let mut sources: FxHashMap<PackageName, Vec<SourceName>> = FxHashMap::default();
+        let mut sources: FxHashMap<PackageName, Vec<Source>> = FxHashMap::default();
 
-        let mut insert_source = |package_name: &PackageName, source_names: &Vec<SourceName>| {
+        let mut insert_source = |package_name: &PackageName, source_names: &Vec<Source>| {
             for source_name in source_names {
                 if let Some(source_packages) = sources.get_mut(package_name) {
                     source_packages.push(source_name.clone());
@@ -728,7 +728,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let deps = edges
                                 .into_iter()
                                 .map(|dependency| format!("{}", dependency.name()))
-                                .chain(source.into_iter().map(|source| format!("-r {source}")))
+                                .chain(
+                                    source
+                                        .into_iter()
+                                        .map(|source| source.to_dependency_string()),
+                                )
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -739,9 +743,12 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         [] if source.is_empty() => {}
                         [] if source.len() == 1 => {
                             let separator = "\n";
-                            let comment = format!("    # via -r {}", source.first().unwrap())
-                                .green()
-                                .to_string();
+                            let comment = format!(
+                                "    # via {}",
+                                source.first().unwrap().to_dependency_string()
+                            )
+                            .green()
+                            .to_string();
                             annotation = Some((separator, comment));
                         }
                         [edge] if source.is_empty() => {
@@ -753,7 +760,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let separator = "\n";
                             let deps = source
                                 .into_iter()
-                                .map(|source| format!("-r {source}"))
+                                .map(|source| source.to_dependency_string())
                                 .chain(
                                     edges
                                         .iter()

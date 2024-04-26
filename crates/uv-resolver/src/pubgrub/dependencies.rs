@@ -7,7 +7,7 @@ use distribution_types::Verbatim;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use uv_configuration::{Constraints, Overrides};
-use uv_normalize::{ExtraName, PackageName, SourceName};
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::specifier::PubGrubSpecifier;
 use crate::pubgrub::PubGrubPackage;
@@ -192,9 +192,9 @@ fn to_pubgrub(
                 requirement.name.clone(),
                 extra,
                 requirement
-                    .path
+                    .source
                     .as_ref()
-                    .map(|p| vec![SourceName::new(p.clone())])
+                    .map(|s| vec![s.clone()])
                     .unwrap_or_default(),
                 urls,
             ),
@@ -230,9 +230,9 @@ fn to_pubgrub(
                     requirement.name.clone(),
                     extra,
                     requirement
-                        .path
+                        .source
                         .as_ref()
-                        .map(|p| vec![SourceName::new(p.clone())])
+                        .map(|s| vec![s.clone()])
                         .unwrap_or_default(),
                     urls,
                 ),
@@ -263,9 +263,9 @@ fn to_pubgrub(
                     extra,
                     Some(expected.clone()),
                     requirement
-                        .path
+                        .source
                         .as_ref()
-                        .map(|p| vec![SourceName::new(p.clone())])
+                        .map(|s| vec![s.clone()])
                         .unwrap_or_default(),
                 ),
                 Range::full(),

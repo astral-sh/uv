@@ -43,6 +43,7 @@ pub use marker::{
 };
 use pep440_rs::{TrackedFromStr, Version, VersionSpecifier, VersionSpecifiers};
 use uv_fs::normalize_url_path;
+use uv_normalize::Source;
 // Parity with the crates.io version of pep508_rs
 use crate::verbatim_url::VerbatimUrlError;
 #[cfg(feature = "non-pep508-extensions")]
@@ -144,8 +145,8 @@ pub struct Requirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
-    /// Path of the original file (where existing)
-    pub path: Option<String>,
+    /// Source of the original file (where existing)
+    pub source: Option<Source>,
 }
 
 impl Display for Requirement {
@@ -1316,7 +1317,7 @@ fn parse_pep508_requirement(
         extras,
         version_or_url: requirement_kind,
         marker,
-        path: source.map(|p| p.to_string_lossy().to_string()),
+        source: source.map(|p| Source::Requirement(p.to_string_lossy().to_string())),
     })
 }
 
@@ -1517,7 +1518,7 @@ mod tests {
                 operator: MarkerOperator::LessThan,
                 r_value: MarkerValue::QuotedString("2.7".to_string()),
             })),
-            path: None,
+            source: None,
         };
         assert_eq!(requests, expected);
     }
@@ -1741,7 +1742,7 @@ mod tests {
             extras: vec![],
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(VerbatimUrl::from_str(url).unwrap())),
-            path: None,
+            source: None,
         };
         assert_eq!(pip_url, expected);
     }

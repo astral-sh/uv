@@ -13,8 +13,10 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/whitespace.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/whitespace.txt",
+                        ),
                     ),
                 },
             ),
@@ -59,8 +61,10 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/whitespace.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/whitespace.txt",
+                        ),
                     ),
                 },
             ),

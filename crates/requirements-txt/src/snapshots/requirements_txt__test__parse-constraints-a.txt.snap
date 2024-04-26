@@ -24,8 +24,10 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/constraints-a.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/constraints-a.txt",
+                        ),
                     ),
                 },
             ),
@@ -54,8 +56,10 @@ RequirementsTxt {
                 ),
             ),
             marker: None,
-            path: Some(
-                "<REQUIREMENTS_DIR>/constraints-b.txt",
+            source: Some(
+                Constraint(
+                    "<REQUIREMENTS_DIR>/constraints-b.txt",
+                ),
             ),
         },
         Requirement {
@@ -76,8 +80,10 @@ RequirementsTxt {
                 ),
             ),
             marker: None,
-            path: Some(
-                "<REQUIREMENTS_DIR>/constraints-b.txt",
+            source: Some(
+                Constraint(
+                    "<REQUIREMENTS_DIR>/constraints-b.txt",
+                ),
             ),
         },
     ],

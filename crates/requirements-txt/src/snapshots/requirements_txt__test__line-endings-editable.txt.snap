@@ -13,8 +13,10 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/editable.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
                     ),
                 },
             ),
@@ -59,8 +61,10 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/editable.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
                     ),
                 },
             ),

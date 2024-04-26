@@ -55,7 +55,7 @@ use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, Source};
 use uv_warnings::warn_user;
 
 mod requirement;
@@ -495,7 +495,10 @@ impl RequirementsTxt {
                     // _requirements_, but we don't want to support that.
                     for entry in sub_constraints.requirements {
                         match entry.requirement {
-                            RequirementsTxtRequirement::Pep508(requirement) => {
+                            RequirementsTxtRequirement::Pep508(mut requirement) => {
+                                if let Some(Source::Requirement(ref name)) = requirement.source {
+                                    requirement.source.replace(Source::Constraint(name.clone()));
+                                }
                                 data.constraints.push(requirement);
                             }
                             RequirementsTxtRequirement::Unnamed(_) => {
@@ -506,7 +509,12 @@ impl RequirementsTxt {
                             }
                         }
                     }
-                    data.constraints.extend(sub_constraints.constraints);
+                    for mut constraint in sub_constraints.constraints {
+                        if let Some(Source::Requirement(ref name)) = constraint.source {
+                            constraint.source.replace(Source::Constraint(name.clone()));
+                        }
+                        data.constraints.push(constraint);
+                    }
                 }
                 RequirementsTxtStatement::RequirementEntry(requirement_entry) => {
                     data.requirements.push(requirement_entry);
@@ -1768,8 +1776,10 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                source: Some(
+                                    Requirement(
+                                        "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                    ),
                                 ),
                             },
                         ),
@@ -1833,8 +1843,10 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                source: Some(
+                                    Requirement(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
@@ -2026,8 +2038,10 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/./sibling.txt",
+                                source: Some(
+                                    Requirement(
+                                        "<REQUIREMENTS_DIR>/./sibling.txt",
+                                    ),
                                 ),
                             },
                         ),
@@ -2056,8 +2070,10 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                source: Some(
+                                    Requirement(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
@@ -2088,8 +2104,10 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                source: Some(
+                                    Requirement(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
@@ -2120,8 +2138,10 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                source: Some(
+                                    Requirement(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
@@ -2150,8 +2170,10 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                source: Some(
+                                    Requirement(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),

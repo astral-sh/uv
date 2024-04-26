@@ -3,11 +3,11 @@ use std::fmt::{Display, Formatter};
 
 pub use extra_name::ExtraName;
 pub use package_name::PackageName;
-pub use source_name::SourceName;
+pub use source::Source;
 
 mod extra_name;
 mod package_name;
-mod source_name;
+mod source;
 
 /// Validate and normalize an owned package or extra name.
 pub(crate) fn validate_and_normalize_owned(name: String) -> Result<String, InvalidNameError> {

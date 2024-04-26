@@ -1,7 +1,7 @@
 use derivative::Derivative;
 use pep508_rs::VerbatimUrl;
 use std::hash::Hash;
-use uv_normalize::{ExtraName, PackageName, SourceName};
+use uv_normalize::{ExtraName, PackageName, Source};
 
 use crate::resolver::Urls;
 
@@ -61,7 +61,7 @@ pub enum PubGrubPackage {
         Option<VerbatimUrl>,
         /// Names of the file sources of this package (e.g. requirements.in), or empty for dependencies
         /// only from other libraries
-        Vec<SourceName>,
+        Vec<Source>,
     ),
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
     ///
@@ -84,7 +84,7 @@ impl PubGrubPackage {
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
-        source: Vec<SourceName>,
+        source: Vec<Source>,
         urls: &Urls,
     ) -> Self {
         let url = urls.get(&name).cloned();

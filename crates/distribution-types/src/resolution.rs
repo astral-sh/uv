@@ -83,7 +83,7 @@ impl From<Dist> for Requirement {
                     ),
                 )),
                 marker: None,
-                path: None,
+                source: None,
             },
 
             Dist::Built(BuiltDist::DirectUrl(wheel)) => Self {
@@ -91,14 +91,14 @@ impl From<Dist> for Requirement {
                 extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(wheel.url)),
                 marker: None,
-                path: None,
+                source: None,
             },
             Dist::Built(BuiltDist::Path(wheel)) => Self {
                 name: wheel.filename.name,
                 extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(wheel.url)),
                 marker: None,
-                path: None,
+                source: None,
             },
             Dist::Source(SourceDist::Registry(sdist)) => Self {
                 name: sdist.filename.name,
@@ -109,28 +109,28 @@ impl From<Dist> for Requirement {
                     ),
                 )),
                 marker: None,
-                path: None,
+                source: None,
             },
             Dist::Source(SourceDist::DirectUrl(sdist)) => Self {
                 name: sdist.name,
                 extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
                 marker: None,
-                path: None,
+                source: None,
             },
             Dist::Source(SourceDist::Git(sdist)) => Self {
                 name: sdist.name,
                 extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
                 marker: None,
-                path: None,
+                source: None,
             },
             Dist::Source(SourceDist::Path(sdist)) => Self {
                 name: sdist.name,
                 extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
                 marker: None,
-                path: None,
+                source: None,
             },
         }
     }
@@ -147,7 +147,7 @@ impl From<InstalledDist> for Requirement {
                 )),
             )),
             marker: None,
-            path: None,
+            source: None,
         }
     }
 }

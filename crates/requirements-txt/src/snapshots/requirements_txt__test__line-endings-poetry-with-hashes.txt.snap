@@ -51,8 +51,10 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
@@ -110,8 +112,10 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
@@ -180,8 +184,10 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
@@ -239,8 +245,10 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
@@ -299,8 +307,10 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    source: Some(
+                        Requirement(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
