@@ -1,3 +1,16 @@
+//! Benchmarks uv using criterion.
+//!
+//! The benchmarks in this file assume that the `uv` and `virtualenv` executables are available.
+//!
+//! To set up the required environment, run:
+//!
+//! ```shell
+//! cargo build --release
+//! ./target/release/uv venv
+//! source .venv/bin/activate
+//! ./target/release/uv pip sync ./scripts/bench/requirements.txt
+//! ```
+
 use std::env;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -23,8 +36,8 @@ fn resolve_warm(c: &mut Criterion<WallTime>) {
         );
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let output_file = Path::new("./requirements.txt");
-        let cache_dir = Path::new("./.cache");
+        let output_file = Path::new("requirements.txt");
+        let cache_dir = Path::new(".cache");
 
         c.bench_function(&name, |b| {
             b.iter_batched(
@@ -58,7 +71,7 @@ fn install_warm(c: &mut Criterion<WallTime>) {
             requirements.file_stem().unwrap().to_string_lossy()
         );
 
-        let venv_dir = fs::canonicalize("./.venv").unwrap();
+        let venv_dir = Path::new(".venv");
         env::set_var("VIRTUAL_ENV", &venv_dir);
 
         let temp_dir = tempfile::tempdir().unwrap();
