@@ -8,11 +8,10 @@
 //! cargo build --release
 //! ./target/release/uv venv
 //! source .venv/bin/activate
-//! ./target/release/uv pip sync ./scripts/bench/requirements.txt
 //! ```
 
 use std::env;
-use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
@@ -20,91 +19,78 @@ use criterion::BatchSize;
 
 use fs_err as fs;
 
-const REQUIREMENTS: [&str; 4] = [
-    "../../scripts/requirements/trio.in",
-    "../../scripts/requirements/boto3.in",
-    "../../scripts/requirements/black.in",
-    "../../scripts/requirements/jupyter.in",
-];
+const REQUIREMENTS_DIR: &str = "../../scripts/requirements";
+const REQUIREMENTS: [&str; 2] = ["trio.in", "home-assistant.in"];
+const COMPILED: [&str; 2] = ["compiled/trio.txt", "home-assistant.in"];
 
 fn resolve_warm(c: &mut Criterion<WallTime>) {
     for requirements in REQUIREMENTS {
-        let requirements = fs::canonicalize(requirements).unwrap();
+        let input = fs::canonicalize(PathBuf::from_iter([REQUIREMENTS_DIR, requirements])).unwrap();
         let name = format!(
             "resolve_warm_{}",
-            requirements.file_stem().unwrap().to_string_lossy()
+            input.file_stem().unwrap().to_string_lossy()
         );
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let output_file = Path::new("requirements.txt");
-        let cache_dir = Path::new(".cache");
+        let root = env::current_dir().unwrap();
+        env::set_current_dir(&temp_dir).unwrap();
 
-        c.bench_function(&name, |b| {
-            b.iter_batched(
-                || fs::remove_file(output_file).ok(),
-                |_| {
-                    let mut command = Command::new("uv");
-                    command
-                        .args(["pip", "compile"])
-                        .arg(&requirements)
-                        .arg("--cache-dir")
-                        .arg(cache_dir)
-                        .arg("--output-file")
-                        .arg(output_file)
-                        .current_dir(&temp_dir)
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null());
+        let output = "requirements.txt";
 
-                    command.status().unwrap();
-                },
-                BatchSize::SmallInput,
-            );
-        });
+        let setup = || fs::remove_file(output).ok();
+
+        let run = |_| {
+            Command::new("uv")
+                .args(["pip", "compile"])
+                .arg(&input)
+                .args(["--cache-dir", ".cache"])
+                .args(["--output-file", output])
+                .current_dir(&temp_dir)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap();
+        };
+
+        c.bench_function(&name, |b| b.iter_batched(setup, run, BatchSize::SmallInput));
+        env::set_current_dir(&root).unwrap();
     }
 }
 
 fn install_warm(c: &mut Criterion<WallTime>) {
-    for requirements in REQUIREMENTS {
-        let requirements = fs::canonicalize(requirements).unwrap();
+    for requirements in COMPILED {
+        let input = fs::canonicalize(PathBuf::from_iter([REQUIREMENTS_DIR, requirements])).unwrap();
         let name = format!(
             "install_warm_{}",
-            requirements.file_stem().unwrap().to_string_lossy()
+            input.file_stem().unwrap().to_string_lossy()
         );
 
-        let venv_dir = Path::new(".venv");
-        env::set_var("VIRTUAL_ENV", venv_dir);
-
         let temp_dir = tempfile::tempdir().unwrap();
-        let cache_dir = Path::new("./.cache");
+        let root = env::current_dir().unwrap();
+        env::set_current_dir(&temp_dir).unwrap();
 
-        c.bench_function(&name, |b| {
-            b.iter_batched(
-                || {
-                    let mut command = Command::new("virtualenv");
-                    command
-                        .args(["--clear", "-p", "3.12"])
-                        .arg(venv_dir)
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null());
+        let setup = || {
+            Command::new("uv")
+                .args(["venv", ".venv", "-p", "3.12"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap();
+        };
 
-                    command.status().unwrap()
-                },
-                |_| {
-                    let mut command = Command::new("uv");
-                    command
-                        .args(["pip", "sync"])
-                        .arg(&requirements)
-                        .arg("--cache-dir")
-                        .arg(cache_dir)
-                        .current_dir(&temp_dir)
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null());
+        let run = |_| {
+            Command::new("uv")
+                .args(["pip", "sync"])
+                .arg(&input)
+                .args(["--cache-dir", ".cache"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap();
+        };
 
-                    command.status().unwrap();
-                },
-                BatchSize::SmallInput,
-            );
-        });
+        c.bench_function(&name, |b| b.iter_batched(setup, run, BatchSize::SmallInput));
+        env::set_current_dir(&root).unwrap();
     }
 }
 
