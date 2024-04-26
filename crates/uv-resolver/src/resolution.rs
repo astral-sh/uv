@@ -544,6 +544,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
     #[allow(clippy::fn_params_excessive_bools)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
         sources: FxHashMap<PackageName, Vec<Source>>,
