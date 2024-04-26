@@ -112,6 +112,8 @@ async fn run() -> Result<ExitStatus> {
     // 3. The user configuration file.
     let workspace = if let Some(config_file) = cli.config_file.as_ref() {
         Some(uv_workspace::Workspace::from_file(config_file)?)
+    } else if cli.isolated {
+        None
     } else if let Some(workspace) = uv_workspace::Workspace::find(env::current_dir()?)? {
         Some(workspace)
     } else {
