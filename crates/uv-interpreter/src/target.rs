@@ -22,8 +22,6 @@ impl Target {
     /// Initialize the `--target` directory.
     pub fn init(&self) -> std::io::Result<()> {
         fs_err::create_dir_all(&self.0)?;
-        fs_err::create_dir_all(self.0.join("bin"))?;
-        fs_err::create_dir_all(self.0.join("include"))?;
         Ok(())
     }
 
