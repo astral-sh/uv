@@ -8217,6 +8217,7 @@ fn resolve_configuration() -> Result<()> {
         [pip]
         resolution = "lowest-direct"
         generate-hashes = true
+        index-url = "https://pypi.org/simple"
     "#})?;
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -8358,6 +8359,7 @@ fn resolve_configuration() -> Result<()> {
         [tool.uv.pip]
         resolution = "lowest-direct"
         generate-hashes = true
+        index-url = "https://pypi.org/simple"
     "#})?;
 
     // Resolution should use the lowest direct version, and generate hashes.

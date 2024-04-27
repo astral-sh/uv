@@ -20,7 +20,7 @@ static DEFAULT_INDEX_URL: Lazy<IndexUrl> =
     Lazy::new(|| IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())));
 
 /// The url of an index, newtype'd to avoid mixing it with file urls.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum IndexUrl {
     Pypi(VerbatimUrl),
     Url(VerbatimUrl),
@@ -97,6 +97,25 @@ impl FromStr for IndexUrl {
         } else {
             Ok(Self::Url(url))
         }
+    }
+}
+
+impl serde::ser::Serialize for IndexUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.verbatim().serialize(serializer)
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for IndexUrl {
+    fn deserialize<D>(deserializer: D) -> Result<IndexUrl, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        IndexUrl::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
