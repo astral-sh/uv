@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use pubgrub::range::Range;
 use tracing::debug;
 
@@ -9,7 +10,6 @@ use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
-use crate::iterators::{MaxIterator, MinIterator};
 use crate::preferences::Preferences;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::resolution_mode::ResolutionStrategy;
@@ -213,9 +213,7 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
     ) -> Option<Candidate> {
         tracing::trace!(
-            "selecting candidate for package {} with range {:?} with {} remote versions",
-            package_name,
-            range,
+            "selecting candidate for package {package_name} with range {range:?} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name);
@@ -224,19 +222,20 @@ impl CandidateSelector {
         if self.index_strategy == IndexStrategy::UnsafeBestMatch {
             if highest {
                 Self::select_candidate(
-                    MaxIterator::new(
-                        version_maps
-                            .iter()
-                            .map(|version_map| version_map.iter().rev())
-                            .collect(),
-                    ),
+                    version_maps
+                        .iter()
+                        .map(|version_map| version_map.iter().rev())
+                        .kmerge_by(|(version1, _), (version2, _)| version1 > version2),
                     package_name,
                     range,
                     allow_prerelease,
                 )
             } else {
                 Self::select_candidate(
-                    MinIterator::new(version_maps.iter().map(VersionMap::iter).collect()),
+                    version_maps
+                        .iter()
+                        .map(VersionMap::iter)
+                        .kmerge_by(|(version1, _), (version2, _)| version1 < version2),
                     package_name,
                     range,
                     allow_prerelease,
