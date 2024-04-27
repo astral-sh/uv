@@ -439,6 +439,7 @@ pub(crate) async fn pip_compile(
         .prerelease_mode(prerelease_mode)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
+        .index_strategy(index_strategy)
         .build();
 
     // Resolve the dependencies.

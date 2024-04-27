@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use pubgrub::range::Range;
 use tracing::debug;
 
@@ -5,6 +6,7 @@ use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
+use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
@@ -15,9 +17,11 @@ use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options};
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PreReleaseStrategy,
+    index_strategy: IndexStrategy,
 }
 
 impl CandidateSelector {
@@ -40,6 +44,7 @@ impl CandidateSelector {
                 markers,
                 options.dependency_mode,
             ),
+            index_strategy: options.index_strategy,
         }
     }
 
@@ -53,6 +58,12 @@ impl CandidateSelector {
     #[allow(dead_code)]
     pub(crate) fn prerelease_strategy(&self) -> &PreReleaseStrategy {
         &self.prerelease_strategy
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn index_strategy(&self) -> &IndexStrategy {
+        &self.index_strategy
     }
 }
 
@@ -202,27 +213,54 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
     ) -> Option<Candidate> {
         tracing::trace!(
-            "selecting candidate for package {} with range {:?} with {} remote versions",
-            package_name,
-            range,
+            "selecting candidate for package {package_name} with range {range:?} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name);
         let allow_prerelease = self.allow_prereleases(package_name);
 
-        if highest {
-            version_maps.iter().find_map(|version_map| {
+        if self.index_strategy == IndexStrategy::UnsafeBestMatch {
+            if highest {
                 Self::select_candidate(
-                    version_map.iter().rev(),
+                    version_maps
+                        .iter()
+                        .map(|version_map| version_map.iter().rev())
+                        .kmerge_by(|(version1, _), (version2, _)| version1 > version2),
                     package_name,
                     range,
                     allow_prerelease,
                 )
-            })
+            } else {
+                Self::select_candidate(
+                    version_maps
+                        .iter()
+                        .map(VersionMap::iter)
+                        .kmerge_by(|(version1, _), (version2, _)| version1 < version2),
+                    package_name,
+                    range,
+                    allow_prerelease,
+                )
+            }
         } else {
-            version_maps.iter().find_map(|version_map| {
-                Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
-            })
+            if highest {
+                version_maps.iter().find_map(|version_map| {
+                    Self::select_candidate(
+                        version_map.iter().rev(),
+                        package_name,
+                        range,
+                        allow_prerelease,
+                    )
+                })
+            } else {
+                version_maps.iter().find_map(|version_map| {
+                    Self::select_candidate(
+                        version_map.iter(),
+                        package_name,
+                        range,
+                        allow_prerelease,
+                    )
+                })
+            }
         }
     }
 
@@ -241,7 +279,7 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over source distributions.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)> + ExactSizeIterator,
+        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: AllowPreRelease,
@@ -253,8 +291,9 @@ impl CandidateSelector {
         }
 
         let mut prerelease = None;
-        let versions_len = versions.len();
-        for (step, (version, maybe_dist)) in versions.enumerate() {
+        let mut steps = 0usize;
+        for (version, maybe_dist) in versions {
+            steps += 1;
             let candidate = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
@@ -267,7 +306,7 @@ impl CandidateSelector {
                                  after {} steps: {:?} version",
                                 package_name,
                                 range,
-                                step,
+                                steps,
                                 version,
                             );
                             // If pre-releases are allowed, treat them equivalently
@@ -308,7 +347,7 @@ impl CandidateSelector {
                          after {} steps: {:?} version",
                         package_name,
                         range,
-                        step,
+                        steps,
                         version,
                     );
                     Candidate::new(package_name, version, dist)
@@ -340,7 +379,7 @@ impl CandidateSelector {
              after {} steps",
             package_name,
             range,
-            versions_len,
+            steps,
         );
         match prerelease {
             None => None,
