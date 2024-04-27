@@ -132,15 +132,15 @@ As of v0.1.39, users can opt in to `pip`-style behavior for multiple indexes via
 `--index-strategy` command-line option, or the `UV_INDEX_STRATEGY` environment
 variable, which supports the following values:
 
-- `--first-match` (default): Search for each package across all indexes, limiting the candidate
+- `first-match` (default): Search for each package across all indexes, limiting the candidate
   versions to those present in the first index that contains the package, prioritizing the
   `--extra-index-url` indexes over the default index URL.
-- `--unsafe-first-match`: Search for each package across all indexes, but prefer the first index
+- `unsafe-first-match`: Search for each package across all indexes, but prefer the first index
   with a compatible version, even if newer versions are available on other indexes.
-- `--unsafe-best-match`: Search for each package across all indexes, and select the best version
+- `unsafe-best-match`: Search for each package across all indexes, and select the best version
   from the combined set of candidate versions.
 
-While `--unsafe-best-match` is the closest to `pip`'s behavior, it exposes users to the risk of
+While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users to the risk of
 "dependency confusion" attacks.
 
 In the future, uv will support pinning packages to dedicated indexes (see: [#171](https://github.com/astral-sh/uv/issues/171)).
