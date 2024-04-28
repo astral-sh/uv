@@ -31,7 +31,7 @@ use crate::{Error, Layout};
 /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl>
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
-#[instrument(skip_all, fields(wheel = % wheel.as_ref().display()))]
+#[instrument(skip_all, fields(wheel = %filename))]
 pub fn install_wheel(
     layout: &Layout,
     wheel: impl AsRef<Path>,

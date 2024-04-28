@@ -1,7 +1,7 @@
-use anstream::ColorChoice;
 use std::fmt;
 use std::str::FromStr;
 
+use anstream::ColorChoice;
 use anyhow::Context;
 use chrono::Utc;
 use owo_colors::OwoColorize;
@@ -128,11 +128,10 @@ pub(crate) fn setup_logging(
     };
 
     // Only record our own spans.
-    let durations_layer =
-        durations.with_filter(tracing_subscriber::filter::Targets::new().with_target(
-            env!("CARGO_PKG_NAME"),
-            tracing::level_filters::LevelFilter::INFO,
-        ));
+    let durations_layer = durations.with_filter(
+        tracing_subscriber::filter::Targets::new()
+            .with_target("", tracing::level_filters::LevelFilter::INFO),
+    );
 
     let filter = EnvFilter::builder()
         .with_default_directive(default_directive)
