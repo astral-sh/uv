@@ -33,6 +33,7 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
+use uv_warnings::warn_user_once;
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::editables::Editables;
@@ -836,7 +837,7 @@ impl<
                     ) {
                         debug!("new_warning: direct {package}{version}");
                         if *version == (Range::full()) {
-                            debug!("new_warning_match: direct {package}{version}");
+                            warn_user_once!("new_warning_match: direct {package}{version}");
                         }
                     }
                     // Update the package priorities.
@@ -923,7 +924,9 @@ impl<
                         ) {
                             debug!("new_warning: transitive {package}{dep_version}");
                             if *dep_version == (Range::full()) {
-                                debug!("new_warning_match: transitive {package}{dep_version}");
+                                warn_user_once!(
+                                    "new_warning_match: transitive {package}{dep_version}"
+                                );
                             }
                         }
 
@@ -1042,7 +1045,7 @@ impl<
                     ) {
                         debug!("new_warning: transitive {package}{dep_version}");
                         if *dep_version == (Range::full()) {
-                            debug!("new_warning_match: transitive {package}{dep_version}");
+                            warn_user_once!("new_warning_match: transitive {package}{dep_version}");
                         }
                     }
                     // Update the package priorities.
