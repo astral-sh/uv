@@ -18,7 +18,7 @@ install-wheel-rs = { workspace = true, features = ["schemars"] }
 uv-configuration = { workspace = true, features = ["schemars", "serde"] }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
-uv-resolver = { workspace = true, features = ["schemars", "serde"] }
+uv-resolver = { workspace = true, features = ["schemars"] }
 uv-toolchain = { workspace = true, features = ["schemars", "serde"] }
 uv-warnings = { workspace = true }
 
