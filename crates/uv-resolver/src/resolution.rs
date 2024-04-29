@@ -25,6 +25,7 @@ use uv_normalize::{ExtraName, PackageName, Source};
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
+use crate::lock::{self, Lock, LockError};
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
@@ -499,6 +500,21 @@ impl ResolutionGraph {
             conjuncts.push(MarkerTree::Expression(expr));
         }
         MarkerTree::And(conjuncts)
+    }
+
+    pub fn lock(&self) -> Result<Lock, LockError> {
+        let mut locked_dists = vec![];
+        for node_index in self.petgraph.node_indices() {
+            let dist = &self.petgraph[node_index];
+            let mut locked_dist = lock::Distribution::from_resolved_dist(dist)?;
+            for edge in self.petgraph.neighbors(node_index) {
+                let dependency_dist = &self.petgraph[edge];
+                locked_dist.add_dependency(dependency_dist);
+            }
+            locked_dists.push(locked_dist);
+        }
+        let lock = Lock::new(locked_dists)?;
+        Ok(lock)
     }
 }
 

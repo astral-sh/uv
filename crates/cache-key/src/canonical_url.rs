@@ -32,8 +32,8 @@ impl CanonicalUrl {
         }
 
         // Strip credentials.
-        url.set_password(None).unwrap();
-        url.set_username("").unwrap();
+        let _ = url.set_password(None);
+        let _ = url.set_username("");
 
         // Strip a trailing slash.
         if url.path().ends_with('/') {

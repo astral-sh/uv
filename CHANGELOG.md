@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.39
+
+### Enhancements
+
+- Add `--target` support to `sync` and `install` ([#3257](https://github.com/astral-sh/uv/pull/3257))
+- Implement `--index-strategy unsafe-best-match` ([#3138](https://github.com/astral-sh/uv/pull/3138))
+
+### Bug fixes
+
+- Fix `platform_machine` tag for `--python-platform` on macOS ARM ([#3267](https://github.com/astral-sh/uv/pull/3267))
+
+### Release
+
+- Build a separate ARM wheel for macOS ([#3268](https://github.com/astral-sh/uv/pull/3268))
+- Use `macos-12` to build release wheels ([#3264](https://github.com/astral-sh/uv/pull/3264))
+
 ## 0.1.38
 
 ### Enhancements

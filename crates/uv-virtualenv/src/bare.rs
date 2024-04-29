@@ -12,7 +12,7 @@ use pypi_types::Scheme;
 use tracing::info;
 
 use crate::{Error, Prompt};
-use uv_fs::Simplified;
+use uv_fs::{cachedir, Simplified};
 use uv_interpreter::{Interpreter, Virtualenv};
 use uv_version::version;
 

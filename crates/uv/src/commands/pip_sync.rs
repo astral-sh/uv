@@ -115,6 +115,10 @@ pub(crate) async fn pip_sync(
 
     // Apply any `--target` directory.
     let venv = if let Some(target) = target {
+        debug!(
+            "Using `--target` directory at {}",
+            target.root().user_display()
+        );
         target.init()?;
         venv.with_target(target)
     } else {

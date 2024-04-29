@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
+use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -85,6 +86,7 @@ pub(crate) async fn pip_compile(
     link_mode: LinkMode,
     python: Option<String>,
     system: bool,
+    uv_lock: bool,
     native_tls: bool,
     quiet: bool,
     cache: Cache,
@@ -483,6 +485,7 @@ pub(crate) async fn pip_compile(
         .prerelease_mode(prerelease_mode)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
+        .index_strategy(index_strategy)
         .build();
 
     // Resolve the dependencies.
@@ -566,6 +569,12 @@ pub(crate) async fn pip_compile(
             "# Pinned dependencies known to be valid for:".green()
         )?;
         writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
+    }
+
+    if uv_lock {
+        let lock = resolution.lock()?;
+        let encoded = toml::to_string_pretty(&lock)?;
+        fs::tokio::write("uv.lock", encoded.as_bytes()).await?;
     }
 
     // Write the index locations to the output channel.

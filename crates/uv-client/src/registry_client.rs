@@ -221,7 +221,7 @@ impl RegistryClient {
     ) -> Result<Vec<(IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
         let mut it = self.index_urls.indexes().peekable();
         if it.peek().is_none() {
-            return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
+            return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }
 
         let mut results = Vec::new();
@@ -231,7 +231,7 @@ impl RegistryClient {
                     results.push((index.clone(), metadata));
 
                     // If we're only using the first match, we can stop here.
-                    if self.index_strategy == IndexStrategy::FirstMatch {
+                    if self.index_strategy == IndexStrategy::FirstIndex {
                         break;
                     }
                 }
@@ -239,6 +239,7 @@ impl RegistryClient {
                     ErrorKind::Offline(_) => continue,
                     ErrorKind::ReqwestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND)
+                            || err.status() == Some(StatusCode::UNAUTHORIZED)
                             || err.status() == Some(StatusCode::FORBIDDEN)
                         {
                             continue;

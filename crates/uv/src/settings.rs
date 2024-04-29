@@ -127,6 +127,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) r#override: Vec<PathBuf>,
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
+    pub(crate) uv_lock: bool,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -194,6 +195,8 @@ impl PipCompileSettings {
             no_emit_marker_expression,
             emit_index_annotation,
             no_emit_index_annotation,
+            unstable_uv_lock_file,
+            no_unstable_uv_lock_file,
             compat_args: _,
         } = args;
 
@@ -207,6 +210,7 @@ impl PipCompileSettings {
             r#override,
             refresh: Refresh::from_args(refresh, refresh_package),
             upgrade: Upgrade::from_args(upgrade, upgrade_package),
+            uv_lock: flag(unstable_uv_lock_file, no_unstable_uv_lock_file).unwrap_or(false),
 
             // Shared settings.
             shared: PipSharedSettings::combine(

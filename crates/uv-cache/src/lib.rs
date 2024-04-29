@@ -13,7 +13,7 @@ use tracing::debug;
 
 use distribution_types::InstalledDist;
 use pypi_types::Metadata23;
-use uv_fs::directories;
+use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
 
 pub use crate::by_timestamp::CachedByTimestamp;

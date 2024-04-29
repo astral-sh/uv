@@ -135,6 +135,10 @@ pub(crate) async fn pip_install(
 
     // Apply any `--target` directory.
     let venv = if let Some(target) = target {
+        debug!(
+            "Using `--target` directory at {}",
+            target.root().user_display()
+        );
         target.init()?;
         venv.with_target(target)
     } else {
@@ -374,6 +378,7 @@ pub(crate) async fn pip_install(
         .prerelease_mode(prerelease_mode)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
+        .index_strategy(index_strategy)
         .build();
 
     // Resolve the requirements.
