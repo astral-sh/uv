@@ -22,7 +22,7 @@ fn resolve_warm_black(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     c.bench_function("resolve_warm_black", |b| {
-        b.to_async(&runtime).iter_with_large_drop(run)
+        b.to_async(&runtime).iter_with_large_drop(run);
     });
 }
 
@@ -41,7 +41,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     c.bench_function("resolve_warm_jupyter", |b| {
-        b.to_async(&runtime).iter_with_large_drop(run)
+        b.to_async(&runtime).iter_with_large_drop(run);
     });
 }
 
