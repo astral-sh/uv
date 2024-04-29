@@ -898,12 +898,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: "Build binary"
-        run: cargo build --release -p uv
-
-      - name: "Enter virtual environment"
-        run: ./target/release/uv venv && source .venv/bin/activate
-
       - name: "Build benchmarks"
         run: cargo codspeed build --features codspeed -p bench
 
