@@ -229,6 +229,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.link_mode,
                 args.shared.python,
                 args.shared.system,
+                args.uv_lock,
                 globals.native_tls,
                 globals.quiet,
                 cache,
