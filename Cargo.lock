@@ -4457,6 +4457,7 @@ dependencies = [
  "thiserror",
  "tikv-jemallocator",
  "tokio",
+ "toml",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",

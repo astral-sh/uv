@@ -601,6 +601,12 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, overrides_with("emit_index_annotation"), hide = true)]
     pub(crate) no_emit_index_annotation: bool,
 
+    #[arg(long, overrides_with("no_unstable_uv_lock_file"), hide = true)]
+    pub(crate) unstable_uv_lock_file: bool,
+
+    #[arg(long, overrides_with("unstable_uv_lock_file"), hide = true)]
+    pub(crate) no_unstable_uv_lock_file: bool,
+
     #[command(flatten)]
     pub(crate) compat_args: compat::PipCompileCompatArgs,
 }
