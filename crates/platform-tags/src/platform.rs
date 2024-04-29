@@ -21,7 +21,7 @@ pub struct Platform {
 
 impl Platform {
     /// Create a new platform from the given operating system and architecture.
-    pub fn new(os: Os, arch: Arch) -> Self {
+    pub const fn new(os: Os, arch: Arch) -> Self {
         Self { os, arch }
     }
 

@@ -1,15 +1,3 @@
-//! Benchmarks uv using criterion.
-//!
-//! The benchmarks in this file assume that the `uv` executable is available.
-//!
-//! To set up the required environment, run:
-//!
-//! ```shell
-//! cargo build --release
-//! ./target/release/uv venv
-//! source .venv/bin/activate
-//! ```
-
 use std::str::FromStr;
 
 use criterion::black_box;
@@ -72,7 +60,7 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClientBuilder;
     use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
-    use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
+    use uv_interpreter::{Interpreter, PythonEnvironment};
     use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, ResolutionGraph, Resolver};
     use uv_types::{
         BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceBuildTrait,
@@ -80,45 +68,36 @@ mod resolver {
 
     static MARKERS: Lazy<MarkerEnvironment> = Lazy::new(|| {
         MarkerEnvironment {
-        implementation_name: "cpython".to_string(),
-        implementation_version: StringVersion::from_str("3.11.5").unwrap(),
-        os_name: "posix".to_string(),
-        platform_machine: "arm64".to_string(),
-        platform_python_implementation: "CPython".to_string(),
-        platform_release: "21.6.0".to_string(),
-        platform_system: "Darwin".to_string(),
-        platform_version: "Darwin Kernel Version 21.6.0: Mon Aug 22 20:19:52 PDT 2022; root:xnu-8020.140.49~2/RELEASE_ARM64_T6000".to_string(),
-        python_full_version: StringVersion::from_str("3.11.5").unwrap(),
-        python_version: StringVersion::from_str("3.11").unwrap(),
-        sys_platform: "darwin".to_string(),
-    }
+            implementation_name: "cpython".to_string(),
+            implementation_version: StringVersion::from_str("3.11.5").unwrap(),
+            os_name: "posix".to_string(),
+            platform_machine: "arm64".to_string(),
+            platform_python_implementation: "CPython".to_string(),
+            platform_release: "21.6.0".to_string(),
+            platform_system: "Darwin".to_string(),
+            platform_version: "Darwin Kernel Version 21.6.0: Mon Aug 22 20:19:52 PDT 2022; root:xnu-8020.140.49~2/RELEASE_ARM64_T6000".to_string(),
+            python_full_version: StringVersion::from_str("3.11.5").unwrap(),
+            python_version: StringVersion::from_str("3.11").unwrap(),
+            sys_platform: "darwin".to_string(),
+        }
     });
 
-    static TAGS: Lazy<Tags> = Lazy::new(|| {
-        Tags::from_env(
-            &Platform::new(
-                Os::Macos {
-                    major: 21,
-                    minor: 6,
-                },
-                Arch::Aarch64,
-            ),
-            (3, 11),
-            "cpython",
-            (3, 11),
-            false,
-        )
-        .unwrap()
-    });
+    static PLATFORM: Platform = Platform::new(
+        Os::Macos {
+            major: 21,
+            minor: 6,
+        },
+        Arch::Aarch64,
+    );
+
+    static TAGS: Lazy<Tags> =
+        Lazy::new(|| Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false).unwrap());
 
     pub(crate) async fn resolve(manifest: Manifest, cache: Cache) -> Result<ResolutionGraph> {
         let client = RegistryClientBuilder::new(cache.clone()).build();
         let flat_index = FlatIndex::default();
         let index = InMemoryIndex::default();
-        let real_interpreter =
-            find_default_python(&cache).expect("Expected a python to be installed");
-        let interpreter =
-            Interpreter::artificial(real_interpreter.platform().clone(), MARKERS.clone());
+        let interpreter = Interpreter::artificial(PLATFORM.clone(), MARKERS.clone());
         let build_context = Context::new(cache, interpreter.clone());
         let hashes = HashStrategy::None;
         let installed_packages = EmptyInstalledPackages;
