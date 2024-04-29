@@ -5,7 +5,6 @@ use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
-
 use itertools::Itertools;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;

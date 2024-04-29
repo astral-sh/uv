@@ -16,6 +16,7 @@ workspace = true
 uv-warnings = { workspace = true }
 
 backoff = { workspace = true }
+cachedir = { workspace = true }
 dunce = { workspace = true }
 encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }

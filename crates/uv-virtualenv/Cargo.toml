@@ -29,7 +29,6 @@ uv-interpreter = { workspace = true }
 uv-version = { workspace = true }
 
 anstream = { workspace = true }
-cachedir = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
 fs-err = { workspace = true }

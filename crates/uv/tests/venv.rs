@@ -527,3 +527,29 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
 
     Ok(())
 }
+
+/// See <https://github.com/astral-sh/uv/issues/3280>
+#[test]
+#[cfg(windows)]
+fn path_with_trailing_space_gives_proper_error() {
+    let context = VenvTestContext::new(&["3.12"]);
+
+    // Create a virtual environment at `.venv`.
+    uv_snapshot!(context.filters(), Command::new(get_bin())
+        .arg("venv")
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .env("UV_CACHE_DIR", format!("{} ", context.cache_dir.path().display()))
+        .env("UV_TEST_PYTHON_PATH", context.python_path.clone())
+        .current_dir(context.temp_dir.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to open file `C:\Users\KONSTA~1\AppData\Local\Temp\.tmpkj23QD \CACHEDIR.TAG`
+      Caused by: The system cannot find the path specified. (os error 3)
+    "###
+    );
+}

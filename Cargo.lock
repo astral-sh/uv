@@ -4540,7 +4540,6 @@ name = "uv-cache"
 version = "0.0.1"
 dependencies = [
  "cache-key",
- "cachedir",
  "clap",
  "directories",
  "distribution-types",
@@ -4761,6 +4760,7 @@ name = "uv-fs"
 version = "0.0.1"
 dependencies = [
  "backoff",
+ "cachedir",
  "dunce",
  "encoding_rs_io",
  "fs-err",
@@ -5011,7 +5011,6 @@ name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
  "anstream",
- "cachedir",
  "clap",
  "directories",
  "fs-err",

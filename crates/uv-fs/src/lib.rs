@@ -10,6 +10,7 @@ use uv_warnings::warn_user;
 
 pub use crate::path::*;
 
+pub mod cachedir;
 mod path;
 
 /// Reads data from the path and requires that it be valid UTF-8.
