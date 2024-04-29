@@ -383,7 +383,7 @@ pub(crate) struct PipCompileArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, env = "UV_LINK_MODE")]
     pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
@@ -644,7 +644,7 @@ pub(crate) struct PipSyncArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, env = "UV_LINK_MODE")]
     pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
@@ -995,7 +995,7 @@ pub(crate) struct PipInstallArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, env = "UV_LINK_MODE")]
     pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
@@ -1641,7 +1641,7 @@ pub(crate) struct VenvArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, env = "UV_LINK_MODE")]
     pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
