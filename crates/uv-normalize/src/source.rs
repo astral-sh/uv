@@ -11,6 +11,7 @@ pub enum Source {
     Requirement(String),
     Constraint(String),
     Override(String),
+    PyProject { path: String, project_name: String },
 }
 
 impl Source {
@@ -24,6 +25,9 @@ impl Source {
             }
             Source::Override(name) => {
                 format!("--override {name}")
+            }
+            Source::PyProject { path, project_name } => {
+                format!("{project_name} ({path})")
             }
         }
     }

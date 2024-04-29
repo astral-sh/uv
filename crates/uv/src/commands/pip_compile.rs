@@ -359,7 +359,20 @@ pub(crate) async fn pip_compile(
 
     for requirement in &requirements {
         if let Some(path) = &requirement.path {
-            insert_source(&requirement.name, Source::Requirement(path.clone()));
+            if path.ends_with("pyproject.toml") {
+                insert_source(
+                    &requirement.name,
+                    Source::PyProject {
+                        path: path.clone(),
+                        project_name: project
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_default(),
+                    },
+                );
+            } else {
+                insert_source(&requirement.name, Source::Requirement(path.clone()));
+            }
         }
     }
 
