@@ -11,10 +11,11 @@ use pep440_rs::Version;
 use pypi_types::HashDigest;
 use url::Url;
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Lock {
     version: u32,
-    #[serde(rename = "distribution")]
+    #[cfg_attr(feature = "serde", serde(rename = "distribution"))]
     distributions: Vec<Distribution>,
 }
 
@@ -46,15 +47,19 @@ impl Lock {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub(crate) struct Distribution {
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde", serde(flatten))]
     pub(crate) id: DistributionId,
     pub(crate) marker: Option<String>,
     pub(crate) sourcedist: Option<SourceDist>,
-    #[serde(rename = "wheel", skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(rename = "wheel", skip_serializing_if = "Vec::is_empty")
+    )]
     pub(crate) wheels: Vec<Wheel>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub(crate) dependencies: Vec<Dependency>,
 }
 
@@ -87,7 +92,8 @@ impl Distribution {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub(crate) struct DistributionId {
     pub(crate) name: String,
     pub(crate) version: Version,
@@ -267,6 +273,7 @@ impl std::fmt::Display for Source {
     }
 }
 
+#[cfg(feature = "serde")]
 impl serde::Serialize for Source {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
     where
@@ -276,6 +283,7 @@ impl serde::Serialize for Source {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Source {
     fn deserialize<D>(d: D) -> Result<Source, D::Error>
     where
@@ -290,8 +298,9 @@ impl<'de> serde::Deserialize<'de> for Source {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 pub(crate) enum SourceKind {
     Registry,
     Git(GitSource),
@@ -314,7 +323,8 @@ impl SourceKind {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub(crate) struct GitSource {
     precise: Option<String>,
     kind: GitSourceKind,
@@ -343,7 +353,8 @@ impl GitSource {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 enum GitSourceKind {
     Tag(String),
     Branch(String),
@@ -352,7 +363,8 @@ enum GitSourceKind {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub(crate) struct SourceDist {
     /// A URL or file path (via `file://`) where the source dist that was
     /// locked against was found. The location does not need to exist in the
@@ -437,7 +449,8 @@ impl SourceDist {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub(crate) struct Wheel {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
@@ -510,9 +523,10 @@ impl Wheel {
 }
 
 /// A single dependency of a distribution in a lock file.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub(crate) struct Dependency {
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde", serde(flatten))]
     id: DistributionId,
 }
 
@@ -559,6 +573,7 @@ impl std::fmt::Display for Hash {
     }
 }
 
+#[cfg(feature = "serde")]
 impl serde::Serialize for Hash {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
     where
@@ -568,6 +583,7 @@ impl serde::Serialize for Hash {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Hash {
     fn deserialize<D>(d: D) -> Result<Hash, D::Error>
     where
