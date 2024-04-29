@@ -534,8 +534,13 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
 fn path_with_trailing_space_gives_proper_error() {
     let context = VenvTestContext::new(&["3.12"]);
 
+    let mut filters = context.filters();
+    filters.push((
+        regex::escape(&context.cache_dir.path().display().to_string()).to_string(),
+        r"C:\Path\to\Cache\dir".to_string(),
+    ));
     // Create a virtual environment at `.venv`.
-    uv_snapshot!(context.filters(), Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(context.venv.as_os_str())
         .arg("--python")
@@ -548,7 +553,7 @@ fn path_with_trailing_space_gives_proper_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `C:\Users\KONSTA~1\AppData\Local\Temp\.tmpkj23QD \CACHEDIR.TAG`
+    error: failed to open file `C:\Path\to\Cache\dir \CACHEDIR.TAG`
       Caused by: The system cannot find the path specified. (os error 3)
     "###
     );
