@@ -599,7 +599,7 @@ jobs:
   system-test-macos-x86_64:
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
-    runs-on: macos-12
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
