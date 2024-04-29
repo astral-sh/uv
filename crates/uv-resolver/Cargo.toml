@@ -49,7 +49,7 @@ pubgrub = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
