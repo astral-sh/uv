@@ -23,7 +23,7 @@ use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
-pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
+pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
     /// The requirements for the project.
     requirements: Vec<RequirementEntry>,
     /// Whether to check hashes for distributions.
@@ -34,7 +34,7 @@ pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
     database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Context> {
+impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
     /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
     pub fn new(
         requirements: Vec<RequirementEntry>,

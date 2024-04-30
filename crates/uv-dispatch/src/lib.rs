@@ -315,7 +315,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             build_kind,
             self.build_extra_env_vars.clone(),
         )
-        .boxed()
+        .boxed_local()
         .await?;
         Ok(builder)
     }

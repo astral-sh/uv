@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::hash::BuildHasherDefault;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -73,8 +73,8 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
-        packages: &OnceMap<PackageName, Arc<VersionsResponse>>,
-        distributions: &OnceMap<VersionId, Arc<MetadataResponse>>,
+        packages: &OnceMap<PackageName, Rc<VersionsResponse>>,
+        distributions: &OnceMap<VersionId, Rc<MetadataResponse>>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,

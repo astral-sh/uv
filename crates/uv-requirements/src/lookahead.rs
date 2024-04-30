@@ -40,7 +40,7 @@ pub enum LookaheadError {
 /// possible because a direct URL points to a _specific_ version of a package, and so we know that
 /// any correct resolution will _have_ to include it (unlike with PyPI dependencies, which may
 /// require a range of versions and backtracking).
-pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
+pub struct LookaheadResolver<'a, Context: BuildContext> {
     /// The direct requirements for the project.
     requirements: &'a [Requirement],
     /// The constraints for the project.
@@ -57,7 +57,7 @@ pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
     database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
+impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
     #[allow(clippy::too_many_arguments)]
     pub fn new(

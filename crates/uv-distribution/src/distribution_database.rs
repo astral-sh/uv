@@ -41,14 +41,14 @@ use crate::{ArchiveMetadata, Error, LocalWheel, Reporter, SourceDistributionBuil
 ///
 /// This struct also has the task of acquiring locks around source dist builds in general and git
 /// operation especially.
-pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
+pub struct DistributionDatabase<'a, Context: BuildContext> {
     client: &'a RegistryClient,
     build_context: &'a Context,
     builder: SourceDistributionBuilder<'a, Context>,
     locks: Arc<Locks>,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> {
+impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn new(client: &'a RegistryClient, build_context: &'a Context) -> Self {
         Self {
             client,
@@ -307,7 +307,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes)
-            .boxed()
+            .boxed_local()
             .await?;
 
         // If the wheel was unzipped previously, respect it. Source distributions are
@@ -360,7 +360,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             return Ok(ArchiveMetadata { metadata, hashes });
         }
 
-        match self.client.wheel_metadata(dist).boxed().await {
+        match self.client.wheel_metadata(dist).boxed_local().await {
             Ok(metadata) => Ok(ArchiveMetadata::from(metadata)),
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
@@ -404,7 +404,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let metadata = self
             .builder
             .download_and_build_metadata(source, hashes)
-            .boxed()
+            .boxed_local()
             .await?;
         Ok(metadata)
     }
