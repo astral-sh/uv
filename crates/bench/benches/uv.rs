@@ -9,7 +9,7 @@ use uv_client::RegistryClientBuilder;
 use uv_resolver::Manifest;
 
 fn resolve_warm_black(c: &mut Criterion<WallTime>) {
-    let runtime = &tokio::runtime::Builder::new_multi_thread()
+    let runtime = &tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
@@ -32,7 +32,7 @@ fn resolve_warm_black(c: &mut Criterion<WallTime>) {
 }
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
-    let runtime = &tokio::runtime::Builder::new_multi_thread()
+    let runtime = &tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
