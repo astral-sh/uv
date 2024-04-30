@@ -195,54 +195,62 @@ fn iter_locals(source: &UvSource) -> Box<dyn Iterator<Item = Version> + '_> {
 }
 
 #[cfg(test)]
-#[cfg(feature = "todo")]
 mod tests {
     use std::str::FromStr;
 
     use anyhow::Result;
     use url::Url;
 
+    use distribution_types::{ParsedUrl, UvSource};
     use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
-    use pep508_rs::{VerbatimUrl, VersionOrUrl};
+    use pep508_rs::VerbatimUrl;
 
     use crate::resolver::locals::{iter_locals, Locals};
 
     #[test]
     fn extract_locals() -> Result<()> {
         // Extract from a source distribution in a URL.
-        let version_or_url = VersionOrUrl::Url(VerbatimUrl::from_url(Url::parse(
-            "https://example.com/foo-1.0.0+local.tar.gz",
-        )?));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        let url = VerbatimUrl::from_url(Url::parse("https://example.com/foo-1.0.0+local.tar.gz")?);
+        let source = UvSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Extract from a wheel in a URL.
-        let version_or_url = VersionOrUrl::Url(VerbatimUrl::from_url(Url::parse(
+        let url = VerbatimUrl::from_url(Url::parse(
             "https://example.com/foo-1.0.0+local-cp39-cp39-linux_x86_64.whl",
-        )?));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        )?);
+        let source = UvSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Don't extract anything if the URL is opaque.
-        let version_or_url = VersionOrUrl::Url(VerbatimUrl::from_url(Url::parse(
-            "git+https://example.com/foo/bar",
-        )?));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        let url = VerbatimUrl::from_url(Url::parse("git+https://example.com/foo/bar")?);
+        let source = UvSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert!(locals.is_empty());
 
         // Extract from `==` specifiers.
-        let version_or_url = VersionOrUrl::VersionSpecifier(VersionSpecifiers::from_iter([
+        let version = VersionSpecifiers::from_iter([
             VersionSpecifier::from_version(Operator::GreaterThan, Version::from_str("1.0.0")?)?,
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?,
-        ]));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        ]);
+        let source = UvSource::Registry {
+            version,
+            index: None,
+        };
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Ignore other specifiers.
-        let version_or_url = VersionOrUrl::VersionSpecifier(VersionSpecifiers::from_iter([
-            VersionSpecifier::from_version(Operator::NotEqual, Version::from_str("1.0.0+local")?)?,
-        ]));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        let version = VersionSpecifiers::from_iter([VersionSpecifier::from_version(
+            Operator::NotEqual,
+            Version::from_str("1.0.0+local")?,
+        )?]);
+        let source = UvSource::Registry {
+            version,
+            index: None,
+        };
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert!(locals.is_empty());
 
         Ok(())
