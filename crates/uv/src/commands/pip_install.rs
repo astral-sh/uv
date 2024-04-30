@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
-use tracing::debug;
+use tracing::{debug, enabled, Level};
 
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable,
@@ -180,14 +180,16 @@ pub(crate) async fn pip_install(
             SatisfiesResult::Fresh {
                 recursive_requirements,
             } => {
-                debug!(
-                    "All requirements satisfied: {}",
-                    recursive_requirements
+                if enabled!(Level::DEBUG) {
+                    for requirement in recursive_requirements
                         .iter()
                         .map(ToString::to_string)
                         .sorted()
-                        .join(" | ")
-                );
+                    {
+                        debug!("Requirement satisfied: {requirement}");
+                    }
+                }
+
                 debug!(
                     "All editables satisfied: {}",
                     editables.iter().map(ToString::to_string).join(" | ")
