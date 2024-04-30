@@ -463,12 +463,23 @@ pub enum VersionOrUrl {
 }
 
 /// Unowned version specifier or URL to install.
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum VersionOrUrlRef<'a> {
     /// A PEP 440 version specifier set
     VersionSpecifier(&'a VersionSpecifiers),
     /// A installable URL
     Url(&'a VerbatimUrl),
+}
+
+impl<'a> From<&'a VersionOrUrl> for VersionOrUrlRef<'a> {
+    fn from(value: &'a VersionOrUrl) -> Self {
+        match value {
+            VersionOrUrl::VersionSpecifier(version_specifier) => {
+                VersionOrUrlRef::VersionSpecifier(version_specifier)
+            }
+            VersionOrUrl::Url(url) => VersionOrUrlRef::Url(url),
+        }
+    }
 }
 
 /// A [`Cursor`] over a string.

@@ -17,6 +17,7 @@ use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
 use crate::is_dynamic;
+use crate::satisfies::RequirementSatisfaction;
 
 /// An index over the packages installed in an environment.
 ///
@@ -382,95 +383,28 @@ impl<'a> SitePackages<'a> {
                     return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                 }
                 [distribution] => {
-                    // Validate that the installed version matches the requirement.
-                    match entry.requirement.version_or_url() {
-                        // Accept any installed version.
-                        None => {}
-
-                        // If the requirement comes from a URL, verify by URL.
-                        Some(pep508_rs::VersionOrUrlRef::Url(url)) => {
-                            let InstalledDist::Url(installed) = &distribution else {
-                                return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                            };
-
-                            if installed.editable {
-                                return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                            }
-
-                            if &installed.url != url.raw() {
-                                return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                            }
-
-                            // If the requirement came from a local path, check freshness.
-                            if url.scheme() == "file" {
-                                if let Ok(archive) = url.to_file_path() {
-                                    if !ArchiveTimestamp::up_to_date_with(
-                                        &archive,
-                                        ArchiveTarget::Install(distribution),
-                                    )? {
-                                        return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                                    }
-                                }
-                            }
+                    match RequirementSatisfaction::check(
+                        distribution,
+                        entry.requirement.version_or_url(),
+                        &entry.requirement,
+                    )? {
+                        RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
+                            return Ok(SatisfiesResult::Unsatisfied(entry.to_string()))
                         }
-
-                        Some(pep508_rs::VersionOrUrlRef::VersionSpecifier(version_specifier)) => {
-                            // The installed version doesn't satisfy the requirement.
-                            if !version_specifier.contains(distribution.version()) {
-                                return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                            }
-                        }
+                        RequirementSatisfaction::Satisfied => {}
                     }
-
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints {
-                        if constraint.name != *distribution.name() {
-                            continue;
-                        }
-
-                        if !constraint.evaluate_markers(self.venv.interpreter().markers(), &[]) {
-                            continue;
-                        }
-
-                        match &constraint.version_or_url {
-                            // Accept any installed version.
-                            None => {}
-
-                            // If the requirement comes from a URL, verify by URL.
-                            Some(pep508_rs::VersionOrUrl::Url(url)) => {
-                                let InstalledDist::Url(installed) = &distribution else {
-                                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                                };
-
-                                if installed.editable {
-                                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                                }
-
-                                if &installed.url != url.raw() {
-                                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                                }
-
-                                // If the requirement came from a local path, check freshness.
-                                if url.scheme() == "file" {
-                                    if let Ok(archive) = url.to_file_path() {
-                                        if !ArchiveTimestamp::up_to_date_with(
-                                            &archive,
-                                            ArchiveTarget::Install(distribution),
-                                        )? {
-                                            return Ok(SatisfiesResult::Unsatisfied(
-                                                entry.to_string(),
-                                            ));
-                                        }
-                                    }
-                                }
+                        match RequirementSatisfaction::check(
+                            distribution,
+                            constraint.version_or_url.as_ref().map(Into::into),
+                            constraint,
+                        )? {
+                            RequirementSatisfaction::Mismatch
+                            | RequirementSatisfaction::OutOfDate => {
+                                return Ok(SatisfiesResult::Unsatisfied(constraint.to_string()))
                             }
-
-                            Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                                // The installed version doesn't satisfy the requirement.
-                                if !version_specifier.contains(distribution.version()) {
-                                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
-                                }
-                            }
+                            RequirementSatisfaction::Satisfied => {}
                         }
                     }
 
