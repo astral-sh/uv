@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Uv",
+  "title": "ToolUv",
   "description": "A `[tool.uv]` section.",
   "type": "object",
   "properties": {
@@ -50,7 +50,7 @@
     "workspace": {
       "anyOf": [
         {
-          "$ref": "#/definitions/UvWorkspace"
+          "$ref": "#/definitions/ToolUvWorkspace"
         },
         {
           "type": "null"
@@ -865,7 +865,7 @@
         }
       ]
     },
-    "UvWorkspace": {
+    "ToolUvWorkspace": {
       "description": "`tool.uv.workspace`.",
       "type": "object",
       "properties": {
