@@ -400,6 +400,7 @@ dependencies = [
  "distribution-filename",
  "distribution-types",
  "fs-err",
+ "mimalloc",
  "once_cell",
  "pep508_rs",
  "platform-tags",

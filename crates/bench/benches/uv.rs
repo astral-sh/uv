@@ -34,6 +34,9 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
 criterion_group!(uv, resolve_warm_jupyter);
 criterion_main!(uv);
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod resolver {
     use anyhow::Result;
     use once_cell::sync::Lazy;

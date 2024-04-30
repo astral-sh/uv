@@ -45,6 +45,7 @@ platform-tags = { workspace = true }
 pep508_rs = { workspace = true }
 anyhow = { workspace = true }
 once_cell = { workspace = true }
+mimalloc = { version = "0.1.39" }
 
 [features]
 codspeed = ["codspeed-criterion-compat"]
