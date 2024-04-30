@@ -27,7 +27,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{Downloader, Plan, Planner, SitePackages};
+use uv_installer::{Downloader, Plan, Planner, SatisfiesResult, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
@@ -223,18 +223,36 @@ async fn environment_for_run(
             // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
             // enough to let us remove this check. But right now, for large environments, it's an order of
             // magnitude faster to validate the environment than to resolve the requirements.
-            if spec.source_trees.is_empty()
-                && site_packages.satisfies(
+            if spec.source_trees.is_empty() {
+                match site_packages.satisfies(
                     &spec.requirements,
                     &spec.editables,
                     &spec.constraints,
-                )?
-            {
-                debug!("Current environment satisfies requirements");
-                return Ok(RunEnvironment {
-                    python: venv,
-                    _temp_dir_drop: None,
-                });
+                )? {
+                    SatisfiesResult::Fresh {
+                        recursive_requirements,
+                    } => {
+                        debug!(
+                            "All requirements satisfied: {}",
+                            recursive_requirements
+                                .iter()
+                                .map(ToString::to_string)
+                                .sorted()
+                                .join(" | ")
+                        );
+                        debug!(
+                            "All editables satisfied: {}",
+                            spec.editables.iter().map(ToString::to_string).join(", ")
+                        );
+                        return Ok(RunEnvironment {
+                            python: venv,
+                            _temp_dir_drop: None,
+                        });
+                    }
+                    SatisfiesResult::Unsatisfied(requirement) => {
+                        debug!("At least one requirement is not satisfied: {requirement}");
+                    }
+                }
             }
         }
     }

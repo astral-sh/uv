@@ -293,13 +293,14 @@ impl<'a> SitePackages<'a> {
         Ok(diagnostics)
     }
 
-    /// Returns `true` if the installed packages satisfy the given requirements.
+    /// Returns `Ok(None)` if the installed packages satisfy the given requirements or the
+    /// requirement that is not satisfied as `Ok(SatisfiesResult::Unsatisfied(_))`.
     pub fn satisfies(
         &self,
         requirements: &[RequirementEntry],
         editables: &[EditableRequirement],
         constraints: &[Requirement],
-    ) -> Result<bool> {
+    ) -> Result<SatisfiesResult> {
         let mut stack = Vec::<RequirementEntry>::with_capacity(requirements.len());
         let mut seen =
             FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
@@ -322,7 +323,7 @@ impl<'a> SitePackages<'a> {
             match installed.as_slice() {
                 [] => {
                     // The package isn't installed.
-                    return Ok(false);
+                    return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                 }
                 [distribution] => {
                     // Is the editable out-of-date?
@@ -330,12 +331,12 @@ impl<'a> SitePackages<'a> {
                         &requirement.path,
                         ArchiveTarget::Install(distribution),
                     )? {
-                        return Ok(false);
+                        return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                     }
 
                     // Does the editable have dynamic metadata?
                     if is_dynamic(requirement) {
-                        return Ok(false);
+                        return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                     }
 
                     // Recurse into the dependencies.
@@ -361,7 +362,7 @@ impl<'a> SitePackages<'a> {
                 }
                 _ => {
                     // There are multiple installed distributions for the same package.
-                    return Ok(false);
+                    return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                 }
             }
         }
@@ -379,7 +380,7 @@ impl<'a> SitePackages<'a> {
             match installed.as_slice() {
                 [] => {
                     // The package isn't installed.
-                    return Ok(false);
+                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                 }
                 [distribution] => {
                     // Validate that the installed version matches the requirement.
@@ -390,15 +391,15 @@ impl<'a> SitePackages<'a> {
                         // If the requirement comes from a URL, verify by URL.
                         Some(pep508_rs::VersionOrUrlRef::Url(url)) => {
                             let InstalledDist::Url(installed) = &distribution else {
-                                return Ok(false);
+                                return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                             };
 
                             if installed.editable {
-                                return Ok(false);
+                                return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                             }
 
                             if &installed.url != url.raw() {
-                                return Ok(false);
+                                return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                             }
 
                             // If the requirement came from a local path, check freshness.
@@ -408,7 +409,7 @@ impl<'a> SitePackages<'a> {
                                         &archive,
                                         ArchiveTarget::Install(distribution),
                                     )? {
-                                        return Ok(false);
+                                        return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                                     }
                                 }
                             }
@@ -417,7 +418,7 @@ impl<'a> SitePackages<'a> {
                         Some(pep508_rs::VersionOrUrlRef::VersionSpecifier(version_specifier)) => {
                             // The installed version doesn't satisfy the requirement.
                             if !version_specifier.contains(distribution.version()) {
-                                return Ok(false);
+                                return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                             }
                         }
                     }
@@ -439,15 +440,15 @@ impl<'a> SitePackages<'a> {
                             // If the requirement comes from a URL, verify by URL.
                             Some(pep508_rs::VersionOrUrl::Url(url)) => {
                                 let InstalledDist::Url(installed) = &distribution else {
-                                    return Ok(false);
+                                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                                 };
 
                                 if installed.editable {
-                                    return Ok(false);
+                                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                                 }
 
                                 if &installed.url != url.raw() {
-                                    return Ok(false);
+                                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                                 }
 
                                 // If the requirement came from a local path, check freshness.
@@ -457,7 +458,9 @@ impl<'a> SitePackages<'a> {
                                             &archive,
                                             ArchiveTarget::Install(distribution),
                                         )? {
-                                            return Ok(false);
+                                            return Ok(SatisfiesResult::Unsatisfied(
+                                                entry.to_string(),
+                                            ));
                                         }
                                     }
                                 }
@@ -466,7 +469,7 @@ impl<'a> SitePackages<'a> {
                             Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
                                 // The installed version doesn't satisfy the requirement.
                                 if !version_specifier.contains(distribution.version()) {
-                                    return Ok(false);
+                                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                                 }
                             }
                         }
@@ -495,13 +498,22 @@ impl<'a> SitePackages<'a> {
                 }
                 _ => {
                     // There are multiple installed distributions for the same package.
-                    return Ok(false);
+                    return Ok(SatisfiesResult::Unsatisfied(entry.to_string()));
                 }
             }
         }
 
-        Ok(true)
+        Ok(SatisfiesResult::Fresh {
+            recursive_requirements: seen,
+        })
     }
+}
+
+pub enum SatisfiesResult {
+    Fresh {
+        recursive_requirements: FxHashSet<RequirementEntry>,
+    },
+    Unsatisfied(String),
 }
 
 impl IntoIterator for SitePackages<'_> {
