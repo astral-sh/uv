@@ -26,9 +26,12 @@ struct ProgressReporter {
 
 #[derive(Default, Debug)]
 struct BarState {
-    bars: FxHashMap<usize, ProgressBar>,
-    // A list of progress bar sizes, in descending order.
+    // The number of bars that precede any download bars (i.e. build/checkout status).
+    headers: usize,
+    // A list of donwnload bar sizes, in descending order.
     sizes: Vec<u64>,
+    // A map of progress bars, by ID.
+    bars: FxHashMap<usize, ProgressBar>,
 }
 
 impl ProgressReporter {
@@ -38,6 +41,9 @@ impl ProgressReporter {
     }
 
     fn on_any_build_start(&self, color_string: &str) -> usize {
+        let id = self.id();
+        let mut state = self.state.lock().unwrap();
+
         let progress = self.multi_progress.insert_before(
             &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -46,14 +52,18 @@ impl ProgressReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!("{} {}", "Building".bold().cyan(), color_string));
 
-        let id = self.id();
-        let mut state = self.state.lock().unwrap();
+        state.headers += 1;
         state.bars.insert(id, progress);
         id
     }
 
     fn on_any_build_complete(&self, color_string: &str, id: usize) {
-        let progress = self.state.lock().unwrap().bars.remove(&id).unwrap();
+        let progress = {
+            let mut state = self.state.lock().unwrap();
+            state.headers -= 1;
+            state.bars.remove(&id).unwrap()
+        };
+
         progress.finish_with_message(format!("   {} {}", "Built".bold().green(), color_string));
     }
 
@@ -65,8 +75,8 @@ impl ProgressReporter {
         state.sizes.insert(position, size.unwrap_or(0));
 
         let progress = self.multi_progress.insert(
-            // make sure not to reorder the initial "downloading.." bar
-            position + 1,
+            // make sure not to reorder the initial "downloading.." bar, or any previous bars
+            position + 1 + state.headers,
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
 
@@ -100,6 +110,9 @@ impl ProgressReporter {
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        let id = self.id();
+        let mut state = self.state.lock().unwrap();
+
         let progress = self.multi_progress.insert_before(
             &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -114,13 +127,18 @@ impl ProgressReporter {
         ));
         progress.finish();
 
-        let id = self.id();
-        self.state.lock().unwrap().bars.insert(id, progress);
+        state.headers += 1;
+        state.bars.insert(id, progress);
         id
     }
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
-        let progress = self.state.lock().unwrap().bars.remove(&id).unwrap();
+        let progress = {
+            let mut state = self.state.lock().unwrap();
+            state.headers -= 1;
+            state.bars.remove(&id).unwrap()
+        };
+
         progress.finish_with_message(format!(
             " {} {} ({})",
             "Updated".bold().green(),
