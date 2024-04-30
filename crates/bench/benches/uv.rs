@@ -5,6 +5,7 @@ use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, C
 
 use pep508_rs::Requirement;
 use uv_cache::Cache;
+use uv_client::RegistryClientBuilder;
 use uv_resolver::Manifest;
 
 fn resolve_warm_black(c: &mut Criterion<WallTime>) {
@@ -15,12 +16,14 @@ fn resolve_warm_black(c: &mut Criterion<WallTime>) {
 
     let cache = &Cache::from_path(".cache").unwrap();
     let manifest = &Manifest::simple(vec![Requirement::from_str("black").unwrap()]);
+    let client = &RegistryClientBuilder::new(cache.clone()).build();
 
     let run = || {
         runtime
             .block_on(resolver::resolve(
                 black_box(manifest.clone()),
                 black_box(cache.clone()),
+                black_box(client),
             ))
             .unwrap();
     };
@@ -36,12 +39,14 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
 
     let cache = &Cache::from_path(".cache").unwrap();
     let manifest = &Manifest::simple(vec![Requirement::from_str("jupyter").unwrap()]);
+    let client = &RegistryClientBuilder::new(cache.clone()).build();
 
     let run = || {
         runtime
             .block_on(resolver::resolve(
                 black_box(manifest.clone()),
                 black_box(cache.clone()),
+                black_box(client),
             ))
             .unwrap();
     };
@@ -62,7 +67,7 @@ mod resolver {
     use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
-    use uv_client::RegistryClientBuilder;
+    use uv_client::RegistryClient;
     use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
     use uv_interpreter::{Interpreter, PythonEnvironment};
     use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, ResolutionGraph, Resolver};
@@ -97,8 +102,11 @@ mod resolver {
     static TAGS: Lazy<Tags> =
         Lazy::new(|| Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false).unwrap());
 
-    pub(crate) async fn resolve(manifest: Manifest, cache: Cache) -> Result<ResolutionGraph> {
-        let client = RegistryClientBuilder::new(cache.clone()).build();
+    pub(crate) async fn resolve(
+        manifest: Manifest,
+        cache: Cache,
+        client: &RegistryClient,
+    ) -> Result<ResolutionGraph> {
         let flat_index = FlatIndex::default();
         let index = InMemoryIndex::default();
         let interpreter = Interpreter::artificial(PLATFORM.clone(), MARKERS.clone());
@@ -112,7 +120,7 @@ mod resolver {
             &MARKERS,
             &interpreter,
             &TAGS,
-            &client,
+            client,
             &flat_index,
             &index,
             &hashes,
