@@ -1,48 +1,52 @@
 use std::str::FromStr;
 
-use criterion::black_box;
-use criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
+use bench::criterion::black_box;
+use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
 
 use pep508_rs::Requirement;
 use uv_cache::Cache;
 use uv_resolver::Manifest;
 
 fn resolve_warm_black(c: &mut Criterion<WallTime>) {
-    let cache = Cache::from_path(".cache").unwrap();
-
-    let cache = &cache;
-    let run = || async move {
-        let manifest = Manifest::simple(vec![Requirement::from_str("black").unwrap()]);
-        resolver::resolve(black_box(manifest), black_box(cache.clone())).await
-    };
-
-    let runtime = tokio::runtime::Builder::new_multi_thread()
+    let runtime = &tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
 
-    c.bench_function("resolve_warm_black", |b| {
-        b.to_async(&runtime).iter_with_large_drop(run);
-    });
+    let cache = &Cache::from_path(".cache").unwrap();
+    let manifest = &Manifest::simple(vec![Requirement::from_str("black").unwrap()]);
+
+    let run = || {
+        runtime
+            .block_on(resolver::resolve(
+                black_box(manifest.clone()),
+                black_box(cache.clone()),
+            ))
+            .unwrap();
+    };
+
+    c.bench_function("resolve_warm_black", |b| b.iter(run));
 }
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
-    let cache = Cache::from_path(".cache").unwrap();
-
-    let cache = &cache;
-    let run = || async move {
-        let manifest = Manifest::simple(vec![Requirement::from_str("jupyter").unwrap()]);
-        resolver::resolve(black_box(manifest), black_box(cache.clone())).await
-    };
-
-    let runtime = tokio::runtime::Builder::new_multi_thread()
+    let runtime = &tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
 
-    c.bench_function("resolve_warm_jupyter", |b| {
-        b.to_async(&runtime).iter_with_large_drop(run);
-    });
+    let cache = &Cache::from_path(".cache").unwrap();
+    let manifest = &Manifest::simple(vec![Requirement::from_str("jupyter").unwrap()]);
+
+    let run = || {
+        runtime
+            .block_on(resolver::resolve(
+                black_box(manifest.clone()),
+                black_box(cache.clone()),
+            ))
+            .unwrap();
+    };
+
+    c.bench_function("resolve_warm_jupyter", |b| b.iter(run));
 }
 
 criterion_group!(uv, resolve_warm_black, resolve_warm_jupyter);
