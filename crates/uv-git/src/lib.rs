@@ -14,7 +14,7 @@ mod util;
 /// A URL reference to a Git repository.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GitUrl {
-    /// The URL of the Git repository, with any query parameters, fragments and leading `git+`
+    /// The URL of the Git repository, with any query parameters, fragments, and leading `git+`
     /// removed.
     repository: Url,
     /// The reference to the commit to use, which could be a branch, tag or revision.
