@@ -10,9 +10,9 @@ use distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDist,
     InstalledMetadata, InstalledVersion, Name, SourceDist,
 };
-use pep508_rs::{Requirement, VersionOrUrl};
+use pep508_rs::{Requirement, VersionOrUrl, VersionOrUrlRef};
 use platform_tags::Tags;
-use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
+use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_configuration::{NoBinary, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
@@ -21,6 +21,7 @@ use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 use uv_types::HashStrategy;
 
+use crate::satisfies::RequirementSatisfaction;
 use crate::{ResolvedEditable, SitePackages};
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
@@ -182,10 +183,23 @@ impl<'a> Planner<'a> {
                 match installed_dists.as_slice() {
                     [] => {}
                     [distribution] => {
-                        if installed_satisfies_requirement(distribution, requirement)? {
-                            debug!("Requirement already installed: {distribution}");
-                            installed.push(distribution.clone());
-                            continue;
+                        match RequirementSatisfaction::check(
+                            distribution,
+                            requirement
+                                .version_or_url
+                                .as_ref()
+                                .map(VersionOrUrlRef::from),
+                            requirement,
+                        )? {
+                            RequirementSatisfaction::Mismatch => {}
+                            RequirementSatisfaction::Satisfied => {
+                                debug!("Requirement already installed: {distribution}");
+                                installed.push(distribution.clone());
+                                continue;
+                            }
+                            RequirementSatisfaction::OutOfDate => {
+                                debug!("Requirement installed, but not fresh: {distribution}");
+                            }
                         }
                         reinstalls.push(distribution.clone());
                     }
@@ -415,54 +429,4 @@ pub struct Plan {
     /// Any distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.
     pub extraneous: Vec<InstalledDist>,
-}
-
-/// Returns true if a requirement is satisfied by an installed distribution.
-///
-/// Returns an error if IO fails during a freshness check for a local path.
-fn installed_satisfies_requirement(
-    distribution: &InstalledDist,
-    requirement: &Requirement,
-) -> Result<bool> {
-    // Filter out already-installed packages.
-    match requirement.version_or_url.as_ref() {
-        // Accept any version of the package.
-        None => return Ok(true),
-
-        // If the requirement comes from a registry, check by name.
-        Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
-            if version_specifier.contains(distribution.version()) {
-                debug!("Requirement already satisfied: {distribution}");
-                return Ok(true);
-            }
-        }
-
-        // If the requirement comes from a direct URL, check by URL.
-        Some(VersionOrUrl::Url(url)) => {
-            if let InstalledDist::Url(installed) = &distribution {
-                if !installed.editable && &installed.url == url.raw() {
-                    // If the requirement came from a local path, check freshness.
-                    if let Some(archive) = (url.scheme() == "file")
-                        .then(|| url.to_file_path().ok())
-                        .flatten()
-                    {
-                        if ArchiveTimestamp::up_to_date_with(
-                            &archive,
-                            ArchiveTarget::Install(distribution),
-                        )? {
-                            debug!("Requirement already satisfied (and up-to-date): {installed}");
-                            return Ok(true);
-                        }
-                        debug!("Requirement already satisfied (but not up-to-date): {installed}");
-                    } else {
-                        // Otherwise, assume the requirement is up-to-date.
-                        debug!("Requirement already satisfied (assumed up-to-date): {installed}");
-                        return Ok(true);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(false)
 }
