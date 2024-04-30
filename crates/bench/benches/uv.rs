@@ -8,29 +8,6 @@ use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_resolver::Manifest;
 
-fn resolve_warm_black(c: &mut Criterion<WallTime>) {
-    let runtime = &tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-
-    let cache = &Cache::from_path(".cache").unwrap();
-    let manifest = &Manifest::simple(vec![Requirement::from_str("black").unwrap()]);
-    let client = &RegistryClientBuilder::new(cache.clone()).build();
-
-    let run = || {
-        runtime
-            .block_on(resolver::resolve(
-                black_box(manifest.clone()),
-                black_box(cache.clone()),
-                black_box(client),
-            ))
-            .unwrap();
-    };
-
-    c.bench_function("resolve_warm_black", |b| b.iter(run));
-}
-
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let runtime = &tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -54,7 +31,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     c.bench_function("resolve_warm_jupyter", |b| b.iter(run));
 }
 
-criterion_group!(uv, resolve_warm_black, resolve_warm_jupyter);
+criterion_group!(uv, resolve_warm_jupyter);
 criterion_main!(uv);
 
 mod resolver {
