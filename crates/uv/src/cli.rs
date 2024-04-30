@@ -500,7 +500,12 @@ pub(crate) struct PipCompileArgs {
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long, overrides_with("build_isolation"))]
+    #[arg(
+        long,
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("build_isolation")
+    )]
     pub(crate) no_build_isolation: bool,
 
     #[arg(long, overrides_with("no_build_isolation"), hide = true)]
@@ -795,7 +800,13 @@ pub(crate) struct PipSyncArgs {
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long, overrides_with("build_isolation"))]
+
+    #[arg(
+        long,
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("build_isolation")
+    )]
     pub(crate) no_build_isolation: bool,
 
     #[arg(long, overrides_with("no_build_isolation"), hide = true)]
@@ -1164,7 +1175,12 @@ pub(crate) struct PipInstallArgs {
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long, overrides_with("build_isolation"))]
+    #[arg(
+        long,
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("build_isolation")
+    )]
     pub(crate) no_build_isolation: bool,
 
     #[arg(long, overrides_with("no_build_isolation"), hide = true)]
