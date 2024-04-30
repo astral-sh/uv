@@ -227,80 +227,90 @@ impl Dist {
         }
     }
 
+    /// A remote built distribution (`.whl`) or source distribution from a `http://` or `https://`
+    /// url.
+    fn from_http_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
+        if Path::new(url.path())
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+        {
+            // Validate that the name in the wheel matches that of the requirement.
+            let filename = WheelFilename::from_str(&url.filename()?)?;
+            if filename.name != name {
+                return Err(Error::PackageNameMismatch(
+                    name,
+                    filename.name,
+                    url.verbatim().to_string(),
+                ));
+            }
+
+            Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                filename,
+                url,
+            })))
+        } else {
+            Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
+                name,
+                url,
+            })))
+        }
+    }
+
+    /// A local built or source distribution from a `file://` url.
+    fn from_file_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
+        // Store the canonicalized path, which also serves to validate that it exists.
+        let path = match url
+            .to_file_path()
+            .map_err(|()| Error::UrlFilename(url.to_url()))?
+            .canonicalize()
+        {
+            Ok(path) => path,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::NotFound(url.to_url()));
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+        {
+            // Validate that the name in the wheel matches that of the requirement.
+            let filename = WheelFilename::from_str(&url.filename()?)?;
+            if filename.name != name {
+                return Err(Error::PackageNameMismatch(
+                    name,
+                    filename.name,
+                    url.verbatim().to_string(),
+                ));
+            }
+
+            Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
+                filename,
+                url,
+                path,
+            })))
+        } else {
+            Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                name,
+                url,
+                path,
+                editable: false,
+            })))
+        }
+    }
+
+    /// A remote source distribution from a `git+https://` or `git+ssh://` url.
+    pub fn from_git_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
+        Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
+    }
+
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: VerbatimUrl) -> Result<Self, Error> {
         match Scheme::parse(url.scheme()) {
-            Some(Scheme::Http | Scheme::Https) => {
-                if Path::new(url.path())
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-                {
-                    // Validate that the name in the wheel matches that of the requirement.
-                    let filename = WheelFilename::from_str(&url.filename()?)?;
-                    if filename.name != name {
-                        return Err(Error::PackageNameMismatch(
-                            name,
-                            filename.name,
-                            url.verbatim().to_string(),
-                        ));
-                    }
-
-                    Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
-                        filename,
-                        url,
-                    })))
-                } else {
-                    Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
-                        name,
-                        url,
-                    })))
-                }
-            }
-            Some(Scheme::File) => {
-                // Store the canonicalized path, which also serves to validate that it exists.
-                let path = match url
-                    .to_file_path()
-                    .map_err(|()| Error::UrlFilename(url.to_url()))?
-                    .canonicalize()
-                {
-                    Ok(path) => path,
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(Error::NotFound(url.to_url()));
-                    }
-                    Err(err) => return Err(err.into()),
-                };
-
-                if path
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-                {
-                    // Validate that the name in the wheel matches that of the requirement.
-                    let filename = WheelFilename::from_str(&url.filename()?)?;
-                    if filename.name != name {
-                        return Err(Error::PackageNameMismatch(
-                            name,
-                            filename.name,
-                            url.verbatim().to_string(),
-                        ));
-                    }
-
-                    Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
-                        filename,
-                        url,
-                        path,
-                    })))
-                } else {
-                    Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                        name,
-                        url,
-                        path,
-                        editable: false,
-                    })))
-                }
-            }
-            Some(Scheme::GitSsh | Scheme::GitHttps) => {
-                Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
-            }
+            Some(Scheme::Http | Scheme::Https) => Self::from_http_url(name, url),
+            Some(Scheme::File) => Self::from_file_url(name, url),
+            Some(Scheme::GitSsh | Scheme::GitHttps) => Self::from_git_url(name, url),
             Some(Scheme::GitGit | Scheme::GitHttp) => Err(Error::UnsupportedScheme(
                 url.scheme().to_owned(),
                 url.verbatim().to_string(),
