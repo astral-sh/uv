@@ -293,8 +293,7 @@ impl<'a> SitePackages<'a> {
         Ok(diagnostics)
     }
 
-    /// Returns `Ok(None)` if the installed packages satisfy the given requirements or the
-    /// requirement that is not satisfied as `Ok(SatisfiesResult::Unsatisfied(_))`.
+    /// Returns if the installed packages satisfy the given requirements.
     pub fn satisfies(
         &self,
         requirements: &[RequirementEntry],
@@ -509,10 +508,16 @@ impl<'a> SitePackages<'a> {
     }
 }
 
+/// We check if all requirements are already satisfied, recursing through the requirements tree.
+#[derive(Debug)]
 pub enum SatisfiesResult {
+    /// All requirements are recursively satisfied.
     Fresh {
+        /// The flattened set (transitive closure) of all requirements checked.
         recursive_requirements: FxHashSet<RequirementEntry>,
     },
+    /// We found an unsatisfied requirement. Since we exit early, we only know about the first
+    /// unsatisfied requirement.
     Unsatisfied(String),
 }
 
