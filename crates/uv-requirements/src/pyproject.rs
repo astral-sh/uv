@@ -147,6 +147,12 @@ impl Deref for SerdePattern {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, deny_unknown_fields)]
 pub enum Source {
+    /// A remote git repository, either over HTTPS or over SSH.
+    ///
+    /// Example:
+    /// ```toml
+    /// flask = { git = "https://github.com/pallets/flask", tag = "3.0.0" }
+    /// ```
     Git {
         git: String,
         subdirectory: Option<String>,
@@ -155,19 +161,34 @@ pub enum Source {
         tag: Option<String>,
         branch: Option<String>,
     },
+    /// A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution
+    /// (`.zip`, `.tar.gz`).
+    ///
+    /// Example:
+    /// ```toml
+    /// flask = { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl" }
+    /// ```
     Url {
         url: String,
         subdirectory: Option<String>,
     },
+    /// The path to a dependency. It can either be a wheel (a `.whl` file), a source distribution
+    /// as archive (a `.zip` or `.tag.gz` file) or a source distribution as directory (a directory
+    /// with a pyproject.toml in, or a legacy directory with only a setup.py but non pyproject.toml
+    /// in it).
     Path {
         path: String,
         /// `false` by default.
         editable: Option<bool>,
     },
+    /// When using a version as requirement, you can optionally pin the requirement to an index
+    /// you defined, e.g. `torch` after configuring `torch` to
+    /// `https://download.pytorch.org/whl/cu118`.
     Registry {
         // TODO(konstin): The string is more-or-less a placeholder
         index: String,
     },
+    /// A dependency on another package in the workspace.
     Workspace {
         workspace: bool,
         /// `true` by default.

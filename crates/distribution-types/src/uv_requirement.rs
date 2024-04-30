@@ -11,12 +11,14 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::{ParsedUrl, ParsedUrlError};
 
+/// The requirements of a distribution, an extension over PEP 508's requirements.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UvRequirements {
     pub dependencies: Vec<UvRequirement>,
     pub optional_dependencies: IndexMap<ExtraName, Vec<UvRequirement>>,
 }
 
+/// A representation of dependency on a package, an extension over a PEP 508's requirement.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub struct UvRequirement {
     pub name: PackageName,
@@ -110,26 +112,44 @@ impl Display for UvRequirement {
     }
 }
 
+/// The different kinds of requirements (version specifier, HTTP(S) URL, git repository, path).
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub enum UvSource {
+    /// The requirement has a version specifier, such as `foo >1,<2`.
     Registry {
         version: VersionSpecifiers,
+        /// Choose a version from the index with this name.
         index: Option<String>,
     },
     // TODO(konsti): Track and verify version specifier from pyproject.toml
+    /// A remote `http://` or `https://` URL, either a built distribution,
+    /// e.g. `foo @ https://example.org/foo-1.0-py3-none-any.whl`, or a source distribution,
+    /// e.g.`foo @ https://example.org/foo-1.0.zip`.
     Url {
+        /// For source distributions, the location of the distribution if it is not in the archive
+        /// root.
         subdirectory: Option<PathBuf>,
         url: VerbatimUrl,
     },
+    /// A remote git repository, either over HTTPS or over SSH.
     Git {
+        /// The repository URL (without `git+` prefix).
         repository: Url,
+        /// Optionally, the revision, tag, or branch to use.
         reference: GitReference,
+        /// The location of the distribution if it is not in the repository root.
         subdirectory: Option<PathBuf>,
         url: VerbatimUrl,
     },
+    /// A local built or source distribution, either from a path or a `file://` URL. It can either
+    /// be a binary distribution (a `.whl` file), a source distribution archive (a `.zip` or
+    /// `.tag.gz` file) or a source tree (a directory with a pyproject.toml in, or a legacy
+    /// source distribution with only a setup.py but non pyproject.toml in it).
     Path {
         path: PathBuf,
+        /// For a source tree (a directory), whether to install as an editable.
         editable: Option<bool>,
+        /// The `file://` URL representing the path.
         url: VerbatimUrl,
     },
 }
