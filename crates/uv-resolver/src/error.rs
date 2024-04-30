@@ -98,7 +98,7 @@ pub enum ResolveError {
     #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
     UnhashedPackage(PackageName),
 
-    // TODO(konsti): Error source
+    // TODO(konsti): Attach the distribution that contained the invalid requirement as error source.
     #[error("Failed to parse requirements")]
     DirectUrl(#[from] Box<ParsedUrlError>),
 

@@ -181,7 +181,7 @@ impl<'a> Planner<'a> {
                 match installed_dists.as_slice() {
                     [] => {}
                     [distribution] => {
-                        match installed_satisfies_requirement(distribution, &requirement.source)? {
+                        match RequirementSatisfaction::check(distribution, &requirement.source)? {
                             RequirementSatisfaction::Mismatch => {}
                             RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {distribution}");

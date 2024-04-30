@@ -17,7 +17,7 @@ use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
 use crate::is_dynamic;
-use crate::satisfies::{installed_satisfies_requirement, RequirementSatisfaction};
+use crate::satisfies::RequirementSatisfaction;
 
 /// An index over the packages installed in an environment.
 ///
@@ -364,10 +364,8 @@ impl<'a> SitePackages<'a> {
                     return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()));
                 }
                 [distribution] => {
-                    match installed_satisfies_requirement(
-                        distribution,
-                        &entry.requirement.source(),
-                    )? {
+                    match RequirementSatisfaction::check(distribution, &entry.requirement.source())?
+                    {
                         RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
                             return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))
                         }
@@ -375,7 +373,7 @@ impl<'a> SitePackages<'a> {
                     }
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints {
-                        match installed_satisfies_requirement(distribution, &constraint.source)? {
+                        match RequirementSatisfaction::check(distribution, &constraint.source)? {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate => {
                                 return Ok(SatisfiesResult::Unsatisfied(

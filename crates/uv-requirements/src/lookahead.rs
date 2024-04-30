@@ -127,7 +127,6 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
-                // TODO(konsti): Git and path too
                 if !matches!(requirement.source, UvSource::Registry { .. }) {
                     if seen.insert(requirement.clone()) {
                         futures.push(self.lookahead(requirement));
