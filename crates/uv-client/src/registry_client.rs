@@ -102,7 +102,7 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn cache<T>(mut self, cache: Cache) -> Self {
+    pub fn cache(mut self, cache: Cache) -> Self {
         self.cache = cache;
         self
     }
