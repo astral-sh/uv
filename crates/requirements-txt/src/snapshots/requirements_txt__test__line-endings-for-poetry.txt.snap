@@ -6,7 +6,7 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "inflection",
                     ),
@@ -29,7 +29,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "upsidedown",
                     ),
@@ -52,7 +52,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "numpy",
                     ),
@@ -70,7 +70,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "pandas",
                     ),

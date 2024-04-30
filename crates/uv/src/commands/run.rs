@@ -4,7 +4,7 @@ use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
 use anyhow::{Context, Result};
 use distribution_types::{
-    IndexLocations, InstalledMetadata, LocalDist, Name, Resolution, UvRequirement,
+    IndexLocations, InstalledMetadata, LocalDist, Name, Requirement, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
 use itertools::Itertools;
@@ -423,7 +423,7 @@ async fn environment_for_run(
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
 async fn resolve(
-    requirements: Vec<UvRequirement>,
+    requirements: Vec<Requirement>,
     project: Option<PackageName>,
     hasher: &HashStrategy,
     interpreter: &Interpreter,

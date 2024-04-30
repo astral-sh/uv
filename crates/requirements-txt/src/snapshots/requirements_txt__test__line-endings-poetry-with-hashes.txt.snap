@@ -6,7 +6,7 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "werkzeug",
                     ),
@@ -58,7 +58,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "urllib3",
                     ),
@@ -110,7 +110,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "ansicon",
                     ),
@@ -173,7 +173,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "requests-oauthlib",
                     ),
@@ -226,7 +226,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "psycopg2",
                     ),

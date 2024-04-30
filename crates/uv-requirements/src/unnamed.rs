@@ -10,10 +10,10 @@ use tracing::debug;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, SourceUrl,
-    UvRequirement, VersionId,
+    BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, Requirement,
+    SourceUrl, VersionId,
 };
-use pep508_rs::{Requirement, Scheme, UnnamedRequirement, VersionOrUrl};
+use pep508_rs::{Scheme, UnnamedRequirement, VersionOrUrl};
 use pypi_types::Metadata10;
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_client::RegistryClient;
@@ -61,7 +61,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     }
 
     /// Resolve any unnamed requirements in the specification.
-    pub async fn resolve(self) -> Result<Vec<UvRequirement>> {
+    pub async fn resolve(self) -> Result<Vec<Requirement>> {
         let Self {
             requirements,
             hasher,
@@ -73,7 +73,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 match entry.requirement {
                     RequirementsTxtRequirement::Uv(requirement) => Ok(requirement),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
-                        Ok(UvRequirement::from_requirement(
+                        Ok(Requirement::from_requirement(
                             Self::resolve_requirement(requirement, hasher, index, &database)
                                 .await?,
                         )?)
@@ -91,7 +91,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
-    ) -> Result<Requirement> {
+    ) -> Result<pep508_rs::Requirement> {
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
         // Ex) `anyio-4.3.0-py3-none-any.whl`
@@ -100,7 +100,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
             let filename = WheelFilename::from_str(&requirement.url.filename()?)?;
-            return Ok(Requirement {
+            return Ok(pep508_rs::Requirement {
                 name: filename.name,
                 extras: requirement.extras,
                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
@@ -118,7 +118,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             .ok()
             .and_then(|filename| SourceDistFilename::parsed_normalized_filename(&filename).ok())
         {
-            return Ok(Requirement {
+            return Ok(pep508_rs::Requirement {
                 name: filename.name,
                 extras: requirement.extras,
                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
@@ -145,7 +145,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                             path = path.display(),
                             name = metadata.name
                         );
-                        return Ok(Requirement {
+                        return Ok(pep508_rs::Requirement {
                             name: metadata.name,
                             extras: requirement.extras,
                             version_or_url: Some(VersionOrUrl::Url(requirement.url)),
@@ -165,7 +165,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                                 path = path.display(),
                                 name = project.name
                             );
-                            return Ok(Requirement {
+                            return Ok(pep508_rs::Requirement {
                                 name: project.name,
                                 extras: requirement.extras,
                                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
@@ -182,7 +182,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                                         path = path.display(),
                                         name = name
                                     );
-                                    return Ok(Requirement {
+                                    return Ok(pep508_rs::Requirement {
                                         name,
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
@@ -210,7 +210,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                                         path = path.display(),
                                         name = name
                                     );
-                                    return Ok(Requirement {
+                                    return Ok(pep508_rs::Requirement {
                                         name,
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
@@ -268,7 +268,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             }
         };
 
-        Ok(Requirement {
+        Ok(pep508_rs::Requirement {
             name,
             extras: requirement.extras,
             version_or_url: Some(VersionOrUrl::Url(requirement.url)),

@@ -8,8 +8,7 @@ use fs_err::File;
 use itertools::Itertools;
 use petgraph::dot::{Config as DotConfig, Dot};
 
-use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Resolution, UvRequirement};
-use pep508_rs::Requirement;
+use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Requirement, Resolution};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
@@ -28,7 +27,7 @@ pub(crate) enum ResolveCliFormat {
 
 #[derive(Parser)]
 pub(crate) struct ResolveCliArgs {
-    requirements: Vec<Requirement>,
+    requirements: Vec<pep508_rs::Requirement>,
     /// Write debug output in DOT format for graphviz to this file
     #[clap(long)]
     graphviz: Option<PathBuf>,
@@ -104,7 +103,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
             args.requirements
                 .iter()
                 .cloned()
-                .map(UvRequirement::from_requirement)
+                .map(Requirement::from_requirement)
                 .collect::<Result<_, _>>()?,
         ),
         Options::default(),

@@ -13,8 +13,8 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ParsedUrlError, ResolvedDist,
-    UvRequirement, Verbatim, VersionId, VersionOrUrl,
+    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ParsedUrlError, Requirement,
+    ResolvedDist, Verbatim, VersionId, VersionOrUrl,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -456,7 +456,7 @@ impl ResolutionGraph {
                 .requires_dist
                 .iter()
                 .cloned()
-                .map(UvRequirement::from_requirement)
+                .map(Requirement::from_requirement)
                 .collect::<Result<_, _>>()?;
             for req in manifest.apply(uv_requirements.iter()) {
                 let Some(ref marker_tree) = req.marker else {

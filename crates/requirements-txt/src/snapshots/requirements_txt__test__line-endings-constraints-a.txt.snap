@@ -6,7 +6,7 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "django-debug-toolbar",
                     ),
@@ -29,7 +29,7 @@ RequirementsTxt {
         },
     ],
     constraints: [
-        UvRequirement {
+        Requirement {
             name: PackageName(
                 "django",
             ),
@@ -47,7 +47,7 @@ RequirementsTxt {
                 index: None,
             },
         },
-        UvRequirement {
+        Requirement {
             name: PackageName(
                 "pytz",
             ),

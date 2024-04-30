@@ -6,7 +6,7 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "tomli",
                     ),
@@ -24,7 +24,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "numpy",
                     ),

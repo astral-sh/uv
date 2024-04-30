@@ -14,11 +14,11 @@ use crate::ROOT_DIR;
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
 // The name is used in the schema
-struct Uv {
+struct ToolUv {
     #[serde(flatten)]
     options: Options,
     #[serde(flatten)]
-    dep_spec: uv_requirements::pyproject::Uv,
+    dep_spec: uv_requirements::pyproject::ToolUv,
 }
 
 #[derive(clap::Args)]
@@ -42,7 +42,7 @@ enum Mode {
 }
 
 pub(crate) fn main(args: &GenerateJsonSchemaArgs) -> Result<()> {
-    let schema = schema_for!(Uv);
+    let schema = schema_for!(ToolUv);
     let schema_string = serde_json::to_string_pretty(&schema).unwrap();
     let filename = "uv.schema.json";
     let schema_path = PathBuf::from(ROOT_DIR).join(filename);

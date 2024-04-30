@@ -44,10 +44,10 @@ use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use distribution_types::{ParsedUrlError, UvRequirement};
+use distribution_types::{ParsedUrlError, Requirement};
 use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Requirement,
-    Scheme, VerbatimUrl,
+    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Scheme,
+    VerbatimUrl,
 };
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
@@ -311,7 +311,7 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<UvRequirement>,
+    pub constraints: Vec<Requirement>,
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
@@ -1746,7 +1746,7 @@ mod test {
             requirements: [
                 RequirementEntry {
                     requirement: Uv(
-                        UvRequirement {
+                        Requirement {
                             name: PackageName(
                                 "flask",
                             ),
@@ -1805,7 +1805,7 @@ mod test {
             requirements: [
                 RequirementEntry {
                     requirement: Uv(
-                        UvRequirement {
+                        Requirement {
                             name: PackageName(
                                 "flask",
                             ),
@@ -1992,7 +1992,7 @@ mod test {
             requirements: [
                 RequirementEntry {
                     requirement: Uv(
-                        UvRequirement {
+                        Requirement {
                             name: PackageName(
                                 "httpx",
                             ),
@@ -2010,7 +2010,7 @@ mod test {
                 },
                 RequirementEntry {
                     requirement: Uv(
-                        UvRequirement {
+                        Requirement {
                             name: PackageName(
                                 "flask",
                             ),
@@ -2035,7 +2035,7 @@ mod test {
                 },
                 RequirementEntry {
                     requirement: Uv(
-                        UvRequirement {
+                        Requirement {
                             name: PackageName(
                                 "requests",
                             ),
@@ -2060,7 +2060,7 @@ mod test {
                 },
                 RequirementEntry {
                     requirement: Uv(
-                        UvRequirement {
+                        Requirement {
                             name: PackageName(
                                 "black",
                             ),
@@ -2083,7 +2083,7 @@ mod test {
                 },
                 RequirementEntry {
                     requirement: Uv(
-                        UvRequirement {
+                        Requirement {
                             name: PackageName(
                                 "mypy",
                             ),

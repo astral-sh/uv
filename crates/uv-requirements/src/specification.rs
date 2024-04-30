@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, instrument};
 
 use cache_key::CanonicalUrl;
-use distribution_types::{FlatIndexLocation, IndexUrl, UvRequirement};
+use distribution_types::{FlatIndexLocation, IndexUrl, Requirement};
 use requirements_txt::RequirementsTxtRequirement;
 use requirements_txt::{EditableRequirement, FindLink, RequirementEntry, RequirementsTxt};
 use uv_client::BaseClientBuilder;
@@ -24,7 +24,7 @@ pub struct RequirementsSpecification {
     /// The requirements for the project.
     pub requirements: Vec<RequirementEntry>,
     /// The constraints for the project.
-    pub constraints: Vec<UvRequirement>,
+    pub constraints: Vec<Requirement>,
     /// The overrides for the project.
     pub overrides: Vec<RequirementEntry>,
     /// Package to install as editable installs

@@ -1,4 +1,4 @@
-use distribution_types::UvSource;
+use distribution_types::RequirementSource;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use pep440_rs::Version;
@@ -24,7 +24,7 @@ impl AllowedYanks {
             .requirements(markers, dependencies)
             .chain(manifest.preferences.iter().map(Preference::requirement))
         {
-            let UvSource::Registry { version, .. } = &requirement.source else {
+            let RequirementSource::Registry { version, .. } = &requirement.source else {
                 continue;
             };
             let [specifier] = version.as_ref() else {

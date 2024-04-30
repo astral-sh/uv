@@ -1,4 +1,4 @@
-use distribution_types::{LocalEditable, UvRequirement, UvRequirements};
+use distribution_types::{LocalEditable, Requirement, Requirements};
 use either::Either;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::Metadata23;
@@ -12,7 +12,7 @@ use crate::{preferences::Preference, DependencyMode, Exclusions};
 #[derive(Clone, Debug)]
 pub struct Manifest {
     /// The direct requirements for the project.
-    pub(crate) requirements: Vec<UvRequirement>,
+    pub(crate) requirements: Vec<Requirement>,
 
     /// The constraints for the project.
     pub(crate) constraints: Constraints,
@@ -34,7 +34,7 @@ pub struct Manifest {
     ///
     /// The requirements of the editables should be included in resolution as if they were
     /// direct requirements in their own right.
-    pub(crate) editables: Vec<(LocalEditable, Metadata23, UvRequirements)>,
+    pub(crate) editables: Vec<(LocalEditable, Metadata23, Requirements)>,
 
     /// The installed packages to exclude from consideration during resolution.
     ///
@@ -53,12 +53,12 @@ pub struct Manifest {
 impl Manifest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        requirements: Vec<UvRequirement>,
+        requirements: Vec<Requirement>,
         constraints: Constraints,
         overrides: Overrides,
         preferences: Vec<Preference>,
         project: Option<PackageName>,
-        editables: Vec<(LocalEditable, Metadata23, UvRequirements)>,
+        editables: Vec<(LocalEditable, Metadata23, Requirements)>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -74,7 +74,7 @@ impl Manifest {
         }
     }
 
-    pub fn simple(requirements: Vec<UvRequirement>) -> Self {
+    pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements,
             constraints: Constraints::default(),
@@ -99,7 +99,7 @@ impl Manifest {
         &'a self,
         markers: &'a MarkerEnvironment,
         mode: DependencyMode,
-    ) -> impl Iterator<Item = &UvRequirement> {
+    ) -> impl Iterator<Item = &Requirement> {
         match mode {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left( self
@@ -208,8 +208,8 @@ impl Manifest {
     /// even if a requirement is overridden.
     pub fn apply<'a>(
         &'a self,
-        requirements: impl IntoIterator<Item = &'a UvRequirement>,
-    ) -> impl Iterator<Item = &UvRequirement> {
+        requirements: impl IntoIterator<Item = &'a Requirement>,
+    ) -> impl Iterator<Item = &Requirement> {
         self.constraints.apply(self.overrides.apply(requirements))
     }
 }

@@ -8,8 +8,8 @@ use thiserror::Error;
 use url::Url;
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, SourceDist, UvRequirement,
-    UvRequirements, UvSource,
+    BuiltDist, Dist, DistributionMetadata, LocalEditable, Requirement, RequirementSource,
+    Requirements, SourceDist,
 };
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use pypi_types::Metadata23;
@@ -49,13 +49,13 @@ pub enum LookaheadError {
 /// require a range of versions and backtracking).
 pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
     /// The direct requirements for the project.
-    requirements: &'a [UvRequirement],
+    requirements: &'a [Requirement],
     /// The constraints for the project.
     constraints: &'a Constraints,
     /// The overrides for the project.
     overrides: &'a Overrides,
     /// The editable requirements for the project.
-    editables: &'a [(LocalEditable, Metadata23, UvRequirements)],
+    editables: &'a [(LocalEditable, Metadata23, Requirements)],
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -68,10 +68,10 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
     /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        requirements: &'a [UvRequirement],
+        requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
-        editables: &'a [(LocalEditable, Metadata23, UvRequirements)],
+        editables: &'a [(LocalEditable, Metadata23, Requirements)],
         hasher: &'a HashStrategy,
         context: &'a Context,
         client: &'a RegistryClient,
@@ -127,7 +127,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
-                if !matches!(requirement.source, UvSource::Registry { .. }) {
+                if !matches!(requirement.source, RequirementSource::Registry { .. }) {
                     if seen.insert(requirement.clone()) {
                         futures.push(self.lookahead(requirement));
                     }
@@ -155,13 +155,13 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
     /// Infer the package name for a given "unnamed" requirement.
     async fn lookahead(
         &self,
-        requirement: UvRequirement,
+        requirement: Requirement,
     ) -> Result<Option<RequestedRequirements>, LookaheadError> {
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
         let dist = match requirement.source {
-            UvSource::Registry { .. } => return Ok(None),
-            UvSource::Url { url, subdirectory } => {
+            RequirementSource::Registry { .. } => return Ok(None),
+            RequirementSource::Url { url, subdirectory } => {
                 let mut merged_url: Url = url.deref().clone();
                 if let Some(subdirectory) = subdirectory {
                     merged_url
@@ -173,8 +173,8 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                 }
                 Dist::from_http_url(requirement.name, merged_url)?
             }
-            UvSource::Git { url, .. } => Dist::from_git_url(requirement.name, url)?,
-            UvSource::Path {
+            RequirementSource::Git { url, .. } => Dist::from_git_url(requirement.name, url)?,
+            RequirementSource::Path {
                 path: _,
                 url,
                 editable: _,
@@ -202,7 +202,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(UvRequirement::from_requirement)
+                    .map(Requirement::from_requirement)
                     .collect::<Result<_, _>>()?
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
@@ -225,7 +225,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
                 requires_dist
                     .into_iter()
-                    .map(UvRequirement::from_requirement)
+                    .map(Requirement::from_requirement)
                     .collect::<Result<_, _>>()?
             }
         };

@@ -7,9 +7,8 @@ use fs_err as fs;
 use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
 
-use distribution_types::{InstalledDist, Name, UvRequirement};
+use distribution_types::{InstalledDist, Name, Requirement};
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::Requirement;
 use requirements_txt::{EditableRequirement, RequirementEntry, RequirementsTxtRequirement};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
@@ -280,7 +279,7 @@ impl<'a> SitePackages<'a> {
         &self,
         requirements: &[RequirementEntry],
         editables: &[EditableRequirement],
-        constraints: &[UvRequirement],
+        constraints: &[Requirement],
     ) -> Result<SatisfiesResult> {
         let mut stack = Vec::<RequirementEntry>::with_capacity(requirements.len());
         let mut seen =
@@ -333,7 +332,7 @@ impl<'a> SitePackages<'a> {
                         ) {
                             let dependency = RequirementEntry {
                                 requirement: RequirementsTxtRequirement::Uv(
-                                    UvRequirement::from_requirement(dependency)?,
+                                    Requirement::from_requirement(dependency)?,
                                 ),
                                 hashes: vec![],
                             };
@@ -397,7 +396,7 @@ impl<'a> SitePackages<'a> {
                         ) {
                             let dependency = RequirementEntry {
                                 requirement: RequirementsTxtRequirement::Uv(
-                                    UvRequirement::from_requirement(dependency)?,
+                                    Requirement::from_requirement(dependency)?,
                                 ),
                                 hashes: vec![],
                             };
@@ -462,7 +461,7 @@ pub enum Diagnostic {
         /// The package that is missing a dependency.
         package: PackageName,
         /// The dependency that is missing.
-        requirement: Requirement,
+        requirement: pep508_rs::Requirement,
     },
     IncompatibleDependency {
         /// The package that has an incompatible dependency.
@@ -470,7 +469,7 @@ pub enum Diagnostic {
         /// The version of the package that is installed.
         version: Version,
         /// The dependency that is incompatible.
-        requirement: Requirement,
+        requirement: pep508_rs::Requirement,
     },
     DuplicatePackage {
         /// The package that has multiple installed distributions.

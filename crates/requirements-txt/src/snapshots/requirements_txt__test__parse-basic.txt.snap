@@ -6,7 +6,7 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "numpy",
                     ),
@@ -29,7 +29,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "pandas",
                     ),
@@ -52,7 +52,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "python-dateutil",
                     ),
@@ -75,7 +75,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "pytz",
                     ),
@@ -98,7 +98,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "six",
                     ),
@@ -121,7 +121,7 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Uv(
-                UvRequirement {
+                Requirement {
                     name: PackageName(
                         "tzdata",
                     ),

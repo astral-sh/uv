@@ -7,7 +7,7 @@ use tracing::{debug, warn};
 
 use distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Hashed, IndexLocations, InstalledDist,
-    InstalledMetadata, InstalledVersion, Name, SourceDist,
+    InstalledMetadata, InstalledVersion, Name, Requirement, RequirementSource, SourceDist,
 };
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
@@ -209,7 +209,7 @@ impl<'a> Planner<'a> {
 
             // Identify any cached distributions that satisfy the requirement.
             match &requirement.source {
-                UvSource::Registry { version, .. } => {
+                RequirementSource::Registry { version, .. } => {
                     if let Some((_version, distribution)) = registry_index
                         .get(&requirement.name)
                         .find(|(version_, _)| version.contains(version_))
@@ -219,7 +219,7 @@ impl<'a> Planner<'a> {
                         continue;
                     }
                 }
-                UvSource::Url { url, .. } => {
+                RequirementSource::Url { url, .. } => {
                     match Dist::from_http_url(requirement.name.clone(), url.clone())? {
                         Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                             if !wheel.filename.is_compatible(tags) {
@@ -275,7 +275,7 @@ impl<'a> Planner<'a> {
                         _ => unreachable!(),
                     }
                 }
-                UvSource::Git { url, .. } => {
+                RequirementSource::Git { url, .. } => {
                     match Dist::from_git_url(requirement.name.clone(), url.clone())? {
                         Dist::Source(SourceDist::Git(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
@@ -290,7 +290,7 @@ impl<'a> Planner<'a> {
                         _ => unreachable!(),
                     }
                 }
-                UvSource::Path { url, .. } => {
+                RequirementSource::Path { url, .. } => {
                     match Dist::from_file_url(requirement.name.clone(), url.clone(), false)? {
                         Dist::Built(BuiltDist::Path(wheel)) => {
                             if !wheel.filename.is_compatible(tags) {
@@ -392,7 +392,7 @@ enum Specifier<'a> {
     /// An editable requirement, marked by the installed version of the package.
     Editable(InstalledVersion<'a>),
     /// A non-editable requirement, marked by the version or URL specifier.
-    NonEditable(&'a UvSource),
+    NonEditable(&'a RequirementSource),
 }
 
 #[derive(Debug, Default)]
@@ -407,7 +407,7 @@ pub struct Plan {
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.
-    pub remote: Vec<UvRequirement>,
+    pub remote: Vec<Requirement>,
 
     /// Any distributions that are already installed in the current environment, but will be
     /// re-installed (including upgraded) to satisfy the requirements.

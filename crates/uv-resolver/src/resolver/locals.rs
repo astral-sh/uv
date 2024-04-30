@@ -4,7 +4,7 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
-use distribution_types::{RemoteSource, UvSource};
+use distribution_types::{RemoteSource, RequirementSource};
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
 use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
@@ -141,11 +141,11 @@ fn is_compatible(expected: &Version, provided: &Version) -> bool {
 
 /// If a [`VersionSpecifier`] contains exact equality specifiers for a local version, returns an
 /// iterator over the local versions.
-fn iter_locals(source: &UvSource) -> Box<dyn Iterator<Item = Version> + '_> {
+fn iter_locals(source: &RequirementSource) -> Box<dyn Iterator<Item = Version> + '_> {
     match source {
         // Extract all local versions from specifiers that require an exact version (e.g.,
         // `==1.0.0+local`).
-        UvSource::Registry { version, .. } => Box::new(
+        RequirementSource::Registry { version, .. } => Box::new(
             version
                 .iter()
                 .filter(|specifier| {
@@ -156,7 +156,7 @@ fn iter_locals(source: &UvSource) -> Box<dyn Iterator<Item = Version> + '_> {
         ),
         // Exact a local version from a URL, if it includes a fully-qualified filename (e.g.,
         // `torch-2.2.1%2Bcu118-cp311-cp311-linux_x86_64.whl`).
-        UvSource::Url { url, .. } => Box::new(
+        RequirementSource::Url { url, .. } => Box::new(
             url.filename()
                 .ok()
                 .and_then(|filename| {
@@ -173,8 +173,8 @@ fn iter_locals(source: &UvSource) -> Box<dyn Iterator<Item = Version> + '_> {
                 .into_iter()
                 .filter(pep440_rs::Version::is_local),
         ),
-        UvSource::Git { .. } => Box::new(iter::empty()),
-        UvSource::Path { path, .. } => Box::new(
+        RequirementSource::Git { .. } => Box::new(iter::empty()),
+        RequirementSource::Path { path, .. } => Box::new(
             path.file_name()
                 .and_then(|filename| {
                     let filename = filename.to_string_lossy();
@@ -201,7 +201,7 @@ mod tests {
     use anyhow::Result;
     use url::Url;
 
-    use distribution_types::{ParsedUrl, UvSource};
+    use distribution_types::{ParsedUrl, RequirementSource};
     use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
     use pep508_rs::VerbatimUrl;
 
@@ -211,7 +211,8 @@ mod tests {
     fn extract_locals() -> Result<()> {
         // Extract from a source distribution in a URL.
         let url = VerbatimUrl::from_url(Url::parse("https://example.com/foo-1.0.0+local.tar.gz")?);
-        let source = UvSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+        let source =
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
         let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
@@ -219,13 +220,15 @@ mod tests {
         let url = VerbatimUrl::from_url(Url::parse(
             "https://example.com/foo-1.0.0+local-cp39-cp39-linux_x86_64.whl",
         )?);
-        let source = UvSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+        let source =
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
         let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Don't extract anything if the URL is opaque.
         let url = VerbatimUrl::from_url(Url::parse("git+https://example.com/foo/bar")?);
-        let source = UvSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+        let source =
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
         let locals: Vec<_> = iter_locals(&source).collect();
         assert!(locals.is_empty());
 
@@ -234,7 +237,7 @@ mod tests {
             VersionSpecifier::from_version(Operator::GreaterThan, Version::from_str("1.0.0")?)?,
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?,
         ]);
-        let source = UvSource::Registry {
+        let source = RequirementSource::Registry {
             version,
             index: None,
         };
@@ -246,7 +249,7 @@ mod tests {
             Operator::NotEqual,
             Version::from_str("1.0.0+local")?,
         )?]);
-        let source = UvSource::Registry {
+        let source = RequirementSource::Registry {
             version,
             index: None,
         };

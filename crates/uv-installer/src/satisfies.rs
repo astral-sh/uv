@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::fmt::Debug;
 use tracing::trace;
 
-use distribution_types::{InstalledDirectUrlDist, InstalledDist, UvSource};
+use distribution_types::{InstalledDirectUrlDist, InstalledDist, RequirementSource};
 use pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 
@@ -19,7 +19,7 @@ impl RequirementSatisfaction {
     /// Returns true if a requirement is satisfied by an installed distribution.
     ///
     /// Returns an error if IO fails during a freshness check for a local path.
-    pub(crate) fn check(distribution: &InstalledDist, source: &UvSource) -> Result<Self> {
+    pub(crate) fn check(distribution: &InstalledDist, source: &RequirementSource) -> Result<Self> {
         trace!(
             "Comparing installed with source: {:?} {:?}",
             distribution,
@@ -28,13 +28,13 @@ impl RequirementSatisfaction {
         // Filter out already-installed packages.
         match source {
             // If the requirement comes from a registry, check by name.
-            UvSource::Registry { version, .. } => {
+            RequirementSource::Registry { version, .. } => {
                 if version.contains(distribution.version()) {
                     return Ok(Self::Satisfied);
                 }
                 Ok(Self::Mismatch)
             }
-            UvSource::Url {
+            RequirementSource::Url {
                 url: requested_url,
                 subdirectory: requested_subdirectory,
             } => {
@@ -80,7 +80,7 @@ impl RequirementSatisfaction {
                 // Otherwise, assume the requirement is up-to-date.
                 Ok(Self::Satisfied)
             }
-            UvSource::Git {
+            RequirementSource::Git {
                 url: _,
                 repository: requested_repository,
                 reference: requested_reference,
@@ -114,7 +114,7 @@ impl RequirementSatisfaction {
 
                 Ok(Self::Satisfied)
             }
-            UvSource::Path {
+            RequirementSource::Path {
                 path,
                 url: requested_url,
                 editable: requested_editable,

@@ -6,9 +6,8 @@ use futures::{StreamExt, TryStreamExt};
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, HashPolicy, PathSourceUrl, SourceUrl, UvRequirement, VersionId,
+    BuildableSource, HashPolicy, PathSourceUrl, Requirement, SourceUrl, VersionId,
 };
-use pep508_rs::Requirement;
 
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
@@ -64,7 +63,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
     }
 
     /// Resolve the requirements from the provided source trees.
-    pub async fn resolve(self) -> Result<Vec<UvRequirement>> {
+    pub async fn resolve(self) -> Result<Vec<Requirement>> {
         let requirements: Vec<_> = futures::stream::iter(self.source_trees.iter())
             .map(|source_tree| async { self.resolve_source_tree(source_tree).await })
             .buffered(50)
@@ -73,12 +72,12 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
         Ok(requirements
             .into_iter()
             .flatten()
-            .map(UvRequirement::from_requirement)
+            .map(Requirement::from_requirement)
             .collect::<Result<_, _>>()?)
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn resolve_source_tree(&self, source_tree: &Path) -> Result<Vec<Requirement>> {
+    async fn resolve_source_tree(&self, source_tree: &Path) -> Result<Vec<pep508_rs::Requirement>> {
         // Convert to a buildable source.
         let path = fs_err::canonicalize(source_tree).with_context(|| {
             format!(
@@ -145,7 +144,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             ExtrasSpecification::All => Ok(metadata
                 .requires_dist
                 .into_iter()
-                .map(|requirement| Requirement {
+                .map(|requirement| pep508_rs::Requirement {
                     marker: requirement
                         .marker
                         .and_then(|marker| marker.simplify_extras(&metadata.provides_extras)),
@@ -155,7 +154,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             ExtrasSpecification::Some(extras) => Ok(metadata
                 .requires_dist
                 .into_iter()
-                .map(|requirement| Requirement {
+                .map(|requirement| pep508_rs::Requirement {
                     marker: requirement
                         .marker
                         .and_then(|marker| marker.simplify_extras(extras)),

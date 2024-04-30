@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{IndexLocations, InstalledDist, Resolution, SourceDist, UvRequirement};
+use distribution_types::{IndexLocations, InstalledDist, Requirement, Resolution, SourceDist};
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
@@ -78,7 +78,7 @@ pub trait BuildContext: Sync {
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
         &'a self,
-        requirements: &'a [UvRequirement],
+        requirements: &'a [Requirement],
     ) -> impl Future<Output = Result<Resolution>> + Send + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must

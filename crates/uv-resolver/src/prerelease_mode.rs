@@ -1,4 +1,4 @@
-use distribution_types::UvSource;
+use distribution_types::RequirementSource;
 use rustc_hash::FxHashSet;
 
 use pep508_rs::MarkerEnvironment;
@@ -67,7 +67,8 @@ impl PreReleaseStrategy {
                 manifest
                     .requirements(markers, dependencies)
                     .filter(|requirement| {
-                        let UvSource::Registry { version, .. } = &requirement.source else {
+                        let RequirementSource::Registry { version, .. } = &requirement.source
+                        else {
                             return false;
                         };
                         version
@@ -81,7 +82,8 @@ impl PreReleaseStrategy {
                 manifest
                     .requirements(markers, dependencies)
                     .filter(|requirement| {
-                        let UvSource::Registry { version, .. } = &requirement.source else {
+                        let RequirementSource::Registry { version, .. } = &requirement.source
+                        else {
                             return false;
                         };
                         version

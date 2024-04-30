@@ -25,9 +25,9 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument, Instrument};
 
-use distribution_types::{ParsedUrlError, Resolution, UvRequirement};
+use distribution_types::{ParsedUrlError, Requirement, Resolution};
 use pep440_rs::Version;
-use pep508_rs::{PackageName, Requirement};
+use pep508_rs::PackageName;
 use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
@@ -54,18 +54,20 @@ static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
-    requirements: vec![UvRequirement::from_requirement(
-        Requirement::from_str("setuptools >= 40.8.0").unwrap(),
+    requirements: vec![Requirement::from_requirement(
+        pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
     )
     .unwrap()],
 });
 
 /// The requirements for `--legacy-setup-py` builds.
-static SETUP_PY_REQUIREMENTS: Lazy<[UvRequirement; 2]> = Lazy::new(|| {
+static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
     [
-        UvRequirement::from_requirement(Requirement::from_str("setuptools >= 40.8.0").unwrap())
-            .unwrap(),
-        UvRequirement::from_requirement(Requirement::from_str("wheel").unwrap()).unwrap(),
+        Requirement::from_requirement(
+            pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
+        )
+        .unwrap(),
+        Requirement::from_requirement(pep508_rs::Requirement::from_str("wheel").unwrap()).unwrap(),
     ]
 });
 
@@ -229,7 +231,7 @@ pub struct Project {
 #[serde(rename_all = "kebab-case")]
 pub struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
-    pub requires: Vec<Requirement>,
+    pub requires: Vec<pep508_rs::Requirement>,
     /// A string naming a Python object that will be used to perform the build.
     pub build_backend: Option<String>,
     /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
@@ -293,7 +295,7 @@ struct Pep517Backend {
     /// <https://peps.python.org/pep-0517/#build-wheel>
     backend: String,
     /// `build-backend.requirements` in pyproject.toml
-    requirements: Vec<UvRequirement>,
+    requirements: Vec<Requirement>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
     backend_path: Option<BackendPath>,
 }
@@ -580,7 +582,7 @@ impl SourceBuild {
                         requirements: build_system
                             .requires
                             .into_iter()
-                            .map(UvRequirement::from_requirement)
+                            .map(Requirement::from_requirement)
                             .collect::<Result<_, _>>()
                             .map_err(|err| Box::new(Error::DirectUrl(err)))?,
                     }
@@ -954,7 +956,7 @@ async fn create_pep517_build_environment(
     })?;
 
     // Deserialize the requirements from the output file.
-    let extra_requires: Vec<Requirement> = serde_json::from_slice::<Vec<Requirement>>(&contents).map_err(|err| {
+    let extra_requires: Vec<pep508_rs::Requirement> = serde_json::from_slice::<Vec<pep508_rs::Requirement>>(&contents).map_err(|err| {
         Error::from_command_output(
             format!(
                 "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
@@ -963,9 +965,9 @@ async fn create_pep517_build_environment(
             version_id,
         )
     })?;
-    let extra_requires: Vec<UvRequirement> = extra_requires
+    let extra_requires: Vec<Requirement> = extra_requires
         .into_iter()
-        .map(UvRequirement::from_requirement)
+        .map(Requirement::from_requirement)
         .collect::<Result<_, _>>()
         .map_err(Error::DirectUrl)?;
 

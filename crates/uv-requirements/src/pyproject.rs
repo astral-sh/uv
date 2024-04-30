@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{ParsedUrlError, UvRequirement, UvRequirements, UvSource};
-use pep508_rs::{Requirement, VerbatimUrl, VersionOrUrl};
+use distribution_types::{ParsedUrlError, Requirement, RequirementSource, Requirements};
+use pep508_rs::{VerbatimUrl, VersionOrUrl};
 use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
@@ -98,23 +98,23 @@ pub struct Project {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
-    pub uv: Option<Uv>,
+    pub uv: Option<ToolUv>,
 }
 
 /// `tool.uv`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
-pub struct Uv {
+pub struct ToolUv {
     pub sources: Option<HashMap<PackageName, Source>>,
-    pub workspace: Option<UvWorkspace>,
+    pub workspace: Option<ToolUvWorkspace>,
 }
 
 /// `tool.uv.workspace`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
-pub struct UvWorkspace {
+pub struct ToolUvWorkspace {
     pub members: Option<Vec<SerdePattern>>,
     pub exclude: Option<Vec<SerdePattern>>,
 }
@@ -215,7 +215,7 @@ pub struct UvMetadata {
     /// The name of the project.
     pub name: PackageName,
     /// The requirements extracted from the project.
-    pub requirements: Vec<UvRequirement>,
+    pub requirements: Vec<Requirement>,
     /// The extras used to collect requirements.
     pub used_extras: FxHashSet<ExtraName>,
 }
@@ -315,11 +315,11 @@ pub(crate) fn lower_requirements(
     project_sources: &HashMap<PackageName, Source>,
     workspace_sources: &HashMap<PackageName, Source>,
     workspace_packages: &HashMap<PackageName, String>,
-) -> Result<UvRequirements, Pep621Error> {
+) -> Result<Requirements, Pep621Error> {
     let dependencies = dependencies
         .iter()
         .map(|dependency| {
-            let requirement = Requirement::from_str(dependency)?;
+            let requirement = pep508_rs::Requirement::from_str(dependency)?;
             let name = requirement.name.clone();
             lower_requirement(
                 requirement,
@@ -338,7 +338,7 @@ pub(crate) fn lower_requirements(
             let dependencies: Vec<_> = dependencies
                 .iter()
                 .map(|dependency| {
-                    let requirement = Requirement::from_str(dependency)?;
+                    let requirement = pep508_rs::Requirement::from_str(dependency)?;
                     let name = requirement.name.clone();
                     lower_requirement(
                         requirement,
@@ -354,7 +354,7 @@ pub(crate) fn lower_requirements(
             Ok((extra_name.clone(), dependencies))
         })
         .collect::<Result<_, Pep621Error>>()?;
-    Ok(UvRequirements {
+    Ok(Requirements {
         dependencies,
         optional_dependencies,
     })
@@ -362,13 +362,13 @@ pub(crate) fn lower_requirements(
 
 /// Combine `project.dependencies`/`project.optional-dependencies` with `tool.uv.sources`.
 pub(crate) fn lower_requirement(
-    requirement: Requirement,
+    requirement: pep508_rs::Requirement,
     project_name: &PackageName,
     project_dir: &Path,
     project_sources: &HashMap<PackageName, Source>,
     workspace_sources: &HashMap<PackageName, Source>,
     workspace_packages: &HashMap<PackageName, String>,
-) -> Result<UvRequirement, UvSourcesLoweringError> {
+) -> Result<Requirement, UvSourcesLoweringError> {
     let source = project_sources
         .get(&requirement.name)
         .or(workspace_sources.get(&requirement.name))
@@ -390,7 +390,7 @@ pub(crate) fn lower_requirement(
         return if requirement.version_or_url.is_none() && &requirement.name != project_name {
             Err(UvSourcesLoweringError::UnconstrainedVersion)
         } else {
-            Ok(UvRequirement::from_requirement(requirement).map_err(Box::new)?)
+            Ok(Requirement::from_requirement(requirement).map_err(Box::new)?)
         };
     };
 
@@ -432,7 +432,7 @@ pub(crate) fn lower_requirement(
             }
             let url = VerbatimUrl::from_url(url).with_given(given);
             let repository = url.to_url().clone();
-            UvSource::Git {
+            RequirementSource::Git {
                 url,
                 repository,
                 reference,
@@ -444,7 +444,7 @@ pub(crate) fn lower_requirement(
                 return Err(UvSourcesLoweringError::ConflictingUrls);
             }
             let url = VerbatimUrl::from_url(Url::parse(&url)?).with_given(url);
-            UvSource::Url {
+            RequirementSource::Url {
                 url,
                 subdirectory: subdirectory.map(PathBuf::from),
             }
@@ -457,7 +457,7 @@ pub(crate) fn lower_requirement(
         }
         Source::Registry { index } => match requirement.version_or_url {
             None => return Err(UvSourcesLoweringError::UnconstrainedVersion),
-            Some(VersionOrUrl::VersionSpecifier(version)) => UvSource::Registry {
+            Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
                 version,
                 index: Some(index),
             },
@@ -484,7 +484,7 @@ pub(crate) fn lower_requirement(
             return Err(UvSourcesLoweringError::InvalidEntry);
         }
     };
-    Ok(UvRequirement {
+    Ok(Requirement {
         name: requirement.name,
         extras: requirement.extras,
         marker: requirement.marker,
@@ -497,7 +497,7 @@ fn path_source(
     path: String,
     project_dir: &Path,
     editable: Option<bool>,
-) -> Result<UvSource, UvSourcesLoweringError> {
+) -> Result<RequirementSource, UvSourcesLoweringError> {
     let path_buf = PathBuf::from(&path);
     let path_buf = path_buf
         .absolutize_from(project_dir)
@@ -508,7 +508,7 @@ fn path_source(
             .map_err(|()| UvSourcesLoweringError::PathToUrl(path_buf.clone()))?,
     )
     .with_given(path);
-    Ok(UvSource::Path {
+    Ok(RequirementSource::Path {
         path: path_buf,
         url,
         editable,
@@ -537,15 +537,15 @@ fn path_source(
 /// ```
 fn flatten_extra(
     project_name: &PackageName,
-    requirements: &[UvRequirement],
-    extras: &IndexMap<ExtraName, Vec<UvRequirement>>,
-) -> Vec<UvRequirement> {
+    requirements: &[Requirement],
+    extras: &IndexMap<ExtraName, Vec<Requirement>>,
+) -> Vec<Requirement> {
     fn inner(
         project_name: &PackageName,
-        requirements: &[UvRequirement],
-        extras: &IndexMap<ExtraName, Vec<UvRequirement>>,
+        requirements: &[Requirement],
+        extras: &IndexMap<ExtraName, Vec<Requirement>>,
         seen: &mut FxHashSet<ExtraName>,
-    ) -> Vec<UvRequirement> {
+    ) -> Vec<Requirement> {
         let mut flattened = Vec::with_capacity(requirements.len());
         for requirement in requirements {
             if requirement.name == *project_name {

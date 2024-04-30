@@ -4,7 +4,9 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{DistributionMetadata, HashPolicy, PackageId, UvRequirement, UvSource};
+use distribution_types::{
+    DistributionMetadata, HashPolicy, PackageId, Requirement, RequirementSource,
+};
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{HashDigest, HashError};
 use requirements_txt::RequirementsTxtRequirement;
@@ -125,11 +127,9 @@ impl HashStrategy {
     }
 }
 
-fn uv_requirement_to_package_id(
-    requirement: &UvRequirement,
-) -> Result<PackageId, HashStrategyError> {
+fn uv_requirement_to_package_id(requirement: &Requirement) -> Result<PackageId, HashStrategyError> {
     Ok(match &requirement.source {
-        UvSource::Registry { version, .. } => {
+        RequirementSource::Registry { version, .. } => {
             // Must be a single specifier.
             let [specifier] = version.as_ref() else {
                 return Err(HashStrategyError::UnpinnedRequirement(
@@ -146,7 +146,7 @@ fn uv_requirement_to_package_id(
 
             PackageId::from_registry(requirement.name.clone())
         }
-        UvSource::Url { url, subdirectory } => {
+        RequirementSource::Url { url, subdirectory } => {
             // Direct URLs are always allowed.
             let mut url: Url = url.deref().clone();
             if let Some(subdirectory) = subdirectory {
@@ -154,8 +154,8 @@ fn uv_requirement_to_package_id(
             }
             PackageId::from_url(&url)
         }
-        UvSource::Git { url, .. } => PackageId::from_url(url),
-        UvSource::Path { url, .. } => PackageId::from_url(url),
+        RequirementSource::Git { url, .. } => PackageId::from_url(url),
+        RequirementSource::Path { url, .. } => PackageId::from_url(url),
     })
 }
 

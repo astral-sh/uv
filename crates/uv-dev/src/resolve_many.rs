@@ -10,9 +10,9 @@ use tokio::time::Instant;
 use tracing::{info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use distribution_types::{IndexLocations, UvRequirement};
+use distribution_types::{IndexLocations, Requirement};
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{Requirement, VersionOrUrl};
+use pep508_rs::VersionOrUrl;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{OwnedArchive, RegistryClient, RegistryClientBuilder};
 use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
@@ -68,10 +68,10 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let tf_models_nightly = PackageName::from_str("tf-models-nightly").unwrap();
     let lines = data
         .lines()
-        .map(Requirement::from_str)
+        .map(pep508_rs::Requirement::from_str)
         .filter_ok(|req| req.name != tf_models_nightly);
 
-    let requirements: Vec<Requirement> = if let Some(limit) = args.limit {
+    let requirements: Vec<pep508_rs::Requirement> = if let Some(limit) = args.limit {
         lines.take(limit).collect::<Result<_, _>>()?
     } else {
         lines.collect::<Result<_, _>>()?
@@ -127,7 +127,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                         let equals_version = VersionOrUrl::VersionSpecifier(
                             VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
                         );
-                        Requirement {
+                        pep508_rs::Requirement {
                             name: requirement.name,
                             extras: requirement.extras,
                             version_or_url: Some(equals_version),
@@ -141,7 +141,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                 };
 
                 let result = build_dispatch
-                    .resolve(&[UvRequirement::from_requirement(requirement.clone())
+                    .resolve(&[Requirement::from_requirement(requirement.clone())
                         .expect("Invalid requirement")])
                     .await;
                 (requirement.to_string(), start.elapsed(), result)

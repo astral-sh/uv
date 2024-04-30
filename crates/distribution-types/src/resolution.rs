@@ -3,7 +3,7 @@ use rustc_hash::FxHashMap;
 use uv_normalize::PackageName;
 
 use crate::{
-    BuiltDist, Dist, Name, ParsedGitUrl, ResolvedDist, SourceDist, UvRequirement, UvSource,
+    BuiltDist, Dist, Name, ParsedGitUrl, Requirement, RequirementSource, ResolvedDist, SourceDist,
 };
 
 /// A set of packages pinned at specific versions.
@@ -57,10 +57,10 @@ impl Resolution {
         self.0.is_empty()
     }
 
-    /// Return the set of [`UvRequirement`]s that this resolution represents, exclusive of any
+    /// Return the set of [`Requirement`]s that this resolution represents, exclusive of any
     /// editable requirements.
-    pub fn requirements(&self) -> Vec<UvRequirement> {
-        let mut requirements: Vec<UvRequirement> = self
+    pub fn requirements(&self) -> Vec<Requirement> {
+        let mut requirements: Vec<Requirement> = self
             .0
             .values()
             // Remove editable requirements
@@ -72,59 +72,59 @@ impl Resolution {
     }
 }
 
-impl From<&ResolvedDist> for UvRequirement {
+impl From<&ResolvedDist> for Requirement {
     fn from(resolved_dist: &ResolvedDist) -> Self {
         let source = match resolved_dist {
             ResolvedDist::Installable(dist) => match dist {
-                Dist::Built(BuiltDist::Registry(wheel)) => UvSource::Registry {
+                Dist::Built(BuiltDist::Registry(wheel)) => RequirementSource::Registry {
                     version: pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(wheel.filename.version.clone()),
                     ),
                     index: None,
                 },
-                Dist::Built(BuiltDist::DirectUrl(wheel)) => UvSource::Url {
+                Dist::Built(BuiltDist::DirectUrl(wheel)) => RequirementSource::Url {
                     url: wheel.url.clone(),
                     subdirectory: None,
                 },
-                Dist::Built(BuiltDist::Path(wheel)) => UvSource::Path {
+                Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
                     path: wheel.path.clone(),
                     url: wheel.url.clone(),
                     editable: None,
                 },
-                Dist::Source(SourceDist::Registry(sdist)) => UvSource::Registry {
+                Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
                     version: pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(sdist.filename.version.clone()),
                     ),
                     index: None,
                 },
-                Dist::Source(SourceDist::DirectUrl(sdist)) => UvSource::Url {
+                Dist::Source(SourceDist::DirectUrl(sdist)) => RequirementSource::Url {
                     url: sdist.url.clone(),
                     subdirectory: None,
                 },
                 Dist::Source(SourceDist::Git(sdist)) => {
                     let git_url = ParsedGitUrl::try_from(sdist.url.raw())
                         .expect("urls must be valid at this point");
-                    UvSource::Git {
+                    RequirementSource::Git {
                         url: sdist.url.clone(),
                         repository: git_url.url.repository().clone(),
                         reference: git_url.url.reference().clone(),
                         subdirectory: git_url.subdirectory,
                     }
                 }
-                Dist::Source(SourceDist::Path(sdist)) => UvSource::Path {
+                Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
                     path: sdist.path.clone(),
                     url: sdist.url.clone(),
                     editable: None,
                 },
             },
-            ResolvedDist::Installed(dist) => UvSource::Registry {
+            ResolvedDist::Installed(dist) => RequirementSource::Registry {
                 version: pep440_rs::VersionSpecifiers::from(
                     pep440_rs::VersionSpecifier::equals_version(dist.version().clone()),
                 ),
                 index: None,
             },
         };
-        UvRequirement {
+        Requirement {
             name: resolved_dist.name().clone(),
             extras: vec![],
             marker: None,

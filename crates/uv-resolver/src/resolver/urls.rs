@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 use tracing::debug;
 
-use distribution_types::{UvSource, Verbatim};
+use distribution_types::{RequirementSource, Verbatim};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use uv_distribution::is_same_reference;
 use uv_normalize::PackageName;
@@ -40,8 +40,8 @@ impl Urls {
         // Add all direct requirements and constraints. If there are any conflicts, return an error.
         for requirement in manifest.requirements(markers, dependencies) {
             match &requirement.source {
-                UvSource::Registry { .. } => {}
-                UvSource::Url { url, .. } | UvSource::Path { url, .. } => {
+                RequirementSource::Registry { .. } => {}
+                RequirementSource::Url { url, .. } | RequirementSource::Path { url, .. } => {
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
                         if !is_equal(&previous, url) {
                             return Err(ResolveError::ConflictingUrlsDirect(
@@ -52,7 +52,7 @@ impl Urls {
                         }
                     }
                 }
-                UvSource::Git { url, .. } => {
+                RequirementSource::Git { url, .. } => {
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
                         if !is_equal(&previous, url) {
                             if is_same_reference(&previous, url) {

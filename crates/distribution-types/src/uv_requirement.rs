@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{MarkerEnvironment, MarkerTree, Requirement, VerbatimUrl, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VersionOrUrl};
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -13,21 +13,21 @@ use crate::{ParsedUrl, ParsedUrlError};
 
 /// The requirements of a distribution, an extension over PEP 508's requirements.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct UvRequirements {
-    pub dependencies: Vec<UvRequirement>,
-    pub optional_dependencies: IndexMap<ExtraName, Vec<UvRequirement>>,
+pub struct Requirements {
+    pub dependencies: Vec<Requirement>,
+    pub optional_dependencies: IndexMap<ExtraName, Vec<Requirement>>,
 }
 
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
-pub struct UvRequirement {
+pub struct Requirement {
     pub name: PackageName,
     pub extras: Vec<ExtraName>,
     pub marker: Option<MarkerTree>,
-    pub source: UvSource,
+    pub source: RequirementSource,
 }
 
-impl UvRequirement {
+impl Requirement {
     /// Returns whether the markers apply for the given environment.
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         if let Some(marker) = &self.marker {
@@ -37,23 +37,23 @@ impl UvRequirement {
         }
     }
 
-    pub fn from_requirement(requirement: Requirement) -> Result<Self, ParsedUrlError> {
+    pub fn from_requirement(requirement: pep508_rs::Requirement) -> Result<Self, ParsedUrlError> {
         let source = match requirement.version_or_url {
-            None => UvSource::Registry {
+            None => RequirementSource::Registry {
                 version: VersionSpecifiers::empty(),
                 index: None,
             },
             // The most popular case: Just a name, a version range and maybe extras.
-            Some(VersionOrUrl::VersionSpecifier(version)) => UvSource::Registry {
+            Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
                 version,
                 index: None,
             },
             Some(VersionOrUrl::Url(url)) => {
                 let direct_url = ParsedUrl::try_from(&url.to_url())?;
-                UvSource::from_parsed_url(direct_url, url)
+                RequirementSource::from_parsed_url(direct_url, url)
             }
         };
-        Ok(UvRequirement {
+        Ok(Requirement {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
@@ -62,7 +62,7 @@ impl UvRequirement {
     }
 }
 
-impl Display for UvRequirement {
+impl Display for Requirement {
     /// Note: This is for user display, not for requirements.txt
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
@@ -78,16 +78,16 @@ impl Display for UvRequirement {
             )?;
         }
         match &self.source {
-            UvSource::Registry { version, index } => {
+            RequirementSource::Registry { version, index } => {
                 write!(f, "{version}")?;
                 if let Some(index) = index {
                     write!(f, " (index: {index})")?;
                 }
             }
-            UvSource::Url { url, .. } => {
+            RequirementSource::Url { url, .. } => {
                 write!(f, " @ {url}")?;
             }
-            UvSource::Git {
+            RequirementSource::Git {
                 url: _,
                 repository,
                 reference,
@@ -101,7 +101,7 @@ impl Display for UvRequirement {
                     writeln!(f, "#subdirectory={}", subdirectory.display())?;
                 }
             }
-            UvSource::Path { url, .. } => {
+            RequirementSource::Path { url, .. } => {
                 write!(f, " @ {url}")?;
             }
         }
@@ -114,7 +114,7 @@ impl Display for UvRequirement {
 
 /// The different kinds of requirements (version specifier, HTTP(S) URL, git repository, path).
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
-pub enum UvSource {
+pub enum RequirementSource {
     /// The requirement has a version specifier, such as `foo >1,<2`.
     Registry {
         version: VersionSpecifiers,
@@ -154,21 +154,21 @@ pub enum UvSource {
     },
 }
 
-impl UvSource {
+impl RequirementSource {
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
-            ParsedUrl::LocalFile(local_file) => UvSource::Path {
+            ParsedUrl::LocalFile(local_file) => RequirementSource::Path {
                 path: local_file.path,
                 url,
                 editable: None,
             },
-            ParsedUrl::Git(git) => UvSource::Git {
+            ParsedUrl::Git(git) => RequirementSource::Git {
                 url,
                 repository: git.url.repository().clone(),
                 reference: git.url.reference().clone(),
                 subdirectory: git.subdirectory,
             },
-            ParsedUrl::Archive(archive) => UvSource::Url {
+            ParsedUrl::Archive(archive) => RequirementSource::Url {
                 url,
                 subdirectory: archive.subdirectory,
             },

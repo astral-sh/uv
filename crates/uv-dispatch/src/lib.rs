@@ -12,7 +12,7 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{IndexLocations, Name, Resolution, SourceDist, UvRequirement};
+use distribution_types::{IndexLocations, Name, Requirement, Resolution, SourceDist};
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
@@ -133,10 +133,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.setup_py
     }
 
-    async fn resolve<'data>(
-        &'data self,
-        requirements: &'data [UvRequirement],
-    ) -> Result<Resolution> {
+    async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(

@@ -16,7 +16,7 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, Verbatim};
-use distribution_types::{UvRequirement, UvRequirements};
+use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
 
 use platform_tags::Tags;
@@ -370,19 +370,19 @@ pub(crate) async fn pip_compile(
 
         // Build all editables.
         let editable_wheel_dir = tempdir_in(cache.root())?;
-        let editables: Vec<(LocalEditable, Metadata23, UvRequirements)> = downloader
+        let editables: Vec<(LocalEditable, Metadata23, Requirements)> = downloader
             .build_editables(editables, editable_wheel_dir.path())
             .await
             .context("Failed to build editables")?
             .into_iter()
             .map(|built_editable| {
-                let requirements = UvRequirements {
+                let requirements = Requirements {
                     dependencies: built_editable
                         .metadata
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(UvRequirement::from_requirement)
+                        .map(Requirement::from_requirement)
                         .collect::<Result<_, ParsedUrlError>>()?,
                     optional_dependencies: IndexMap::default(),
                 };

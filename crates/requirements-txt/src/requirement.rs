@@ -3,7 +3,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use distribution_types::{ParsedUrl, ParsedUrlError, UvRequirement, UvSource};
+use distribution_types::{ParsedUrl, ParsedUrlError, RequirementSource};
 use pep508_rs::{
     MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, UnnamedRequirement,
 };
@@ -16,7 +16,7 @@ use crate::Requirement;
 pub enum RequirementsTxtRequirement {
     /// The uv-specific superset over PEP 508 requirements specifier incorporating
     /// `tool.uv.sources`.
-    Uv(UvRequirement),
+    Uv(Requirement),
     /// A PEP 508-like, direct URL dependency specifier.
     Unnamed(UnnamedRequirement),
 }
@@ -64,21 +64,21 @@ impl RequirementsTxtRequirement {
     }
 
     /// Return the version specifier or URL for the requirement.
-    pub fn source(&self) -> UvSource {
+    pub fn source(&self) -> RequirementSource {
         // TODO(konsti): Error handling
         match self {
             Self::Uv(requirement) => requirement.source.clone(),
             Self::Unnamed(requirement) => {
                 let parsed_url = ParsedUrl::try_from(&requirement.url.to_url())
                     .expect("TODO(konsti): scheme not supported");
-                UvSource::from_parsed_url(parsed_url, requirement.url.clone())
+                RequirementSource::from_parsed_url(parsed_url, requirement.url.clone())
             }
         }
     }
 }
 
-impl From<UvRequirement> for RequirementsTxtRequirement {
-    fn from(requirement: UvRequirement) -> Self {
+impl From<Requirement> for RequirementsTxtRequirement {
+    fn from(requirement: Requirement) -> Self {
         Self::Uv(requirement)
     }
 }
@@ -104,9 +104,9 @@ impl RequirementsTxtRequirement {
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtRequirementError> {
         // Attempt to parse as a PEP 508-compliant requirement.
-        match Requirement::parse(input, &working_dir) {
+        match pep508_rs::Requirement::parse(input, &working_dir) {
             Ok(requirement) => Ok(Self::Uv(
-                UvRequirement::from_requirement(requirement)
+                Requirement::from_requirement(requirement)
                     .map_err(|err| RequirementsTxtRequirementError::ParsedUrl(Box::new(err)))?,
             )),
             Err(err) => match err.message {

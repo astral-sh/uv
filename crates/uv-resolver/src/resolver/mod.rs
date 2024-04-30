@@ -18,7 +18,7 @@ use tracing::{debug, enabled, info_span, instrument, trace, warn, Instrument, Le
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, UvRequirement,
+    InstalledDist, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist,
     VersionOrUrl,
 };
 pub(crate) use locals::Locals;
@@ -113,7 +113,7 @@ pub struct Resolver<
     InstalledPackages: InstalledPackagesProvider + Send + Sync,
 > {
     project: Option<PackageName>,
-    requirements: Vec<UvRequirement>,
+    requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
     preferences: Preferences,
@@ -891,7 +891,7 @@ impl<
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(UvRequirement::from_requirement)
+                        .map(Requirement::from_requirement)
                         .collect::<Result<_, _>>()
                         .map_err(Box::new)?;
                     let constraints = PubGrubDependencies::from_requirements(
@@ -1007,7 +1007,7 @@ impl<
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(UvRequirement::from_requirement)
+                    .map(Requirement::from_requirement)
                     .collect::<Result<_, _>>()
                     .map_err(Box::new)?;
                 let constraints = PubGrubDependencies::from_requirements(

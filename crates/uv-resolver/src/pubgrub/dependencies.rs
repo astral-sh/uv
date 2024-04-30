@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use tracing::warn;
 use url::Url;
 
-use distribution_types::{UvRequirement, UvSource, Verbatim};
+use distribution_types::{Requirement, RequirementSource, Verbatim};
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use uv_configuration::{Constraints, Overrides};
@@ -24,7 +24,7 @@ impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_requirements(
-        requirements: &[UvRequirement],
+        requirements: &[Requirement],
         constraints: &Constraints,
         overrides: &Overrides,
         source_name: Option<&PackageName>,
@@ -66,7 +66,7 @@ impl PubGrubDependencies {
 /// Add a set of requirements to a list of dependencies.
 #[allow(clippy::too_many_arguments)]
 fn add_requirements(
-    requirements: &[UvRequirement],
+    requirements: &[Requirement],
     constraints: &Constraints,
     overrides: &Overrides,
     source_name: Option<&PackageName>,
@@ -183,13 +183,13 @@ impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
 
 /// Convert a [`Requirement`] to a `PubGrub`-compatible package and range.
 fn to_pubgrub(
-    requirement: &UvRequirement,
+    requirement: &Requirement,
     extra: Option<ExtraName>,
     urls: &Urls,
     locals: &Locals,
 ) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
     match &requirement.source {
-        UvSource::Registry { version, .. } => {
+        RequirementSource::Registry { version, .. } => {
             // TODO(konsti): Index
             // If the specifier is an exact version, and the user requested a local version that's
             // more precise than the specifier, use the local version instead.
@@ -218,7 +218,7 @@ fn to_pubgrub(
                 version,
             ))
         }
-        UvSource::Url { url, subdirectory } => {
+        RequirementSource::Url { url, subdirectory } => {
             let mut url: Url = url.deref().clone();
             if let Some(subdirectory) = subdirectory {
                 url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
@@ -243,7 +243,7 @@ fn to_pubgrub(
                 Range::full(),
             ))
         }
-        UvSource::Git { url, .. } => {
+        RequirementSource::Git { url, .. } => {
             let Some(expected) = urls.get(&requirement.name) else {
                 return Err(ResolveError::DisallowedUrl(
                     requirement.name.clone(),
@@ -264,7 +264,7 @@ fn to_pubgrub(
                 Range::full(),
             ))
         }
-        UvSource::Path { url, .. } => {
+        RequirementSource::Path { url, .. } => {
             let Some(expected) = urls.get(&requirement.name) else {
                 return Err(ResolveError::DisallowedUrl(
                     requirement.name.clone(),

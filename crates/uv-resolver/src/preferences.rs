@@ -3,7 +3,7 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use distribution_types::{UvRequirement, UvSource};
+use distribution_types::{Requirement, RequirementSource};
 use pep440_rs::{Operator, Version};
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
 use pypi_types::{HashDigest, HashError};
@@ -21,7 +21,7 @@ pub enum PreferenceError {
 /// A pinned requirement, as extracted from a `requirements.txt` file.
 #[derive(Clone, Debug)]
 pub struct Preference {
-    requirement: UvRequirement,
+    requirement: Requirement,
     hashes: Vec<HashDigest>,
 }
 
@@ -45,7 +45,7 @@ impl Preference {
     }
 
     /// Create a [`Preference`] from a [`Requirement`].
-    pub fn from_requirement(requirement: UvRequirement) -> Self {
+    pub fn from_requirement(requirement: Requirement) -> Self {
         Self {
             requirement,
             hashes: Vec::new(),
@@ -58,7 +58,7 @@ impl Preference {
     }
 
     /// Return the [`Requirement`] for this preference.
-    pub fn requirement(&self) -> &UvRequirement {
+    pub fn requirement(&self) -> &Requirement {
         &self.requirement
     }
 }
@@ -97,7 +97,7 @@ impl Preferences {
                         return None;
                     }
                     match &requirement.source {
-                        UvSource::Registry {version , ..} => {
+                        RequirementSource::Registry {version , ..} => {
                             let [version_specifier] = version.as_ref() else {
                                     trace!(
                                     "Excluding {requirement} from preferences due to multiple version specifiers."
@@ -118,7 +118,7 @@ impl Preferences {
                                     },
                                 ))
                             }
-                        UvSource::Url {..} | UvSource::Git { .. } | UvSource::Path { .. }=> {
+                        RequirementSource::Url {..} | RequirementSource::Git { .. } | RequirementSource::Path { .. }=> {
                             trace!(
                                 "Excluding {requirement} from preferences due to URL dependency."
                             );

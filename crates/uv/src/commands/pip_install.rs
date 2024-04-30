@@ -12,9 +12,9 @@ use tracing::{debug, enabled, Level};
 
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist,
-    LocalEditable, LocalEditables, Name, ParsedUrl, ParsedUrlError, Resolution, UvSource,
+    LocalEditable, LocalEditables, Name, ParsedUrl, ParsedUrlError, RequirementSource, Resolution,
 };
-use distribution_types::{UvRequirement, UvRequirements};
+use distribution_types::{Requirement, Requirements};
 use indexmap::IndexMap;
 use install_wheel_rs::linker::LinkMode;
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
@@ -619,9 +619,9 @@ async fn build_editables(
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
 async fn resolve(
-    requirements: Vec<UvRequirement>,
-    constraints: Vec<UvRequirement>,
-    overrides: Vec<UvRequirement>,
+    requirements: Vec<Requirement>,
+    constraints: Vec<Requirement>,
+    overrides: Vec<Requirement>,
     project: Option<PackageName>,
     editables: &[BuiltEditable],
     hasher: &HashStrategy,
@@ -649,7 +649,7 @@ async fn resolve(
         .filter(|dist| !exclusions.contains(dist.name()))
         .map(|dist| {
             let source = match dist.installed_version() {
-                InstalledVersion::Version(version) => UvSource::Registry {
+                InstalledVersion::Version(version) => RequirementSource::Registry {
                     version: VersionSpecifiers::from(VersionSpecifier::equals_version(
                         version.clone(),
                     )),
@@ -658,10 +658,13 @@ async fn resolve(
                 },
                 InstalledVersion::Url(url, _version) => {
                     let parsed_url = ParsedUrl::try_from(url)?;
-                    UvSource::from_parsed_url(parsed_url, VerbatimUrl::from_url(url.clone()))
+                    RequirementSource::from_parsed_url(
+                        parsed_url,
+                        VerbatimUrl::from_url(url.clone()),
+                    )
                 }
             };
-            let requirement = UvRequirement {
+            let requirement = Requirement {
                 name: dist.name().clone(),
                 extras: vec![],
                 marker: None,
@@ -685,12 +688,12 @@ async fn resolve(
                 .requires_dist
                 .iter()
                 .cloned()
-                .map(UvRequirement::from_requirement)
+                .map(Requirement::from_requirement)
                 .collect::<Result<_, _>>()?;
             Ok::<_, ParsedUrlError>((
                 built_editable.editable.clone(),
                 built_editable.metadata.clone(),
-                UvRequirements {
+                Requirements {
                     dependencies,
                     optional_dependencies: IndexMap::default(),
                 },
