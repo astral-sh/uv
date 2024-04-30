@@ -223,7 +223,7 @@ fn find_python(
     Ok(None)
 }
 
-/// Find the Python interpreter in `PATH` matching the given name (e.g., `python3`, respecting
+/// Find the Python interpreter in `PATH` matching the given name (e.g., `python3`), respecting
 /// `UV_PYTHON_PATH`.
 ///
 /// Returns `Ok(None)` if not found.
