@@ -984,7 +984,7 @@ fn compile_python_invalid_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '3.7.x' for '--python-version <PYTHON_VERSION>': after parsing '3.7', found '.x', which is not part of a valid version
+    error: invalid value '3.7.x' for '--python-version <PYTHON_VERSION>': Python version `3.7.x` could not be parsed: after parsing '3.7', found '.x', which is not part of a valid version
 
     For more information, try '--help'.
     "###
@@ -1009,7 +1009,7 @@ fn compile_python_dev_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '3.7-dev' for '--python-version <PYTHON_VERSION>': Python version 3.7-dev is a development release
+    error: invalid value '3.7-dev' for '--python-version <PYTHON_VERSION>': Python version `3.7-dev` is a development release
 
     For more information, try '--help'.
     "###

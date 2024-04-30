@@ -13,7 +13,7 @@ use tokio::time::Instant;
 use tracing::{info, info_span, Instrument};
 
 use uv_fs::Simplified;
-use uv_toolchain::{
+use uv_interpreter::managed::{
     DownloadResult, Error, PythonDownload, PythonDownloadRequest, TOOLCHAIN_DIRECTORY,
 };
 

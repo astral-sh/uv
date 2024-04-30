@@ -9,11 +9,10 @@ use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy, TargetTriple, Upgrade,
 };
-use uv_interpreter::Target;
+use uv_interpreter::{PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_requirements::ExtrasSpecification;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::PythonVersion;
 use uv_workspace::{PipOptions, Workspace};
 
 use crate::cli::{

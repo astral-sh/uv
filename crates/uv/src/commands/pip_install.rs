@@ -33,7 +33,7 @@ use uv_fs::Simplified;
 use uv_installer::{
     BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SatisfiesResult, SitePackages,
 };
-use uv_interpreter::{Interpreter, PythonEnvironment, Target};
+use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
@@ -43,7 +43,6 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
     OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 

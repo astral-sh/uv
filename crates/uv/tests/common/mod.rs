@@ -13,11 +13,10 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
-use uv_interpreter::find_requested_python;
-
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_toolchain::{toolchains_for_version, PythonVersion};
+use uv_interpreter::managed::toolchains_for_version;
+use uv_interpreter::{find_requested_python, PythonVersion};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -341,7 +340,7 @@ pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path
     )
     .expect("Tests are run on a supported platform")
     .first()
-    .map(uv_toolchain::Toolchain::executable)
+    .map(uv_interpreter::managed::Toolchain::executable)
     // We'll search for the request Python on the PATH if not found in the toolchain versions
     // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
     .unwrap_or(PathBuf::from(python));

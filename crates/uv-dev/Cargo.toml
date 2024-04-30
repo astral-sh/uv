@@ -31,7 +31,6 @@ uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-resolver = { workspace = true }
-uv-toolchain = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true, features = ["schemars"] }
 

@@ -6,11 +6,11 @@ use std::path::PathBuf;
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
-use uv_toolchain::PythonVersion;
 use uv_warnings::warn_user_once;
 
+use crate::environment::python_environment::{detect_python_executable, detect_virtual_env};
 use crate::interpreter::InterpreterInfoError;
-use crate::python_environment::{detect_python_executable, detect_virtual_env};
+use crate::PythonVersion;
 use crate::{Error, Interpreter};
 
 /// Find a Python of a specific version, a binary with a name or a path to a binary.
