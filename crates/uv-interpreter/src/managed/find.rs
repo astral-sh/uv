@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use crate::downloads::{Arch, Error, Libc, Os};
+use crate::managed::downloads::Error;
 use crate::python_version::PythonVersion;
+use crate::selectors::{Arch, Libc, Os};
 
 use once_cell::sync::Lazy;
 

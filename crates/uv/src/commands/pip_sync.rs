@@ -26,13 +26,12 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment, Target};
+use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion, Target};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
 use uv_resolver::{DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
-use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 

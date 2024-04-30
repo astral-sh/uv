@@ -8,7 +8,7 @@ use tracing::{debug, info};
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
-use crate::cfg::PyVenvConfiguration;
+use crate::environment::cfg::PyVenvConfiguration;
 use crate::{find_default_python, find_requested_python, Error, Interpreter, Target};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.

@@ -19,7 +19,7 @@ uv-configuration = { workspace = true, features = ["schemars", "serde"] }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
 uv-resolver = { workspace = true, features = ["schemars", "serde"] }
-uv-toolchain = { workspace = true, features = ["schemars", "serde"] }
+uv-interpreter = { workspace = true, features = ["schemars"] }
 uv-warnings = { workspace = true }
 
 dirs-sys = { workspace = true }

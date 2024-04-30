@@ -16,10 +16,8 @@ use platform_tags::{Tags, TagsError};
 use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
-use uv_toolchain::PythonVersion;
 
-use crate::Virtualenv;
-use crate::{Error, Target};
+use crate::{Error, PythonVersion, Target, Virtualenv};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
