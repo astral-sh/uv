@@ -2141,7 +2141,7 @@ impl std::fmt::Display for VersionParseError {
             } => {
                 write!(
                     f,
-                    "after parsing {version}, found {remaining:?} after it, \
+                    "after parsing '{version}', found '{remaining}', \
                      which is not part of a valid version",
                 )
             }

@@ -1986,10 +1986,11 @@ mod tests {
     fn error_invalid_prerelease() {
         assert_snapshot!(
             parse_pepe508_err("name==1.0.org1"),
-            @"
-            after parsing 1.0, found \".org1\" after it, which is not part of a valid version
-            name==1.0.org1
-                ^^^^^^^^^^"
+            @r###"
+        after parsing '1.0', found '.org1', which is not part of a valid version
+        name==1.0.org1
+            ^^^^^^^^^^
+        "###
         );
     }
 
