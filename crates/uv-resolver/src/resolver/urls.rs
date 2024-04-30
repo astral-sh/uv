@@ -41,7 +41,7 @@ impl Urls {
         for requirement in manifest.requirements(markers, dependencies) {
             match &requirement.source {
                 UvSource::Registry { .. } => {}
-                UvSource::Url { url, .. } => {
+                UvSource::Url { url, .. } | UvSource::Path { url, .. } => {
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
                         if !is_equal(&previous, url) {
                             return Err(ResolveError::ConflictingUrlsDirect(
@@ -64,17 +64,6 @@ impl Urls {
                                     url.verbatim().to_string(),
                                 ));
                             }
-                        }
-                    }
-                }
-                UvSource::Path { url, .. } => {
-                    if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
-                        if !is_equal(&previous, url) {
-                            return Err(ResolveError::ConflictingUrlsDirect(
-                                requirement.name.clone(),
-                                previous.verbatim().to_string(),
-                                url.verbatim().to_string(),
-                            ));
                         }
                     }
                 }
