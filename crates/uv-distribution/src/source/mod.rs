@@ -1556,7 +1556,7 @@ async fn read_pkg_info(
     Ok(metadata)
 }
 
-/// Read the [`Metadata23`] from a source distribution's `pyproject.tom` file, if it defines static
+/// Read the [`Metadata23`] from a source distribution's `pyproject.toml` file, if it defines static
 /// metadata consistent with PEP 621.
 async fn read_pyproject_toml(
     source_tree: &Path,
