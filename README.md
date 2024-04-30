@@ -508,6 +508,8 @@ uv accepts the following command-line arguments as environment variables:
   file as the constraints file. Uses space-separated list of files.
 - `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this
   as a link mode.
+- `UV_NO_BUILD_ISOLATION`: Equivalent to the `--no-build-isolation` command-line argument. If set,
+  uv will skip isolation when building source distributions.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
