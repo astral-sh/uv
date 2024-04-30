@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
-use tracing::debug;
+use tracing::{debug, enabled, Level};
 
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable,
@@ -30,7 +30,9 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
+use uv_installer::{
+    BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SatisfiesResult, SitePackages,
+};
 use uv_interpreter::{Interpreter, PythonEnvironment, Target};
 use uv_normalize::PackageName;
 use uv_requirements::{
@@ -173,28 +175,46 @@ pub(crate) async fn pip_install(
     // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
     // enough to let us remove this check. But right now, for large environments, it's an order of
     // magnitude faster to validate the environment than to resolve the requirements.
-    if reinstall.is_none()
-        && upgrade.is_none()
-        && source_trees.is_empty()
-        && overrides.is_empty()
-        && site_packages.satisfies(&requirements, &editables, &constraints)?
-    {
-        let num_requirements = requirements.len() + editables.len();
-        let s = if num_requirements == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Audited {} in {}",
-                format!("{num_requirements} package{s}").bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-        if dry_run {
-            writeln!(printer.stderr(), "Would make no changes")?;
+    if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
+        match site_packages.satisfies(&requirements, &editables, &constraints)? {
+            SatisfiesResult::Fresh {
+                recursive_requirements,
+            } => {
+                if enabled!(Level::DEBUG) {
+                    for requirement in recursive_requirements
+                        .iter()
+                        .map(ToString::to_string)
+                        .sorted()
+                    {
+                        debug!("Requirement satisfied: {requirement}");
+                    }
+                }
+
+                debug!(
+                    "All editables satisfied: {}",
+                    editables.iter().map(ToString::to_string).join(" | ")
+                );
+                let num_requirements = requirements.len() + editables.len();
+                let s = if num_requirements == 1 { "" } else { "s" };
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Audited {} in {}",
+                        format!("{num_requirements} package{s}").bold(),
+                        elapsed(start.elapsed())
+                    )
+                    .dimmed()
+                )?;
+                if dry_run {
+                    writeln!(printer.stderr(), "Would make no changes")?;
+                }
+                return Ok(ExitStatus::Success);
+            }
+            SatisfiesResult::Unsatisfied(requirement) => {
+                debug!("At least one requirement is not satisfied: {requirement}");
+            }
         }
-        return Ok(ExitStatus::Success);
     }
 
     let interpreter = venv.interpreter().clone();
