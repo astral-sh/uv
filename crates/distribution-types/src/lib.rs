@@ -477,7 +477,7 @@ impl SourceDist {
         }
     }
 
-    /// Returns the path to the source distribution, if if it's a local distribution.
+    /// Returns the path to the source distribution, if it's a local distribution.
     pub fn as_path(&self) -> Option<&Path> {
         match self {
             Self::Path(dist) => Some(&dist.path),
