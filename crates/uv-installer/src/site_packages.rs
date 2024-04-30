@@ -9,7 +9,7 @@ use url::Url;
 
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::{Requirement, VerbatimUrl};
+use pep508_rs::{Requirement, VerbatimUrl, VersionOrUrlRef};
 use requirements_txt::{EditableRequirement, RequirementEntry, RequirementsTxtRequirement};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
@@ -397,7 +397,10 @@ impl<'a> SitePackages<'a> {
                     for constraint in constraints {
                         match RequirementSatisfaction::check(
                             distribution,
-                            constraint.version_or_url.as_ref().map(Into::into),
+                            constraint
+                                .version_or_url
+                                .as_ref()
+                                .map(VersionOrUrlRef::from),
                             constraint,
                         )? {
                             RequirementSatisfaction::Mismatch

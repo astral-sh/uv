@@ -10,7 +10,7 @@ use distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDist,
     InstalledMetadata, InstalledVersion, Name, SourceDist,
 };
-use pep508_rs::{Requirement, VersionOrUrl};
+use pep508_rs::{Requirement, VersionOrUrl, VersionOrUrlRef};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_configuration::{NoBinary, Reinstall};
@@ -185,7 +185,10 @@ impl<'a> Planner<'a> {
                     [distribution] => {
                         match RequirementSatisfaction::check(
                             distribution,
-                            requirement.version_or_url.as_ref().map(Into::into),
+                            requirement
+                                .version_or_url
+                                .as_ref()
+                                .map(VersionOrUrlRef::from),
                             requirement,
                         )? {
                             RequirementSatisfaction::Mismatch => {}
