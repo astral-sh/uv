@@ -370,8 +370,11 @@ pub(crate) struct PipCompileArgs {
     pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
+
+    #[arg(long, overrides_with("refresh"), hide = true)]
+    pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
@@ -474,8 +477,11 @@ pub(crate) struct PipCompileArgs {
     pub(crate) no_system: bool,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
-    #[arg(long, short = 'U')]
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
     pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
     /// file.
@@ -624,8 +630,11 @@ pub(crate) struct PipSyncArgs {
     pub(crate) src_file: Vec<PathBuf>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
-    #[arg(long, alias = "force-reinstall")]
+    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub(crate) reinstall: bool,
+
+    #[arg(long, overrides_with("reinstall"), hide = true)]
+    pub(crate) no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[arg(long)]
@@ -644,8 +653,11 @@ pub(crate) struct PipSyncArgs {
     pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
+
+    #[arg(long, overrides_with("refresh"), hide = true)]
+    pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
@@ -971,16 +983,22 @@ pub(crate) struct PipInstallArgs {
     pub(crate) no_all_extras: bool,
 
     /// Allow package upgrades.
-    #[arg(long, short = 'U')]
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
     pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
 
     /// Allow upgrade of a specific package.
     #[arg(long, short = 'P')]
     pub(crate) upgrade_package: Vec<PackageName>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
-    #[arg(long, alias = "force-reinstall")]
+    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub(crate) reinstall: bool,
+
+    #[arg(long, overrides_with("reinstall"), hide = true)]
+    pub(crate) no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[arg(long)]
@@ -999,8 +1017,11 @@ pub(crate) struct PipInstallArgs {
     pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
+
+    #[arg(long, overrides_with("refresh"), hide = true)]
+    pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
