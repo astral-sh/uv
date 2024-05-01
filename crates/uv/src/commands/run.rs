@@ -268,6 +268,7 @@ async fn environment_for_run(
         python_env.into_interpreter(),
         uv_virtualenv::Prompt::None,
         false,
+        false,
     )?;
 
     // Determine the tags, markers, and interpreter to use for resolution.
