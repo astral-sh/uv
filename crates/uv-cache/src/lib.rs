@@ -898,13 +898,17 @@ pub enum Refresh {
 
 impl Refresh {
     /// Determine the refresh strategy to use based on the command-line arguments.
-    pub fn from_args(refresh: bool, refresh_package: Vec<PackageName>) -> Self {
-        if refresh {
-            Self::All(Timestamp::now())
-        } else if !refresh_package.is_empty() {
-            Self::Packages(refresh_package, Timestamp::now())
-        } else {
-            Self::None
+    pub fn from_args(refresh: Option<bool>, refresh_package: Vec<PackageName>) -> Self {
+        match refresh {
+            Some(true) => Self::All(Timestamp::now()),
+            Some(false) => Self::None,
+            None => {
+                if refresh_package.is_empty() {
+                    Self::None
+                } else {
+                    Self::Packages(refresh_package, Timestamp::now())
+                }
+            }
         }
     }
 
