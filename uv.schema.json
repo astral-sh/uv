@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ToolUv",
-  "description": "A `[tool.uv]` section.",
+  "description": "Metadata and configuration for uv.",
   "type": "object",
   "properties": {
     "cache-dir": {

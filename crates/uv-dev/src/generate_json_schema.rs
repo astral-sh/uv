@@ -13,7 +13,9 @@ use crate::ROOT_DIR;
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
-// The name is used in the schema
+// The names and docstrings of this struct and the types it contains are used as `title` and
+// `description` in uv.schema.json, see https://github.com/SchemaStore/schemastore/blob/master/editor-features.md#title-as-an-expected-object-type
+/// Metadata and configuration for uv.
 struct ToolUv {
     #[serde(flatten)]
     options: Options,
