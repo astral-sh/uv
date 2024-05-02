@@ -1745,7 +1745,7 @@ mod test {
         RequirementsTxt {
             requirements: [
                 RequirementEntry {
-                    requirement: Uv(
+                    requirement: Named(
                         Requirement {
                             name: PackageName(
                                 "flask",
@@ -1804,7 +1804,7 @@ mod test {
         RequirementsTxt {
             requirements: [
                 RequirementEntry {
-                    requirement: Uv(
+                    requirement: Named(
                         Requirement {
                             name: PackageName(
                                 "flask",
@@ -1991,7 +1991,7 @@ mod test {
         RequirementsTxt {
             requirements: [
                 RequirementEntry {
-                    requirement: Uv(
+                    requirement: Named(
                         Requirement {
                             name: PackageName(
                                 "httpx",
@@ -2009,7 +2009,7 @@ mod test {
                     hashes: [],
                 },
                 RequirementEntry {
-                    requirement: Uv(
+                    requirement: Named(
                         Requirement {
                             name: PackageName(
                                 "flask",
@@ -2034,7 +2034,7 @@ mod test {
                     ],
                 },
                 RequirementEntry {
-                    requirement: Uv(
+                    requirement: Named(
                         Requirement {
                             name: PackageName(
                                 "requests",
@@ -2059,7 +2059,7 @@ mod test {
                     ],
                 },
                 RequirementEntry {
-                    requirement: Uv(
+                    requirement: Named(
                         Requirement {
                             name: PackageName(
                                 "black",
@@ -2082,7 +2082,7 @@ mod test {
                     hashes: [],
                 },
                 RequirementEntry {
-                    requirement: Uv(
+                    requirement: Named(
                         Requirement {
                             name: PackageName(
                                 "mypy",

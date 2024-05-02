@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Uv(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "tomli",
@@ -23,7 +23,7 @@ RequirementsTxt {
             hashes: [],
         },
         RequirementEntry {
-            requirement: Uv(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "numpy",

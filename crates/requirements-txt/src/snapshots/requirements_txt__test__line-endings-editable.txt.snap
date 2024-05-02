@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Uv(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "numpy",
@@ -23,7 +23,7 @@ RequirementsTxt {
             hashes: [],
         },
         RequirementEntry {
-            requirement: Uv(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "pandas",
@@ -36,6 +36,21 @@ RequirementsTxt {
                     marker: None,
                     source: Url {
                         subdirectory: None,
+                        location: Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "github.com",
+                                ),
+                            ),
+                            port: None,
+                            path: "/pandas-dev/pandas",
+                            query: None,
+                            fragment: None,
+                        },
                         url: VerbatimUrl {
                             url: Url {
                                 scheme: "https",

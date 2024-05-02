@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Uv(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "inflection",
@@ -28,7 +28,7 @@ RequirementsTxt {
             hashes: [],
         },
         RequirementEntry {
-            requirement: Uv(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "upsidedown",
@@ -51,7 +51,7 @@ RequirementsTxt {
             hashes: [],
         },
         RequirementEntry {
-            requirement: Uv(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "numpy",
@@ -69,7 +69,7 @@ RequirementsTxt {
             hashes: [],
         },
         RequirementEntry {
-            requirement: Uv(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "pandas",

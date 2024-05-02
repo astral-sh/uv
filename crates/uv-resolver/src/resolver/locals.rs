@@ -212,7 +212,7 @@ mod tests {
         // Extract from a source distribution in a URL.
         let url = VerbatimUrl::from_url(Url::parse("https://example.com/foo-1.0.0+local.tar.gz")?);
         let source =
-            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
         let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
@@ -221,14 +221,14 @@ mod tests {
             "https://example.com/foo-1.0.0+local-cp39-cp39-linux_x86_64.whl",
         )?);
         let source =
-            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
         let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Don't extract anything if the URL is opaque.
         let url = VerbatimUrl::from_url(Url::parse("git+https://example.com/foo/bar")?);
         let source =
-            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.raw()).unwrap(), url);
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
         let locals: Vec<_> = iter_locals(&source).collect();
         assert!(locals.is_empty());
 
