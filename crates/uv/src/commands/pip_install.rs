@@ -657,7 +657,7 @@ async fn resolve(
                     index: None,
                 },
                 InstalledVersion::Url(url, _version) => {
-                    let parsed_url = ParsedUrl::try_from(url)?;
+                    let parsed_url = ParsedUrl::try_from(url.clone())?;
                     RequirementSource::from_parsed_url(
                         parsed_url,
                         VerbatimUrl::from_url(url.clone()),

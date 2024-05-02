@@ -331,7 +331,7 @@ impl<'a> SitePackages<'a> {
                             &requirement.extras,
                         ) {
                             let dependency = RequirementEntry {
-                                requirement: RequirementsTxtRequirement::Uv(
+                                requirement: RequirementsTxtRequirement::Named(
                                     Requirement::from_requirement(dependency)?,
                                 ),
                                 hashes: vec![],
@@ -352,7 +352,9 @@ impl<'a> SitePackages<'a> {
         // Verify that all non-editable requirements are met.
         while let Some(entry) = stack.pop() {
             let installed = match &entry.requirement {
-                RequirementsTxtRequirement::Uv(requirement) => self.get_packages(&requirement.name),
+                RequirementsTxtRequirement::Named(requirement) => {
+                    self.get_packages(&requirement.name)
+                }
                 RequirementsTxtRequirement::Unnamed(requirement) => {
                     self.get_urls(requirement.url.raw())
                 }
@@ -395,7 +397,7 @@ impl<'a> SitePackages<'a> {
                             entry.requirement.extras(),
                         ) {
                             let dependency = RequirementEntry {
-                                requirement: RequirementsTxtRequirement::Uv(
+                                requirement: RequirementsTxtRequirement::Named(
                                     Requirement::from_requirement(dependency)?,
                                 ),
                                 hashes: vec![],

@@ -99,7 +99,7 @@ impl HashStrategy {
 
             // Every requirement must be either a pinned version or a direct URL.
             let id = match &requirement {
-                RequirementsTxtRequirement::Uv(requirement) => {
+                RequirementsTxtRequirement::Named(requirement) => {
                     uv_requirement_to_package_id(requirement)?
                 }
                 RequirementsTxtRequirement::Unnamed(requirement) => {

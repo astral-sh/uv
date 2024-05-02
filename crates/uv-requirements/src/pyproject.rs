@@ -272,7 +272,7 @@ impl Pep621Metadata {
             }
         }
 
-        let uv_requirements = lower_requirements(
+        let requirements = lower_requirements(
             &project.dependencies.unwrap_or_default(),
             &project.optional_dependencies.unwrap_or_default(),
             &project.name,
@@ -283,19 +283,19 @@ impl Pep621Metadata {
         )?;
 
         // Parse out the project requirements.
-        let mut requirements = uv_requirements.dependencies;
+        let mut requirements_with_extras = requirements.dependencies;
 
         // Include any optional dependencies specified in `extras`.
         let mut used_extras = FxHashSet::default();
         if !extras.is_empty() {
             // Include the optional dependencies if the extras are requested.
-            for (extra, optional_requirements) in &uv_requirements.optional_dependencies {
+            for (extra, optional_requirements) in &requirements.optional_dependencies {
                 if extras.contains(extra) {
                     used_extras.insert(extra.clone());
-                    requirements.extend(flatten_extra(
+                    requirements_with_extras.extend(flatten_extra(
                         &project.name,
                         optional_requirements,
-                        &uv_requirements.optional_dependencies,
+                        &requirements.optional_dependencies,
                     ));
                 }
             }
@@ -303,7 +303,7 @@ impl Pep621Metadata {
 
         Ok(Some(Self {
             name: project.name,
-            requirements,
+            requirements: requirements_with_extras,
             used_extras,
         }))
     }

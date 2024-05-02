@@ -56,13 +56,13 @@ pub struct ParsedGitUrl {
     pub subdirectory: Option<PathBuf>,
 }
 
-impl TryFrom<&Url> for ParsedGitUrl {
+impl TryFrom<Url> for ParsedGitUrl {
     type Error = ParsedUrlError;
 
     /// Supports url both with `git+` prefix and without. With prefix is PEP 508, without is
     /// `tool.uv.sources`.
-    fn try_from(url_in: &Url) -> Result<Self, Self::Error> {
-        let subdirectory = get_subdirectory(url_in);
+    fn try_from(url_in: Url) -> Result<Self, Self::Error> {
+        let subdirectory = get_subdirectory(&url_in);
 
         let url = url_in
             .as_str()
@@ -87,12 +87,10 @@ pub struct ParsedArchiveUrl {
     pub subdirectory: Option<PathBuf>,
 }
 
-impl From<&Url> for ParsedArchiveUrl {
-    fn from(url: &Url) -> Self {
-        Self {
-            url: url.clone(),
-            subdirectory: get_subdirectory(url),
-        }
+impl From<Url> for ParsedArchiveUrl {
+    fn from(url: Url) -> Self {
+        let subdirectory = get_subdirectory(&url);
+        Self { url, subdirectory }
     }
 }
 
@@ -111,15 +109,15 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
 }
 
 /// Return the Git reference of the given URL, if it exists.
-pub fn git_reference(url: &Url) -> Result<Option<GitSha>, Error> {
+pub fn git_reference(url: Url) -> Result<Option<GitSha>, Error> {
     let ParsedGitUrl { url, .. } = ParsedGitUrl::try_from(url)?;
     Ok(url.precise())
 }
 
-impl TryFrom<&Url> for ParsedUrl {
+impl TryFrom<Url> for ParsedUrl {
     type Error = ParsedUrlError;
 
-    fn try_from(url: &Url) -> Result<Self, Self::Error> {
+    fn try_from(url: Url) -> Result<Self, Self::Error> {
         if let Some((prefix, ..)) = url.scheme().split_once('+') {
             match prefix {
                 "git" => Ok(Self::Git(ParsedGitUrl::try_from(url)?)),
@@ -129,11 +127,12 @@ impl TryFrom<&Url> for ParsedUrl {
                 }),
             }
         } else if url.scheme().eq_ignore_ascii_case("file") {
+            let path = url
+                .to_file_path()
+                .map_err(|()| ParsedUrlError::InvalidFileUrl(url.clone()))?;
             Ok(Self::LocalFile(ParsedLocalFileUrl {
-                url: url.clone(),
-                path: url
-                    .to_file_path()
-                    .map_err(|()| ParsedUrlError::InvalidFileUrl(url.clone()))?,
+                url,
+                path,
                 editable: false,
             }))
         } else {

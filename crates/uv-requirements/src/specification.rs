@@ -192,7 +192,7 @@ impl RequirementsSpecification {
                     .requirements
                     .into_iter()
                     .map(|requirement| RequirementEntry {
-                        requirement: RequirementsTxtRequirement::Uv(requirement),
+                        requirement: RequirementsTxtRequirement::Named(requirement),
                         hashes: vec![],
                     })
                     .collect(),
@@ -269,7 +269,7 @@ impl RequirementsSpecification {
             let source = Self::from_source(source, extras, client_builder).await?;
             for entry in source.requirements {
                 match entry.requirement {
-                    RequirementsTxtRequirement::Uv(requirement) => {
+                    RequirementsTxtRequirement::Named(requirement) => {
                         spec.constraints.push(requirement);
                     }
                     RequirementsTxtRequirement::Unnamed(requirement) => {

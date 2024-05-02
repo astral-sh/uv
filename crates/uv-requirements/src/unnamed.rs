@@ -71,7 +71,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
         futures::stream::iter(requirements)
             .map(|entry| async {
                 match entry.requirement {
-                    RequirementsTxtRequirement::Uv(requirement) => Ok(requirement),
+                    RequirementsTxtRequirement::Named(requirement) => Ok(requirement),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
                         Ok(Requirement::from_requirement(
                             Self::resolve_requirement(requirement, hasher, index, &database)

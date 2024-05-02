@@ -49,7 +49,7 @@ impl Requirement {
                 index: None,
             },
             Some(VersionOrUrl::Url(url)) => {
-                let direct_url = ParsedUrl::try_from(&url.to_url())?;
+                let direct_url = ParsedUrl::try_from(url.to_url())?;
                 RequirementSource::from_parsed_url(direct_url, url)
             }
         };

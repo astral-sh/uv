@@ -112,7 +112,7 @@ impl From<&ResolvedDist> for Requirement {
                     }
                 }
                 Dist::Source(SourceDist::Git(sdist)) => {
-                    let git_url = ParsedGitUrl::try_from(sdist.url.raw())
+                    let git_url = ParsedGitUrl::try_from(sdist.url.to_url())
                         .expect("urls must be valid at this point");
                     RequirementSource::Git {
                         url: sdist.url.clone(),

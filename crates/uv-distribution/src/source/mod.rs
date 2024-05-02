@@ -135,7 +135,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
                 let filename = dist.filename().expect("Distribution must have a filename");
-                let ParsedArchiveUrl { url, subdirectory } = ParsedArchiveUrl::from(dist.url.raw());
+                let ParsedArchiveUrl { url, subdirectory } =
+                    ParsedArchiveUrl::from(dist.url.to_url());
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self
@@ -186,7 +187,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .url
                     .filename()
                     .expect("Distribution must have a filename");
-                let ParsedArchiveUrl { url, subdirectory } = ParsedArchiveUrl::from(resource.url);
+                let ParsedArchiveUrl { url, subdirectory } =
+                    ParsedArchiveUrl::from(resource.url.clone());
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self
@@ -284,7 +286,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
                 let filename = dist.filename().expect("Distribution must have a filename");
-                let ParsedArchiveUrl { url, subdirectory } = ParsedArchiveUrl::from(dist.url.raw());
+                let ParsedArchiveUrl { url, subdirectory } =
+                    ParsedArchiveUrl::from(dist.url.to_url());
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self
@@ -328,7 +331,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .url
                     .filename()
                     .expect("Distribution must have a filename");
-                let ParsedArchiveUrl { url, subdirectory } = ParsedArchiveUrl::from(resource.url);
+                let ParsedArchiveUrl { url, subdirectory } =
+                    ParsedArchiveUrl::from(resource.url.clone());
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self

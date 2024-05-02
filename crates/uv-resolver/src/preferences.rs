@@ -30,7 +30,7 @@ impl Preference {
     pub fn from_entry(entry: RequirementEntry) -> Result<Self, PreferenceError> {
         Ok(Self {
             requirement: match entry.requirement {
-                RequirementsTxtRequirement::Uv(requirement) => requirement,
+                RequirementsTxtRequirement::Named(requirement) => requirement,
                 RequirementsTxtRequirement::Unnamed(requirement) => {
                     return Err(PreferenceError::Bare(requirement));
                 }

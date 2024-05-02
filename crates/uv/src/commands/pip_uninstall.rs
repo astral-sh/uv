@@ -97,7 +97,7 @@ pub(crate) async fn pip_uninstall(
         .requirements
         .into_iter()
         .partition_map(|entry| match entry.requirement {
-            RequirementsTxtRequirement::Uv(requirement) => Either::Left(requirement),
+            RequirementsTxtRequirement::Named(requirement) => Either::Left(requirement),
             RequirementsTxtRequirement::Unnamed(requirement) => Either::Right(requirement),
         });
 

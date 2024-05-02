@@ -118,7 +118,7 @@ impl CachedDist {
                         editable: dist.editable,
                     })))
                 } else {
-                    Ok(Some(ParsedUrl::try_from(dist.url.raw())?))
+                    Ok(Some(ParsedUrl::try_from(dist.url.to_url())?))
                 }
             }
         }

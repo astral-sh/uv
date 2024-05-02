@@ -477,7 +477,7 @@ impl RequirementsTxt {
                     // _requirements_, but we don't want to support that.
                     for entry in sub_constraints.requirements {
                         match entry.requirement {
-                            RequirementsTxtRequirement::Uv(requirement) => {
+                            RequirementsTxtRequirement::Named(requirement) => {
                                 data.constraints.push(requirement);
                             }
                             RequirementsTxtRequirement::Unnamed(_) => {

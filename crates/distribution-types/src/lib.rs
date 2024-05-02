@@ -56,10 +56,10 @@ pub use crate::index_url::*;
 pub use crate::installed::*;
 pub use crate::parsed_url::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::requirement::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::traits::*;
-pub use crate::uv_requirement::*;
 
 mod any;
 mod buildable;
@@ -73,10 +73,10 @@ mod index_url;
 mod installed;
 mod parsed_url;
 mod prioritized_distribution;
+mod requirement;
 mod resolution;
 mod resolved;
 mod traits;
-mod uv_requirement;
 
 #[derive(Debug, Clone)]
 pub enum VersionOrUrl<'a> {

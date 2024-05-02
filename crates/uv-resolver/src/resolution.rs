@@ -451,14 +451,14 @@ impl ResolutionGraph {
                     dist.version_id()
                 )
             };
-            let uv_requirements: Vec<_> = archive
+            let requirements: Vec<_> = archive
                 .metadata
                 .requires_dist
                 .iter()
                 .cloned()
                 .map(Requirement::from_requirement)
                 .collect::<Result<_, _>>()?;
-            for req in manifest.apply(uv_requirements.iter()) {
+            for req in manifest.apply(requirements.iter()) {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
                 };
