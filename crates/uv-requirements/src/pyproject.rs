@@ -799,8 +799,12 @@ mod test {
 
         assert_snapshot!(format_err(input), @r###"
         error: Failed to parse `pyproject.toml`
-          Caused by: Failed to parse entry for: `tqdm`
-          Caused by: relative URL without a base
+          Caused by: TOML parse error at line 9, column 8
+          |
+        9 | tqdm = { url = "§invalid#+#*Ä" }
+          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        data did not match any variant of untagged enum Source
+
         "###);
     }
 
