@@ -8,8 +8,8 @@ use thiserror::Error;
 use url::Url;
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, Requirement, RequirementSource,
-    Requirements, SourceDist,
+    BuiltDist, Dist, DistributionMetadata, GitSourceDist, LocalEditable, Requirement,
+    RequirementSource, Requirements, SourceDist,
 };
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use pypi_types::Metadata23;
@@ -173,7 +173,10 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                 }
                 Dist::from_http_url(requirement.name, merged_url)?
             }
-            RequirementSource::Git { url, .. } => Dist::from_git_url(requirement.name, url)?,
+            RequirementSource::Git { url, .. } => Dist::Source(SourceDist::Git(GitSourceDist {
+                name: requirement.name,
+                url,
+            })),
             RequirementSource::Path {
                 path: _,
                 url,
