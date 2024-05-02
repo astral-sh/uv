@@ -211,7 +211,7 @@ pub enum Source {
 /// The PEP 621 project metadata, with static requirements extracted in advance, joined
 /// with `tool.uv.sources`.
 #[derive(Debug)]
-pub struct UvMetadata {
+pub struct Pep621Metadata {
     /// The name of the project.
     pub name: PackageName,
     /// The requirements extracted from the project.
@@ -220,8 +220,8 @@ pub struct UvMetadata {
     pub used_extras: FxHashSet<ExtraName>,
 }
 
-impl UvMetadata {
-    /// Extract the static [`UvMetadata`] from a [`Project`] and [`ExtrasSpecification`], if
+impl Pep621Metadata {
+    /// Extract the static [`Pep621Metadata`] from a [`Project`] and [`ExtrasSpecification`], if
     /// possible.
     ///
     /// If the project specifies dynamic dependencies, or if the project specifies dynamic optional

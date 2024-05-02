@@ -14,7 +14,7 @@ use uv_configuration::{NoBinary, NoBuild};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::pyproject::{PyProjectToml, UvMetadata};
+use crate::pyproject::{Pep621Metadata, PyProjectToml};
 use crate::{ExtrasSpecification, RequirementsSource};
 
 #[derive(Debug, Default)]
@@ -179,7 +179,7 @@ impl RequirementsSpecification {
         let project_dir = path
             .parent()
             .context("pyproject.toml has no parent directory")?;
-        match UvMetadata::try_from(
+        match Pep621Metadata::try_from(
             pyproject,
             extras,
             project_dir,
