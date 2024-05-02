@@ -4,6 +4,7 @@ use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
+use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
@@ -40,7 +41,7 @@ use uv_requirements::{
     RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
+    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Lock, Manifest, Options,
     OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -84,6 +85,7 @@ pub(crate) async fn pip_install(
     system: bool,
     break_system_packages: bool,
     target: Option<Target>,
+    uv_lock: Option<String>,
     native_tls: bool,
     cache: Cache,
     dry_run: bool,
@@ -329,47 +331,6 @@ pub(crate) async fn pip_install(
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
-    // Resolve the requirements from the provided sources.
-    let requirements = {
-        // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(
-            requirements,
-            &hasher,
-            &resolve_dispatch,
-            &client,
-            &index,
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
-
-        // Resolve any source trees into requirements.
-        if !source_trees.is_empty() {
-            requirements.extend(
-                SourceTreeResolver::new(
-                    source_trees,
-                    extras,
-                    &hasher,
-                    &resolve_dispatch,
-                    &client,
-                    &index,
-                )
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?,
-            );
-        }
-
-        requirements
-    };
-
-    // Resolve the overrides from the provided sources.
-    let overrides =
-        NamedRequirementsResolver::new(overrides, &hasher, &resolve_dispatch, &client, &index)
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve()
-            .await?;
-
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command. If an editable is already
     // installed in the environment, we'll still re-build it here.
@@ -392,45 +353,93 @@ pub(crate) async fn pip_install(
         .await?
     };
 
-    let options = OptionsBuilder::new()
-        .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
-        .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
-        .index_strategy(index_strategy)
-        .build();
-
     // Resolve the requirements.
-    let resolution = match resolve(
-        requirements,
-        constraints,
-        overrides,
-        project,
-        &editables,
-        &hasher,
-        &site_packages,
-        &reinstall,
-        &upgrade,
-        &interpreter,
-        &tags,
-        &markers,
-        &client,
-        &flat_index,
-        &index,
-        &resolve_dispatch,
-        options,
-        printer,
-    )
-    .await
-    {
-        Ok(resolution) => Resolution::from(resolution),
-        Err(Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}"))
-                .context("No solution found when resolving dependencies:");
-            eprint!("{report:?}");
-            return Ok(ExitStatus::Failure);
+    let resolution = if let Some(ref root) = uv_lock {
+        let root = PackageName::new(root.to_string())?;
+        let encoded = fs::tokio::read_to_string("uv.lock").await?;
+        let lock: Lock = toml::from_str(&encoded)?;
+        lock.to_resolution(&markers, &tags, &root)
+    } else {
+        // Resolve the requirements from the provided sources.
+        let requirements = {
+            // Convert from unnamed to named requirements.
+            let mut requirements = NamedRequirementsResolver::new(
+                requirements,
+                &hasher,
+                &resolve_dispatch,
+                &client,
+                &index,
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve()
+            .await?;
+
+            // Resolve any source trees into requirements.
+            if !source_trees.is_empty() {
+                requirements.extend(
+                    SourceTreeResolver::new(
+                        source_trees,
+                        extras,
+                        &hasher,
+                        &resolve_dispatch,
+                        &client,
+                        &index,
+                    )
+                    .with_reporter(ResolverReporter::from(printer))
+                    .resolve()
+                    .await?,
+                );
+            }
+
+            requirements
+        };
+
+        // Resolve the overrides from the provided sources.
+        let overrides =
+            NamedRequirementsResolver::new(overrides, &hasher, &resolve_dispatch, &client, &index)
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?;
+
+        let options = OptionsBuilder::new()
+            .resolution_mode(resolution_mode)
+            .prerelease_mode(prerelease_mode)
+            .dependency_mode(dependency_mode)
+            .exclude_newer(exclude_newer)
+            .index_strategy(index_strategy)
+            .build();
+
+        match resolve(
+            requirements,
+            constraints,
+            overrides,
+            project,
+            &editables,
+            &hasher,
+            &site_packages,
+            &reinstall,
+            &upgrade,
+            &interpreter,
+            &tags,
+            &markers,
+            &client,
+            &flat_index,
+            &index,
+            &resolve_dispatch,
+            options,
+            printer,
+        )
+        .await
+        {
+            Ok(resolution) => Resolution::from(resolution),
+            Err(Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
+                let report = miette::Report::msg(format!("{err}"))
+                    .context("No solution found when resolving dependencies:");
+                eprint!("{report:?}");
+                return Ok(ExitStatus::Failure);
+            }
+            Err(err) => return Err(err.into()),
         }
-        Err(err) => return Err(err.into()),
     };
 
     // Re-initialize the in-flight map.
