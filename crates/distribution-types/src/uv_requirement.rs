@@ -63,7 +63,8 @@ impl Requirement {
 }
 
 impl Display for Requirement {
-    /// Note: This is for user display, not for requirements.txt
+    /// Display the [`Requirement`], with the intention of being shown directly to a user, rather
+    /// than for inclusion in a `requirements.txt` file.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
         if !self.extras.is_empty() {
