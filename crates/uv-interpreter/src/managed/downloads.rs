@@ -3,7 +3,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use crate::selectors::{Arch, ImplementationName, Libc, Os, PythonSelectorError};
+use crate::implementation::{Error as ImplementationError, ImplementationName};
+use crate::platform::{Arch, Error as PlatformError, Libc, Os};
 use crate::PythonVersion;
 use thiserror::Error;
 use uv_client::BetterReqwestError;
@@ -18,7 +19,9 @@ use uv_fs::Simplified;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    SelectorError(#[from] PythonSelectorError),
+    PlatformError(#[from] PlatformError),
+    #[error(transparent)]
+    ImplementationError(#[from] ImplementationError),
     #[error("invalid python version: {0}")]
     InvalidPythonVersion(String),
     #[error("download failed")]

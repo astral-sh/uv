@@ -3,8 +3,10 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use crate::managed::downloads::Error;
-use crate::python_version::PythonVersion;
-use crate::selectors::{Arch, Libc, Os};
+use crate::{
+    platform::{Arch, Libc, Os},
+    python_version::PythonVersion,
+};
 
 use once_cell::sync::Lazy;
 
