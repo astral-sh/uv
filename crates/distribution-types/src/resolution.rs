@@ -60,13 +60,13 @@ impl Resolution {
     /// Return the set of [`Requirement`]s that this resolution represents, exclusive of any
     /// editable requirements.
     pub fn requirements(&self) -> Vec<Requirement> {
-        let mut requirements: Vec<Requirement> = self
+        let mut requirements: Vec<_> = self
             .0
             .values()
             // Remove editable requirements
             .filter(|dist| !dist.is_editable())
-            .map(Into::into)
-            .collect::<Vec<_>>();
+            .map(Requirement::from)
+            .collect();
         requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
         requirements
     }
