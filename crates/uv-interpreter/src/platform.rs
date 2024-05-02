@@ -1,13 +1,8 @@
 use std::{
-    fmt::{self, Display},
+    fmt::{self},
     str::FromStr,
 };
 use thiserror::Error;
-
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub enum ImplementationName {
-    Cpython,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Platform {
@@ -51,49 +46,20 @@ pub enum Libc {
 }
 
 #[derive(Error, Debug)]
-pub enum PythonSelectorError {
+pub enum Error {
     #[error("Operating system not supported: {0}")]
     OsNotSupported(String),
     #[error("Architecture not supported: {0}")]
     ArchNotSupported(String),
     #[error("Libc type could not be detected")]
     LibcNotDetected(),
-    #[error("Implementation not supported: {0}")]
-    ImplementationNotSupported(String),
-}
-
-impl ImplementationName {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Cpython => "cpython",
-        }
-    }
-}
-
-impl FromStr for ImplementationName {
-    type Err = PythonSelectorError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "cpython" => Ok(Self::Cpython),
-            _ => Err(PythonSelectorError::ImplementationNotSupported(
-                s.to_string(),
-            )),
-        }
-    }
-}
-
-impl Display for ImplementationName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
 }
 
 impl Platform {
     pub fn new(os: Os, arch: Arch, libc: Libc) -> Self {
         Self { os, arch, libc }
     }
-    pub fn from_env() -> Result<Self, PythonSelectorError> {
+    pub fn from_env() -> Result<Self, Error> {
         Ok(Self::new(
             Os::from_env()?,
             Arch::from_env()?,
@@ -119,13 +85,13 @@ impl fmt::Display for Os {
 }
 
 impl Os {
-    pub(crate) fn from_env() -> Result<Self, PythonSelectorError> {
+    pub(crate) fn from_env() -> Result<Self, Error> {
         Self::from_str(std::env::consts::OS)
     }
 }
 
 impl FromStr for Os {
-    type Err = PythonSelectorError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
@@ -138,7 +104,7 @@ impl FromStr for Os {
             "dragonfly" => Ok(Self::Dragonfly),
             "illumos" => Ok(Self::Illumos),
             "haiku" => Ok(Self::Haiku),
-            _ => Err(PythonSelectorError::OsNotSupported(s.to_string())),
+            _ => Err(Error::OsNotSupported(s.to_string())),
         }
     }
 }
@@ -159,7 +125,7 @@ impl fmt::Display for Arch {
 }
 
 impl FromStr for Arch {
-    type Err = PythonSelectorError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
@@ -171,24 +137,24 @@ impl FromStr for Arch {
             "x86" | "i686" | "i386" => Ok(Self::X86),
             "x86_64" | "amd64" => Ok(Self::X86_64),
             "s390x" => Ok(Self::S390X),
-            _ => Err(PythonSelectorError::ArchNotSupported(s.to_string())),
+            _ => Err(Error::ArchNotSupported(s.to_string())),
         }
     }
 }
 
 impl Arch {
-    pub(crate) fn from_env() -> Result<Self, PythonSelectorError> {
+    pub(crate) fn from_env() -> Result<Self, Error> {
         Self::from_str(std::env::consts::ARCH)
     }
 }
 
 impl Libc {
-    pub(crate) fn from_env() -> Result<Self, PythonSelectorError> {
+    pub(crate) fn from_env() -> Result<Self, Error> {
         // TODO(zanieb): Perform this lookup
         match std::env::consts::OS {
             "linux" => Ok(Libc::Gnu),
             "windows" | "macos" => Ok(Libc::None),
-            _ => Err(PythonSelectorError::LibcNotDetected()),
+            _ => Err(Error::LibcNotDetected()),
         }
     }
 }
