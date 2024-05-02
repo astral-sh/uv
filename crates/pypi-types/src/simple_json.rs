@@ -64,7 +64,7 @@ where
         return Ok(None);
     };
     Ok(Some(
-        LenientVersionSpecifiers::from_str(&string).map(Into::into),
+        LenientVersionSpecifiers::from_str(&string).map(VersionSpecifiers::from),
     ))
 }
 
