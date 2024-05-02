@@ -36,13 +36,13 @@ pub enum Pep621Error {
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
     CantBeDynamic(&'static str),
     #[error("Failed to parse entry for: `{0}`")]
-    LoweringError(PackageName, #[source] UvSourcesLoweringError),
+    LoweringError(PackageName, #[source] LoweringError),
 }
 
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.
 #[derive(Debug, Error)]
-pub enum UvSourcesLoweringError {
+pub enum LoweringError {
     #[error("Invalid URL structure")]
     DirectUrl(#[from] Box<ParsedUrlError>),
     #[error("Unsupported path (can't convert to URL): `{}`", _0.user_display())]
@@ -368,7 +368,7 @@ pub(crate) fn lower_requirement(
     project_sources: &HashMap<PackageName, Source>,
     workspace_sources: &HashMap<PackageName, Source>,
     workspace_packages: &HashMap<PackageName, String>,
-) -> Result<Requirement, UvSourcesLoweringError> {
+) -> Result<Requirement, LoweringError> {
     let source = project_sources
         .get(&requirement.name)
         .or(workspace_sources.get(&requirement.name))
@@ -382,13 +382,13 @@ pub(crate) fn lower_requirement(
         })
     ) && workspace_packages.contains_key(&requirement.name)
     {
-        return Err(UvSourcesLoweringError::UndeclaredWorkspacePackage);
+        return Err(LoweringError::UndeclaredWorkspacePackage);
     }
 
     let Some(source) = source else {
         // Support recursive editable inclusions. TODO(konsti): This is a workspace feature.
         return if requirement.version_or_url.is_none() && &requirement.name != project_name {
-            Err(UvSourcesLoweringError::UnconstrainedVersion)
+            Err(LoweringError::UnconstrainedVersion)
         } else {
             Ok(Requirement::from_requirement(requirement).map_err(Box::new)?)
         };
@@ -403,7 +403,7 @@ pub(crate) fn lower_requirement(
             branch,
         } => {
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                return Err(UvSourcesLoweringError::ConflictingUrls);
+                return Err(LoweringError::ConflictingUrls);
             }
             // TODO(konsti): We know better than this enum
             let reference = match (rev, tag, branch) {
@@ -417,7 +417,7 @@ pub(crate) fn lower_requirement(
                 }
                 (None, Some(tag), None) => GitReference::BranchOrTag(tag),
                 (None, None, Some(branch)) => GitReference::BranchOrTag(branch),
-                _ => return Err(UvSourcesLoweringError::MoreThanOneGitRef),
+                _ => return Err(LoweringError::MoreThanOneGitRef),
             };
 
             let mut url = Url::parse(&format!("git+{git}"))?;
@@ -441,7 +441,7 @@ pub(crate) fn lower_requirement(
         }
         Source::Url { url, subdirectory } => {
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                return Err(UvSourcesLoweringError::ConflictingUrls);
+                return Err(LoweringError::ConflictingUrls);
             }
             let url = VerbatimUrl::from_url(Url::parse(&url)?).with_given(url);
             RequirementSource::Url {
@@ -451,37 +451,37 @@ pub(crate) fn lower_requirement(
         }
         Source::Path { path, editable } => {
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                return Err(UvSourcesLoweringError::ConflictingUrls);
+                return Err(LoweringError::ConflictingUrls);
             }
             path_source(path, project_dir, editable)?
         }
         Source::Registry { index } => match requirement.version_or_url {
-            None => return Err(UvSourcesLoweringError::UnconstrainedVersion),
+            None => return Err(LoweringError::UnconstrainedVersion),
             Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
                 version,
                 index: Some(index),
             },
-            Some(VersionOrUrl::Url(_)) => return Err(UvSourcesLoweringError::ConflictingUrls),
+            Some(VersionOrUrl::Url(_)) => return Err(LoweringError::ConflictingUrls),
         },
         Source::Workspace {
             workspace,
             editable,
         } => {
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                return Err(UvSourcesLoweringError::ConflictingUrls);
+                return Err(LoweringError::ConflictingUrls);
             }
             if !workspace {
                 todo!()
             }
             let path = workspace_packages
                 .get(&requirement.name)
-                .ok_or(UvSourcesLoweringError::UndeclaredWorkspacePackage)?
+                .ok_or(LoweringError::UndeclaredWorkspacePackage)?
                 .clone();
             path_source(path, project_dir, editable)?
         }
         Source::CatchAll { .. } => {
             // This is better than a serde error about not matching any enum variant
-            return Err(UvSourcesLoweringError::InvalidEntry);
+            return Err(LoweringError::InvalidEntry);
         }
     };
     Ok(Requirement {
@@ -497,15 +497,14 @@ fn path_source(
     path: String,
     project_dir: &Path,
     editable: Option<bool>,
-) -> Result<RequirementSource, UvSourcesLoweringError> {
+) -> Result<RequirementSource, LoweringError> {
     let path_buf = PathBuf::from(&path);
     let path_buf = path_buf
         .absolutize_from(project_dir)
-        .map_err(|err| UvSourcesLoweringError::AbsolutizeError(path.clone(), err))?
+        .map_err(|err| LoweringError::AbsolutizeError(path.clone(), err))?
         .to_path_buf();
     let url = VerbatimUrl::from_url(
-        Url::from_file_path(&path_buf)
-            .map_err(|()| UvSourcesLoweringError::PathToUrl(path_buf.clone()))?,
+        Url::from_file_path(&path_buf).map_err(|()| LoweringError::PathToUrl(path_buf.clone()))?,
     )
     .with_given(path);
     Ok(RequirementSource::Path {
