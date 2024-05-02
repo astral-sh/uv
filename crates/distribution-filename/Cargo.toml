@@ -13,7 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [features]
-rkyv = ["dep:rkyv", "pep440_rs/rkyv"]
+rkyv = ["dep:rkyv", "pep440_rs/rkyv", "uv-normalize/rkyv"]
 
 [dependencies]
 pep440_rs = { workspace = true }
