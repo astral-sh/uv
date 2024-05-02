@@ -13,7 +13,6 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use indexmap::IndexMap;
-use path_absolutize::Absolutize;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -510,17 +509,9 @@ fn path_source(
     project_dir: &Path,
     editable: Option<bool>,
 ) -> Result<RequirementSource, LoweringError> {
-    let path_buf = PathBuf::from(&path);
-    let path_buf = path_buf
-        .absolutize_from(project_dir)
-        .map_err(|err| LoweringError::AbsolutizeError(path.clone(), err))?
-        .to_path_buf();
-    let url = VerbatimUrl::from_url(
-        Url::from_file_path(&path_buf).map_err(|()| LoweringError::PathToUrl(path_buf.clone()))?,
-    )
-    .with_given(path);
+    let url = VerbatimUrl::parse_path(&path, project_dir);
     Ok(RequirementSource::Path {
-        path: path_buf,
+        path: PathBuf::from(path),
         url,
         editable,
     })
