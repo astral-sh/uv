@@ -128,8 +128,10 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
-                // We need to join relative paths inside pyproject.toml to this.
                 let contents = uv_fs::read_to_string(&path).await?;
+                // We need use this path as base for the relative paths inside pyproject.toml, so
+                // we need the absolute path instead of a potentially relative path. E.g. with
+                // `foo = { path = "../foo" }`, we will join `../foo` onto this path.
                 let path = uv_fs::absolutize_path(path)?;
                 Self::parse_direct_pyproject_toml(&contents, extras, path.as_ref())
                     .with_context(|| format!("Failed to parse `{}`", path.user_display()))?
