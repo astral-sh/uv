@@ -8,9 +8,9 @@ use tracing::{debug, instrument};
 use uv_cache::Cache;
 use uv_warnings::warn_user_once;
 
-use crate::environment::python_environment::{detect_python_executable, detect_virtual_env};
 use crate::interpreter::InterpreterInfoError;
 use crate::py_launcher::{py_list_paths, Error as PyLauncherError, PyListPath};
+use crate::virtualenv::{detect_virtualenv, virtualenv_python_executable};
 use crate::PythonVersion;
 use crate::{Error, Interpreter};
 
@@ -506,8 +506,8 @@ fn find_version(
 
     // Check if the venv Python matches.
     if !system {
-        if let Some(venv) = detect_virtual_env()? {
-            let executable = detect_python_executable(venv);
+        if let Some(venv) = detect_virtualenv()? {
+            let executable = virtualenv_python_executable(venv);
             let interpreter = Interpreter::query(executable, cache)?;
 
             if version_matches(&interpreter) {

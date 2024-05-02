@@ -13,7 +13,7 @@ use tracing::info;
 
 use crate::{Error, Prompt};
 use uv_fs::{cachedir, Simplified};
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, VirtualEnvironment};
 use uv_version::version;
 
 /// The bash activate scripts with the venv dependent paths patches out
@@ -48,7 +48,7 @@ pub fn create_bare_venv(
     prompt: Prompt,
     system_site_packages: bool,
     force: bool,
-) -> Result<Virtualenv, Error> {
+) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
     // from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
@@ -258,7 +258,7 @@ pub fn create_bare_venv(
     fs::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
     fs::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
 
-    Ok(Virtualenv {
+    Ok(VirtualEnvironment {
         scheme: Scheme {
             purelib: location.join(&interpreter.virtualenv().purelib),
             platlib: location.join(&interpreter.virtualenv().platlib),

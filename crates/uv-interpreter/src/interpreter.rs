@@ -17,7 +17,7 @@ use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
-use crate::{Error, PythonVersion, Target, Virtualenv};
+use crate::{Error, PythonVersion, Target, VirtualEnvironment};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -98,7 +98,7 @@ impl Interpreter {
 
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
-    pub fn with_virtualenv(self, virtualenv: Virtualenv) -> Self {
+    pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
         Self {
             scheme: virtualenv.scheme,
             sys_executable: virtualenv.executable,

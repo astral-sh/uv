@@ -14,14 +14,13 @@ use std::process::ExitStatus;
 
 use thiserror::Error;
 
-pub use crate::environment::cfg::PyVenvConfiguration;
-pub use crate::environment::python_environment::PythonEnvironment;
-pub use crate::environment::virtualenv::Virtualenv;
+pub use crate::environment::PythonEnvironment;
 pub use crate::find_python::{find_best_python, find_default_python, find_requested_python};
 pub use crate::interpreter::Interpreter;
 use crate::interpreter::InterpreterInfoError;
 pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
+pub use crate::virtualenv::{PyVenvConfiguration, VirtualEnvironment};
 
 mod environment;
 mod find_python;
@@ -31,6 +30,7 @@ mod py_launcher;
 mod python_version;
 pub mod selectors;
 mod target;
+mod virtualenv;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -76,7 +76,7 @@ pub enum Error {
     #[error("Failed to write to cache")]
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Broken virtualenv: Failed to parse pyvenv.cfg")]
-    Cfg(#[from] environment::cfg::Error),
+    Cfg(#[from] virtualenv::Error),
     #[error("Error finding `{}` in PATH", _0.to_string_lossy())]
     WhichError(OsString, #[source] which::Error),
     #[error("Can't use Python at `{interpreter}`")]
