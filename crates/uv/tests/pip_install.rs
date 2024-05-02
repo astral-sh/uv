@@ -210,7 +210,7 @@ dependencies = ["flask==1.0.x"]
 
     ----- stderr -----
     error: Failed to parse `pyproject.toml`
-      Caused by: after parsing 1.0, found ".x" after it, which is not part of a valid version
+      Caused by: after parsing '1.0', found '.x', which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
     "###
