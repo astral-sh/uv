@@ -363,37 +363,36 @@ impl<
                         .term_intersection_for_package(&next)
                         .expect("a package was chosen but we don't have a term.");
 
-                    let reason = {
-                        if let PubGrubPackage::Package(ref package_name, _, _) = next {
-                            // Check if the decision was due to the package being unavailable
-                            self.unavailable_packages
-                                .get(package_name)
-                                .map(|entry| match *entry {
-                                    UnavailablePackage::NoIndex => {
-                                        "was not found in the provided package locations"
-                                    }
-                                    UnavailablePackage::Offline => "was not found in the cache",
-                                    UnavailablePackage::NotFound => {
-                                        "was not found in the package registry"
-                                    }
-                                    UnavailablePackage::InvalidMetadata(_) => {
-                                        "was found, but the metadata could not be parsed"
-                                    }
-                                    UnavailablePackage::InvalidStructure(_) => {
-                                        "was found, but has an invalid format"
-                                    }
-                                })
-                        } else {
-                            None
+                    if let PubGrubPackage::Package(ref package_name, _, _) = next {
+                        // Check if the decision was due to the package being unavailable
+                        if let Some(entry) = self.unavailable_packages.get(package_name) {
+                            let reason = match *entry {
+                                UnavailablePackage::NoIndex => {
+                                    "was not found in the provided package locations"
+                                }
+                                UnavailablePackage::Offline => "was not found in the cache",
+                                UnavailablePackage::NotFound => {
+                                    "was not found in the package registry"
+                                }
+                                UnavailablePackage::InvalidMetadata(_) => {
+                                    "was found, but the metadata could not be parsed"
+                                }
+                                UnavailablePackage::InvalidStructure(_) => {
+                                    "was found, but has an invalid format"
+                                }
+                            };
+                            let inc = Incompatibility::custom_term(
+                                next.clone(),
+                                term_intersection.clone(),
+                                reason.to_string(),
+                            );
+
+                            state.add_incompatibility(inc);
+                            continue;
                         }
-                    };
+                    }
 
-                    let inc = Incompatibility::no_versions(
-                        next.clone(),
-                        term_intersection.clone(),
-                        reason.map(ToString::to_string),
-                    );
-
+                    let inc = Incompatibility::no_versions(next.clone(), term_intersection.clone());
                     state.add_incompatibility(inc);
                     continue;
                 }
@@ -436,7 +435,7 @@ impl<
                             incompatibility.to_string()
                         }
                     };
-                    state.add_incompatibility(Incompatibility::unavailable(
+                    state.add_incompatibility(Incompatibility::custom_version(
                         next.clone(),
                         version.clone(),
                         reason,
@@ -470,7 +469,7 @@ impl<
                     .await?
                 {
                     Dependencies::Unavailable(reason) => {
-                        state.add_incompatibility(Incompatibility::unavailable(
+                        state.add_incompatibility(Incompatibility::custom_version(
                             package.clone(),
                             version.clone(),
                             reason.clone(),

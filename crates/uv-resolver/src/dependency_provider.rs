@@ -15,6 +15,7 @@ impl DependencyProvider for UvDependencyProvider {
     type P = PubGrubPackage;
     type V = Version;
     type VS = Range<Version>;
+    type M = String;
     fn prioritize(&self, _package: &Self::P, _range: &Self::VS) -> Self::Priority {
         unimplemented!()
     }
@@ -34,7 +35,7 @@ impl DependencyProvider for UvDependencyProvider {
         &self,
         _package: &Self::P,
         _version: &Self::V,
-    ) -> Result<Dependencies<Vec<(Self::P, Self::VS)>>, Self::Err> {
+    ) -> Result<Dependencies<Vec<(Self::P, Self::VS)>, Self::M>, Self::Err> {
         unimplemented!()
     }
 }
