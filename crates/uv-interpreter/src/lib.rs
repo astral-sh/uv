@@ -27,6 +27,7 @@ mod environment;
 mod find_python;
 mod interpreter;
 pub mod managed;
+mod py_launcher;
 mod python_version;
 pub mod selectors;
 mod target;
@@ -49,8 +50,8 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to run `py --list-paths` to find Python installations. Is Python installed?")]
-    PyList(#[source] io::Error),
+    #[error(transparent)]
+    PyLauncher(#[from] py_launcher::Error),
     #[cfg(windows)]
     #[error(
         "No Python {0} found through `py --list-paths` or in `PATH`. Is Python {0} installed?"
