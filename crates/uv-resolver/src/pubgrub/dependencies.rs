@@ -190,7 +190,8 @@ fn to_pubgrub(
 ) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
     match &requirement.source {
         RequirementSource::Registry { version, .. } => {
-            // TODO(konsti): Index
+            // TODO(konsti): We're currently losing the index information here, but we need
+            // either pass it to `PubGrubPackage` or the `ResolverProvider` beforehand.
             // If the specifier is an exact version, and the user requested a local version that's
             // more precise than the specifier, use the local version instead.
             let version = if let Some(expected) = locals.get(&requirement.name) {
