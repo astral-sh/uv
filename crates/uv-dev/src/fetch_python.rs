@@ -25,7 +25,9 @@ pub(crate) struct FetchPythonArgs {
 pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let start = Instant::now();
 
-    let bootstrap_dir = &*TOOLCHAIN_DIRECTORY;
+    let bootstrap_dir = TOOLCHAIN_DIRECTORY
+        .as_ref()
+        .expect("The toolchain directory must exist for bootstrapping");
 
     fs_err::create_dir_all(bootstrap_dir)?;
 
