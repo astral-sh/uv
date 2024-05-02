@@ -1,14 +1,11 @@
-use std::ops::Deref;
-
 use itertools::Itertools;
 use pubgrub::range::Range;
 use rustc_hash::FxHashSet;
 use tracing::warn;
-use url::Url;
 
 use distribution_types::{Requirement, RequirementSource, Verbatim};
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, VerbatimUrl};
+use pep508_rs::MarkerEnvironment;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -219,11 +216,7 @@ fn to_pubgrub(
                 version,
             ))
         }
-        RequirementSource::Url { url, subdirectory } => {
-            let mut url: Url = url.deref().clone();
-            if let Some(subdirectory) = subdirectory {
-                url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
-            }
+        RequirementSource::Url { url, .. } => {
             let Some(expected) = urls.get(&requirement.name) else {
                 return Err(ResolveError::DisallowedUrl(
                     requirement.name.clone(),
@@ -231,7 +224,7 @@ fn to_pubgrub(
                 ));
             };
 
-            if !Urls::is_allowed(expected, &VerbatimUrl::from_url(url.clone())) {
+            if !Urls::is_allowed(expected, &url) {
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
                     expected.verbatim().to_string(),

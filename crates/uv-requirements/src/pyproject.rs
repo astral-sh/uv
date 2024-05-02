@@ -62,6 +62,8 @@ pub enum LoweringError {
     /// Note: Infallible on unix and windows.
     #[error("Could not normalize path: `{0}`")]
     AbsolutizeError(String, #[source] io::Error),
+    #[error("Fragments are not allowed in URLs: `{0}`")]
+    ForbiddenFragment(Url),
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -169,7 +171,7 @@ pub enum Source {
     /// flask = { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl" }
     /// ```
     Url {
-        url: String,
+        url: Url,
         subdirectory: Option<String>,
     },
     /// The path to a dependency. It can either be a wheel (a `.whl` file), a source distribution
@@ -443,10 +445,20 @@ pub(crate) fn lower_requirement(
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                 return Err(LoweringError::ConflictingUrls);
             }
-            let url = VerbatimUrl::from_url(Url::parse(&url)?).with_given(url);
+
+            let mut verbatim_url = url.clone();
+            if verbatim_url.fragment().is_some() {
+                return Err(LoweringError::ForbiddenFragment(url));
+            }
+            if let Some(subdirectory) = &subdirectory {
+                verbatim_url.set_fragment(Some(subdirectory));
+            }
+
+            let verbatim_url = VerbatimUrl::from_url(verbatim_url);
             RequirementSource::Url {
-                url,
+                location: url,
                 subdirectory: subdirectory.map(PathBuf::from),
+                url: verbatim_url,
             }
         }
         Source::Path { path, editable } => {

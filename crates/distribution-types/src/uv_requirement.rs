@@ -114,6 +114,10 @@ impl Display for Requirement {
 }
 
 /// The different kinds of requirements (version specifier, HTTP(S) URL, git repository, path).
+///
+/// We store both the parsed fields (such as the plain url and the subdirectory) and the joined
+/// PEP 508 style url (e.g. `file:///<path>#subdirectory=<subdirectory>`) since we need both in
+/// different locations.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub enum RequirementSource {
     /// The requirement has a version specifier, such as `foo >1,<2`.
@@ -122,7 +126,8 @@ pub enum RequirementSource {
         /// Choose a version from the index with this name.
         index: Option<String>,
     },
-    // TODO(konsti): Track and verify version specifier from pyproject.toml
+    // TODO(konsti): Track and verify version specifier from `project.dependencies` matches the
+    // version in remote location.
     /// A remote `http://` or `https://` URL, either a built distribution,
     /// e.g. `foo @ https://example.org/foo-1.0-py3-none-any.whl`, or a source distribution,
     /// e.g.`foo @ https://example.org/foo-1.0.zip`.
@@ -130,6 +135,10 @@ pub enum RequirementSource {
         /// For source distributions, the location of the distribution if it is not in the archive
         /// root.
         subdirectory: Option<PathBuf>,
+        /// The remote location of the archive file, without subdirectory fragment.
+        location: Url,
+        /// The PEP 508 style url in the format
+        /// `<scheme>://<domain>/<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
     },
     /// A remote git repository, either over HTTPS or over SSH.
@@ -140,6 +149,8 @@ pub enum RequirementSource {
         reference: GitReference,
         /// The location of the distribution if it is not in the repository root.
         subdirectory: Option<PathBuf>,
+        /// The PEP 508 style url in the format
+        /// `git+<scheme>://<domain>/<path>@<rev>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
     },
     /// A local built or source distribution, either from a path or a `file://` URL. It can either
@@ -150,7 +161,8 @@ pub enum RequirementSource {
         path: PathBuf,
         /// For a source tree (a directory), whether to install as an editable.
         editable: Option<bool>,
-        /// The `file://` URL representing the path.
+        /// The PEP 508 style url in the format
+        /// `file:///<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
     },
 }
@@ -171,6 +183,7 @@ impl RequirementSource {
             },
             ParsedUrl::Archive(archive) => RequirementSource::Url {
                 url,
+                location: archive.url,
                 subdirectory: archive.subdirectory,
             },
         }

@@ -82,10 +82,15 @@ impl From<&ResolvedDist> for Requirement {
                     ),
                     index: None,
                 },
-                Dist::Built(BuiltDist::DirectUrl(wheel)) => RequirementSource::Url {
-                    url: wheel.url.clone(),
-                    subdirectory: None,
-                },
+                Dist::Built(BuiltDist::DirectUrl(wheel)) => {
+                    let mut location = wheel.url.to_url();
+                    location.set_fragment(None);
+                    RequirementSource::Url {
+                        url: wheel.url.clone(),
+                        location,
+                        subdirectory: None,
+                    }
+                }
                 Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
                     path: wheel.path.clone(),
                     url: wheel.url.clone(),
@@ -97,10 +102,15 @@ impl From<&ResolvedDist> for Requirement {
                     ),
                     index: None,
                 },
-                Dist::Source(SourceDist::DirectUrl(sdist)) => RequirementSource::Url {
-                    url: sdist.url.clone(),
-                    subdirectory: None,
-                },
+                Dist::Source(SourceDist::DirectUrl(sdist)) => {
+                    let mut location = sdist.url.to_url();
+                    location.set_fragment(None);
+                    RequirementSource::Url {
+                        url: sdist.url.clone(),
+                        location,
+                        subdirectory: None,
+                    }
+                }
                 Dist::Source(SourceDist::Git(sdist)) => {
                     let git_url = ParsedGitUrl::try_from(sdist.url.raw())
                         .expect("urls must be valid at this point");

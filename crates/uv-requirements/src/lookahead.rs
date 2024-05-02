@@ -1,17 +1,15 @@
 use std::collections::VecDeque;
-use std::ops::Deref;
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use thiserror::Error;
-use url::Url;
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, GitSourceDist, LocalEditable, Requirement,
     RequirementSource, Requirements, SourceDist,
 };
-use pep508_rs::{MarkerEnvironment, VerbatimUrl};
+use pep508_rs::MarkerEnvironment;
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
@@ -161,18 +159,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         // buildable distribution.
         let dist = match requirement.source {
             RequirementSource::Registry { .. } => return Ok(None),
-            RequirementSource::Url { url, subdirectory } => {
-                let mut merged_url: Url = url.deref().clone();
-                if let Some(subdirectory) = subdirectory {
-                    merged_url
-                        .set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
-                }
-                let mut merged_url = VerbatimUrl::from_url(merged_url);
-                if let Some(given) = url.given() {
-                    merged_url = merged_url.with_given(given);
-                }
-                Dist::from_http_url(requirement.name, merged_url)?
-            }
+            RequirementSource::Url { url, .. } => Dist::from_http_url(requirement.name, url)?,
             RequirementSource::Git { url, .. } => Dist::Source(SourceDist::Git(GitSourceDist {
                 name: requirement.name,
                 url,

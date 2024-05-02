@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
@@ -146,16 +145,9 @@ fn uv_requirement_to_package_id(requirement: &Requirement) -> Result<PackageId, 
 
             PackageId::from_registry(requirement.name.clone())
         }
-        RequirementSource::Url { url, subdirectory } => {
-            // Direct URLs are always allowed.
-            let mut url: Url = url.deref().clone();
-            if let Some(subdirectory) = subdirectory {
-                url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
-            }
-            PackageId::from_url(&url)
-        }
-        RequirementSource::Git { url, .. } => PackageId::from_url(url),
-        RequirementSource::Path { url, .. } => PackageId::from_url(url),
+        RequirementSource::Url { url, .. }
+        | RequirementSource::Git { url, .. }
+        | RequirementSource::Path { url, .. } => PackageId::from_url(url),
     })
 }
 

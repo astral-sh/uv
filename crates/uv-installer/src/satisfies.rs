@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use anyhow::Result;
 use std::fmt::Debug;
 use tracing::trace;
@@ -35,8 +33,12 @@ impl RequirementSatisfaction {
                 Ok(Self::Mismatch)
             }
             RequirementSource::Url {
-                url: requested_url,
+                // We use the location since `direct_url.json` also stores this URL, e.g.
+                // `pip install git+https://github.com/tqdm/tqdm@cc372d09dcd5a5eabdc6ed4cf365bdb0be004d44#subdirectory=.`
+                // records `"url": "https://github.com/tqdm/tqdm"` in `direct_url.json`.
+                location: requested_url,
                 subdirectory: requested_subdirectory,
+                url: _,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist {
                     direct_url,
@@ -59,7 +61,7 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if &requested_url.deref().to_string() != installed_url
+                if &requested_url.to_string() != installed_url
                     || requested_subdirectory != installed_subdirectory
                 {
                     return Ok(Self::Mismatch);

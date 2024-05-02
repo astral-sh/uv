@@ -56,18 +56,6 @@ pub struct ParsedGitUrl {
     pub subdirectory: Option<PathBuf>,
 }
 
-/// An archive url
-///
-/// Examples:
-/// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
-/// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
-/// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
-#[derive(Debug, Eq, PartialEq)]
-pub struct ParsedArchiveUrl {
-    pub url: Url,
-    pub subdirectory: Option<PathBuf>,
-}
-
 impl TryFrom<&Url> for ParsedGitUrl {
     type Error = ParsedUrlError;
 
@@ -85,6 +73,18 @@ impl TryFrom<&Url> for ParsedGitUrl {
             .map_err(|err| ParsedUrlError::GitShaParse(url_in.clone(), err))?;
         Ok(Self { url, subdirectory })
     }
+}
+
+/// An archive url.
+///
+/// Examples:
+/// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
+/// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
+/// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
+#[derive(Debug, Eq, PartialEq)]
+pub struct ParsedArchiveUrl {
+    pub url: Url,
+    pub subdirectory: Option<PathBuf>,
 }
 
 impl From<&Url> for ParsedArchiveUrl {
