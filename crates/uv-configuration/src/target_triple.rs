@@ -43,15 +43,15 @@ pub enum TargetTriple {
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-musl"))]
     Aarch64UnknownLinuxMusl,
 
-    /// An x86_64 Linux target.
+    /// An `x86_64` Linux target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-musl"))]
     X8664UnknownLinuxMusl,
 
-    /// An x86_64 target for the `manylinux_2_17` platform.
+    /// An `x86_64` target for the `manylinux_2_17` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_17"))]
     X8664Manylinux217,
 
-    /// An x86_64 target for the `manylinux_2_28` platform.
+    /// An `x86_64` target for the `manylinux_2_28` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_28"))]
     X8664Manylinux228,
 

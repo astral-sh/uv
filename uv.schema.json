@@ -121,14 +121,14 @@
           ]
         },
         {
-          "description": "Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next.\n\nIn this strategy, we look for every package across all indexes. When resolving, we attempt to use versions from the indexes in order, such that we exhaust all available versions from the first index before moving on to the next. Further, if a version is found to be incompatible in the first index, we do not reconsider that version in subsequent indexes, even if the secondary index might contain compatible versions (e.g., variants of the same versions with different ABI tags or Python version constraints).\n\nSee: https://peps.python.org/pep-0708/",
+          "description": "Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next.\n\nIn this strategy, we look for every package across all indexes. When resolving, we attempt to use versions from the indexes in order, such that we exhaust all available versions from the first index before moving on to the next. Further, if a version is found to be incompatible in the first index, we do not reconsider that version in subsequent indexes, even if the secondary index might contain compatible versions (e.g., variants of the same versions with different ABI tags or Python version constraints).\n\nSee: <https://peps.python.org/pep-0708/>",
           "type": "string",
           "enum": [
             "unsafe-first-match"
           ]
         },
         {
-          "description": "Search for every package name across all indexes, preferring the \"best\" version found. If a package version is in multiple indexes, only look at the entry for the first index.\n\nIn this strategy, we look for every package across all indexes. When resolving, we consider all versions from all indexes, choosing the \"best\" version found (typically, the highest compatible version).\n\nThis most closely matches pip's behavior, but exposes the resolver to \"dependency confusion\" attacks whereby malicious actors can publish packages to public indexes with the same name as internal packages, causing the resolver to install the malicious package in lieu of the intended internal package.\n\nSee: https://peps.python.org/pep-0708/",
+          "description": "Search for every package name across all indexes, preferring the \"best\" version found. If a package version is in multiple indexes, only look at the entry for the first index.\n\nIn this strategy, we look for every package across all indexes. When resolving, we consider all versions from all indexes, choosing the \"best\" version found (typically, the highest compatible version).\n\nThis most closely matches pip's behavior, but exposes the resolver to \"dependency confusion\" attacks whereby malicious actors can publish packages to public indexes with the same name as internal packages, causing the resolver to install the malicious package in lieu of the intended internal package.\n\nSee: <https://peps.python.org/pep-0708/>",
           "type": "string",
           "enum": [
             "unsafe-best-match"
@@ -640,21 +640,21 @@
           ]
         },
         {
-          "description": "An x86_64 Linux target.",
+          "description": "An `x86_64` Linux target.",
           "type": "string",
           "enum": [
             "x8664-unknown-linux-musl"
           ]
         },
         {
-          "description": "An x86_64 target for the `manylinux_2_17` platform.",
+          "description": "An `x86_64` target for the `manylinux_2_17` platform.",
           "type": "string",
           "enum": [
             "x8664-manylinux217"
           ]
         },
         {
-          "description": "An x86_64 target for the `manylinux_2_28` platform.",
+          "description": "An `x86_64` target for the `manylinux_2_28` platform.",
           "type": "string",
           "enum": [
             "x8664-manylinux228"

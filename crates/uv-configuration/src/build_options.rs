@@ -218,7 +218,7 @@ pub enum IndexStrategy {
     /// even if the secondary index might contain compatible versions (e.g., variants of the same
     /// versions with different ABI tags or Python version constraints).
     ///
-    /// See: https://peps.python.org/pep-0708/
+    /// See: <https://peps.python.org/pep-0708/>
     #[cfg_attr(feature = "clap", clap(alias = "unsafe-any-match"))]
     UnsafeFirstMatch,
     /// Search for every package name across all indexes, preferring the "best" version found. If a
@@ -233,7 +233,7 @@ pub enum IndexStrategy {
     /// as internal packages, causing the resolver to install the malicious package in lieu of
     /// the intended internal package.
     ///
-    /// See: https://peps.python.org/pep-0708/
+    /// See: <https://peps.python.org/pep-0708/>
     UnsafeBestMatch,
 }
 
