@@ -4889,6 +4889,7 @@ dependencies = [
  "uv-fs",
  "uv-interpreter",
  "uv-normalize",
+ "uv-requirements",
  "uv-types",
  "uv-warnings",
  "walkdir",

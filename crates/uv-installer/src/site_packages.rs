@@ -7,9 +7,11 @@ use fs_err as fs;
 use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
 
-use distribution_types::{InstalledDist, Name, Requirement};
+use distribution_types::{
+    InstalledDist, Name, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use pep440_rs::{Version, VersionSpecifiers};
-use requirements_txt::{EditableRequirement, RequirementEntry, RequirementsTxtRequirement};
+use requirements_txt::EditableRequirement;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
@@ -277,11 +279,11 @@ impl<'a> SitePackages<'a> {
     /// Returns if the installed packages satisfy the given requirements.
     pub fn satisfies(
         &self,
-        requirements: &[RequirementEntry],
+        requirements: &[UnresolvedRequirementSpecification],
         editables: &[EditableRequirement],
         constraints: &[Requirement],
     ) -> Result<SatisfiesResult> {
-        let mut stack = Vec::<RequirementEntry>::with_capacity(requirements.len());
+        let mut stack = Vec::with_capacity(requirements.len());
         let mut seen =
             FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
@@ -330,8 +332,8 @@ impl<'a> SitePackages<'a> {
                             self.venv.interpreter().markers(),
                             &requirement.extras,
                         ) {
-                            let dependency = RequirementEntry {
-                                requirement: RequirementsTxtRequirement::Named(
+                            let dependency = UnresolvedRequirementSpecification {
+                                requirement: UnresolvedRequirement::Named(
                                     Requirement::from_requirement(dependency)?,
                                 ),
                                 hashes: vec![],
@@ -352,12 +354,8 @@ impl<'a> SitePackages<'a> {
         // Verify that all non-editable requirements are met.
         while let Some(entry) = stack.pop() {
             let installed = match &entry.requirement {
-                RequirementsTxtRequirement::Named(requirement) => {
-                    self.get_packages(&requirement.name)
-                }
-                RequirementsTxtRequirement::Unnamed(requirement) => {
-                    self.get_urls(requirement.url.raw())
-                }
+                UnresolvedRequirement::Named(requirement) => self.get_packages(&requirement.name),
+                UnresolvedRequirement::Unnamed(requirement) => self.get_urls(requirement.url.raw()),
             };
             match installed.as_slice() {
                 [] => {
@@ -365,8 +363,10 @@ impl<'a> SitePackages<'a> {
                     return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()));
                 }
                 [distribution] => {
-                    match RequirementSatisfaction::check(distribution, &entry.requirement.source())?
-                    {
+                    match RequirementSatisfaction::check(
+                        distribution,
+                        &entry.requirement.source()?,
+                    )? {
                         RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
                             return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))
                         }
@@ -396,8 +396,8 @@ impl<'a> SitePackages<'a> {
                             self.venv.interpreter().markers(),
                             entry.requirement.extras(),
                         ) {
-                            let dependency = RequirementEntry {
-                                requirement: RequirementsTxtRequirement::Named(
+                            let dependency = UnresolvedRequirementSpecification {
+                                requirement: UnresolvedRequirement::Named(
                                     Requirement::from_requirement(dependency)?,
                                 ),
                                 hashes: vec![],
@@ -427,7 +427,7 @@ pub enum SatisfiesResult {
     /// All requirements are recursively satisfied.
     Fresh {
         /// The flattened set (transitive closure) of all requirements checked.
-        recursive_requirements: FxHashSet<RequirementEntry>,
+        recursive_requirements: FxHashSet<UnresolvedRequirementSpecification>,
     },
     /// We found an unsatisfied requirement. Since we exit early, we only know about the first
     /// unsatisfied requirement.

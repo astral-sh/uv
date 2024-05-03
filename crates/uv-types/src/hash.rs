@@ -5,10 +5,10 @@ use url::Url;
 
 use distribution_types::{
     DistributionMetadata, HashPolicy, PackageId, Requirement, RequirementSource,
+    UnresolvedRequirement,
 };
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{HashDigest, HashError};
-use requirements_txt::RequirementsTxtRequirement;
 use uv_normalize::PackageName;
 
 #[derive(Debug, Clone)]
@@ -83,9 +83,9 @@ impl HashStrategy {
         }
     }
 
-    /// Generate the required hashes from a set of [`RequirementsTxtRequirement`] entries.
+    /// Generate the required hashes from a set of [`UnresolvedRequirement`] entries.
     pub fn from_requirements<'a>(
-        requirements: impl Iterator<Item = (&'a RequirementsTxtRequirement, &'a [String])>,
+        requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
         markers: &MarkerEnvironment,
     ) -> Result<Self, HashStrategyError> {
         let mut hashes = FxHashMap::<PackageId, Vec<HashDigest>>::default();
@@ -99,10 +99,10 @@ impl HashStrategy {
 
             // Every requirement must be either a pinned version or a direct URL.
             let id = match &requirement {
-                RequirementsTxtRequirement::Named(requirement) => {
+                UnresolvedRequirement::Named(requirement) => {
                     uv_requirement_to_package_id(requirement)?
                 }
-                RequirementsTxtRequirement::Unnamed(requirement) => {
+                UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
                     PackageId::from_url(&requirement.url)
                 }

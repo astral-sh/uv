@@ -11,18 +11,19 @@ RequirementsTxt {
                         "tqdm",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "4.65.0",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "4.65.0",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -34,18 +35,19 @@ RequirementsTxt {
                         "tomli-w",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "1.0.0",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "1.0.0",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],

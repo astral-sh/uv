@@ -44,7 +44,9 @@ use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use distribution_types::{ParsedUrlError, Requirement};
+use distribution_types::{
+    ParsedUrlError, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use pep508_rs::{
     expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Scheme,
     VerbatimUrl,
@@ -295,14 +297,35 @@ impl Display for EditableRequirement {
     }
 }
 
-/// A [Requirement] with additional metadata from the requirements.txt, currently only hashes but in
-/// the future also editable an similar information
+/// A [Requirement] with additional metadata from the `requirements.txt`, currently only hashes but in
+/// the future also editable and similar information.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequirementEntry {
-    /// The actual PEP 508 requirement
+    /// The actual PEP 508 requirement.
     pub requirement: RequirementsTxtRequirement,
-    /// Hashes of the downloadable packages
+    /// Hashes of the downloadable packages.
     pub hashes: Vec<String>,
+}
+
+// We place with impl here instead of next to `UnresolvedRequirementSpecification` because
+// `UnresolvedRequirementSpecification` is defined in `distribution-types` and `requirements-txt` depends on
+// `distribution-types`.
+impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
+    type Error = ParsedUrlError;
+
+    fn try_from(value: RequirementEntry) -> Result<Self, Self::Error> {
+        Ok(Self {
+            requirement: match value.requirement {
+                RequirementsTxtRequirement::Named(named) => {
+                    UnresolvedRequirement::Named(Requirement::from_requirement(named)?)
+                }
+                RequirementsTxtRequirement::Unnamed(unnamed) => {
+                    UnresolvedRequirement::Unnamed(unnamed)
+                }
+            },
+            hashes: value.hashes,
+        })
+    }
 }
 
 /// Parsed and flattened requirements.txt with requirements and constraints
@@ -311,7 +334,7 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<Requirement>,
+    pub constraints: Vec<pep508_rs::Requirement>,
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
@@ -1751,13 +1774,8 @@ mod test {
                                 "flask",
                             ),
                             extras: [],
+                            version_or_url: None,
                             marker: None,
-                            source: Registry {
-                                version: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                            },
                         },
                     ),
                     hashes: [],
@@ -1810,13 +1828,8 @@ mod test {
                                 "flask",
                             ),
                             extras: [],
+                            version_or_url: None,
                             marker: None,
-                            source: Registry {
-                                version: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                            },
                         },
                     ),
                     hashes: [],
@@ -1997,13 +2010,8 @@ mod test {
                                 "httpx",
                             ),
                             extras: [],
+                            version_or_url: None,
                             marker: None,
-                            source: Registry {
-                                version: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                            },
                         },
                     ),
                     hashes: [],
@@ -2015,18 +2023,19 @@ mod test {
                                 "flask",
                             ),
                             extras: [],
-                            marker: None,
-                            source: Registry {
-                                version: VersionSpecifiers(
-                                    [
-                                        VersionSpecifier {
-                                            operator: Equal,
-                                            version: "3.0.0",
-                                        },
-                                    ],
+                            version_or_url: Some(
+                                VersionSpecifier(
+                                    VersionSpecifiers(
+                                        [
+                                            VersionSpecifier {
+                                                operator: Equal,
+                                                version: "3.0.0",
+                                            },
+                                        ],
+                                    ),
                                 ),
-                                index: None,
-                            },
+                            ),
+                            marker: None,
                         },
                     ),
                     hashes: [
@@ -2040,18 +2049,19 @@ mod test {
                                 "requests",
                             ),
                             extras: [],
-                            marker: None,
-                            source: Registry {
-                                version: VersionSpecifiers(
-                                    [
-                                        VersionSpecifier {
-                                            operator: Equal,
-                                            version: "2.26.0",
-                                        },
-                                    ],
+                            version_or_url: Some(
+                                VersionSpecifier(
+                                    VersionSpecifiers(
+                                        [
+                                            VersionSpecifier {
+                                                operator: Equal,
+                                                version: "2.26.0",
+                                            },
+                                        ],
+                                    ),
                                 ),
-                                index: None,
-                            },
+                            ),
+                            marker: None,
                         },
                     ),
                     hashes: [
@@ -2065,18 +2075,19 @@ mod test {
                                 "black",
                             ),
                             extras: [],
-                            marker: None,
-                            source: Registry {
-                                version: VersionSpecifiers(
-                                    [
-                                        VersionSpecifier {
-                                            operator: Equal,
-                                            version: "21.12b0",
-                                        },
-                                    ],
+                            version_or_url: Some(
+                                VersionSpecifier(
+                                    VersionSpecifiers(
+                                        [
+                                            VersionSpecifier {
+                                                operator: Equal,
+                                                version: "21.12b0",
+                                            },
+                                        ],
+                                    ),
                                 ),
-                                index: None,
-                            },
+                            ),
+                            marker: None,
                         },
                     ),
                     hashes: [],
@@ -2088,18 +2099,19 @@ mod test {
                                 "mypy",
                             ),
                             extras: [],
-                            marker: None,
-                            source: Registry {
-                                version: VersionSpecifiers(
-                                    [
-                                        VersionSpecifier {
-                                            operator: Equal,
-                                            version: "0.910",
-                                        },
-                                    ],
+                            version_or_url: Some(
+                                VersionSpecifier(
+                                    VersionSpecifiers(
+                                        [
+                                            VersionSpecifier {
+                                                operator: Equal,
+                                                version: "0.910",
+                                            },
+                                        ],
+                                    ),
                                 ),
-                                index: None,
-                            },
+                            ),
+                            marker: None,
                         },
                     ),
                     hashes: [],

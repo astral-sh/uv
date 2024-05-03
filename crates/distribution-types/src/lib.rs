@@ -59,6 +59,7 @@ pub use crate::prioritized_distribution::*;
 pub use crate::requirement::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
+pub use crate::specified_requirement::*;
 pub use crate::traits::*;
 
 mod any;
@@ -76,6 +77,7 @@ mod prioritized_distribution;
 mod requirement;
 mod resolution;
 mod resolved;
+mod specified_requirement;
 mod traits;
 
 #[derive(Debug, Clone)]

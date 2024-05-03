@@ -6,9 +6,13 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, instrument};
 
 use cache_key::CanonicalUrl;
-use distribution_types::{FlatIndexLocation, IndexUrl, Requirement};
-use requirements_txt::RequirementsTxtRequirement;
-use requirements_txt::{EditableRequirement, FindLink, RequirementEntry, RequirementsTxt};
+use distribution_types::{
+    FlatIndexLocation, IndexUrl, Requirement, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
+};
+use requirements_txt::{
+    EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
+};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_fs::Simplified;
@@ -22,11 +26,11 @@ pub struct RequirementsSpecification {
     /// The name of the project specifying requirements.
     pub project: Option<PackageName>,
     /// The requirements for the project.
-    pub requirements: Vec<RequirementEntry>,
+    pub requirements: Vec<UnresolvedRequirementSpecification>,
     /// The constraints for the project.
     pub constraints: Vec<Requirement>,
     /// The overrides for the project.
-    pub overrides: Vec<RequirementEntry>,
+    pub overrides: Vec<UnresolvedRequirementSpecification>,
     /// Package to install as editable installs
     pub editables: Vec<EditableRequirement>,
     /// The source trees from which to extract requirements.
@@ -61,10 +65,12 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
-                    requirements: vec![RequirementEntry {
-                        requirement,
-                        hashes: vec![],
-                    }],
+                    requirements: vec![UnresolvedRequirementSpecification::try_from(
+                        RequirementEntry {
+                            requirement,
+                            hashes: vec![],
+                        },
+                    )?],
                     constraints: vec![],
                     overrides: vec![],
                     editables: vec![],
@@ -102,8 +108,16 @@ impl RequirementsSpecification {
                     RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
                 Self {
                     project: None,
-                    requirements: requirements_txt.requirements,
-                    constraints: requirements_txt.constraints,
+                    requirements: requirements_txt
+                        .requirements
+                        .into_iter()
+                        .map(UnresolvedRequirementSpecification::try_from)
+                        .collect::<Result<_, _>>()?,
+                    constraints: requirements_txt
+                        .constraints
+                        .into_iter()
+                        .map(Requirement::from_requirement)
+                        .collect::<Result<_, _>>()?,
                     overrides: vec![],
                     editables: requirements_txt.editables,
                     source_trees: vec![],
@@ -191,8 +205,8 @@ impl RequirementsSpecification {
                 requirements: project
                     .requirements
                     .into_iter()
-                    .map(|requirement| RequirementEntry {
-                        requirement: RequirementsTxtRequirement::Named(requirement),
+                    .map(|requirement| UnresolvedRequirementSpecification {
+                        requirement: UnresolvedRequirement::Named(requirement),
                         hashes: vec![],
                     })
                     .collect(),
@@ -269,10 +283,10 @@ impl RequirementsSpecification {
             let source = Self::from_source(source, extras, client_builder).await?;
             for entry in source.requirements {
                 match entry.requirement {
-                    RequirementsTxtRequirement::Named(requirement) => {
+                    UnresolvedRequirement::Named(requirement) => {
                         spec.constraints.push(requirement);
                     }
-                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                    UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(
                             "Unnamed requirements are not allowed as constraints (found: `{requirement}`)"
                         ));

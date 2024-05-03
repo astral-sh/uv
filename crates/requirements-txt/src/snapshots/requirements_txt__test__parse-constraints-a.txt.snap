@@ -11,18 +11,19 @@ RequirementsTxt {
                         "django-debug-toolbar",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: LessThan,
-                                    version: "2.2",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: LessThan,
+                                        version: "2.2",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -34,36 +35,38 @@ RequirementsTxt {
                 "django",
             ),
             extras: [],
-            marker: None,
-            source: Registry {
-                version: VersionSpecifiers(
-                    [
-                        VersionSpecifier {
-                            operator: Equal,
-                            version: "2.1.15",
-                        },
-                    ],
+            version_or_url: Some(
+                VersionSpecifier(
+                    VersionSpecifiers(
+                        [
+                            VersionSpecifier {
+                                operator: Equal,
+                                version: "2.1.15",
+                            },
+                        ],
+                    ),
                 ),
-                index: None,
-            },
+            ),
+            marker: None,
         },
         Requirement {
             name: PackageName(
                 "pytz",
             ),
             extras: [],
-            marker: None,
-            source: Registry {
-                version: VersionSpecifiers(
-                    [
-                        VersionSpecifier {
-                            operator: Equal,
-                            version: "2023.3",
-                        },
-                    ],
+            version_or_url: Some(
+                VersionSpecifier(
+                    VersionSpecifiers(
+                        [
+                            VersionSpecifier {
+                                operator: Equal,
+                                version: "2023.3",
+                            },
+                        ],
+                    ),
                 ),
-                index: None,
-            },
+            ),
+            marker: None,
         },
     ],
     editables: [],

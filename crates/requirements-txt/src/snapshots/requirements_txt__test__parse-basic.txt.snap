@@ -11,18 +11,19 @@ RequirementsTxt {
                         "numpy",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "1.24.2",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "1.24.2",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -34,18 +35,19 @@ RequirementsTxt {
                         "pandas",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "2.0.0",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "2.0.0",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -57,18 +59,19 @@ RequirementsTxt {
                         "python-dateutil",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "2.8.2",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "2.8.2",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -80,18 +83,19 @@ RequirementsTxt {
                         "pytz",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "2023.3",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "2023.3",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -103,18 +107,19 @@ RequirementsTxt {
                         "six",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "1.16.0",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "1.16.0",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -126,18 +131,19 @@ RequirementsTxt {
                         "tzdata",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "2023.3",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "2023.3",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],

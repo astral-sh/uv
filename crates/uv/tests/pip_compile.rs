@@ -5224,8 +5224,7 @@ fn unsupported_scheme() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Couldn't parse URL in `requirements.in` at position 0
-      Caused by: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio`
+    error: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio`
     "###
     );
 

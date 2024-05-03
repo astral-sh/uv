@@ -11,18 +11,19 @@ RequirementsTxt {
                         "inflection",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "0.5.1",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "0.5.1",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -34,18 +35,19 @@ RequirementsTxt {
                         "upsidedown",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "0.4",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "0.4",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],
@@ -57,13 +59,8 @@ RequirementsTxt {
                         "numpy",
                     ),
                     extras: [],
+                    version_or_url: None,
                     marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [],
-                        ),
-                        index: None,
-                    },
                 },
             ),
             hashes: [],
@@ -79,22 +76,23 @@ RequirementsTxt {
                             "tabulate",
                         ),
                     ],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: GreaterThanEqual,
-                                    version: "1",
-                                },
-                                VersionSpecifier {
-                                    operator: LessThan,
-                                    version: "2",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "1",
+                                    },
+                                    VersionSpecifier {
+                                        operator: LessThan,
+                                        version: "2",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],

@@ -11,13 +11,8 @@ RequirementsTxt {
                         "numpy",
                     ),
                     extras: [],
+                    version_or_url: None,
                     marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [],
-                        ),
-                        index: None,
-                    },
                 },
             ),
             hashes: [],
@@ -33,45 +28,31 @@ RequirementsTxt {
                             "tabulate",
                         ),
                     ],
-                    marker: None,
-                    source: Url {
-                        subdirectory: None,
-                        location: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "github.com",
-                                ),
-                            ),
-                            port: None,
-                            path: "/pandas-dev/pandas",
-                            query: None,
-                            fragment: None,
-                        },
-                        url: VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "github.com",
+                    version_or_url: Some(
+                        Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "github.com",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/pandas-dev/pandas",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://github.com/pandas-dev/pandas",
                                 ),
-                                port: None,
-                                path: "/pandas-dev/pandas",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://github.com/pandas-dev/pandas",
-                            ),
-                        },
-                    },
+                        ),
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],

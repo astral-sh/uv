@@ -5,9 +5,8 @@ use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{InstalledMetadata, Name, Requirement};
+use distribution_types::{InstalledMetadata, Name, Requirement, UnresolvedRequirement};
 use pep508_rs::UnnamedRequirement;
-use requirements_txt::RequirementsTxtRequirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::KeyringProviderType;
@@ -97,8 +96,8 @@ pub(crate) async fn pip_uninstall(
         .requirements
         .into_iter()
         .partition_map(|entry| match entry.requirement {
-            RequirementsTxtRequirement::Named(requirement) => Either::Left(requirement),
-            RequirementsTxtRequirement::Unnamed(requirement) => Either::Right(requirement),
+            UnresolvedRequirement::Named(requirement) => Either::Left(requirement),
+            UnresolvedRequirement::Unnamed(requirement) => Either::Right(requirement),
         });
 
     // Sort and deduplicate the packages, which are keyed by name. Like `pip`, we ignore the

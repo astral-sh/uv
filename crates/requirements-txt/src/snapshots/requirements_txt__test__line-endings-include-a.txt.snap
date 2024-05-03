@@ -11,13 +11,8 @@ RequirementsTxt {
                         "tomli",
                     ),
                     extras: [],
+                    version_or_url: None,
                     marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [],
-                        ),
-                        index: None,
-                    },
                 },
             ),
             hashes: [],
@@ -29,18 +24,19 @@ RequirementsTxt {
                         "numpy",
                     ),
                     extras: [],
-                    marker: None,
-                    source: Registry {
-                        version: VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "1.24.2",
-                                },
-                            ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "1.24.2",
+                                    },
+                                ],
+                            ),
                         ),
-                        index: None,
-                    },
+                    ),
+                    marker: None,
                 },
             ),
             hashes: [],

@@ -11,11 +11,10 @@ use tracing::debug;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
     BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, Requirement,
-    SourceUrl, VersionId,
+    SourceUrl, UnresolvedRequirement, UnresolvedRequirementSpecification, VersionId,
 };
 use pep508_rs::{Scheme, UnnamedRequirement, VersionOrUrl};
 use pypi_types::Metadata10;
-use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
@@ -25,7 +24,7 @@ use uv_types::{BuildContext, HashStrategy};
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
     /// The requirements for the project.
-    requirements: Vec<RequirementEntry>,
+    requirements: Vec<UnresolvedRequirementSpecification>,
     /// Whether to check hashes for distributions.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -37,7 +36,7 @@ pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
 impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Context> {
     /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
     pub fn new(
-        requirements: Vec<RequirementEntry>,
+        requirements: Vec<UnresolvedRequirementSpecification>,
         hasher: &'a HashStrategy,
         context: &'a Context,
         client: &'a RegistryClient,
@@ -71,8 +70,8 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
         futures::stream::iter(requirements)
             .map(|entry| async {
                 match entry.requirement {
-                    RequirementsTxtRequirement::Named(requirement) => Ok(requirement),
-                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                    UnresolvedRequirement::Named(requirement) => Ok(requirement),
+                    UnresolvedRequirement::Unnamed(requirement) => {
                         Ok(Requirement::from_requirement(
                             Self::resolve_requirement(requirement, hasher, index, &database)
                                 .await?,
