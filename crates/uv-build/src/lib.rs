@@ -355,12 +355,12 @@ pub struct SourceBuild {
     venv: PythonEnvironment,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
     ///
-    /// > If the build frontend has previously called prepare_metadata_for_build_wheel and depends
+    /// > If the build frontend has previously called `prepare_metadata_for_build_wheel` and depends
     /// > on the wheel resulting from this call to have metadata matching this earlier call, then
-    /// > it should provide the path to the created .dist-info directory as the metadata_directory
-    /// > argument. If this argument is provided, then build_wheel MUST produce a wheel with
+    /// > it should provide the path to the created .dist-info directory as the `metadata_directory`
+    /// > argument. If this argument is provided, then `build_wheel` MUST produce a wheel with
     /// > identical metadata. The directory passed in by the build frontend MUST be identical to the
-    /// > directory created by prepare_metadata_for_build_wheel, including any unrecognized files
+    /// > directory created by `prepare_metadata_for_build_wheel`, including any unrecognized files
     /// > it created.
     metadata_directory: Option<PathBuf>,
     /// Package id such as `foo-1.2.3`, for error reporting

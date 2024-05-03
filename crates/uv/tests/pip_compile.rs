@@ -1,5 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::disallowed_types))]
+#![allow(clippy::disallowed_types)]
 
 use std::env::current_dir;
 use std::fs;

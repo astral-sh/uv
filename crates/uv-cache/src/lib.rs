@@ -376,7 +376,7 @@ impl Cache {
 pub enum CacheBucket {
     /// Wheels (excluding built wheels), alongside their metadata and cache policy.
     ///
-    /// There are three kinds from cache entries: Wheel metadata and policy as MsgPack files, the
+    /// There are three kinds from cache entries: Wheel metadata and policy as `MsgPack` files, the
     /// wheels themselves, and the unzipped wheel archives. If a wheel file is over an in-memory
     /// size threshold, we first download the zip file into the cache, then unzip it into a
     /// directory with the same name (exclusive of the `.whl` extension).
@@ -559,7 +559,7 @@ pub enum CacheBucket {
     ///
     /// # Example
     ///
-    /// The contents of each of the MsgPack files has a timestamp field in unix time, the [PEP 508]
+    /// The contents of each of the `MsgPack` files has a timestamp field in unix time, the [PEP 508]
     /// markers and some information from the `sys`/`sysconfig` modules.
     ///
     /// ```json
