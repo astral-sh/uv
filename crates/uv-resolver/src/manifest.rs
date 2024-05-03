@@ -112,10 +112,9 @@ impl Manifest {
                             requirement.evaluate_markers(markers, lookahead.extras())
                         })
                 })
-                .chain(self.editables.iter()                    .flat_map(|(editable, _metadata, uv_requirements)| {
-
+                .chain(self.editables.iter().flat_map(|(editable, _metadata, requirements)| {
                     self.overrides
-                        .apply(&uv_requirements.dependencies)
+                        .apply(&requirements.dependencies)
                         .filter(|requirement| {
                             requirement.evaluate_markers(markers, &editable.extras)
                         })

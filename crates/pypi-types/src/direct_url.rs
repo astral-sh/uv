@@ -20,7 +20,7 @@ pub enum DirectUrl {
     /// {"archive_info": {"hash": "sha256=75909db2664838d015e3d9139004ee16711748a52c8f336b52882266540215d8", "hashes": {"sha256": "75909db2664838d015e3d9139004ee16711748a52c8f336b52882266540215d8"}}, "url": "https://files.pythonhosted.org/packages/b8/8b/31273bf66016be6ad22bb7345c37ff350276cfd46e389a0c2ac5da9d9073/wheel-0.41.2-py3-none-any.whl"}
     /// ```
     ArchiveUrl {
-        /// The URL without parsed information such as git revision or subdirectory.
+        /// The URL without parsed information (such as the Git revision or subdirectory).
         ///
         /// For example, for `pip install git+https://github.com/tqdm/tqdm@cc372d09dcd5a5eabdc6ed4cf365bdb0be004d44#subdirectory=.`,
         /// the URL is `https://github.com/tqdm/tqdm`.

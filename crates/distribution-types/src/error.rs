@@ -1,5 +1,6 @@
-use pep508_rs::VerbatimUrl;
 use url::Url;
+
+use pep508_rs::VerbatimUrl;
 use uv_normalize::PackageName;
 
 #[derive(thiserror::Error, Debug)]

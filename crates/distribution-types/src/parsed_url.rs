@@ -20,7 +20,7 @@ pub enum ParsedUrlError {
 
 /// We support three types of URLs for distributions:
 /// * The path to a file or directory (`file://`)
-/// * A git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
+/// * A Git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
 ///   string to checkout.
 /// * A remote archive (`https://`), optional with a subdirectory (source dist only)
 /// A URL in a requirement `foo @ <url>` must be one of the above.
@@ -45,7 +45,7 @@ pub struct ParsedLocalFileUrl {
     pub editable: bool,
 }
 
-/// A git repository url
+/// A Git repository URL.
 ///
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
@@ -59,8 +59,10 @@ pub struct ParsedGitUrl {
 impl TryFrom<Url> for ParsedGitUrl {
     type Error = ParsedUrlError;
 
-    /// Supports url both with `git+` prefix and without. With prefix is PEP 508, without is
-    /// `tool.uv.sources`.
+    /// Supports URLS with and without the `git+` prefix.
+    ///
+    /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
+    /// excluded, it's presumed to come from `tool.uv.sources`.
     fn try_from(url_in: Url) -> Result<Self, Self::Error> {
         let subdirectory = get_subdirectory(&url_in);
 
@@ -75,7 +77,7 @@ impl TryFrom<Url> for ParsedGitUrl {
     }
 }
 
-/// An archive url.
+/// An archive URL.
 ///
 /// Examples:
 /// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`

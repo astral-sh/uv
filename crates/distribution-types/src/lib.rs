@@ -232,7 +232,7 @@ impl Dist {
     }
 
     /// A remote built distribution (`.whl`) or source distribution from a `http://` or `https://`
-    /// url.
+    /// URL.
     pub fn from_http_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
         if Path::new(url.path())
             .extension()
@@ -260,7 +260,7 @@ impl Dist {
         }
     }
 
-    /// A local built or source distribution from a `file://` url.
+    /// A local built or source distribution from a `file://` URL.
     pub fn from_file_url(
         name: PackageName,
         url: VerbatimUrl,
@@ -317,7 +317,7 @@ impl Dist {
         Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
     }
 
-    // TODO(konsti): We should carry the parsed url through the codebase.
+    // TODO(konsti): We should carry the parsed URL through the codebase.
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: VerbatimUrl) -> Result<Self, Error> {
         match Scheme::parse(url.scheme()) {
