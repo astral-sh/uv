@@ -18,9 +18,8 @@ use rustc_hash::FxHashMap;
 use url::Url;
 use uv_normalize::PackageName;
 
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "serde", serde(into = "LockWire", try_from = "LockWire"))]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(into = "LockWire", try_from = "LockWire")]
 pub struct Lock {
     version: u32,
     distributions: Vec<Distribution>,
@@ -104,11 +103,10 @@ impl Lock {
     }
 }
 
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 struct LockWire {
     version: u32,
-    #[cfg_attr(feature = "serde", serde(rename = "distribution"))]
+    #[serde(rename = "distribution")]
     distributions: Vec<Distribution>,
 }
 
@@ -171,24 +169,17 @@ impl TryFrom<LockWire> for Lock {
     }
 }
 
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub(crate) struct Distribution {
-    #[cfg_attr(feature = "serde", serde(flatten))]
+    #[serde(flatten)]
     pub(crate) id: DistributionId,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     pub(crate) marker: Option<String>,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     pub(crate) sourcedist: Option<SourceDist>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, rename = "wheel", skip_serializing_if = "Vec::is_empty")
-    )]
+    #[serde(default, rename = "wheel", skip_serializing_if = "Vec::is_empty")]
     pub(crate) wheels: Vec<Wheel>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Vec::is_empty")
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) dependencies: Vec<Dependency>,
 }
 
@@ -275,8 +266,9 @@ impl Distribution {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(
+    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
 pub(crate) struct DistributionId {
     pub(crate) name: PackageName,
     pub(crate) version: Version,
@@ -456,7 +448,6 @@ impl std::fmt::Display for Source {
     }
 }
 
-#[cfg(feature = "serde")]
 impl serde::Serialize for Source {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
     where
@@ -466,7 +457,6 @@ impl serde::Serialize for Source {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Source {
     fn deserialize<D>(d: D) -> Result<Source, D::Error>
     where
@@ -481,9 +471,10 @@ impl<'de> serde::Deserialize<'de> for Source {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
+#[derive(
+    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum SourceKind {
     Registry,
     Git(GitSource),
@@ -506,8 +497,9 @@ impl SourceKind {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(
+    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
 pub(crate) struct GitSource {
     precise: Option<String>,
     kind: GitSourceKind,
@@ -536,8 +528,9 @@ impl GitSource {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(
+    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
 enum GitSourceKind {
     Tag(String),
     Branch(String),
@@ -546,8 +539,7 @@ enum GitSourceKind {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub(crate) struct SourceDist {
     /// A URL or file path (via `file://`) where the source dist that was
     /// locked against was found. The location does not need to exist in the
@@ -632,9 +624,8 @@ impl SourceDist {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "serde", serde(into = "WheelWire", try_from = "WheelWire"))]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(into = "WheelWire", try_from = "WheelWire")]
 pub(crate) struct Wheel {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
@@ -713,8 +704,7 @@ impl Wheel {
     }
 }
 
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 struct WheelWire {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
@@ -756,10 +746,9 @@ impl TryFrom<WheelWire> for Wheel {
 }
 
 /// A single dependency of a distribution in a lock file.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
 pub(crate) struct Dependency {
-    #[cfg_attr(feature = "serde", serde(flatten))]
+    #[serde(flatten)]
     id: DistributionId,
 }
 
@@ -806,7 +795,6 @@ impl std::fmt::Display for Hash {
     }
 }
 
-#[cfg(feature = "serde")]
 impl serde::Serialize for Hash {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
     where
@@ -816,7 +804,6 @@ impl serde::Serialize for Hash {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Hash {
     fn deserialize<D>(d: D) -> Result<Hash, D::Error>
     where

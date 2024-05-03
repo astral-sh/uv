@@ -36,7 +36,6 @@ enum ConfigSettingValue {
     List(Vec<String>),
 }
 
-#[cfg(feature = "serde")]
 impl serde::Serialize for ConfigSettingValue {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -46,7 +45,6 @@ impl serde::Serialize for ConfigSettingValue {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct Visitor;
@@ -84,7 +82,6 @@ impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
 /// See: <https://peps.python.org/pep-0517/#config-settings>
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[cfg_attr(not(feature = "serde"), allow(dead_code))]
 pub struct ConfigSettings(BTreeMap<String, ConfigSettingValue>);
 
 impl FromIterator<ConfigSettingEntry> for ConfigSettings {
@@ -110,7 +107,6 @@ impl FromIterator<ConfigSettingEntry> for ConfigSettings {
     }
 }
 
-#[cfg(feature = "serde")]
 impl ConfigSettings {
     /// Convert the settings to a string that can be passed directly to a PEP 517 build backend.
     pub fn escape_for_python(&self) -> String {
@@ -118,7 +114,6 @@ impl ConfigSettings {
     }
 }
 
-#[cfg(feature = "serde")]
 impl serde::Serialize for ConfigSettings {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
@@ -131,7 +126,6 @@ impl serde::Serialize for ConfigSettings {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for ConfigSettings {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct Visitor;
@@ -202,7 +196,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
     fn escape_for_python() {
         let mut settings = ConfigSettings::default();
         settings.0.insert(

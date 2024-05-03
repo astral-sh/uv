@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 cache-key = { workspace = true }
-distribution-filename = { workspace = true, features = ["serde"] }
+distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true }
 once-map = { workspace = true }
@@ -49,7 +49,7 @@ pubgrub = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

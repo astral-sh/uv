@@ -12,16 +12,13 @@ license = { workspace = true }
 [lints]
 workspace = true
 
-[features]
-rkyv = ["dep:rkyv", "pep440_rs/rkyv", "uv-normalize/rkyv"]
-
 [dependencies]
 pep440_rs = { workspace = true }
 platform-tags = { workspace = true }
 uv-normalize = { workspace = true }
 
-rkyv = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+rkyv = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 

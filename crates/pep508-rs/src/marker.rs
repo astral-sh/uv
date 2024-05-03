@@ -16,7 +16,6 @@ use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, types::PyAnyMethods, PyResult,
     Python,
 };
-#[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
@@ -324,7 +323,6 @@ impl Display for StringVersion {
     }
 }
 
-#[cfg(feature = "serde")]
 impl Serialize for StringVersion {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -334,7 +332,6 @@ impl Serialize for StringVersion {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for StringVersion {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -359,9 +356,8 @@ impl Deref for StringVersion {
 ///
 /// Some are `(String, Version)` because we have to support version comparison
 #[allow(missing_docs, clippy::unsafe_derive_deserialize)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct MarkerEnvironment {
     pub implementation_name: String,
     pub implementation_version: StringVersion,
@@ -1683,7 +1679,6 @@ mod test {
         );
     }
 
-    #[cfg(feature = "serde")]
     #[test]
     fn test_marker_environment_from_json() {
         let _env: MarkerEnvironment = serde_json::from_str(

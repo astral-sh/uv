@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-#[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
@@ -10,13 +9,9 @@ use pep440_rs::{Version, VersionParseError};
 use platform_tags::{TagCompatibility, Tags};
 use uv_normalize::{InvalidNameError, PackageName};
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
-)]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(feature = "rkyv", archive_attr(derive(Debug)))]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
@@ -196,7 +191,6 @@ impl TryFrom<&Url> for WheelFilename {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for WheelFilename {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -207,7 +201,6 @@ impl<'de> Deserialize<'de> for WheelFilename {
     }
 }
 
-#[cfg(feature = "serde")]
 impl Serialize for WheelFilename {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

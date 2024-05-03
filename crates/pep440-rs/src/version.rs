@@ -11,20 +11,14 @@ use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, FromPyObject, IntoPy, PyAny,
     PyObject, PyResult, Python,
 };
-#[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 /// One of `~=` `==` `!=` `<=` `>=` `<` `>` `===`
-#[derive(Eq, PartialEq, Debug, Hash, Clone, Copy)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+#[derive(
+    Eq, PartialEq, Debug, Hash, Clone, Copy, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(
-    feature = "rkyv",
-    archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))
-)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Operator {
     /// `== 1.2.3`
@@ -248,30 +242,16 @@ impl std::fmt::Display for OperatorParseError {
 ///
 /// let version = Version::from_str("1.19").unwrap();
 /// ```
-#[derive(Clone)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
-)]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(
-    feature = "rkyv",
-    archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))
-)]
+#[derive(Clone, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 pub struct Version {
     inner: Arc<VersionInner>,
 }
 
-#[derive(Clone, Debug)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
-)]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(
-    feature = "rkyv",
-    archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))
-)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 enum VersionInner {
     Small { small: VersionSmall },
     Full { full: VersionFull },
@@ -636,7 +616,6 @@ impl Version {
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Version {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -648,7 +627,6 @@ impl<'de> Deserialize<'de> for Version {
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-#[cfg(feature = "serde")]
 impl Serialize for Version {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -839,16 +817,9 @@ impl FromStr for Version {
 ///
 /// Thankfully, such versions are incredibly rare. Virtually all versions have
 /// zero or one pre, dev or post release components.
-#[derive(Clone, Debug)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
-)]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(
-    feature = "rkyv",
-    archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))
-)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 struct VersionSmall {
     /// The representation discussed above.
     repr: u64,
@@ -1185,16 +1156,9 @@ impl VersionSmall {
 ///
 /// In general, the "full" representation is rarely used in practice since most
 /// versions will fit into the "small" representation.
-#[derive(Clone, Debug)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
-)]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(
-    feature = "rkyv",
-    archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))
-)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 struct VersionFull {
     /// The [versioning
     /// epoch](https://peps.python.org/pep-0440/#version-epochs). Normally
@@ -1314,17 +1278,22 @@ impl FromStr for VersionPattern {
 }
 
 /// An optional pre-release modifier and number applied to a version.
-#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy, Ord, PartialOrd)]
+#[derive(
+    PartialEq,
+    Eq,
+    Debug,
+    Hash,
+    Clone,
+    Copy,
+    Ord,
+    PartialOrd,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
-)]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(
-    feature = "rkyv",
-    archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))
-)]
 pub struct PreRelease {
     /// The kind of pre-release.
     pub kind: PreReleaseKind,
@@ -1335,17 +1304,22 @@ pub struct PreRelease {
 /// Optional prerelease modifier (alpha, beta or release candidate) appended to version
 ///
 /// <https://peps.python.org/pep-0440/#pre-releases>
-#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy, Ord, PartialOrd)]
+#[derive(
+    PartialEq,
+    Eq,
+    Debug,
+    Hash,
+    Clone,
+    Copy,
+    Ord,
+    PartialOrd,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
-)]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(
-    feature = "rkyv",
-    archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))
-)]
 pub enum PreReleaseKind {
     /// alpha prerelease
     Alpha,
@@ -1380,16 +1354,9 @@ impl std::fmt::Display for PreReleaseKind {
 /// > exactly.
 ///
 /// Luckily the default `Ord` implementation for `Vec<LocalSegment>` matches the PEP 440 rules.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
-)]
-#[cfg_attr(feature = "rkyv", archive(check_bytes))]
-#[cfg_attr(
-    feature = "rkyv",
-    archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))
-)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 pub enum LocalSegment {
     /// Not-parseable as integer segment of local version
     String(String),
