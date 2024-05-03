@@ -5,13 +5,9 @@ use platform_tags::{Arch, Os, Platform};
 /// system.
 ///
 /// See: <https://doc.rust-lang.org/nightly/rustc/platform-support.html>
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(deny_unknown_fields, rename_all = "kebab-case")
-)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum TargetTriple {
     /// An alias for `x86_64-pc-windows-msvc`, the default target for Windows.

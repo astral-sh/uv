@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 cache-key = { workspace = true }
-distribution-filename = { workspace = true, features = ["rkyv", "serde"] }
+distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true }
 pep440_rs = { workspace = true }

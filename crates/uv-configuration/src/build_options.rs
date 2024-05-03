@@ -196,13 +196,9 @@ impl NoBuild {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(deny_unknown_fields, rename_all = "kebab-case")
-)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum IndexStrategy {
     /// Only use results from the first index that returns a match for a given package name.

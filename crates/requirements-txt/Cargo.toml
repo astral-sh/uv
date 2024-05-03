@@ -13,7 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-pep508_rs = { workspace = true, features = ["rkyv", "serde", "non-pep508-extensions"] }
+pep508_rs = { workspace = true, features = ["non-pep508-extensions"] }
 uv-client = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }

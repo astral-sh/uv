@@ -32,7 +32,6 @@ use pyo3::{
     create_exception, exceptions::PyNotImplementedError, pyclass, pyclass::CompareOp, pymethods,
     pymodule, types::PyModule, IntoPy, PyObject, PyResult, Python,
 };
-#[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
@@ -181,7 +180,6 @@ impl Display for Requirement {
 }
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Requirement {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -193,7 +191,6 @@ impl<'de> Deserialize<'de> for Requirement {
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-#[cfg(feature = "serde")]
 impl Serialize for Requirement {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

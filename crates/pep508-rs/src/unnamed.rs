@@ -62,7 +62,6 @@ impl Display for UnnamedRequirement {
 }
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for UnnamedRequirement {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -74,7 +73,6 @@ impl<'de> Deserialize<'de> for UnnamedRequirement {
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-#[cfg(feature = "serde")]
 impl Serialize for UnnamedRequirement {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
