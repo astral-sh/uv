@@ -164,6 +164,9 @@ jobs:
           cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv
@@ -815,6 +818,9 @@ jobs:
 
       - name: "Validate global Python install"
         shell: bash -el {0}
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
