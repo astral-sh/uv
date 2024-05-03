@@ -334,7 +334,7 @@ impl<'a> SitePackages<'a> {
                         ) {
                             let dependency = UnresolvedRequirementSpecification {
                                 requirement: UnresolvedRequirement::Named(
-                                    Requirement::from_requirement(dependency)?,
+                                    Requirement::from_pep508(dependency)?,
                                 ),
                                 hashes: vec![],
                             };
@@ -398,7 +398,7 @@ impl<'a> SitePackages<'a> {
                         ) {
                             let dependency = UnresolvedRequirementSpecification {
                                 requirement: UnresolvedRequirement::Named(
-                                    Requirement::from_requirement(dependency)?,
+                                    Requirement::from_pep508(dependency)?,
                                 ),
                                 hashes: vec![],
                             };

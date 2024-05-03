@@ -71,12 +71,9 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             .map(|entry| async {
                 match entry.requirement {
                     UnresolvedRequirement::Named(requirement) => Ok(requirement),
-                    UnresolvedRequirement::Unnamed(requirement) => {
-                        Ok(Requirement::from_requirement(
-                            Self::resolve_requirement(requirement, hasher, index, &database)
-                                .await?,
-                        )?)
-                    }
+                    UnresolvedRequirement::Unnamed(requirement) => Ok(Requirement::from_pep508(
+                        Self::resolve_requirement(requirement, hasher, index, &database).await?,
+                    )?),
                 }
             })
             .buffered(50)

@@ -54,7 +54,7 @@ static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
-    requirements: vec![Requirement::from_requirement(
+    requirements: vec![Requirement::from_pep508(
         pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
     )
     .unwrap()],
@@ -63,11 +63,9 @@ static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
 /// The requirements for `--legacy-setup-py` builds.
 static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
     [
-        Requirement::from_requirement(
-            pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
-        )
-        .unwrap(),
-        Requirement::from_requirement(pep508_rs::Requirement::from_str("wheel").unwrap()).unwrap(),
+        Requirement::from_pep508(pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap())
+            .unwrap(),
+        Requirement::from_pep508(pep508_rs::Requirement::from_str("wheel").unwrap()).unwrap(),
     ]
 });
 
@@ -582,7 +580,7 @@ impl SourceBuild {
                         requirements: build_system
                             .requires
                             .into_iter()
-                            .map(Requirement::from_requirement)
+                            .map(Requirement::from_pep508)
                             .collect::<Result<_, _>>()
                             .map_err(|err| Box::new(Error::DirectUrl(err)))?,
                     }
@@ -967,7 +965,7 @@ async fn create_pep517_build_environment(
     })?;
     let extra_requires: Vec<Requirement> = extra_requires
         .into_iter()
-        .map(Requirement::from_requirement)
+        .map(Requirement::from_pep508)
         .collect::<Result<_, _>>()
         .map_err(Error::DirectUrl)?;
 

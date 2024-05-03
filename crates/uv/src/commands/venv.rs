@@ -212,20 +212,17 @@ async fn venv_impl(
         // Resolve the seed packages.
         let mut requirements =
             vec![
-                Requirement::from_requirement(pep508_rs::Requirement::from_str("pip").unwrap())
-                    .unwrap(),
+                Requirement::from_pep508(pep508_rs::Requirement::from_str("pip").unwrap()).unwrap(),
             ];
 
         // Only include `setuptools` and `wheel` on Python <3.12
         if interpreter.python_tuple() < (3, 12) {
             requirements.push(
-                Requirement::from_requirement(
-                    pep508_rs::Requirement::from_str("setuptools").unwrap(),
-                )
-                .unwrap(),
+                Requirement::from_pep508(pep508_rs::Requirement::from_str("setuptools").unwrap())
+                    .unwrap(),
             );
             requirements.push(
-                Requirement::from_requirement(pep508_rs::Requirement::from_str("wheel").unwrap())
+                Requirement::from_pep508(pep508_rs::Requirement::from_str("wheel").unwrap())
                     .unwrap(),
             );
         }

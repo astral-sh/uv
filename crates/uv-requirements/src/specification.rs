@@ -116,7 +116,7 @@ impl RequirementsSpecification {
                     constraints: requirements_txt
                         .constraints
                         .into_iter()
-                        .map(Requirement::from_requirement)
+                        .map(Requirement::from_pep508)
                         .collect::<Result<_, _>>()?,
                     overrides: vec![],
                     editables: requirements_txt.editables,

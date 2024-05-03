@@ -72,7 +72,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
         Ok(requirements
             .into_iter()
             .flatten()
-            .map(Requirement::from_requirement)
+            .map(Requirement::from_pep508)
             .collect::<Result<_, _>>()?)
     }
 

@@ -141,8 +141,9 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                 };
 
                 let result = build_dispatch
-                    .resolve(&[Requirement::from_requirement(requirement.clone())
-                        .expect("Invalid requirement")])
+                    .resolve(&[
+                        Requirement::from_pep508(requirement.clone()).expect("Invalid requirement")
+                    ])
                     .await;
                 (requirement.to_string(), start.elapsed(), result)
             }

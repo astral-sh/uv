@@ -382,7 +382,7 @@ pub(crate) async fn pip_compile(
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(Requirement::from_requirement)
+                        .map(Requirement::from_pep508)
                         .collect::<Result<_, ParsedUrlError>>()?,
                     optional_dependencies: IndexMap::default(),
                 };

@@ -317,7 +317,7 @@ impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
         Ok(Self {
             requirement: match value.requirement {
                 RequirementsTxtRequirement::Named(named) => {
-                    UnresolvedRequirement::Named(Requirement::from_requirement(named)?)
+                    UnresolvedRequirement::Named(Requirement::from_pep508(named)?)
                 }
                 RequirementsTxtRequirement::Unnamed(unnamed) => {
                     UnresolvedRequirement::Unnamed(unnamed)

@@ -891,7 +891,7 @@ impl<
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(Requirement::from_requirement)
+                        .map(Requirement::from_pep508)
                         .collect::<Result<_, _>>()
                         .map_err(Box::new)?;
                     let constraints = PubGrubDependencies::from_requirements(
@@ -1007,7 +1007,7 @@ impl<
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(Requirement::from_requirement)
+                    .map(Requirement::from_pep508)
                     .collect::<Result<_, _>>()
                     .map_err(Box::new)?;
                 let constraints = PubGrubDependencies::from_requirements(

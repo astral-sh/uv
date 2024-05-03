@@ -688,7 +688,7 @@ async fn resolve(
                 .requires_dist
                 .iter()
                 .cloned()
-                .map(Requirement::from_requirement)
+                .map(Requirement::from_pep508)
                 .collect::<Result<_, _>>()?;
             Ok::<_, ParsedUrlError>((
                 built_editable.editable.clone(),

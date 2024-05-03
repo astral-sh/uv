@@ -14,7 +14,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     let cache = &Cache::from_path(".cache").unwrap();
-    let manifest = &Manifest::simple(vec![Requirement::from_requirement(
+    let manifest = &Manifest::simple(vec![Requirement::from_pep508(
         pep508_rs::Requirement::from_str("jupyter").unwrap(),
     )
     .unwrap()]);

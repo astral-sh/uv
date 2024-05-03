@@ -103,7 +103,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
             args.requirements
                 .iter()
                 .cloned()
-                .map(Requirement::from_requirement)
+                .map(Requirement::from_pep508)
                 .collect::<Result<_, _>>()?,
         ),
         Options::default(),

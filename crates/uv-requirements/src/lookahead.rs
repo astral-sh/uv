@@ -192,7 +192,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(Requirement::from_requirement)
+                    .map(Requirement::from_pep508)
                     .collect::<Result<_, _>>()?
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
@@ -215,7 +215,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
                 requires_dist
                     .into_iter()
-                    .map(Requirement::from_requirement)
+                    .map(Requirement::from_pep508)
                     .collect::<Result<_, _>>()?
             }
         };
