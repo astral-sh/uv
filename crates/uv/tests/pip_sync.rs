@@ -4809,9 +4809,9 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     Ok(())
 }
 
-/// Sync to a `--target` directory.
+/// Sync to a `--target` directory with a built distribution.
 #[test]
-fn target() -> Result<()> {
+fn target_built_distribution() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Install `iniconfig` to the target directory.
@@ -4897,6 +4897,121 @@ fn target() -> Result<()> {
         .child("bin")
         .child(format!("flask{EXE_SUFFIX}"))
         .is_file());
+
+    Ok(())
+}
+
+/// Sync to a `--target` directory with a package that requires building from source.
+#[test]
+fn target_source_distribution() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install `iniconfig` to the target directory.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig==2.0.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in")
+        .arg("--no-binary")
+        .arg("iniconfig")
+        .arg("--target")
+        .arg("target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Ensure that the build requirements are not present in the target directory.
+    assert!(!context.temp_dir.child("target").child("hatchling").is_dir());
+
+    // Ensure that the package is present in the target directory.
+    assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
+
+    // Ensure that we can't import the package.
+    context.assert_command("import iniconfig").failure();
+
+    // Ensure that we can import the package by augmenting the `PYTHONPATH`.
+    Command::new(venv_to_interpreter(&context.venv))
+        .arg("-B")
+        .arg("-c")
+        .arg("import iniconfig")
+        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .current_dir(&context.temp_dir)
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Sync to a `--target` directory with a package that requires building from source, along with
+/// `--no-build-isolation`.
+#[test]
+fn target_no_build_isolation() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install `hatchling` into the current environment.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("flit_core")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flit-core==3.9.0
+    "###);
+
+    // Install `iniconfig` to the target directory.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("wheel")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in")
+        .arg("--no-build-isolation")
+        .arg("--no-binary")
+        .arg("wheel")
+        .arg("--target")
+        .arg("target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + wheel==0.43.0
+    "###);
+
+    // Ensure that the build requirements are not present in the target directory.
+    assert!(!context.temp_dir.child("target").child("flit_core").is_dir());
+
+    // Ensure that the package is present in the target directory.
+    assert!(context.temp_dir.child("target").child("wheel").is_dir());
+
+    // Ensure that we can't import the package.
+    context.assert_command("import wheel").failure();
+
+    // Ensure that we can import the package by augmenting the `PYTHONPATH`.
+    Command::new(venv_to_interpreter(&context.venv))
+        .arg("-B")
+        .arg("-c")
+        .arg("import wheel")
+        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .current_dir(&context.temp_dir)
+        .assert()
+        .success();
 
     Ok(())
 }

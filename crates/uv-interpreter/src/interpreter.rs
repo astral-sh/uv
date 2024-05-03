@@ -103,6 +103,7 @@ impl Interpreter {
             scheme: virtualenv.scheme,
             sys_executable: virtualenv.executable,
             prefix: virtualenv.root,
+            target: None,
             ..self
         }
     }
