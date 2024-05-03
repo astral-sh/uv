@@ -1329,6 +1329,9 @@ pub(crate) struct PipInstallArgs {
     /// print the resulting plan.
     #[arg(long)]
     pub(crate) dry_run: bool,
+
+    #[arg(long, hide = true)]
+    pub(crate) unstable_uv_lock_file: Option<String>,
 }
 
 #[derive(Args)]

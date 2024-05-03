@@ -390,6 +390,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) reinstall: Reinstall,
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
+    pub(crate) uv_lock: Option<String>,
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
 }
@@ -454,6 +455,7 @@ impl PipInstallSettings {
             no_strict,
             exclude_newer,
             dry_run,
+            unstable_uv_lock_file,
         } = args;
 
         Self {
@@ -470,6 +472,7 @@ impl PipInstallSettings {
             reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
+            uv_lock: unstable_uv_lock_file,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
