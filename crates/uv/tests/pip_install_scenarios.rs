@@ -91,7 +91,7 @@ fn requires_package_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a was not found in the package registry and you require package-a, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because all versions of package-a were not found in the package registry and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -254,7 +254,7 @@ fn transitive_requires_package_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-b was not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because all versions of package-b were not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -1419,7 +1419,7 @@ fn local_used_without_sdist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.2.3 is unusable because no wheels are available with a matching Python ABI and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because package-a==1.2.3 has no wheels are available with a matching Python ABI and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
@@ -1793,7 +1793,7 @@ fn local_transitive_confounding() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-b==2.0.0 is unusable because no wheels are available with a matching Python ABI and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because package-b==2.0.0 has no wheels are available with a matching Python ABI and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4204,7 +4204,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no wheels are available with a matching platform, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels are available with a matching platform, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4245,7 +4245,7 @@ fn no_sdist_no_wheels_with_matching_python() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no wheels are available with a matching Python implementation, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels are available with a matching Python implementation, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4286,7 +4286,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no wheels are available with a matching Python ABI, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels are available with a matching Python ABI, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4329,7 +4329,7 @@ fn no_wheels_no_build() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no wheels are usable and building from source is disabled, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no usable wheels and building from source is disabled, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4368,7 +4368,7 @@ fn only_wheels_no_binary() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no source distribution is available and using wheels is disabled, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no available source distribution and using wheels is disabled, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4485,7 +4485,7 @@ fn package_only_yanked() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4527,7 +4527,7 @@ fn package_only_yanked_in_range() {
       ╰─▶ Because only the following versions of package-a are available:
               package-a<=0.1.0
               package-a==1.0.0
-          and package-a==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that package-a>0.1.0 cannot be used.
+          and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-a>0.1.0 cannot be used.
           And because you require package-a>0.1.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4667,7 +4667,7 @@ fn transitive_package_only_yanked() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that all versions of package-b cannot be used.
+      ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-b cannot be used.
           And because package-a==0.1.0 depends on package-b, we can conclude that package-a==0.1.0 cannot be used.
           And because only package-a==0.1.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
@@ -4719,7 +4719,7 @@ fn transitive_package_only_yanked_in_range() {
       ╰─▶ Because only the following versions of package-b are available:
               package-b<=0.1
               package-b==1.0.0
-          and package-b==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
+          and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
           And because package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
           And because only package-a==0.1.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
@@ -4840,7 +4840,7 @@ fn transitive_yanked_and_unyanked_dependency() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-c==2.0.0 is unusable because it was yanked (reason: Yanked for testing) and package-a==1.0.0 depends on package-c==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because package-c==2.0.0 was yanked (reason: Yanked for testing) and package-a==1.0.0 depends on package-c==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
