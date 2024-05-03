@@ -26,8 +26,8 @@ impl RequirementSatisfaction {
         // Filter out already-installed packages.
         match source {
             // If the requirement comes from a registry, check by name.
-            RequirementSource::Registry { version, .. } => {
-                if version.contains(distribution.version()) {
+            RequirementSource::Registry { specifier, .. } => {
+                if specifier.contains(distribution.version()) {
                     return Ok(Self::Satisfied);
                 }
                 Ok(Self::Mismatch)

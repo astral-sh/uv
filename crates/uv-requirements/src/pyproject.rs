@@ -156,7 +156,8 @@ pub enum Source {
     /// flask = { git = "https://github.com/pallets/flask", tag = "3.0.0" }
     /// ```
     Git {
-        git: String,
+        git: Url,
+        /// The path to the directory with the `pyproject.toml` if it is not in the archive root.
         subdirectory: Option<String>,
         // Only one of the three may be used, we validate this later for a better error message.
         rev: Option<String>,
@@ -172,6 +173,8 @@ pub enum Source {
     /// ```
     Url {
         url: Url,
+        /// For source distributions, the path to the directory with the `pyproject.toml` if it is
+        /// not in the archive root.
         subdirectory: Option<String>,
     },
     /// The path to a dependency. It can either be a wheel (a `.whl` file), a source distribution
@@ -213,13 +216,13 @@ pub enum Source {
 /// The PEP 621 project metadata, with static requirements extracted in advance, joined
 /// with `tool.uv.sources`.
 #[derive(Debug)]
-pub struct Pep621Metadata {
+pub(crate) struct Pep621Metadata {
     /// The name of the project.
-    pub name: PackageName,
+    pub(crate) name: PackageName,
     /// The requirements extracted from the project.
-    pub requirements: Vec<Requirement>,
+    pub(crate) requirements: Vec<Requirement>,
     /// The extras used to collect requirements.
-    pub used_extras: FxHashSet<ExtraName>,
+    pub(crate) used_extras: FxHashSet<ExtraName>,
 }
 
 impl Pep621Metadata {
@@ -230,7 +233,7 @@ impl Pep621Metadata {
     /// dependencies and the extras are requested, the requirements cannot be extracted.
     ///
     /// Returns an error if the requirements are not valid PEP 508 requirements.
-    pub fn try_from(
+    pub(crate) fn try_from(
         pyproject: PyProjectToml,
         extras: &ExtrasSpecification,
         project_dir: &Path,
@@ -423,7 +426,7 @@ pub(crate) fn lower_requirement(
             };
 
             let mut url = Url::parse(&format!("git+{git}"))?;
-            let mut given = git;
+            let mut given = git.to_string();
             if let Some(rev) = reference.as_str() {
                 url.set_path(&format!("{}@{}", url.path(), rev));
                 given = format!("{given}@{rev}");
@@ -470,7 +473,7 @@ pub(crate) fn lower_requirement(
         Source::Registry { index } => match requirement.version_or_url {
             None => return Err(LoweringError::UnconstrainedVersion),
             Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
-                version,
+                specifier: version,
                 index: Some(index),
             },
             Some(VersionOrUrl::Url(_)) => return Err(LoweringError::ConflictingUrls),

@@ -650,7 +650,7 @@ async fn resolve(
         .map(|dist| {
             let source = match dist.installed_version() {
                 InstalledVersion::Version(version) => RequirementSource::Registry {
-                    version: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
                         version.clone(),
                     )),
                     // TODO(konstin): track index

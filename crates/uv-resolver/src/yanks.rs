@@ -24,10 +24,10 @@ impl AllowedYanks {
             .requirements(markers, dependencies)
             .chain(manifest.preferences.iter().map(Preference::requirement))
         {
-            let RequirementSource::Registry { version, .. } = &requirement.source else {
+            let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };
-            let [specifier] = version.as_ref() else {
+            let [specifier] = specifier.as_ref() else {
                 continue;
             };
             if matches!(

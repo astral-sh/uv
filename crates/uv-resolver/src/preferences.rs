@@ -101,8 +101,8 @@ impl Preferences {
                         return None;
                     }
                     match &requirement.source {
-                        RequirementSource::Registry {version , ..} => {
-                            let [version_specifier] = version.as_ref() else {
+                        RequirementSource::Registry { specifier, ..} => {
+                            let [version_specifier] = specifier.as_ref() else {
                                     trace!(
                                     "Excluding {requirement} from preferences due to multiple version specifiers."
                                 );

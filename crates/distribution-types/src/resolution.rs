@@ -77,7 +77,7 @@ impl From<&ResolvedDist> for Requirement {
         let source = match resolved_dist {
             ResolvedDist::Installable(dist) => match dist {
                 Dist::Built(BuiltDist::Registry(wheel)) => RequirementSource::Registry {
-                    version: pep440_rs::VersionSpecifiers::from(
+                    specifier: pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(wheel.filename.version.clone()),
                     ),
                     index: None,
@@ -97,7 +97,7 @@ impl From<&ResolvedDist> for Requirement {
                     editable: None,
                 },
                 Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
-                    version: pep440_rs::VersionSpecifiers::from(
+                    specifier: pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(sdist.filename.version.clone()),
                     ),
                     index: None,
@@ -128,7 +128,7 @@ impl From<&ResolvedDist> for Requirement {
                 },
             },
             ResolvedDist::Installed(dist) => RequirementSource::Registry {
-                version: pep440_rs::VersionSpecifiers::from(
+                specifier: pep440_rs::VersionSpecifiers::from(
                     pep440_rs::VersionSpecifier::equals_version(dist.version().clone()),
                 ),
                 index: None,

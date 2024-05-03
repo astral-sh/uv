@@ -963,7 +963,7 @@ async fn create_pep517_build_environment(
             version_id,
         )
     })?;
-    let extra_requires: Vec<Requirement> = extra_requires
+    let extra_requires: Vec<_> = extra_requires
         .into_iter()
         .map(Requirement::from_pep508)
         .collect::<Result<_, _>>()

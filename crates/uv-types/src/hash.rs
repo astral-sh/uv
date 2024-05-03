@@ -128,9 +128,9 @@ impl HashStrategy {
 
 fn uv_requirement_to_package_id(requirement: &Requirement) -> Result<PackageId, HashStrategyError> {
     Ok(match &requirement.source {
-        RequirementSource::Registry { version, .. } => {
+        RequirementSource::Registry { specifier, .. } => {
             // Must be a single specifier.
-            let [specifier] = version.as_ref() else {
+            let [specifier] = specifier.as_ref() else {
                 return Err(HashStrategyError::UnpinnedRequirement(
                     requirement.to_string(),
                 ));

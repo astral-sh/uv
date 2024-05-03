@@ -186,13 +186,13 @@ fn to_pubgrub(
     locals: &Locals,
 ) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
     match &requirement.source {
-        RequirementSource::Registry { version, .. } => {
+        RequirementSource::Registry { specifier, .. } => {
             // TODO(konsti): We're currently losing the index information here, but we need
             // either pass it to `PubGrubPackage` or the `ResolverProvider` beforehand.
             // If the specifier is an exact version, and the user requested a local version that's
             // more precise than the specifier, use the local version instead.
             let version = if let Some(expected) = locals.get(&requirement.name) {
-                version
+                specifier
                     .iter()
                     .map(|specifier| {
                         Locals::map(expected, specifier)
@@ -203,7 +203,7 @@ fn to_pubgrub(
                         range.intersection(&specifier.into())
                     })?
             } else {
-                version
+                specifier
                     .iter()
                     .map(PubGrubSpecifier::try_from)
                     .fold_ok(Range::full(), |range, specifier| {

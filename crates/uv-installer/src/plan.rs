@@ -213,10 +213,10 @@ impl<'a> Planner<'a> {
 
             // Identify any cached distributions that satisfy the requirement.
             match &requirement.source {
-                RequirementSource::Registry { version, .. } => {
+                RequirementSource::Registry { specifier, .. } => {
                     if let Some((_version, distribution)) = registry_index
                         .get(&requirement.name)
-                        .find(|(version_, _)| version.contains(version_))
+                        .find(|(version, _)| specifier.contains(version))
                     {
                         debug!("Requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));

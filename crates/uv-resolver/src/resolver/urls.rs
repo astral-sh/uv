@@ -20,7 +20,7 @@ impl Urls {
     ) -> Result<Self, ResolveError> {
         let mut urls: FxHashMap<PackageName, VerbatimUrl> = FxHashMap::default();
 
-        // Add the urls themselves to the list of required URLs.
+        // Add the editables themselves to the list of required URLs.
         for (editable, metadata, _) in &manifest.editables {
             if let Some(previous) = urls.insert(metadata.name.clone(), editable.url.clone()) {
                 if !is_equal(&previous, &editable.url) {

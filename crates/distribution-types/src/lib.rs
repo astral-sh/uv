@@ -198,7 +198,6 @@ pub struct DirectUrlSourceDist {
 #[derive(Debug, Clone)]
 pub struct GitSourceDist {
     pub name: PackageName,
-    /// The url without `git+` prefix.
     pub url: VerbatimUrl,
 }
 

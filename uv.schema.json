@@ -609,7 +609,8 @@
               ]
             },
             "git": {
-              "type": "string"
+              "type": "string",
+              "format": "uri"
             },
             "rev": {
               "type": [
@@ -618,6 +619,7 @@
               ]
             },
             "subdirectory": {
+              "description": "The path to the directory with the `pyproject.toml` if it is not in the archive root.",
               "type": [
                 "string",
                 "null"
@@ -640,6 +642,7 @@
           ],
           "properties": {
             "subdirectory": {
+              "description": "For source distributions, the path to the directory with the `pyproject.toml` if it is not in the archive root.",
               "type": [
                 "string",
                 "null"

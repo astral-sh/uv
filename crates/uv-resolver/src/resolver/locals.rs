@@ -145,7 +145,9 @@ fn iter_locals(source: &RequirementSource) -> Box<dyn Iterator<Item = Version> +
     match source {
         // Extract all local versions from specifiers that require an exact version (e.g.,
         // `==1.0.0+local`).
-        RequirementSource::Registry { version, .. } => Box::new(
+        RequirementSource::Registry {
+            specifier: version, ..
+        } => Box::new(
             version
                 .iter()
                 .filter(|specifier| {
@@ -238,7 +240,7 @@ mod tests {
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?,
         ]);
         let source = RequirementSource::Registry {
-            version,
+            specifier: version,
             index: None,
         };
         let locals: Vec<_> = iter_locals(&source).collect();
@@ -250,7 +252,7 @@ mod tests {
             Version::from_str("1.0.0+local")?,
         )?]);
         let source = RequirementSource::Registry {
-            version,
+            specifier: version,
             index: None,
         };
         let locals: Vec<_> = iter_locals(&source).collect();

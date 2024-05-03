@@ -19,6 +19,9 @@ pub struct Requirements {
 }
 
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.
+///
+/// The main change is using [`RequirementSource`] to represent all supported package sources over
+/// [`pep508_rs::VersionOrUrl`], which collapses all URL sources into a single stringly type.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub struct Requirement {
     pub name: PackageName,
@@ -37,16 +40,16 @@ impl Requirement {
         }
     }
 
-    /// Convert a [`pep508_rs::Requirement`] to a [`Requirement`]
+    /// Convert a [`pep508_rs::Requirement`] to a [`Requirement`].
     pub fn from_pep508(requirement: pep508_rs::Requirement) -> Result<Self, ParsedUrlError> {
         let source = match requirement.version_or_url {
             None => RequirementSource::Registry {
-                version: VersionSpecifiers::empty(),
+                specifier: VersionSpecifiers::empty(),
                 index: None,
             },
             // The most popular case: Just a name, a version range and maybe extras.
-            Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
-                version,
+            Some(VersionOrUrl::VersionSpecifier(specifier)) => RequirementSource::Registry {
+                specifier,
                 index: None,
             },
             Some(VersionOrUrl::Url(url)) => {
@@ -80,8 +83,8 @@ impl Display for Requirement {
             )?;
         }
         match &self.source {
-            RequirementSource::Registry { version, index } => {
-                write!(f, "{version}")?;
+            RequirementSource::Registry { specifier, index } => {
+                write!(f, "{specifier}")?;
                 if let Some(index) = index {
                     write!(f, " (index: {index})")?;
                 }
@@ -114,7 +117,8 @@ impl Display for Requirement {
     }
 }
 
-/// The different kinds of requirements (version specifier, HTTP(S) URL, git repository, path).
+/// The different locations with can install a distribution from: Version specifier (from an index),
+/// HTTP(S) URL, git repository, and path.
 ///
 /// We store both the parsed fields (such as the plain url and the subdirectory) and the joined
 /// PEP 508 style url (e.g. `file:///<path>#subdirectory=<subdirectory>`) since we need both in
@@ -123,7 +127,7 @@ impl Display for Requirement {
 pub enum RequirementSource {
     /// The requirement has a version specifier, such as `foo >1,<2`.
     Registry {
-        version: VersionSpecifiers,
+        specifier: VersionSpecifiers,
         /// Choose a version from the index with this name.
         index: Option<String>,
     },
@@ -133,12 +137,12 @@ pub enum RequirementSource {
     /// e.g. `foo @ https://example.org/foo-1.0-py3-none-any.whl`, or a source distribution,
     /// e.g.`foo @ https://example.org/foo-1.0.zip`.
     Url {
-        /// For source distributions, the location of the distribution if it is not in the archive
+        /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
         subdirectory: Option<PathBuf>,
         /// The remote location of the archive file, without subdirectory fragment.
         location: Url,
-        /// The PEP 508 style url in the format
+        /// The PEP 508 style URL in the format
         /// `<scheme>://<domain>/<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
     },
@@ -148,7 +152,7 @@ pub enum RequirementSource {
         repository: Url,
         /// Optionally, the revision, tag, or branch to use.
         reference: GitReference,
-        /// The location of the distribution if it is not in the repository root.
+        /// The path to the source distribution if it is not in the repository root.
         subdirectory: Option<PathBuf>,
         /// The PEP 508 style url in the format
         /// `git+<scheme>://<domain>/<path>@<rev>#subdirectory=<subdirectory>`.
@@ -162,13 +166,15 @@ pub enum RequirementSource {
         path: PathBuf,
         /// For a source tree (a directory), whether to install as an editable.
         editable: Option<bool>,
-        /// The PEP 508 style url in the format
+        /// The PEP 508 style URL in the format
         /// `file:///<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
     },
 }
 
 impl RequirementSource {
+    /// Construct a [`RequirementSource`] for a URL source, given a URL parsed into components and
+    /// the PEP 508 string (after the `@`) as [`VerbatimUrl`].
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
             ParsedUrl::LocalFile(local_file) => RequirementSource::Path {

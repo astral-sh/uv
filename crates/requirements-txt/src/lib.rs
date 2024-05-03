@@ -307,9 +307,9 @@ pub struct RequirementEntry {
     pub hashes: Vec<String>,
 }
 
-// We place with impl here instead of next to `UnresolvedRequirementSpecification` because
-// `UnresolvedRequirementSpecification` is defined in `distribution-types` and `requirements-txt` depends on
-// `distribution-types`.
+// We place the impl here instead of next to `UnresolvedRequirementSpecification` because
+// `UnresolvedRequirementSpecification` is defined in `distribution-types` and `requirements-txt`
+// depends on `distribution-types`.
 impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
     type Error = ParsedUrlError;
 

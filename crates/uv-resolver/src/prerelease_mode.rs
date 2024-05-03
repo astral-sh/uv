@@ -67,11 +67,11 @@ impl PreReleaseStrategy {
                 manifest
                     .requirements(markers, dependencies)
                     .filter(|requirement| {
-                        let RequirementSource::Registry { version, .. } = &requirement.source
+                        let RequirementSource::Registry { specifier, .. } = &requirement.source
                         else {
                             return false;
                         };
-                        version
+                        specifier
                             .iter()
                             .any(pep440_rs::VersionSpecifier::any_prerelease)
                     })
@@ -82,11 +82,11 @@ impl PreReleaseStrategy {
                 manifest
                     .requirements(markers, dependencies)
                     .filter(|requirement| {
-                        let RequirementSource::Registry { version, .. } = &requirement.source
+                        let RequirementSource::Registry { specifier, .. } = &requirement.source
                         else {
                             return false;
                         };
-                        version
+                        specifier
                             .iter()
                             .any(pep440_rs::VersionSpecifier::any_prerelease)
                     })
