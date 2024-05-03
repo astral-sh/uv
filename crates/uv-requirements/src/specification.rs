@@ -180,7 +180,8 @@ impl RequirementsSpecification {
     /// Attempt to read metadata from the `pyproject.toml` directly.
     ///
     /// Since we only use this path for directly included pyproject.toml, we are strict about
-    /// PEP 621 and don't allow invalid `project.dependencies` (e.g. hatch's relative path support).
+    /// PEP 621 and don't allow invalid `project.dependencies` (e.g., Hatch's relative path
+    /// support).
     pub(crate) fn parse_direct_pyproject_toml(
         contents: &str,
         extras: &ExtrasSpecification,
