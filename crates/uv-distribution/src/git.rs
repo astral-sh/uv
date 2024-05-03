@@ -67,7 +67,8 @@ pub(crate) async fn fetch_git_archive(
     )
     .map_err(Error::CacheWrite)?;
 
-    let ParsedGitUrl { url, subdirectory } = ParsedGitUrl::try_from(url).map_err(Box::new)?;
+    let ParsedGitUrl { url, subdirectory } =
+        ParsedGitUrl::try_from(url.clone()).map_err(Box::new)?;
 
     // Fetch the Git repository.
     let source = if let Some(reporter) = reporter {
@@ -95,7 +96,8 @@ pub(crate) async fn resolve_precise(
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
 ) -> Result<Option<Url>, Error> {
-    let ParsedGitUrl { url, subdirectory } = ParsedGitUrl::try_from(url).map_err(Box::new)?;
+    let ParsedGitUrl { url, subdirectory } =
+        ParsedGitUrl::try_from(url.clone()).map_err(Box::new)?;
 
     // If the Git reference already contains a complete SHA, short-circuit.
     if url.precise().is_some() {
@@ -154,7 +156,7 @@ pub(crate) async fn resolve_precise(
 /// This method will only return precise URLs for URLs that have already been resolved via
 /// [`resolve_precise`].
 pub fn to_precise(url: &Url) -> Option<Url> {
-    let ParsedGitUrl { url, subdirectory } = ParsedGitUrl::try_from(url).ok()?;
+    let ParsedGitUrl { url, subdirectory } = ParsedGitUrl::try_from(url.clone()).ok()?;
     let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
     let reference = RepositoryReference::new(&url);
     let precise = resolved_git_refs.get(&reference)?;
@@ -182,12 +184,12 @@ fn is_same_reference_impl<'a>(
     resolved_refs: &FxHashMap<RepositoryReference, GitSha>,
 ) -> bool {
     // Convert `a` to a Git URL, if possible.
-    let Ok(a_git) = ParsedGitUrl::try_from(&Url::from(CanonicalUrl::new(a))) else {
+    let Ok(a_git) = ParsedGitUrl::try_from(Url::from(CanonicalUrl::new(a))) else {
         return false;
     };
 
     // Convert `b` to a Git URL, if possible.
-    let Ok(b_git) = ParsedGitUrl::try_from(&Url::from(CanonicalUrl::new(b))) else {
+    let Ok(b_git) = ParsedGitUrl::try_from(Url::from(CanonicalUrl::new(b))) else {
         return false;
     };
 

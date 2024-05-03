@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use std::borrow::Cow;
 use std::env;
 use std::fmt::Write;
@@ -14,9 +15,12 @@ use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
+use distribution_types::{IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, Verbatim};
+use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
+
 use platform_tags::Tags;
+use pypi_types::Metadata23;
 use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -366,17 +370,33 @@ pub(crate) async fn pip_compile(
 
         // Build all editables.
         let editable_wheel_dir = tempdir_in(cache.root())?;
-        let editables: Vec<_> = downloader
+        let editables: Vec<(LocalEditable, Metadata23, Requirements)> = downloader
             .build_editables(editables, editable_wheel_dir.path())
             .await
             .context("Failed to build editables")?
             .into_iter()
-            .map(|built_editable| (built_editable.editable, built_editable.metadata))
-            .collect();
+            .map(|built_editable| {
+                let requirements = Requirements {
+                    dependencies: built_editable
+                        .metadata
+                        .requires_dist
+                        .iter()
+                        .cloned()
+                        .map(Requirement::from_pep508)
+                        .collect::<Result<_, ParsedUrlError>>()?,
+                    optional_dependencies: IndexMap::default(),
+                };
+                Ok::<_, ParsedUrlError>((
+                    built_editable.editable,
+                    built_editable.metadata,
+                    requirements,
+                ))
+            })
+            .collect::<Result<_, _>>()?;
 
         // Validate that the editables are compatible with the target Python version.
         let requirement = PythonRequirement::new(&interpreter, &markers);
-        for (.., metadata) in &editables {
+        for (_, metadata, _) in &editables {
             if let Some(python_requires) = metadata.requires_python.as_ref() {
                 if !python_requires.contains(requirement.target()) {
                     return Err(anyhow!(
@@ -518,7 +538,7 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        let relevant_markers = resolution.marker_tree(&manifest, &top_level_index, &markers);
+        let relevant_markers = resolution.marker_tree(&manifest, &top_level_index, &markers)?;
         writeln!(
             writer,
             "{}",

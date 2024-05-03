@@ -10,9 +10,8 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
+use distribution_types::{DistributionMetadata, IndexLocations, Name, Requirement, ResolvedDist};
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -211,12 +210,21 @@ async fn venv_impl(
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
         // Resolve the seed packages.
-        let mut requirements = vec![Requirement::from_str("pip").unwrap()];
+        let mut requirements =
+            vec![
+                Requirement::from_pep508(pep508_rs::Requirement::from_str("pip").unwrap()).unwrap(),
+            ];
 
         // Only include `setuptools` and `wheel` on Python <3.12
         if interpreter.python_tuple() < (3, 12) {
-            requirements.push(Requirement::from_str("setuptools").unwrap());
-            requirements.push(Requirement::from_str("wheel").unwrap());
+            requirements.push(
+                Requirement::from_pep508(pep508_rs::Requirement::from_str("setuptools").unwrap())
+                    .unwrap(),
+            );
+            requirements.push(
+                Requirement::from_pep508(pep508_rs::Requirement::from_str("wheel").unwrap())
+                    .unwrap(),
+            );
         }
         let resolution = build_dispatch
             .resolve(&requirements)

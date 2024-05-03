@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Options",
-  "description": "A `[tool.uv]` section.",
+  "title": "ToolUv",
+  "description": "Metadata and configuration for uv.",
   "type": "object",
   "properties": {
     "cache-dir": {
@@ -36,6 +36,25 @@
       "type": [
         "boolean",
         "null"
+      ]
+    },
+    "sources": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/definitions/Source"
+      }
+    },
+    "workspace": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ToolUvWorkspace"
+        },
+        {
+          "type": "null"
+        }
       ]
     }
   },
@@ -573,6 +592,180 @@
         }
       ]
     },
+    "Source": {
+      "description": "A `tool.uv.sources` value.",
+      "anyOf": [
+        {
+          "description": "A remote git repository, either over HTTPS or over SSH.\n\nExample: ```toml flask = { git = \"https://github.com/pallets/flask\", tag = \"3.0.0\" } ```",
+          "type": "object",
+          "required": [
+            "git"
+          ],
+          "properties": {
+            "branch": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "git": {
+              "type": "string",
+              "format": "uri"
+            },
+            "rev": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subdirectory": {
+              "description": "The path to the directory with the `pyproject.toml` if it is not in the archive root.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution (`.zip`, `.tar.gz`).\n\nExample: ```toml flask = { url = \"https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl\" } ```",
+          "type": "object",
+          "required": [
+            "url"
+          ],
+          "properties": {
+            "subdirectory": {
+              "description": "For source distributions, the path to the directory with the `pyproject.toml` if it is not in the archive root.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "The path to a dependency. It can either be a wheel (a `.whl` file), a source distribution as archive (a `.zip` or `.tag.gz` file) or a source distribution as directory (a directory with a pyproject.toml in, or a legacy directory with only a setup.py but non pyproject.toml in it).",
+          "type": "object",
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "editable": {
+              "description": "`false` by default.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "When using a version as requirement, you can optionally pin the requirement to an index you defined, e.g. `torch` after configuring `torch` to `https://download.pytorch.org/whl/cu118`.",
+          "type": "object",
+          "required": [
+            "index"
+          ],
+          "properties": {
+            "index": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A dependency on another package in the workspace.",
+          "type": "object",
+          "required": [
+            "workspace"
+          ],
+          "properties": {
+            "editable": {
+              "description": "`true` by default.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "workspace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Show a better error message for invalid combinations of options.",
+          "type": "object",
+          "required": [
+            "git",
+            "index",
+            "patch",
+            "url",
+            "workspace"
+          ],
+          "properties": {
+            "branch": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "git": {
+              "type": "string"
+            },
+            "index": {
+              "type": "string"
+            },
+            "patch": {
+              "type": "string"
+            },
+            "rev": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subdirectory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": "string"
+            },
+            "workspace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "String": {
+      "type": "string"
+    },
     "TargetTriple": {
       "description": "The supported target triples. Each triple consists of an architecture, vendor, and operating system.\n\nSee: <https://doc.rust-lang.org/nightly/rustc/platform-support.html>",
       "oneOf": [
@@ -675,6 +868,31 @@
           ]
         }
       ]
+    },
+    "ToolUvWorkspace": {
+      "description": "`tool.uv.workspace`.",
+      "type": "object",
+      "properties": {
+        "exclude": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/String"
+          }
+        },
+        "members": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/String"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

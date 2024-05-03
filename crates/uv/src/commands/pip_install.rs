@@ -11,13 +11,16 @@ use tempfile::tempdir_in;
 use tracing::{debug, enabled, Level};
 
 use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable,
-    LocalEditables, Name, Resolution,
+    DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist,
+    LocalEditable, LocalEditables, Name, ParsedUrl, ParsedUrlError, RequirementSource, Resolution,
 };
+use distribution_types::{Requirement, Requirements};
+use indexmap::IndexMap;
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::{MarkerEnvironment, Requirement};
+use pep440_rs::{VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::Tags;
-use pypi_types::{Metadata23, Yanked};
+use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -184,7 +187,7 @@ pub(crate) async fn pip_install(
                 if enabled!(Level::DEBUG) {
                     for requirement in recursive_requirements
                         .iter()
-                        .map(ToString::to_string)
+                        .map(|entry| entry.requirement.to_string())
                         .sorted()
                     {
                         debug!("Requirement satisfied: {requirement}");
@@ -642,25 +645,62 @@ async fn resolve(
 
     // Prefer current site packages; filter out packages that are marked for reinstall or upgrade
     let preferences = site_packages
-        .requirements()
-        .filter(|requirement| !exclusions.contains(&requirement.name))
-        .map(Preference::from_requirement)
-        .collect();
+        .iter()
+        .filter(|dist| !exclusions.contains(dist.name()))
+        .map(|dist| {
+            let source = match dist.installed_version() {
+                InstalledVersion::Version(version) => RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                        version.clone(),
+                    )),
+                    // TODO(konstin): track index
+                    index: None,
+                },
+                InstalledVersion::Url(url, _version) => {
+                    let parsed_url = ParsedUrl::try_from(url.clone())?;
+                    RequirementSource::from_parsed_url(
+                        parsed_url,
+                        VerbatimUrl::from_url(url.clone()),
+                    )
+                }
+            };
+            let requirement = Requirement {
+                name: dist.name().clone(),
+                extras: vec![],
+                marker: None,
+                source,
+            };
+            Ok(Preference::from_requirement(requirement))
+        })
+        .collect::<Result<_, _>>()
+        .map_err(Error::UnsupportedInstalledDist)?;
 
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
 
     // Map the editables to their metadata.
-    let editables: Vec<(LocalEditable, Metadata23)> = editables
+    let editables: Vec<_> = editables
         .iter()
         .map(|built_editable| {
-            (
+            let dependencies: Vec<_> = built_editable
+                .metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(Requirement::from_pep508)
+                .collect::<Result<_, _>>()?;
+            Ok::<_, ParsedUrlError>((
                 built_editable.editable.clone(),
                 built_editable.metadata.clone(),
-            )
+                Requirements {
+                    dependencies,
+                    optional_dependencies: IndexMap::default(),
+                },
+            ))
         })
-        .collect();
+        .collect::<Result<_, _>>()
+        .map_err(|err| Error::ParsedUrl(Box::new(err)))?;
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -1158,5 +1198,11 @@ enum Error {
     Lookahead(#[from] uv_requirements::LookaheadError),
 
     #[error(transparent)]
+    ParsedUrl(Box<distribution_types::ParsedUrlError>),
+
+    #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+
+    #[error("Installed distribution has unsupported type")]
+    UnsupportedInstalledDist(#[source] Box<distribution_types::ParsedUrlError>),
 }

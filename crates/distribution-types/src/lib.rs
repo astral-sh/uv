@@ -56,8 +56,10 @@ pub use crate::index_url::*;
 pub use crate::installed::*;
 pub use crate::parsed_url::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::requirement::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
+pub use crate::specified_requirement::*;
 pub use crate::traits::*;
 
 mod any;
@@ -72,8 +74,10 @@ mod index_url;
 mod installed;
 mod parsed_url;
 mod prioritized_distribution;
+mod requirement;
 mod resolution;
 mod resolved;
+mod specified_requirement;
 mod traits;
 
 #[derive(Debug, Clone)]
@@ -228,8 +232,8 @@ impl Dist {
     }
 
     /// A remote built distribution (`.whl`) or source distribution from a `http://` or `https://`
-    /// url.
-    fn from_http_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
+    /// URL.
+    pub fn from_http_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
         if Path::new(url.path())
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
@@ -256,8 +260,12 @@ impl Dist {
         }
     }
 
-    /// A local built or source distribution from a `file://` url.
-    fn from_file_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
+    /// A local built or source distribution from a `file://` URL.
+    pub fn from_file_url(
+        name: PackageName,
+        url: VerbatimUrl,
+        editable: bool,
+    ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
         let path = match url
             .to_file_path()
@@ -285,6 +293,10 @@ impl Dist {
                 ));
             }
 
+            if editable {
+                return Err(Error::EditableFile(url));
+            }
+
             Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                 filename,
                 url,
@@ -295,7 +307,7 @@ impl Dist {
                 name,
                 url,
                 path,
-                editable: false,
+                editable,
             })))
         }
     }
@@ -305,11 +317,12 @@ impl Dist {
         Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
     }
 
+    // TODO(konsti): We should carry the parsed URL through the codebase.
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: VerbatimUrl) -> Result<Self, Error> {
         match Scheme::parse(url.scheme()) {
             Some(Scheme::Http | Scheme::Https) => Self::from_http_url(name, url),
-            Some(Scheme::File) => Self::from_file_url(name, url),
+            Some(Scheme::File) => Self::from_file_url(name, url, false),
             Some(Scheme::GitSsh | Scheme::GitHttps) => Self::from_git_url(name, url),
             Some(Scheme::GitGit | Scheme::GitHttp) => Err(Error::UnsupportedScheme(
                 url.scheme().to_owned(),

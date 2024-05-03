@@ -2,8 +2,7 @@ use std::str::FromStr;
 
 use bench::criterion::black_box;
 use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
-
-use pep508_rs::Requirement;
+use distribution_types::Requirement;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_resolver::Manifest;
@@ -15,7 +14,10 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     let cache = &Cache::from_path(".cache").unwrap();
-    let manifest = &Manifest::simple(vec![Requirement::from_str("jupyter").unwrap()]);
+    let manifest = &Manifest::simple(vec![Requirement::from_pep508(
+        pep508_rs::Requirement::from_str("jupyter").unwrap(),
+    )
+    .unwrap()]);
     let client = &RegistryClientBuilder::new(cache.clone()).build();
 
     let run = || {
@@ -35,13 +37,14 @@ criterion_group!(uv, resolve_warm_jupyter);
 criterion_main!(uv);
 
 mod resolver {
-    use anyhow::Result;
-    use once_cell::sync::Lazy;
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
 
-    use distribution_types::{IndexLocations, Resolution, SourceDist};
-    use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
+    use anyhow::Result;
+    use once_cell::sync::Lazy;
+
+    use distribution_types::{IndexLocations, Requirement, Resolution, SourceDist};
+    use pep508_rs::{MarkerEnvironment, StringVersion};
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
     use uv_client::RegistryClient;

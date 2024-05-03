@@ -12,8 +12,7 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
-use pep508_rs::Requirement;
+use distribution_types::{IndexLocations, Name, Requirement, Resolution, SourceDist};
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;

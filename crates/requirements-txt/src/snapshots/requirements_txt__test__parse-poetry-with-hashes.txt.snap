@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "werkzeug",
@@ -58,7 +58,7 @@ RequirementsTxt {
             ],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "urllib3",
@@ -111,7 +111,7 @@ RequirementsTxt {
             ],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "ansicon",
@@ -175,7 +175,7 @@ RequirementsTxt {
             ],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "requests-oauthlib",
@@ -229,7 +229,7 @@ RequirementsTxt {
             ],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "psycopg2",

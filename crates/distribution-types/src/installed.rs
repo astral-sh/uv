@@ -7,6 +7,7 @@ use tracing::warn;
 use url::Url;
 
 use pep440_rs::Version;
+use pypi_types::DirectUrl;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
@@ -32,6 +33,7 @@ pub struct InstalledRegistryDist {
 pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
+    pub direct_url: Box<DirectUrl>,
     pub url: Url,
     pub editable: bool,
     pub path: PathBuf,
@@ -60,7 +62,8 @@ impl InstalledDist {
                     Ok(url) => Ok(Some(Self::Url(InstalledDirectUrlDist {
                         name,
                         version,
-                        editable: matches!(&direct_url, pypi_types::DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
+                        editable: matches!(&direct_url, DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
+                        direct_url: Box::new(direct_url),
                         url,
                         path: path.to_path_buf(),
                     }))),
@@ -101,12 +104,12 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    pub fn direct_url(path: &Path) -> Result<Option<pypi_types::DirectUrl>> {
+    pub fn direct_url(path: &Path) -> Result<Option<DirectUrl>> {
         let path = path.join("direct_url.json");
         let Ok(file) = fs_err::File::open(path) else {
             return Ok(None);
         };
-        let direct_url = serde_json::from_reader::<fs_err::File, pypi_types::DirectUrl>(file)?;
+        let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
         Ok(Some(direct_url))
     }
 

@@ -1118,6 +1118,7 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "git2",
+ "indexmap",
  "itertools 0.12.1",
  "once_cell",
  "pep440_rs",
@@ -2522,6 +2523,7 @@ name = "pep508_rs"
 version = "0.4.2"
 dependencies = [
  "derivative",
+ "indexmap",
  "insta",
  "log",
  "once_cell",
@@ -2537,6 +2539,7 @@ dependencies = [
  "unicode-width",
  "url",
  "uv-fs",
+ "uv-git",
  "uv-normalize",
 ]
 
@@ -3070,10 +3073,12 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "distribution-types",
  "fs-err",
  "indoc",
  "insta",
  "itertools 0.12.1",
+ "pep440_rs",
  "pep508_rs",
  "regex",
  "reqwest",
@@ -3081,6 +3086,7 @@ dependencies = [
  "serde",
  "tempfile",
  "test-case",
+ "thiserror",
  "tokio",
  "tracing",
  "unscanny",
@@ -3446,6 +3452,7 @@ dependencies = [
  "schemars_derive",
  "serde",
  "serde_json",
+ "url",
 ]
 
 [[package]]
@@ -4482,6 +4489,7 @@ dependencies = [
  "filetime",
  "flate2",
  "fs-err",
+ "indexmap",
  "indicatif",
  "indoc",
  "insta",
@@ -4490,6 +4498,7 @@ dependencies = [
  "miette",
  "mimalloc",
  "owo-colors",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "predicates",
@@ -4661,6 +4670,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
+ "distribution-types",
  "itertools 0.12.1",
  "pep508_rs",
  "platform-tags",
@@ -4669,6 +4679,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uv-auth",
+ "uv-cache",
  "uv-normalize",
 ]
 
@@ -4714,6 +4725,7 @@ dependencies = [
  "uv-installer",
  "uv-interpreter",
  "uv-normalize",
+ "uv-requirements",
  "uv-resolver",
  "uv-types",
  "uv-workspace",
@@ -4850,6 +4862,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-channel",
+ "distribution-filename",
  "distribution-types",
  "fs-err",
  "futures",
@@ -4876,6 +4889,7 @@ dependencies = [
  "uv-fs",
  "uv-interpreter",
  "uv-normalize",
+ "uv-requirements",
  "uv-types",
  "uv-warnings",
  "walkdir",
@@ -4943,11 +4957,17 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
+ "glob",
  "indexmap",
+ "indoc",
+ "insta",
+ "path-absolutize",
+ "pep440_rs",
  "pep508_rs",
  "pypi-types",
  "requirements-txt",
  "rustc-hash",
+ "schemars",
  "serde",
  "thiserror",
  "toml",
@@ -4957,6 +4977,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution",
  "uv-fs",
+ "uv-git",
  "uv-normalize",
  "uv-resolver",
  "uv-types",

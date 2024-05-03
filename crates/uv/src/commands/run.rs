@@ -3,11 +3,13 @@ use crate::commands::ExitStatus;
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
 use anyhow::{Context, Result};
-use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, Name, Resolution};
+use distribution_types::{
+    IndexLocations, InstalledMetadata, LocalDist, Name, Requirement, Resolution,
+};
 use install_wheel_rs::linker::LinkMode;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pep508_rs::{MarkerEnvironment, PackageName, Requirement};
+use pep508_rs::{MarkerEnvironment, PackageName};
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use std::ffi::OsString;
@@ -236,7 +238,7 @@ async fn environment_for_run(
                             "All requirements satisfied: {}",
                             recursive_requirements
                                 .iter()
-                                .map(ToString::to_string)
+                                .map(|entry| entry.requirement.to_string())
                                 .sorted()
                                 .join(" | ")
                         );

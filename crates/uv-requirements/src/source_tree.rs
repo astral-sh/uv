@@ -5,8 +5,10 @@ use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use url::Url;
 
-use distribution_types::{BuildableSource, HashPolicy, PathSourceUrl, SourceUrl, VersionId};
-use pep508_rs::Requirement;
+use distribution_types::{
+    BuildableSource, HashPolicy, PathSourceUrl, Requirement, SourceUrl, VersionId,
+};
+
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_fs::Simplified;
@@ -67,11 +69,15 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             .buffered(50)
             .try_collect()
             .await?;
-        Ok(requirements.into_iter().flatten().collect())
+        Ok(requirements
+            .into_iter()
+            .flatten()
+            .map(Requirement::from_pep508)
+            .collect::<Result<_, _>>()?)
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn resolve_source_tree(&self, source_tree: &Path) -> Result<Vec<Requirement>> {
+    async fn resolve_source_tree(&self, source_tree: &Path) -> Result<Vec<pep508_rs::Requirement>> {
         // Convert to a buildable source.
         let path = fs_err::canonicalize(source_tree).with_context(|| {
             format!(
@@ -138,7 +144,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             ExtrasSpecification::All => Ok(metadata
                 .requires_dist
                 .into_iter()
-                .map(|requirement| Requirement {
+                .map(|requirement| pep508_rs::Requirement {
                     marker: requirement
                         .marker
                         .and_then(|marker| marker.simplify_extras(&metadata.provides_extras)),
@@ -148,7 +154,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             ExtrasSpecification::Some(extras) => Ok(metadata
                 .requires_dist
                 .into_iter()
-                .map(|requirement| Requirement {
+                .map(|requirement| pep508_rs::Requirement {
                     marker: requirement
                         .marker
                         .and_then(|marker| marker.simplify_extras(extras)),
