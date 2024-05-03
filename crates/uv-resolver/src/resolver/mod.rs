@@ -152,7 +152,7 @@ impl Display for UnavailableVersion {
             UnavailableVersion::Offline => f.write_str(
                 "network connectivity is disabled, but the metadata wasn't found in the cache",
             ),
-            UnavailableVersion::ResolverError(err) => f.write_str(&err),
+            UnavailableVersion::ResolverError(err) => f.write_str(err),
         }
     }
 }
