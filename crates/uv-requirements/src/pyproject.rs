@@ -31,7 +31,7 @@ use crate::ExtrasSpecification;
 pub enum Pep621Error {
     #[error(transparent)]
     Pep508(#[from] pep508_rs::Pep508Error),
-    #[error("You need to specify a `[project]` section to use `[tool.uv.sources]`")]
+    #[error("Must specify a `[project]` section alongside `[tool.uv.sources]`")]
     MissingProjectSection,
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
     CantBeDynamic(&'static str),
@@ -47,32 +47,33 @@ pub enum LoweringError {
     DirectUrl(#[from] Box<ParsedUrlError>),
     #[error("Unsupported path (can't convert to URL): `{}`", _0.user_display())]
     PathToUrl(PathBuf),
-    #[error("The package is not included as workspace package in `tool.uv.workspace`")]
+    #[error("Package is not included as workspace package in `tool.uv.workspace`")]
     UndeclaredWorkspacePackage,
-    #[error("You need to specify a version constraint")]
+    #[error("Must specify a version constraint")]
     UnconstrainedVersion,
-    #[error("You can only use one of rev, tag or branch")]
+    #[error("Can only specify one of rev, tag, or branch")]
     MoreThanOneGitRef,
-    #[error("You can't combine these options in `tool.uv.sources`")]
+    #[error("Unable to combine options in `tool.uv.sources`")]
     InvalidEntry,
     #[error(transparent)]
     InvalidUrl(#[from] url::ParseError),
-    #[error("You can't combine a url in `project` with `tool.uv.sources`")]
+    #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
     ConflictingUrls,
-    /// Note: Infallible on unix and windows.
     #[error("Could not normalize path: `{0}`")]
     AbsolutizeError(String, #[source] io::Error),
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
+    #[error("`workspace = false` is not yet supported")]
+    WorkspaceFalse,
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
-    /// Project metadata
+    /// PEP 621-compliant project metadata.
     pub project: Option<Project>,
-    /// Uv additions
+    /// Proprietary additions.
     pub tool: Option<Tool>,
 }
 
@@ -149,17 +150,18 @@ impl Deref for SerdePattern {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, deny_unknown_fields)]
 pub enum Source {
-    /// A remote git repository, either over HTTPS or over SSH.
+    /// A remote Git repository, available over HTTPS or SSH.
     ///
     /// Example:
     /// ```toml
     /// flask = { git = "https://github.com/pallets/flask", tag = "3.0.0" }
     /// ```
     Git {
+        /// The repository URL (without the `git+` prefix).
         git: Url,
-        /// The path to the directory with the `pyproject.toml` if it is not in the archive root.
+        /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
         subdirectory: Option<String>,
-        // Only one of the three may be used, we validate this later for a better error message.
+        // Only one of the three may be used; we'll validate this later and emit a custom error.
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
@@ -173,33 +175,32 @@ pub enum Source {
     /// ```
     Url {
         url: Url,
-        /// For source distributions, the path to the directory with the `pyproject.toml` if it is
+        /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<String>,
     },
-    /// The path to a dependency. It can either be a wheel (a `.whl` file), a source distribution
-    /// as archive (a `.zip` or `.tag.gz` file) or a source distribution as directory (a directory
-    /// with a pyproject.toml in, or a legacy directory with only a setup.py but non pyproject.toml
-    /// in it).
+    /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
+    /// `.tag.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
+    /// `setup.py` file in the root).
     Path {
         path: String,
         /// `false` by default.
         editable: Option<bool>,
     },
-    /// When using a version as requirement, you can optionally pin the requirement to an index
-    /// you defined, e.g. `torch` after configuring `torch` to
-    /// `https://download.pytorch.org/whl/cu118`.
+    /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
         // TODO(konstin): The string is more-or-less a placeholder
         index: String,
     },
     /// A dependency on another package in the workspace.
     Workspace {
+        /// When set to `false`, the package will be fetched from the remote index, rather than
+        /// included as a workspace package.
         workspace: bool,
         /// `true` by default.
         editable: Option<bool>,
     },
-    /// Show a better error message for invalid combinations of options.
+    /// A catch-all variant used to emit precise error messages when deserializing.
     CatchAll {
         git: String,
         subdirectory: Option<String>,
@@ -365,7 +366,7 @@ pub(crate) fn lower_requirements(
     })
 }
 
-/// Combine `project.dependencies`/`project.optional-dependencies` with `tool.uv.sources`.
+/// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
 pub(crate) fn lower_requirement(
     requirement: pep508_rs::Requirement,
     project_name: &PackageName,
@@ -391,7 +392,8 @@ pub(crate) fn lower_requirement(
     }
 
     let Some(source) = source else {
-        // Support recursive editable inclusions. TODO(konsti): This is a workspace feature.
+        // Support recursive editable inclusions.
+        // TODO(konsti): This is a workspace feature.
         return if requirement.version_or_url.is_none() && &requirement.name != project_name {
             Err(LoweringError::UnconstrainedVersion)
         } else {
@@ -482,11 +484,11 @@ pub(crate) fn lower_requirement(
             workspace,
             editable,
         } => {
+            if !workspace {
+                return Err(LoweringError::WorkspaceFalse);
+            }
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                 return Err(LoweringError::ConflictingUrls);
-            }
-            if !workspace {
-                todo!()
             }
             let path = workspace_packages
                 .get(&requirement.name)
@@ -495,7 +497,7 @@ pub(crate) fn lower_requirement(
             path_source(path, project_dir, editable)?
         }
         Source::CatchAll { .. } => {
-            // This is better than a serde error about not matching any enum variant
+            // Emit a dedicated error message, which is an improvement over Serde's default error.
             return Err(LoweringError::InvalidEntry);
         }
     };
@@ -526,8 +528,8 @@ fn path_source(
     })
 }
 
-/// Given an extra in a project that may contain references to the project
-/// itself, flatten it into a list of requirements.
+/// Given an extra in a project that may contain references to the project itself, flatten it into
+/// a list of requirements.
 ///
 /// For example:
 /// ```toml
@@ -665,7 +667,7 @@ mod test {
         assert_snapshot!(format_err(input), @r###"
         error: Failed to parse `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
-          Caused by: You can't combine a url in `project` with `tool.uv.sources`
+          Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
         "###);
     }
 
@@ -686,7 +688,7 @@ mod test {
         assert_snapshot!(format_err(input), @r###"
         error: Failed to parse `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
-          Caused by: You can only use one of rev, tag or branch
+          Caused by: Can only specify one of rev, tag, or branch
         "###);
     }
 
@@ -756,7 +758,7 @@ mod test {
         assert_snapshot!(format_err(input), @r###"
         error: Failed to parse `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
-          Caused by: You need to specify a version constraint
+          Caused by: Must specify a version constraint
         "###);
     }
 
@@ -828,7 +830,7 @@ mod test {
         assert_snapshot!(format_err(input), @r###"
         error: Failed to parse `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
-          Caused by: You can't combine a url in `project` with `tool.uv.sources`
+          Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
         "###);
     }
 
@@ -849,7 +851,7 @@ mod test {
         assert_snapshot!(format_err(input), @r###"
         error: Failed to parse `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
-          Caused by: The package is not included as workspace package in `tool.uv.workspace`
+          Caused by: Package is not included as workspace package in `tool.uv.workspace`
         "###);
     }
 
@@ -882,7 +884,7 @@ mod test {
 
         assert_snapshot!(format_err(input), @r###"
         error: Failed to parse `pyproject.toml`
-          Caused by: You need to specify a `[project]` section to use `[tool.uv.sources]`
+          Caused by: Must specify a `[project]` section alongside `[tool.uv.sources]`
         "###);
     }
 }

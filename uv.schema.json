@@ -596,7 +596,7 @@
       "description": "A `tool.uv.sources` value.",
       "anyOf": [
         {
-          "description": "A remote git repository, either over HTTPS or over SSH.\n\nExample: ```toml flask = { git = \"https://github.com/pallets/flask\", tag = \"3.0.0\" } ```",
+          "description": "A remote Git repository, available over HTTPS or SSH.\n\nExample: ```toml flask = { git = \"https://github.com/pallets/flask\", tag = \"3.0.0\" } ```",
           "type": "object",
           "required": [
             "git"
@@ -609,6 +609,7 @@
               ]
             },
             "git": {
+              "description": "The repository URL (without the `git+` prefix).",
               "type": "string",
               "format": "uri"
             },
@@ -619,7 +620,7 @@
               ]
             },
             "subdirectory": {
-              "description": "The path to the directory with the `pyproject.toml` if it is not in the archive root.",
+              "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
               "type": [
                 "string",
                 "null"
@@ -642,7 +643,7 @@
           ],
           "properties": {
             "subdirectory": {
-              "description": "For source distributions, the path to the directory with the `pyproject.toml` if it is not in the archive root.",
+              "description": "For source distributions, the path to the directory with the `pyproject.toml`, if it's not in the archive root.",
               "type": [
                 "string",
                 "null"
@@ -656,7 +657,7 @@
           "additionalProperties": false
         },
         {
-          "description": "The path to a dependency. It can either be a wheel (a `.whl` file), a source distribution as archive (a `.zip` or `.tag.gz` file) or a source distribution as directory (a directory with a pyproject.toml in, or a legacy directory with only a setup.py but non pyproject.toml in it).",
+          "description": "The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or `.tag.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or `setup.py` file in the root).",
           "type": "object",
           "required": [
             "path"
@@ -676,7 +677,7 @@
           "additionalProperties": false
         },
         {
-          "description": "When using a version as requirement, you can optionally pin the requirement to an index you defined, e.g. `torch` after configuring `torch` to `https://download.pytorch.org/whl/cu118`.",
+          "description": "A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.",
           "type": "object",
           "required": [
             "index"
@@ -703,13 +704,14 @@
               ]
             },
             "workspace": {
+              "description": "When set to `false`, the package will be fetched from the remote index, rather than included as a workspace package.",
               "type": "boolean"
             }
           },
           "additionalProperties": false
         },
         {
-          "description": "Show a better error message for invalid combinations of options.",
+          "description": "A catch-all variant used to emit precise error messages when deserializing.",
           "type": "object",
           "required": [
             "git",
