@@ -4601,7 +4601,7 @@ fn tool_uv_sources() -> Result<()> {
         version = "0.0.0"
         dependencies = [
           "tqdm>4,<=5",
-          "packaging @ git+https://github.com/pypa/packaging",
+          "packaging @ git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e",
           "poetry_editable",
           "urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl",
           # Windows consistency
@@ -4619,7 +4619,7 @@ fn tool_uv_sources() -> Result<()> {
         [tool.uv.sources]
         tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
         boltons = { git = "https://github.com/mahmoud/boltons", rev = "57fbaa9b673ed85b32458b31baeeae230520e4a0" }
-        poetry_editable = { path = "../poetry_editable" }
+        poetry_editable = { path = "../poetry_editable", editable = true }
     "#})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
@@ -4646,8 +4646,9 @@ fn tool_uv_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Built 1 editable in [TIME]
     Resolved 9 packages in [TIME]
-    Downloaded 9 packages in [TIME]
+    Downloaded 8 packages in [TIME]
     Installed 9 packages in [TIME]
      + anyio==4.3.0
      + boltons==24.0.1.dev0 (from git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0)
@@ -4661,8 +4662,8 @@ fn tool_uv_sources() -> Result<()> {
     "###
     );
 
-    // Install the editable packages.
-    uv_snapshot!(context.install()
+    // Re-install the editable packages.
+    uv_snapshot!(context.filters(), windows_filters=false, context.install()
         .arg("-r")
         .arg(require_path), @r###"
     success: true
@@ -4670,8 +4671,7 @@ fn tool_uv_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
-    Audited 8 packages in [TIME]
+    Audited 5 packages in [TIME]
     "###
     );
     Ok(())
