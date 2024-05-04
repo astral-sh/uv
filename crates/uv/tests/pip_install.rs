@@ -4667,13 +4667,15 @@ fn tool_uv_sources() -> Result<()> {
     uv_snapshot!(context.filters(), windows_filters=false, context.install()
         .arg("--preview")
         .arg("-r")
-        .arg(require_path), @r###"
+        .arg(require_path)
+        .arg("--extra")
+        .arg("utils"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 5 packages in [TIME]
+    Audited 6 packages in [TIME]
     "###
     );
     Ok(())
