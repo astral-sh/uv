@@ -60,6 +60,7 @@ COPY crates/ crates/
 COPY Cargo.toml Cargo.lock .
 ARG APP_NAME=uv
 ARG CARGO_HOME=/usr/local/cargo
+ARG RUSTFLAGS="-C strip=symbols -C relocation-model=static -C target-feature=+crt-static -C opt-level=z"
 ARG TARGETPLATFORM
 RUN \
   --mount=type=cache,target="/root/.cache/zig",id="zig-cache" \
