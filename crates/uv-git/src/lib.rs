@@ -104,7 +104,10 @@ impl From<GitUrl> for Url {
         } else {
             // Otherwise, add the branch or tag name.
             match git.reference {
-                GitReference::BranchOrTag(rev)
+                GitReference::Branch(rev)
+                | GitReference::Tag(rev)
+                | GitReference::ShortCommit(rev)
+                | GitReference::BranchOrTag(rev)
                 | GitReference::NamedRef(rev)
                 | GitReference::FullCommit(rev)
                 | GitReference::BranchOrTagOrCommit(rev) => {
