@@ -146,9 +146,9 @@ pub enum RequirementSource {
         /// `<scheme>://<domain>/<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
     },
-    /// A remote git repository, either over HTTPS or over SSH.
+    /// A remote Git repository, over either HTTPS or SSH.
     Git {
-        /// The repository URL (without `git+` prefix).
+        /// The repository URL (without the `git+` prefix).
         repository: Url,
         /// Optionally, the revision, tag, or branch to use.
         reference: GitReference,
