@@ -67,7 +67,7 @@ else {
 
 New-Variable -Scope global -Name _OLD_VIRTUAL_PATH -Value $env:PATH
 
-$env:PATH = "$env:VIRTUAL_ENV/{{ BIN_NAME }};" + $env:PATH
+$env:PATH = "$env:VIRTUAL_ENV/{{ BIN_NAME }}{{ PATH_SEP }}" + $env:PATH
 if (!$env:VIRTUAL_ENV_DISABLE_PROMPT) {
     function global:_old_virtual_prompt {
         ""
