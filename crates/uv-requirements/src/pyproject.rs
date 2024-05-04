@@ -426,18 +426,19 @@ pub(crate) fn lower_requirement(
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                 return Err(LoweringError::ConflictingUrls);
             }
-            // TODO(konsti): We know better than this enum
             let reference = match (rev, tag, branch) {
                 (None, None, None) => GitReference::DefaultBranch,
                 (Some(rev), None, None) => {
-                    if rev.len() == 40 {
-                        GitReference::FullCommit(rev)
+                    if rev.starts_with("refs/") {
+                        GitReference::NamedRef(rev.clone())
+                    } else if rev.len() == 40 {
+                        GitReference::FullCommit(rev.clone())
                     } else {
-                        GitReference::BranchOrTagOrCommit(rev)
+                        GitReference::ShortCommit(rev.clone())
                     }
                 }
-                (None, Some(tag), None) => GitReference::BranchOrTag(tag),
-                (None, None, Some(branch)) => GitReference::BranchOrTag(branch),
+                (None, Some(tag), None) => GitReference::Tag(tag),
+                (None, None, Some(branch)) => GitReference::Branch(branch),
                 _ => return Err(LoweringError::MoreThanOneGitRef),
             };
 
