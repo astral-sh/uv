@@ -33,31 +33,20 @@ HEREDOC
 # Install rust
 ENV PATH="$HOME/.cargo/bin:$PATH"
 COPY rust-toolchain.toml .
-ARG TARGETPLATFORM
 RUN <<HEREDOC
-  case "${TARGETPLATFORM}" in
-    ( 'linux/arm64' )
-      CARGO_BUILD_TARGET='aarch64-unknown-linux-musl'
-      ;;
-    ( 'linux/amd64' )
-      CARGO_BUILD_TARGET='x86_64-unknown-linux-musl'
-      ;;
-    *) exit 1 ;;
-  esac
-
   # Install `rustup` to match the toolchain version in `rust-toolchain.toml`:
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+
   # Ensure toolchain to be installed upon rustup command uses the minimal profile to avoid excess layer weight:
   # https://github.com/rust-lang/rustup/issues/3805#issuecomment-2094066914
   echo 'profile = "minimal"' >> rust-toolchain.toml
+  echo 'targets = [ "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl" ]' >> rust-toolchain.toml
   # Add the relevant musl target triple (to build uv as static binary):
-  rustup target add "${CARGO_BUILD_TARGET}"
-
-  # For the next RUN layer to reference:
-  echo "${CARGO_BUILD_TARGET}" > rust_target.txt
+  # Workaround until `ensure` arrives: https://github.com/rust-lang/rustup/issues/2686#issuecomment-788825744
+  rustup show
 HEREDOC
 
-# Build app
+# Build app for both AMD64 + ARM64
 ARG APP_NAME=uv
 ARG CARGO_HOME=/usr/local/cargo
 COPY crates/ crates/
@@ -75,14 +64,22 @@ RUN \
   --mount=type=tmpfs,target="${CARGO_HOME}/registry/src" \
   --mount=type=tmpfs,target="${CARGO_HOME}/git/checkouts" \
   <<HEREDOC
-    cargo zigbuild --release --target "$(cat rust_target.txt)" --bin "${APP_NAME}"
-    cp "target/$(cat rust_target.txt)/release/${APP_NAME}" "/${APP_NAME}"
+    BUILD_TARGETS=('aarch64-unknown-linux-musl' 'x86_64-unknown-linux-musl')
+    for BUILD_TARGET in "${BUILD_TARGETS[@]}"; do
+      cargo zigbuild --release --bin "${APP_NAME}" --target "${BUILD_TARGET}"
 
-    # TODO(konsti): Optimize binary size, with a version that also works when cross compiling
-    # strip --strip-all /uv
+      mkdir -p /dist/${BUILD_TARGET}/
+      cp "target/${BUILD_TARGET}/release/${APP_NAME}" "/dist/${BUILD_TARGET}/${APP_NAME}"
+    done
 HEREDOC
 
-FROM scratch AS output
-COPY --from=builder /uv /uv
+# Handle individual ARM64 + AMD64 images:
+FROM scratch AS output-arm64
+COPY --from=builder /dist/aarch64-unknown-linux-musl/uv /uv
+
+FROM scratch AS output-amd64
+COPY --from=builder /dist/x86_64-unknown-linux-musl/uv /uv
+
+FROM output-${TARGETARCH}
 WORKDIR /io
 ENTRYPOINT ["/uv"]
