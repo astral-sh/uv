@@ -2,12 +2,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use itertools::{Either, Itertools};
 use rustc_hash::FxHashSet;
 use tracing::{debug, instrument};
 
 use cache_key::CanonicalUrl;
 use distribution_types::{
-    FlatIndexLocation, IndexUrl, Requirement, UnresolvedRequirement,
+    FlatIndexLocation, IndexUrl, Requirement, RequirementSource, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use requirements_txt::{
@@ -201,19 +202,39 @@ impl RequirementsSpecification {
             &workspace_sources,
             &workspace_packages,
         ) {
-            Ok(Some(project)) => Ok(Self {
-                project: Some(project.name),
-                requirements: project
+            Ok(Some(project)) => {
+                // Partition into editable and non-editable requirements.
+                let (editables, requirements): (Vec<_>, Vec<_>) = project
                     .requirements
                     .into_iter()
-                    .map(|requirement| UnresolvedRequirementSpecification {
-                        requirement: UnresolvedRequirement::Named(requirement),
-                        hashes: vec![],
-                    })
-                    .collect(),
-                extras: project.used_extras,
-                ..Self::default()
-            }),
+                    .partition_map(|requirement| {
+                        if let RequirementSource::Path {
+                            path,
+                            editable: Some(true),
+                            url,
+                        } = requirement.source
+                        {
+                            Either::Left(EditableRequirement {
+                                url,
+                                path,
+                                extras: requirement.extras,
+                            })
+                        } else {
+                            Either::Right(UnresolvedRequirementSpecification {
+                                requirement: UnresolvedRequirement::Named(requirement),
+                                hashes: vec![],
+                            })
+                        }
+                    });
+
+                Ok(Self {
+                    project: Some(project.name),
+                    editables,
+                    requirements,
+                    extras: project.used_extras,
+                    ..Self::default()
+                })
+            }
             Ok(None) => {
                 debug!("Dynamic pyproject.toml at: `{}`", path.user_display());
                 let path = fs_err::canonicalize(path)?;

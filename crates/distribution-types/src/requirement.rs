@@ -21,7 +21,7 @@ pub struct Requirements {
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.
 ///
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
-/// [`pep508_rs::VersionOrUrl`], which collapses all URL sources into a single stringly type.
+/// [`VersionOrUrl`], which collapses all URL sources into a single stringly type.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub struct Requirement {
     pub name: PackageName,
@@ -47,7 +47,7 @@ impl Requirement {
                 specifier: VersionSpecifiers::empty(),
                 index: None,
             },
-            // The most popular case: Just a name, a version range and maybe extras.
+            // The most popular case: just a name, a version range and maybe extras.
             Some(VersionOrUrl::VersionSpecifier(specifier)) => RequirementSource::Registry {
                 specifier,
                 index: None,
