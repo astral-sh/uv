@@ -94,6 +94,7 @@ pub(crate) async fn run(
         &overrides,
         python.as_deref(),
         isolated,
+        preview,
         cache,
         printer,
     )
@@ -177,6 +178,7 @@ async fn environment_for_run(
     overrides: &[RequirementsSource],
     python: Option<&str>,
     isolated: bool,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<RunEnvironment> {
@@ -203,6 +205,7 @@ async fn environment_for_run(
         overrides,
         &ExtrasSpecification::None,
         &client_builder,
+        preview,
     )
     .await?;
 

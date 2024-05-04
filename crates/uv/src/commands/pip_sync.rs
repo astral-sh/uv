@@ -20,7 +20,7 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
+    ConfigSettings, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -64,6 +64,7 @@ pub(crate) async fn pip_sync(
     break_system_packages: bool,
     target: Option<Target>,
     native_tls: bool,
+    preview: PreviewMode,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -89,7 +90,7 @@ pub(crate) async fn pip_sync(
         find_links,
         no_binary: specified_no_binary,
         no_build: specified_no_build,
-    } = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
+    } = RequirementsSpecification::from_simple_sources(sources, &client_builder, preview).await?;
 
     // Validate that the requirements are non-empty.
     let num_requirements = requirements.len() + source_trees.len() + editables.len();
