@@ -32,6 +32,7 @@ anstream = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
 fs-err = { workspace = true }
+itertools = { workspace = true }
 pathdiff = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

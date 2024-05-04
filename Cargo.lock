@@ -5067,6 +5067,7 @@ dependencies = [
  "clap",
  "directories",
  "fs-err",
+ "itertools 0.12.1",
  "pathdiff",
  "platform-tags",
  "pypi-types",
