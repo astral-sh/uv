@@ -441,18 +441,18 @@ pub(crate) fn lower_requirement(
                 _ => return Err(LoweringError::MoreThanOneGitRef),
             };
 
+            // Create a PEP 508-compatible URL.
             let mut url = Url::parse(&format!("git+{git}"))?;
-            let mut given = git.to_string();
             if let Some(rev) = reference.as_str() {
                 url.set_path(&format!("{}@{}", url.path(), rev));
-                given = format!("{given}@{rev}");
             }
             if let Some(subdirectory) = &subdirectory {
                 url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
-                given = format!("{given}#subdirectory={subdirectory}");
             }
-            let url = VerbatimUrl::from_url(url).with_given(given);
-            let repository = url.to_url().clone();
+            let url = VerbatimUrl::from_url(url);
+
+            let repository = git.clone();
+
             RequirementSource::Git {
                 url,
                 repository,
