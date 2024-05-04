@@ -1,4 +1,4 @@
-//! Create a bare virtualenv without any packages install.
+//! Create a bare virtualenv without any packages installed.
 
 use std::env;
 use std::env::consts::EXE_SUFFIX;
