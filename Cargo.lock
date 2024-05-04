@@ -4862,6 +4862,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-channel",
+ "cache-key",
  "distribution-filename",
  "distribution-types",
  "fs-err",
