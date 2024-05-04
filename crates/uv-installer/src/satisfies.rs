@@ -1,5 +1,7 @@
 use anyhow::Result;
+use cache_key::{CanonicalUrl, RepositoryUrl};
 use std::fmt::Debug;
+use tracing::log::debug;
 use tracing::trace;
 
 use distribution_types::{InstalledDirectUrlDist, InstalledDist, RequirementSource};
@@ -61,8 +63,12 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if &requested_url.to_string() != installed_url
-                    || requested_subdirectory != installed_subdirectory
+                if requested_subdirectory != installed_subdirectory {
+                    return Ok(Self::Mismatch);
+                }
+
+                if !CanonicalUrl::parse(installed_url)
+                    .is_ok_and(|installed_url| installed_url == CanonicalUrl::new(requested_url))
                 {
                     return Ok(Self::Mismatch);
                 }
@@ -105,12 +111,30 @@ impl RequirementSatisfaction {
                 else {
                     return Ok(Self::Mismatch);
                 };
-                if &requested_repository.to_string() != installed_url
-                    || requested_subdirectory != installed_subdirectory
-                {
+
+                if requested_subdirectory != installed_subdirectory {
+                    debug!(
+                        "Subdirectory mismatch: {:?} vs. {:?}",
+                        installed_subdirectory, requested_subdirectory
+                    );
                     return Ok(Self::Mismatch);
                 }
+
+                if !RepositoryUrl::parse(installed_url).is_ok_and(|installed_url| {
+                    installed_url == RepositoryUrl::new(requested_repository)
+                }) {
+                    debug!(
+                        "Repository mismatch: {:?} vs. {:?}",
+                        installed_url, requested_repository
+                    );
+                    return Ok(Self::Mismatch);
+                }
+
                 if installed_reference.as_deref() != requested_reference.as_str() {
+                    debug!(
+                        "Reference mismatch: {:?} vs. {:?}",
+                        installed_reference, requested_reference
+                    );
                     return Ok(Self::OutOfDate);
                 }
 
@@ -136,9 +160,12 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 };
 
-                if &requested_url.to_string() != installed_url
-                    || requested_editable.unwrap_or_default()
-                        != installed_editable.unwrap_or_default()
+                if requested_editable != installed_editable {
+                    return Ok(Self::Mismatch);
+                }
+
+                if !CanonicalUrl::parse(installed_url)
+                    .is_ok_and(|installed_url| installed_url == CanonicalUrl::new(requested_url))
                 {
                     return Ok(Self::Mismatch);
                 }

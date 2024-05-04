@@ -4093,6 +4093,31 @@ fn already_installed_remote_url() {
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
 
+    // Request installation again with a different URL, but the same _canonical_ URL. We should
+    // resolve the package (since we installed a specific commit, but are now requesting the default
+    // branch), but not reinstall the package.
+    uv_snapshot!(context.filters(), context.install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Request installation again with a different URL, but the same _canonical_ URL and the same
+    // commit. We should neither resolve nor reinstall the package, since it's already installed
+    // at this precise commit.
+    uv_snapshot!(context.filters(), context.install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+
     // Request installation again with just the name
     // We should just audit the URL package since it fulfills this requirement
     uv_snapshot!(
