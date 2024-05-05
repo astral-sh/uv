@@ -365,7 +365,7 @@ impl<'a> SitePackages<'a> {
                 [distribution] => {
                     match RequirementSatisfaction::check(
                         distribution,
-                        &entry.requirement.source()?,
+                        entry.requirement.source()?.as_ref(),
                     )? {
                         RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
                             return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))

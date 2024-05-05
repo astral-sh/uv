@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
@@ -58,16 +59,16 @@ impl UnresolvedRequirement {
     }
 
     /// Return the version specifier or URL for the requirement.
-    pub fn source(&self) -> Result<RequirementSource, ParsedUrlError> {
+    pub fn source(&self) -> Result<Cow<'_, RequirementSource>, ParsedUrlError> {
         // TODO(konsti): This is a bad place to raise errors, we should have parsed the url earlier.
         match self {
-            Self::Named(requirement) => Ok(requirement.source.clone()),
+            Self::Named(requirement) => Ok(Cow::Borrowed(&requirement.source)),
             Self::Unnamed(requirement) => {
                 let parsed_url = ParsedUrl::try_from(requirement.url.to_url())?;
-                Ok(RequirementSource::from_parsed_url(
+                Ok(Cow::Owned(RequirementSource::from_parsed_url(
                     parsed_url,
                     requirement.url.clone(),
-                ))
+                )))
             }
         }
     }
