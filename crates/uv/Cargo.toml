@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true, features = ["clap"], default-features = false }
+pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
@@ -32,7 +33,6 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
-uv-toolchain = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
@@ -46,6 +46,7 @@ clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 clap_complete_command = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
+indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }

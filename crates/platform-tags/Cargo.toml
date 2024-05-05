@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 rustc-hash = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

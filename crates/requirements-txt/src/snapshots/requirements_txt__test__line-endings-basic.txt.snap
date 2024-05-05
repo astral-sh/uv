@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "numpy",
@@ -35,7 +35,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "pandas",
@@ -65,7 +65,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "python-dateutil",
@@ -95,7 +95,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "pytz",
@@ -125,7 +125,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "six",
@@ -155,7 +155,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "tzdata",

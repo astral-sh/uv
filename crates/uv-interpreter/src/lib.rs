@@ -14,18 +14,22 @@ use std::process::ExitStatus;
 
 use thiserror::Error;
 
-pub use crate::cfg::PyVenvConfiguration;
+pub use crate::environment::PythonEnvironment;
 pub use crate::find_python::{find_best_python, find_default_python, find_requested_python};
 pub use crate::interpreter::Interpreter;
 use crate::interpreter::InterpreterInfoError;
-pub use crate::python_environment::PythonEnvironment;
+pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
-pub use crate::virtualenv::Virtualenv;
+pub use crate::virtualenv::{PyVenvConfiguration, VirtualEnvironment};
 
-mod cfg;
+mod environment;
 mod find_python;
+mod implementation;
 mod interpreter;
-mod python_environment;
+pub mod managed;
+pub mod platform;
+mod py_launcher;
+mod python_version;
 mod target;
 mod virtualenv;
 
@@ -47,8 +51,8 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to run `py --list-paths` to find Python installations. Is Python installed?")]
-    PyList(#[source] io::Error),
+    #[error(transparent)]
+    PyLauncher(#[from] py_launcher::Error),
     #[cfg(windows)]
     #[error(
         "No Python {0} found through `py --list-paths` or in `PATH`. Is Python {0} installed?"
@@ -73,7 +77,7 @@ pub enum Error {
     #[error("Failed to write to cache")]
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Broken virtualenv: Failed to parse pyvenv.cfg")]
-    Cfg(#[from] cfg::Error),
+    Cfg(#[from] virtualenv::Error),
     #[error("Error finding `{}` in PATH", _0.to_string_lossy())]
     WhichError(OsString, #[source] which::Error),
     #[error("Can't use Python at `{interpreter}`")]

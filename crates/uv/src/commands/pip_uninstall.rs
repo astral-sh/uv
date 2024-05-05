@@ -5,12 +5,11 @@ use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{InstalledMetadata, Name};
-use pep508_rs::{Requirement, UnnamedRequirement};
-use requirements_txt::RequirementsTxtRequirement;
+use distribution_types::{InstalledMetadata, Name, Requirement, UnresolvedRequirement};
+use pep508_rs::UnnamedRequirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::KeyringProviderType;
+use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
 use uv_interpreter::{PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -29,6 +28,7 @@ pub(crate) async fn pip_uninstall(
     cache: Cache,
     connectivity: Connectivity,
     native_tls: bool,
+    preview: PreviewMode,
     keyring_provider: KeyringProviderType,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -39,7 +39,8 @@ pub(crate) async fn pip_uninstall(
         .keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
-    let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
+    let spec =
+        RequirementsSpecification::from_simple_sources(sources, &client_builder, preview).await?;
 
     // Detect the current Python interpreter.
     let venv = if let Some(python) = python.as_ref() {
@@ -97,8 +98,8 @@ pub(crate) async fn pip_uninstall(
         .requirements
         .into_iter()
         .partition_map(|entry| match entry.requirement {
-            RequirementsTxtRequirement::Pep508(requirement) => Either::Left(requirement),
-            RequirementsTxtRequirement::Unnamed(requirement) => Either::Right(requirement),
+            UnresolvedRequirement::Named(requirement) => Either::Left(requirement),
+            UnresolvedRequirement::Unnamed(requirement) => Either::Right(requirement),
         });
 
     // Sort and deduplicate the packages, which are keyed by name. Like `pip`, we ignore the

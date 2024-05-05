@@ -9,11 +9,10 @@ use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy, TargetTriple, Upgrade,
 };
-use uv_interpreter::Target;
+use uv_interpreter::{PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_requirements::ExtrasSpecification;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::PythonVersion;
 use uv_workspace::{PipOptions, Workspace};
 
 use crate::cli::{
@@ -160,6 +159,7 @@ impl PipCompileSettings {
             offline,
             no_offline,
             refresh,
+            no_refresh,
             refresh_package,
             link_mode,
             index_url,
@@ -172,6 +172,7 @@ impl PipCompileSettings {
             system,
             no_system,
             upgrade,
+            no_upgrade,
             upgrade_package,
             generate_hashes,
             no_generate_hashes,
@@ -208,8 +209,8 @@ impl PipCompileSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             r#override,
-            refresh: Refresh::from_args(refresh, refresh_package),
-            upgrade: Upgrade::from_args(upgrade, upgrade_package),
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
+            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             uv_lock: flag(unstable_uv_lock_file, no_unstable_uv_lock_file).unwrap_or(false),
 
             // Shared settings.
@@ -288,10 +289,12 @@ impl PipSyncSettings {
         let PipSyncArgs {
             src_file,
             reinstall,
+            no_reinstall,
             reinstall_package,
             offline,
             refresh,
             no_offline,
+            no_refresh,
             refresh_package,
             link_mode,
             index_url,
@@ -329,8 +332,8 @@ impl PipSyncSettings {
         Self {
             // CLI-only settings.
             src_file,
-            reinstall: Reinstall::from_args(reinstall, reinstall_package),
-            refresh: Refresh::from_args(refresh, refresh_package),
+            reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
 
             // Shared settings.
             shared: PipSharedSettings::combine(
@@ -387,6 +390,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) reinstall: Reinstall,
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
+    pub(crate) uv_lock: Option<String>,
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
 }
@@ -404,12 +408,15 @@ impl PipInstallSettings {
             all_extras,
             no_all_extras,
             upgrade,
+            no_upgrade,
             upgrade_package,
             reinstall,
+            no_reinstall,
             reinstall_package,
             offline,
             refresh,
             no_offline,
+            no_refresh,
             refresh_package,
             no_deps,
             deps,
@@ -448,6 +455,7 @@ impl PipInstallSettings {
             no_strict,
             exclude_newer,
             dry_run,
+            unstable_uv_lock_file,
         } = args;
 
         Self {
@@ -460,10 +468,11 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             r#override,
-            upgrade: Upgrade::from_args(upgrade, upgrade_package),
-            reinstall: Reinstall::from_args(reinstall, reinstall_package),
-            refresh: Refresh::from_args(refresh, refresh_package),
+            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
+            reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
+            uv_lock: unstable_uv_lock_file,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
@@ -737,6 +746,7 @@ impl PipCheckSettings {
 pub(crate) struct VenvSettings {
     // CLI-only settings.
     pub(crate) seed: bool,
+    pub(crate) force: bool,
     pub(crate) name: PathBuf,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
@@ -753,6 +763,7 @@ impl VenvSettings {
             system,
             no_system,
             seed,
+            force,
             name,
             prompt,
             system_site_packages,
@@ -771,6 +782,7 @@ impl VenvSettings {
         Self {
             // CLI-only settings.
             seed,
+            force,
             name,
             prompt,
             system_site_packages,

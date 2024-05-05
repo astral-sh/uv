@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "tqdm",
@@ -35,7 +35,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "tomli-w",

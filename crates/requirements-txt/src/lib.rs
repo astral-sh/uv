@@ -40,16 +40,17 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Requirement,
-    Scheme, VerbatimUrl,
+use distribution_types::{
+    ParsedUrlError, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-pub use requirement::RequirementsTxtRequirement;
+use pep508_rs::{
+    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Scheme,
+    VerbatimUrl,
+};
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
@@ -57,6 +58,8 @@ use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
+
+pub use crate::requirement::{RequirementsTxtRequirement, RequirementsTxtRequirementError};
 
 mod requirement;
 
@@ -294,25 +297,37 @@ impl Display for EditableRequirement {
     }
 }
 
-/// A [Requirement] with additional metadata from the requirements.txt, currently only hashes but in
-/// the future also editable an similar information
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Hash, Serialize)]
+/// A [Requirement] with additional metadata from the `requirements.txt`, currently only hashes but in
+/// the future also editable and similar information.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequirementEntry {
-    /// The actual PEP 508 requirement
+    /// The actual PEP 508 requirement.
     pub requirement: RequirementsTxtRequirement,
-    /// Hashes of the downloadable packages
+    /// Hashes of the downloadable packages.
     pub hashes: Vec<String>,
     /// Path of the original file (where existing)
     pub path: Option<String>,
 }
 
-impl Display for RequirementEntry {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.requirement)?;
-        for hash in &self.hashes {
-            write!(f, " --hash {hash}")?;
-        }
-        Ok(())
+// We place the impl here instead of next to `UnresolvedRequirementSpecification` because
+// `UnresolvedRequirementSpecification` is defined in `distribution-types` and `requirements-txt`
+// depends on `distribution-types`.
+impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
+    type Error = ParsedUrlError;
+
+    fn try_from(value: RequirementEntry) -> Result<Self, Self::Error> {
+        Ok(Self {
+            requirement: match value.requirement {
+                RequirementsTxtRequirement::Named(named) => {
+                    UnresolvedRequirement::Named(Requirement::from_pep508(named)?)
+                }
+                RequirementsTxtRequirement::Unnamed(unnamed) => {
+                    UnresolvedRequirement::Unnamed(unnamed)
+                }
+            },
+            hashes: value.hashes,
+            path: None,
+        })
     }
 }
 
@@ -322,7 +337,7 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<Requirement>,
+    pub constraints: Vec<pep508_rs::Requirement>,
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
@@ -495,7 +510,7 @@ impl RequirementsTxt {
                     // _requirements_, but we don't want to support that.
                     for entry in sub_constraints.requirements {
                         match entry.requirement {
-                            RequirementsTxtRequirement::Pep508(requirement) => {
+                            RequirementsTxtRequirement::Named(requirement) => {
                                 data.constraints.push(requirement);
                             }
                             RequirementsTxtRequirement::Unnamed(_) => {
@@ -802,21 +817,30 @@ fn parse_requirement_and_hashes(
     }
 
     let requirement = RequirementsTxtRequirement::parse(requirement, source, working_dir).map_err(
-        |err| match err.message {
-            Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                RequirementsTxtParserError::Pep508 {
+        |err| match err {
+            RequirementsTxtRequirementError::ParsedUrl(err) => {
+                RequirementsTxtParserError::ParsedUrl {
                     source: err,
                     start,
                     end,
                 }
             }
-            Pep508ErrorSource::UnsupportedRequirement(_) => {
-                RequirementsTxtParserError::UnsupportedRequirement {
-                    source: err,
-                    start,
-                    end,
+            RequirementsTxtRequirementError::Pep508(err) => match err.message {
+                Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
+                    RequirementsTxtParserError::Pep508 {
+                        source: err,
+                        start,
+                        end,
+                    }
                 }
-            }
+                Pep508ErrorSource::UnsupportedRequirement(_) => {
+                    RequirementsTxtParserError::UnsupportedRequirement {
+                        source: err,
+                        start,
+                        end,
+                    }
+                }
+            },
         },
     )?;
 
@@ -953,6 +977,11 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
+    ParsedUrl {
+        source: Box<ParsedUrlError>,
+        start: usize,
+        end: usize,
+    },
     Subfile {
         source: Box<RequirementsTxtFileError>,
         start: usize,
@@ -1030,6 +1059,11 @@ impl RequirementsTxtParserError {
                 start: start + offset,
                 end: end + offset,
             },
+            Self::ParsedUrl { source, start, end } => Self::ParsedUrl {
+                source,
+                start: start + offset,
+                end: end + offset,
+            },
             Self::Subfile { source, start, end } => Self::Subfile {
                 source,
                 start: start + offset,
@@ -1080,6 +1114,9 @@ impl Display for RequirementsTxtParserError {
             Self::Pep508 { start, .. } => {
                 write!(f, "Couldn't parse requirement at position {start}")
             }
+            Self::ParsedUrl { start, .. } => {
+                write!(f, "Couldn't URL at position {start}")
+            }
             Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
             }
@@ -1111,6 +1148,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::UnnamedConstraint { .. } => None,
             Self::UnsupportedRequirement { source, .. } => Some(source),
             Self::Pep508 { source, .. } => Some(source),
+            Self::ParsedUrl { source, .. } => Some(source),
             Self::Subfile { source, .. } => Some(source.as_ref()),
             Self::Parser { .. } => None,
             Self::NonUnicodeUrl { .. } => None,
@@ -1195,6 +1233,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Couldn't parse requirement in `{}` at position {start}",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::ParsedUrl { start, .. } => {
+                write!(
+                    f,
+                    "Couldn't parse URL in `{}` at position {start}",
                     self.file.user_display(),
                 )
             }
@@ -1756,95 +1801,95 @@ mod test {
         .unwrap();
         let filters = vec![(temp_dir.path().to_str().unwrap(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
-                filters => filters,
-            }, {
+                    filters => filters,
+                }, {
             insta::assert_debug_snapshot!(requirements, @r###"
-            RequirementsTxt {
-                requirements: [
-                    RequirementEntry {
-                        requirement: Pep508(
-                            Requirement {
-                                name: PackageName(
-                                    "flask",
-                                ),
-                                extras: [],
-                                version_or_url: None,
-                                marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/subdir/sibling.txt",
-                                ),
-                            },
-                        ),
-                        hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/subdir/sibling.txt",
-                        ),
-                    },
-                ],
-                constraints: [],
-                editables: [],
-                index_url: None,
-                extra_index_urls: [],
-                find_links: [],
-                no_index: false,
-                no_binary: None,
-                only_binary: None,
-            }
-            "###);
-        });
+        RequirementsTxt {
+            requirements: [
+                RequirementEntry {
+                    requirement: Named(
+                        Requirement {
+                            name: PackageName(
+                                "flask",
+                            ),
+                            extras: [],
+                            version_or_url: None,
+                            marker: None,
+                        },
+                    ),
+                    hashes: [],
+                },
+            ],
+            constraints: [],
+            editables: [],
+            index_url: None,
+            extra_index_urls: [],
+            find_links: [],
+            no_index: false,
+            no_binary: None,
+            only_binary: None,
+        }
+        "###);
 
-        Ok(())
-    }
 
-    #[tokio::test]
-    async fn nested_no_binary() -> Result<()> {
-        let temp_dir = assert_fs::TempDir::new()?;
+            Ok(())
+        }
 
-        let requirements_txt = temp_dir.child("requirements.txt");
-        requirements_txt.write_str(indoc! {"
+        #[tokio::test]
+        async fn nested_no_binary() -> Result<()> {
+            let temp_dir = assert_fs::TempDir::new()?;
+
+            let requirements_txt = temp_dir.child("requirements.txt");
+            requirements_txt.write_str(indoc! {"
             flask
             --no-binary :none:
             -r child.txt
         "})?;
 
-        let child = temp_dir.child("child.txt");
-        child.write_str(indoc! {"
+            let child = temp_dir.child("child.txt");
+            child.write_str(indoc! {"
             --no-binary flask
         "})?;
 
-        let requirements = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::new(),
-        )
-        .await
-        .unwrap();
+            let requirements = RequirementsTxt::parse(
+                requirements_txt.path(),
+                temp_dir.path(),
+                &BaseClientBuilder::new(),
+            )
+            .await
+            .unwrap();
         let filters = vec![(temp_dir.path().to_str().unwrap(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
             filters => filters,
         }, {
             insta::assert_debug_snapshot!(requirements, @r###"
-            RequirementsTxt {
-                requirements: [
-                    RequirementEntry {
-                        requirement: Pep508(
-                            Requirement {
-                                name: PackageName(
-                                    "flask",
-                                ),
-                                extras: [],
-                                version_or_url: None,
-                                marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
-                                ),
-                            },
-                        ),
-                        hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
-                    },
+        RequirementsTxt {
+            requirements: [
+                RequirementEntry {
+                    requirement: Named(
+                        Requirement {
+                            name: PackageName(
+                                "flask",
+                            ),
+                            extras: [],
+                            version_or_url: None,
+                            marker: None,
+                        },
+                    ),
+                    hashes: [],
+                },
+            ],
+            constraints: [],
+            editables: [],
+            index_url: None,
+            extra_index_urls: [],
+            find_links: [],
+            no_index: false,
+            no_binary: Packages(
+                [
+                    PackageName(
+                        "flask",
+                    ),
                 ],
                 constraints: [],
                 editables: [],
@@ -1862,6 +1907,7 @@ mod test {
                 only_binary: None,
             }
             "###);
+            });
         });
 
         Ok(())
@@ -2020,7 +2066,7 @@ mod test {
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
-                        requirement: Pep508(
+                        requirement: Named(
                             Requirement {
                                 name: PackageName(
                                     "httpx",
@@ -2028,18 +2074,12 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/./sibling.txt",
-                                ),
                             },
                         ),
                         hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/./sibling.txt",
-                        ),
                     },
                     RequirementEntry {
-                        requirement: Pep508(
+                        requirement: Named(
                             Requirement {
                                 name: PackageName(
                                     "flask",
@@ -2058,20 +2098,14 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
-                                ),
                             },
                         ),
                         hashes: [
                             "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
                         ],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
                     },
                     RequirementEntry {
-                        requirement: Pep508(
+                        requirement: Named(
                             Requirement {
                                 name: PackageName(
                                     "requests",
@@ -2090,20 +2124,14 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
-                                ),
                             },
                         ),
                         hashes: [
                             "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
                         ],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
                     },
                     RequirementEntry {
-                        requirement: Pep508(
+                        requirement: Named(
                             Requirement {
                                 name: PackageName(
                                     "black",
@@ -2122,18 +2150,12 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
-                                ),
                             },
                         ),
                         hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
                     },
                     RequirementEntry {
-                        requirement: Pep508(
+                        requirement: Named(
                             Requirement {
                                 name: PackageName(
                                     "mypy",
@@ -2150,50 +2172,49 @@ mod test {
                                             ],
                                         ),
                                     ),
-                                ),
-                                marker: None,
-                                path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
-                                ),
-                            },
-                        ),
-                        hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
-                    },
-                ],
-                constraints: [],
-                editables: [],
-                index_url: Some(
-                    VerbatimUrl {
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "test.pypi.org",
-                                ),
+                                    marker: None,
+                                    path: Some(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                },
                             ),
-                            port: None,
-                            path: "/simple/",
-                            query: None,
-                            fragment: None,
+                            hashes: [],
+                            path: Some(
+                                "<REQUIREMENTS_DIR>/requirements.txt",
+                            ),
                         },
-                        given: Some(
-                            "https://test.pypi.org/simple/",
-                        ),
-                    },
-                ),
-                extra_index_urls: [],
-                find_links: [],
-                no_index: false,
-                no_binary: All,
-                only_binary: None,
-            }
-            "###);
+                    ],
+                    constraints: [],
+                    editables: [],
+                    index_url: Some(
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "test.pypi.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/simple/",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://test.pypi.org/simple/",
+                            ),
+                        },
+                    ),
+                    extra_index_urls: [],
+                    find_links: [],
+                    no_index: false,
+                    no_binary: All,
+                    only_binary: None,
+                }
+                "###);
         });
 
         Ok(())

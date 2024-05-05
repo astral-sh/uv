@@ -3,12 +3,11 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use same_file::is_same_file;
-use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
-use crate::cfg::PyVenvConfiguration;
+use crate::virtualenv::{detect_virtualenv, virtualenv_python_executable, PyVenvConfiguration};
 use crate::{find_default_python, find_requested_python, Error, Interpreter, Target};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
@@ -21,11 +20,11 @@ pub struct PythonEnvironment {
 impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
-        let Some(venv) = detect_virtual_env()? else {
+        let Some(venv) = detect_virtualenv()? else {
             return Err(Error::VenvNotFound);
         };
         let venv = fs_err::canonicalize(venv)?;
-        let executable = detect_python_executable(&venv);
+        let executable = virtualenv_python_executable(&venv);
         let interpreter = Interpreter::query(&executable, cache)?;
 
         debug_assert!(
@@ -150,63 +149,5 @@ impl PythonEnvironment {
     /// Return the [`Interpreter`] for this virtual environment.
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
-    }
-}
-
-/// Locate the current virtual environment.
-pub(crate) fn detect_virtual_env() -> Result<Option<PathBuf>, Error> {
-    if let Some(dir) = env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()) {
-        info!(
-            "Found a virtualenv through VIRTUAL_ENV at: {}",
-            Path::new(&dir).display()
-        );
-        return Ok(Some(PathBuf::from(dir)));
-    }
-    if let Some(dir) = env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()) {
-        info!(
-            "Found a virtualenv through CONDA_PREFIX at: {}",
-            Path::new(&dir).display()
-        );
-        return Ok(Some(PathBuf::from(dir)));
-    }
-
-    // Search for a `.venv` directory in the current or any parent directory.
-    let current_dir = env::current_dir().expect("Failed to detect current directory");
-    for dir in current_dir.ancestors() {
-        let dot_venv = dir.join(".venv");
-        if dot_venv.is_dir() {
-            if !dot_venv.join("pyvenv.cfg").is_file() {
-                return Err(Error::MissingPyVenvCfg(dot_venv));
-            }
-            debug!("Found a virtualenv named .venv at: {}", dot_venv.display());
-            return Ok(Some(dot_venv));
-        }
-    }
-
-    Ok(None)
-}
-
-/// Returns the path to the `python` executable inside a virtual environment.
-pub(crate) fn detect_python_executable(venv: impl AsRef<Path>) -> PathBuf {
-    let venv = venv.as_ref();
-    if cfg!(windows) {
-        // Search for `python.exe` in the `Scripts` directory.
-        let executable = venv.join("Scripts").join("python.exe");
-        if executable.exists() {
-            return executable;
-        }
-
-        // Apparently, Python installed via msys2 on Windows _might_ produce a POSIX-like layout.
-        // See: https://github.com/PyO3/maturin/issues/1108
-        let executable = venv.join("bin").join("python.exe");
-        if executable.exists() {
-            return executable;
-        }
-
-        // Fallback for Conda environments.
-        venv.join("python.exe")
-    } else {
-        // Search for `python` in the `bin` directory.
-        venv.join("bin").join("python")
     }
 }

@@ -5,7 +5,7 @@ use std::str::FromStr;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PythonVersion(StringVersion);
 
 impl Deref for PythonVersion {
@@ -20,21 +20,22 @@ impl FromStr for PythonVersion {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let version = StringVersion::from_str(s)?;
+        let version = StringVersion::from_str(s)
+            .map_err(|err| format!("Python version `{s}` could not be parsed: {err}"))?;
         if version.is_dev() {
-            return Err(format!("Python version {s} is a development release"));
+            return Err(format!("Python version `{s}` is a development release"));
         }
         if version.is_local() {
-            return Err(format!("Python version {s} is a local version"));
+            return Err(format!("Python version `{s}` is a local version"));
         }
         if version.epoch() != 0 {
-            return Err(format!("Python version {s} has a non-zero epoch"));
+            return Err(format!("Python version `{s}` has a non-zero epoch"));
         }
         if version.version < Version::new([3, 7]) {
-            return Err(format!("Python version {s} must be >= 3.7"));
+            return Err(format!("Python version `{s}` must be >= 3.7"));
         }
         if version.version >= Version::new([4, 0]) {
-            return Err(format!("Python version {s} must be < 4.0"));
+            return Err(format!("Python version `{s}` must be < 4.0"));
         }
 
         Ok(Self(version))
@@ -52,7 +53,6 @@ impl schemars::JsonSchema for PythonVersion {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for PythonVersion {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;

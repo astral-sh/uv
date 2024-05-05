@@ -1,7 +1,7 @@
 // DO NOT EDIT
 //
-// Generated with `crates/uv-toolchain/template-version-metadata.py`
-// From template at `crates/uv-toolchain/src/python_versions.inc.mustache`
+// Generated with `crates/uv-interpreter/template-version-metadata.py`
+// From template at `crates/uv-interpreter/src/python_versions.inc.mustache`
 
 pub(crate) const PYTHON_DOWNLOADS: &[PythonDownload] = &[
     PythonDownload {

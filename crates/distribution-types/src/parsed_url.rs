@@ -1,5 +1,6 @@
-use anyhow::{Error, Result};
 use std::path::PathBuf;
+
+use anyhow::{Error, Result};
 use thiserror::Error;
 use url::Url;
 
@@ -15,13 +16,11 @@ pub enum ParsedUrlError {
     GitShaParse(Url, #[source] git2::Error),
     #[error("Not a valid URL: `{0}`")]
     UrlParse(String, #[source] url::ParseError),
-    #[error("Missing `git+` prefix for Git URL: `{0}`")]
-    MissingUrlPrefix(Url),
 }
 
 /// We support three types of URLs for distributions:
 /// * The path to a file or directory (`file://`)
-/// * A git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
+/// * A Git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
 ///   string to checkout.
 /// * A remote archive (`https://`), optional with a subdirectory (source dist only)
 /// A URL in a requirement `foo @ <url>` must be one of the above.
@@ -39,45 +38,38 @@ pub enum ParsedUrl {
 ///
 /// Examples:
 /// * `file:///home/ferris/my_project`
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ParsedLocalFileUrl {
     pub url: Url,
+    pub path: PathBuf,
     pub editable: bool,
 }
 
-/// A git repository url
+/// A Git repository URL.
 ///
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ParsedGitUrl {
     pub url: GitUrl,
     pub subdirectory: Option<PathBuf>,
 }
 
-/// An archive url
-///
-/// Examples:
-/// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
-/// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
-/// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
-#[derive(Debug)]
-pub struct ParsedArchiveUrl {
-    pub url: Url,
-    pub subdirectory: Option<PathBuf>,
-}
-
-impl TryFrom<&Url> for ParsedGitUrl {
+impl TryFrom<Url> for ParsedGitUrl {
     type Error = ParsedUrlError;
 
-    fn try_from(url_in: &Url) -> Result<Self, Self::Error> {
-        let subdirectory = get_subdirectory(url_in);
+    /// Supports URLS with and without the `git+` prefix.
+    ///
+    /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
+    /// excluded, it's presumed to come from `tool.uv.sources`.
+    fn try_from(url_in: Url) -> Result<Self, Self::Error> {
+        let subdirectory = get_subdirectory(&url_in);
 
         let url = url_in
             .as_str()
             .strip_prefix("git+")
-            .ok_or_else(|| ParsedUrlError::MissingUrlPrefix(url_in.clone()))?;
+            .unwrap_or(url_in.as_str());
         let url = Url::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)
             .map_err(|err| ParsedUrlError::GitShaParse(url_in.clone(), err))?;
@@ -85,12 +77,22 @@ impl TryFrom<&Url> for ParsedGitUrl {
     }
 }
 
-impl From<&Url> for ParsedArchiveUrl {
-    fn from(url: &Url) -> Self {
-        Self {
-            url: url.clone(),
-            subdirectory: get_subdirectory(url),
-        }
+/// An archive URL.
+///
+/// Examples:
+/// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
+/// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
+/// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
+#[derive(Debug, Eq, PartialEq)]
+pub struct ParsedArchiveUrl {
+    pub url: Url,
+    pub subdirectory: Option<PathBuf>,
+}
+
+impl From<Url> for ParsedArchiveUrl {
+    fn from(url: Url) -> Self {
+        let subdirectory = get_subdirectory(&url);
+        Self { url, subdirectory }
     }
 }
 
@@ -109,15 +111,15 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
 }
 
 /// Return the Git reference of the given URL, if it exists.
-pub fn git_reference(url: &Url) -> Result<Option<GitSha>, Error> {
+pub fn git_reference(url: Url) -> Result<Option<GitSha>, Error> {
     let ParsedGitUrl { url, .. } = ParsedGitUrl::try_from(url)?;
     Ok(url.precise())
 }
 
-impl TryFrom<&Url> for ParsedUrl {
+impl TryFrom<Url> for ParsedUrl {
     type Error = ParsedUrlError;
 
-    fn try_from(url: &Url) -> Result<Self, Self::Error> {
+    fn try_from(url: Url) -> Result<Self, Self::Error> {
         if let Some((prefix, ..)) = url.scheme().split_once('+') {
             match prefix {
                 "git" => Ok(Self::Git(ParsedGitUrl::try_from(url)?)),
@@ -127,8 +129,12 @@ impl TryFrom<&Url> for ParsedUrl {
                 }),
             }
         } else if url.scheme().eq_ignore_ascii_case("file") {
+            let path = url
+                .to_file_path()
+                .map_err(|()| ParsedUrlError::InvalidFileUrl(url.clone()))?;
             Ok(Self::LocalFile(ParsedLocalFileUrl {
-                url: url.clone(),
+                url,
+                path,
                 editable: false,
             }))
         } else {
@@ -239,33 +245,38 @@ mod tests {
 
     #[test]
     fn direct_url_from_url() -> Result<()> {
-        let expected = Url::parse("file:///path/to/directory")?;
-        let actual = Url::from(ParsedUrl::try_from(&expected)?);
-        assert_eq!(expected, actual);
-
         let expected = Url::parse("git+https://github.com/pallets/flask.git")?;
-        let actual = Url::from(ParsedUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
 
         let expected = Url::parse("git+https://github.com/pallets/flask.git#subdirectory=pkg_dir")?;
-        let actual = Url::from(ParsedUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
 
         let expected = Url::parse("git+https://github.com/pallets/flask.git@2.0.0")?;
-        let actual = Url::from(ParsedUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
 
         let expected =
             Url::parse("git+https://github.com/pallets/flask.git@2.0.0#subdirectory=pkg_dir")?;
-        let actual = Url::from(ParsedUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
 
         // TODO(charlie): Preserve other fragments.
         let expected =
             Url::parse("git+https://github.com/pallets/flask.git#egg=flask&subdirectory=pkg_dir")?;
-        let actual = Url::from(ParsedUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
         assert_ne!(expected, actual);
 
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn direct_url_from_url_absolute() -> Result<()> {
+        let expected = Url::parse("file:///path/to/directory")?;
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
+        assert_eq!(expected, actual);
         Ok(())
     }
 }

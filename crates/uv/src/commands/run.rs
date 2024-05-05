@@ -3,11 +3,13 @@ use crate::commands::ExitStatus;
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
 use anyhow::{Context, Result};
-use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, Name, Resolution};
+use distribution_types::{
+    IndexLocations, InstalledMetadata, LocalDist, Name, Requirement, Resolution,
+};
 use install_wheel_rs::linker::LinkMode;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pep508_rs::{MarkerEnvironment, PackageName, Requirement};
+use pep508_rs::{MarkerEnvironment, PackageName};
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use std::ffi::OsString;
@@ -27,7 +29,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{Downloader, Plan, Planner, SitePackages};
+use uv_installer::{Downloader, Plan, Planner, SatisfiesResult, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
@@ -92,6 +94,7 @@ pub(crate) async fn run(
         &overrides,
         python.as_deref(),
         isolated,
+        preview,
         cache,
         printer,
     )
@@ -175,6 +178,7 @@ async fn environment_for_run(
     overrides: &[RequirementsSource],
     python: Option<&str>,
     isolated: bool,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<RunEnvironment> {
@@ -201,6 +205,7 @@ async fn environment_for_run(
         overrides,
         &ExtrasSpecification::None,
         &client_builder,
+        preview,
     )
     .await?;
 
@@ -223,18 +228,36 @@ async fn environment_for_run(
             // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
             // enough to let us remove this check. But right now, for large environments, it's an order of
             // magnitude faster to validate the environment than to resolve the requirements.
-            if spec.source_trees.is_empty()
-                && site_packages.satisfies(
+            if spec.source_trees.is_empty() {
+                match site_packages.satisfies(
                     &spec.requirements,
                     &spec.editables,
                     &spec.constraints,
-                )?
-            {
-                debug!("Current environment satisfies requirements");
-                return Ok(RunEnvironment {
-                    python: venv,
-                    _temp_dir_drop: None,
-                });
+                )? {
+                    SatisfiesResult::Fresh {
+                        recursive_requirements,
+                    } => {
+                        debug!(
+                            "All requirements satisfied: {}",
+                            recursive_requirements
+                                .iter()
+                                .map(|entry| entry.requirement.to_string())
+                                .sorted()
+                                .join(" | ")
+                        );
+                        debug!(
+                            "All editables satisfied: {}",
+                            spec.editables.iter().map(ToString::to_string).join(", ")
+                        );
+                        return Ok(RunEnvironment {
+                            python: venv,
+                            _temp_dir_drop: None,
+                        });
+                    }
+                    SatisfiesResult::Unsatisfied(requirement) => {
+                        debug!("At least one requirement is not satisfied: {requirement}");
+                    }
+                }
             }
         }
     }
@@ -249,6 +272,7 @@ async fn environment_for_run(
         tmpdir.path(),
         python_env.into_interpreter(),
         uv_virtualenv::Prompt::None,
+        false,
         false,
     )?;
 

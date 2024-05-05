@@ -95,7 +95,7 @@ impl<'a> BuiltWheelIndex<'a> {
             return None;
         }
 
-        let Ok(Some(git_sha)) = git_reference(&source_dist.url) else {
+        let Ok(Some(git_sha)) = git_reference(source_dist.url.to_url()) else {
             return None;
         };
 

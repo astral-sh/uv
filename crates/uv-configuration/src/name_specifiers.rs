@@ -21,7 +21,6 @@ impl FromStr for PackageNameSpecifier {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for PackageNameSpecifier {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

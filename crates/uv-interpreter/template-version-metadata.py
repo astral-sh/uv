@@ -19,7 +19,7 @@ from pathlib import Path
 CRATE_ROOT = Path(__file__).parent
 WORKSPACE_ROOT = CRATE_ROOT.parent.parent
 VERSION_METADATA = CRATE_ROOT / "python-version-metadata.json"
-TEMPLATE = CRATE_ROOT / "src" / "python_versions.inc.mustache"
+TEMPLATE = CRATE_ROOT / "src" / "managed" / "python_versions.inc.mustache"
 TARGET = TEMPLATE.with_suffix("")
 
 

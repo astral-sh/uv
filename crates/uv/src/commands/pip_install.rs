@@ -4,19 +4,23 @@ use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
+use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
-use tracing::debug;
+use tracing::{debug, enabled, Level};
 
 use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable,
-    LocalEditables, Name, Resolution,
+    DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist,
+    LocalEditable, LocalEditables, Name, ParsedUrl, ParsedUrlError, RequirementSource, Resolution,
 };
+use distribution_types::{Requirement, Requirements};
+use indexmap::IndexMap;
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::{MarkerEnvironment, Requirement};
+use pep440_rs::{VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::Tags;
-use pypi_types::{Metadata23, Yanked};
+use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -24,24 +28,25 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
 use uv_configuration::{
-    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, Reinstall,
-    SetupPyStrategy, Upgrade,
+    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, PreviewMode,
+    Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment, Target};
+use uv_installer::{
+    BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SatisfiesResult, SitePackages,
+};
+use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
     RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
+    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Lock, Manifest, Options,
     OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -83,7 +88,9 @@ pub(crate) async fn pip_install(
     system: bool,
     break_system_packages: bool,
     target: Option<Target>,
+    uv_lock: Option<String>,
     native_tls: bool,
+    preview: PreviewMode,
     cache: Cache,
     dry_run: bool,
     printer: Printer,
@@ -116,6 +123,7 @@ pub(crate) async fn pip_install(
         overrides,
         extras,
         &client_builder,
+        preview,
     )
     .await?;
 
@@ -173,28 +181,46 @@ pub(crate) async fn pip_install(
     // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
     // enough to let us remove this check. But right now, for large environments, it's an order of
     // magnitude faster to validate the environment than to resolve the requirements.
-    if reinstall.is_none()
-        && upgrade.is_none()
-        && source_trees.is_empty()
-        && overrides.is_empty()
-        && site_packages.satisfies(&requirements, &editables, &constraints)?
-    {
-        let num_requirements = requirements.len() + editables.len();
-        let s = if num_requirements == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Audited {} in {}",
-                format!("{num_requirements} package{s}").bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-        if dry_run {
-            writeln!(printer.stderr(), "Would make no changes")?;
+    if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
+        match site_packages.satisfies(&requirements, &editables, &constraints)? {
+            SatisfiesResult::Fresh {
+                recursive_requirements,
+            } => {
+                if enabled!(Level::DEBUG) {
+                    for requirement in recursive_requirements
+                        .iter()
+                        .map(|entry| entry.requirement.to_string())
+                        .sorted()
+                    {
+                        debug!("Requirement satisfied: {requirement}");
+                    }
+                }
+
+                debug!(
+                    "All editables satisfied: {}",
+                    editables.iter().map(ToString::to_string).join(" | ")
+                );
+                let num_requirements = requirements.len() + editables.len();
+                let s = if num_requirements == 1 { "" } else { "s" };
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Audited {} in {}",
+                        format!("{num_requirements} package{s}").bold(),
+                        elapsed(start.elapsed())
+                    )
+                    .dimmed()
+                )?;
+                if dry_run {
+                    writeln!(printer.stderr(), "Would make no changes")?;
+                }
+                return Ok(ExitStatus::Success);
+            }
+            SatisfiesResult::Unsatisfied(requirement) => {
+                debug!("At least one requirement is not satisfied: {requirement}");
+            }
         }
-        return Ok(ExitStatus::Success);
     }
 
     let interpreter = venv.interpreter().clone();
@@ -310,47 +336,6 @@ pub(crate) async fn pip_install(
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
-    // Resolve the requirements from the provided sources.
-    let requirements = {
-        // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(
-            requirements,
-            &hasher,
-            &resolve_dispatch,
-            &client,
-            &index,
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
-
-        // Resolve any source trees into requirements.
-        if !source_trees.is_empty() {
-            requirements.extend(
-                SourceTreeResolver::new(
-                    source_trees,
-                    extras,
-                    &hasher,
-                    &resolve_dispatch,
-                    &client,
-                    &index,
-                )
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?,
-            );
-        }
-
-        requirements
-    };
-
-    // Resolve the overrides from the provided sources.
-    let overrides =
-        NamedRequirementsResolver::new(overrides, &hasher, &resolve_dispatch, &client, &index)
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve()
-            .await?;
-
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command. If an editable is already
     // installed in the environment, we'll still re-build it here.
@@ -373,45 +358,93 @@ pub(crate) async fn pip_install(
         .await?
     };
 
-    let options = OptionsBuilder::new()
-        .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
-        .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
-        .index_strategy(index_strategy)
-        .build();
-
     // Resolve the requirements.
-    let resolution = match resolve(
-        requirements,
-        constraints,
-        overrides,
-        project,
-        &editables,
-        &hasher,
-        &site_packages,
-        &reinstall,
-        &upgrade,
-        &interpreter,
-        &tags,
-        &markers,
-        &client,
-        &flat_index,
-        &index,
-        &resolve_dispatch,
-        options,
-        printer,
-    )
-    .await
-    {
-        Ok(resolution) => Resolution::from(resolution),
-        Err(Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}"))
-                .context("No solution found when resolving dependencies:");
-            eprint!("{report:?}");
-            return Ok(ExitStatus::Failure);
+    let resolution = if let Some(ref root) = uv_lock {
+        let root = PackageName::new(root.to_string())?;
+        let encoded = fs::tokio::read_to_string("uv.lock").await?;
+        let lock: Lock = toml::from_str(&encoded)?;
+        lock.to_resolution(&markers, &tags, &root)
+    } else {
+        // Resolve the requirements from the provided sources.
+        let requirements = {
+            // Convert from unnamed to named requirements.
+            let mut requirements = NamedRequirementsResolver::new(
+                requirements,
+                &hasher,
+                &resolve_dispatch,
+                &client,
+                &index,
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve()
+            .await?;
+
+            // Resolve any source trees into requirements.
+            if !source_trees.is_empty() {
+                requirements.extend(
+                    SourceTreeResolver::new(
+                        source_trees,
+                        extras,
+                        &hasher,
+                        &resolve_dispatch,
+                        &client,
+                        &index,
+                    )
+                    .with_reporter(ResolverReporter::from(printer))
+                    .resolve()
+                    .await?,
+                );
+            }
+
+            requirements
+        };
+
+        // Resolve the overrides from the provided sources.
+        let overrides =
+            NamedRequirementsResolver::new(overrides, &hasher, &resolve_dispatch, &client, &index)
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?;
+
+        let options = OptionsBuilder::new()
+            .resolution_mode(resolution_mode)
+            .prerelease_mode(prerelease_mode)
+            .dependency_mode(dependency_mode)
+            .exclude_newer(exclude_newer)
+            .index_strategy(index_strategy)
+            .build();
+
+        match resolve(
+            requirements,
+            constraints,
+            overrides,
+            project,
+            &editables,
+            &hasher,
+            &site_packages,
+            &reinstall,
+            &upgrade,
+            &interpreter,
+            &tags,
+            &markers,
+            &client,
+            &flat_index,
+            &index,
+            &resolve_dispatch,
+            options,
+            printer,
+        )
+        .await
+        {
+            Ok(resolution) => Resolution::from(resolution),
+            Err(Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
+                let report = miette::Report::msg(format!("{err}"))
+                    .context("No solution found when resolving dependencies:");
+                eprint!("{report:?}");
+                return Ok(ExitStatus::Failure);
+            }
+            Err(err) => return Err(err.into()),
         }
-        Err(err) => return Err(err.into()),
     };
 
     // Re-initialize the in-flight map.
@@ -477,6 +510,7 @@ async fn read_requirements(
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
     client_builder: &BaseClientBuilder<'_>,
+    preview: PreviewMode,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
@@ -494,6 +528,7 @@ async fn read_requirements(
         overrides,
         extras,
         client_builder,
+        preview,
     )
     .await?;
 
@@ -614,25 +649,63 @@ async fn resolve(
 
     // Prefer current site packages; filter out packages that are marked for reinstall or upgrade
     let preferences = site_packages
-        .requirements()
-        .filter(|requirement| !exclusions.contains(&requirement.name))
-        .map(Preference::from_requirement)
-        .collect();
+        .iter()
+        .filter(|dist| !exclusions.contains(dist.name()))
+        .map(|dist| {
+            let source = match dist.installed_version() {
+                InstalledVersion::Version(version) => RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                        version.clone(),
+                    )),
+                    // TODO(konstin): track index
+                    index: None,
+                },
+                InstalledVersion::Url(url, _version) => {
+                    let parsed_url = ParsedUrl::try_from(url.clone())?;
+                    RequirementSource::from_parsed_url(
+                        parsed_url,
+                        VerbatimUrl::from_url(url.clone()),
+                    )
+                }
+            };
+            let requirement = Requirement {
+                name: dist.name().clone(),
+                extras: vec![],
+                marker: None,
+                source,
+                path: None,
+            };
+            Ok(Preference::from_requirement(requirement))
+        })
+        .collect::<Result<_, _>>()
+        .map_err(Error::UnsupportedInstalledDist)?;
 
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
 
     // Map the editables to their metadata.
-    let editables: Vec<(LocalEditable, Metadata23)> = editables
+    let editables: Vec<_> = editables
         .iter()
         .map(|built_editable| {
-            (
+            let dependencies: Vec<_> = built_editable
+                .metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(Requirement::from_pep508)
+                .collect::<Result<_, _>>()?;
+            Ok::<_, ParsedUrlError>((
                 built_editable.editable.clone(),
                 built_editable.metadata.clone(),
-            )
+                Requirements {
+                    dependencies,
+                    optional_dependencies: IndexMap::default(),
+                },
+            ))
         })
-        .collect();
+        .collect::<Result<_, _>>()
+        .map_err(|err| Error::ParsedUrl(Box::new(err)))?;
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -1130,5 +1203,11 @@ enum Error {
     Lookahead(#[from] uv_requirements::LookaheadError),
 
     #[error(transparent)]
+    ParsedUrl(Box<distribution_types::ParsedUrlError>),
+
+    #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+
+    #[error("Installed distribution has unsupported type")]
+    UnsupportedInstalledDist(#[source] Box<distribution_types::ParsedUrlError>),
 }

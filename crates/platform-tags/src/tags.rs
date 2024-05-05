@@ -64,7 +64,7 @@ impl TagCompatibility {
 /// wheel are compatible with the current environment.
 #[derive(Debug, Clone)]
 pub struct Tags {
-    /// python_tag |--> abi_tag |--> platform_tag |--> priority
+    /// `python_tag` |--> `abi_tag` |--> `platform_tag` |--> priority
     #[allow(clippy::type_complexity)]
     map: Arc<FxHashMap<String, FxHashMap<String, FxHashMap<String, TagPriority>>>>,
 }

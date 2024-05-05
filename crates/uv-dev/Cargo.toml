@@ -30,8 +30,8 @@ uv-fs = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
+uv-requirements = { workspace = true, features = ["schemars"] }
 uv-resolver = { workspace = true }
-uv-toolchain = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true, features = ["schemars"] }
 

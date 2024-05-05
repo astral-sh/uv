@@ -13,6 +13,8 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+cache-key = { workspace = true }
+distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true, default-features = false }
 pep440_rs = { workspace = true }
@@ -28,6 +30,7 @@ uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
+uv-requirements = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 

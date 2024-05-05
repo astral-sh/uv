@@ -394,9 +394,23 @@ checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
 name = "bench"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
+ "codspeed-criterion-compat",
  "criterion",
  "distribution-filename",
+ "distribution-types",
+ "fs-err",
+ "once_cell",
+ "pep508_rs",
  "platform-tags",
+ "tempfile",
+ "tokio",
+ "uv-cache",
+ "uv-client",
+ "uv-configuration",
+ "uv-interpreter",
+ "uv-resolver",
+ "uv-types",
 ]
 
 [[package]]
@@ -759,6 +773,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "codspeed"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a104ac948e0188b921eb3fcbdd55dcf62e542df4c7ab7e660623f6288302089"
+dependencies = [
+ "colored",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
+name = "codspeed-criterion-compat"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "722c36bdc62d9436d027256ce2627af81ac7a596dfc7d13d849d0d212448d7fe"
+dependencies = [
+ "codspeed",
+ "colored",
+ "criterion",
+]
+
+[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -769,6 +805,16 @@ name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
+
+[[package]]
+name = "colored"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbf2150cce219b664a8a70df7a1f933836724b503f8a413af9365b4dcc4d90b8"
+dependencies = [
+ "lazy_static",
+ "windows-sys 0.48.0",
+]
 
 [[package]]
 name = "concurrent-queue"
@@ -843,6 +889,7 @@ dependencies = [
  "ciborium",
  "clap",
  "criterion-plot",
+ "futures",
  "is-terminal",
  "itertools 0.10.5",
  "num-traits",
@@ -853,6 +900,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "tinytemplate",
+ "tokio",
  "walkdir",
 ]
 
@@ -1070,6 +1118,7 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "git2",
+ "indexmap",
  "itertools 0.12.1",
  "once_cell",
  "pep440_rs",
@@ -2474,6 +2523,7 @@ name = "pep508_rs"
 version = "0.4.2"
 dependencies = [
  "derivative",
+ "indexmap",
  "insta",
  "log",
  "once_cell",
@@ -2489,6 +2539,7 @@ dependencies = [
  "unicode-width",
  "url",
  "uv-fs",
+ "uv-git",
  "uv-normalize",
 ]
 
@@ -3022,10 +3073,12 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "distribution-types",
  "fs-err",
  "indoc",
  "insta",
  "itertools 0.12.1",
+ "pep440_rs",
  "pep508_rs",
  "regex",
  "reqwest",
@@ -3033,6 +3086,7 @@ dependencies = [
  "serde",
  "tempfile",
  "test-case",
+ "thiserror",
  "tokio",
  "tracing",
  "unscanny",
@@ -3398,6 +3452,7 @@ dependencies = [
  "schemars_derive",
  "serde",
  "serde_json",
+ "url",
 ]
 
 [[package]]
@@ -4434,6 +4489,7 @@ dependencies = [
  "filetime",
  "flate2",
  "fs-err",
+ "indexmap",
  "indicatif",
  "indoc",
  "insta",
@@ -4442,6 +4498,7 @@ dependencies = [
  "miette",
  "mimalloc",
  "owo-colors",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "predicates",
@@ -4476,7 +4533,6 @@ dependencies = [
  "uv-normalize",
  "uv-requirements",
  "uv-resolver",
- "uv-toolchain",
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
@@ -4614,6 +4670,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
+ "distribution-types",
  "itertools 0.12.1",
  "pep508_rs",
  "platform-tags",
@@ -4622,6 +4679,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uv-auth",
+ "uv-cache",
  "uv-normalize",
 ]
 
@@ -4667,8 +4725,8 @@ dependencies = [
  "uv-installer",
  "uv-interpreter",
  "uv-normalize",
+ "uv-requirements",
  "uv-resolver",
- "uv-toolchain",
  "uv-types",
  "uv-workspace",
  "walkdir",
@@ -4804,6 +4862,8 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-channel",
+ "cache-key",
+ "distribution-filename",
  "distribution-types",
  "fs-err",
  "futures",
@@ -4830,6 +4890,7 @@ dependencies = [
  "uv-fs",
  "uv-interpreter",
  "uv-normalize",
+ "uv-requirements",
  "uv-types",
  "uv-warnings",
  "walkdir",
@@ -4843,6 +4904,7 @@ dependencies = [
  "cache-key",
  "configparser",
  "fs-err",
+ "futures",
  "indoc",
  "insta",
  "install-wheel-rs",
@@ -4853,16 +4915,22 @@ dependencies = [
  "platform-tags",
  "pypi-types",
  "regex",
+ "reqwest",
+ "reqwest-middleware",
  "rmp-serde",
  "same-file",
+ "schemars",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "tokio-util",
  "tracing",
+ "url",
  "uv-cache",
+ "uv-client",
+ "uv-extract",
  "uv-fs",
- "uv-toolchain",
  "uv-warnings",
  "which",
  "winapi",
@@ -4890,12 +4958,18 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
+ "glob",
  "indexmap",
+ "indoc",
+ "insta",
+ "itertools 0.12.1",
+ "path-absolutize",
  "pep440_rs",
  "pep508_rs",
  "pypi-types",
  "requirements-txt",
  "rustc-hash",
+ "schemars",
  "serde",
  "thiserror",
  "toml",
@@ -4905,6 +4979,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution",
  "uv-fs",
+ "uv-git",
  "uv-normalize",
  "uv-resolver",
  "uv-types",
@@ -4961,30 +5036,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv-toolchain"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "fs-err",
- "futures",
- "once_cell",
- "pep440_rs",
- "pep508_rs",
- "reqwest",
- "reqwest-middleware",
- "schemars",
- "serde",
- "tempfile",
- "thiserror",
- "tokio-util",
- "tracing",
- "url",
- "uv-client",
- "uv-extract",
- "uv-fs",
-]
-
-[[package]]
 name = "uv-types"
 version = "0.0.1"
 dependencies = [
@@ -5016,6 +5067,7 @@ dependencies = [
  "clap",
  "directories",
  "fs-err",
+ "itertools 0.12.1",
  "pathdiff",
  "platform-tags",
  "pypi-types",
@@ -5053,9 +5105,9 @@ dependencies = [
  "tracing",
  "uv-configuration",
  "uv-fs",
+ "uv-interpreter",
  "uv-normalize",
  "uv-resolver",
- "uv-toolchain",
  "uv-warnings",
 ]
 

@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 use tracing::debug;
 
-use distribution_types::Verbatim;
+use distribution_types::{RequirementSource, Verbatim};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use uv_distribution::is_same_reference;
 use uv_normalize::PackageName;
@@ -20,8 +20,8 @@ impl Urls {
     ) -> Result<Self, ResolveError> {
         let mut urls: FxHashMap<PackageName, VerbatimUrl> = FxHashMap::default();
 
-        // Add the themselves to the list of required URLs.
-        for (editable, metadata) in &manifest.editables {
+        // Add the editables themselves to the list of required URLs.
+        for (editable, metadata, _) in &manifest.editables {
             if let Some(previous) = urls.insert(metadata.name.clone(), editable.url.clone()) {
                 if !is_equal(&previous, &editable.url) {
                     if is_same_reference(&previous, &editable.url) {
@@ -39,17 +39,31 @@ impl Urls {
 
         // Add all direct requirements and constraints. If there are any conflicts, return an error.
         for requirement in manifest.requirements(markers, dependencies) {
-            if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
-                if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
-                    if !is_equal(&previous, url) {
-                        if is_same_reference(&previous, url) {
-                            debug!("Allowing {url} as a variant of {previous}");
-                        } else {
+            match &requirement.source {
+                RequirementSource::Registry { .. } => {}
+                RequirementSource::Url { url, .. } | RequirementSource::Path { url, .. } => {
+                    if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
+                        if !is_equal(&previous, url) {
                             return Err(ResolveError::ConflictingUrlsDirect(
                                 requirement.name.clone(),
                                 previous.verbatim().to_string(),
                                 url.verbatim().to_string(),
                             ));
+                        }
+                    }
+                }
+                RequirementSource::Git { url, .. } => {
+                    if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
+                        if !is_equal(&previous, url) {
+                            if is_same_reference(&previous, url) {
+                                debug!("Allowing {url} as a variant of {previous}");
+                            } else {
+                                return Err(ResolveError::ConflictingUrlsDirect(
+                                    requirement.name.clone(),
+                                    previous.verbatim().to_string(),
+                                    url.verbatim().to_string(),
+                                ));
+                            }
                         }
                     }
                 }

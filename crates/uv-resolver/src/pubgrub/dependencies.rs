@@ -3,9 +3,9 @@ use pubgrub::range::Range;
 use rustc_hash::FxHashSet;
 use tracing::warn;
 
-use distribution_types::Verbatim;
+use distribution_types::{Requirement, RequirementSource, Verbatim};
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::MarkerEnvironment;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -185,19 +185,14 @@ fn to_pubgrub(
     urls: &Urls,
     locals: &Locals,
 ) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
-    match requirement.version_or_url.as_ref() {
-        // The requirement has no specifier (e.g., `flask`).
-        None => Ok((
-            PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
-            Range::full(),
-        )),
-
-        // The requirement has a specifier (e.g., `flask>=1.0`).
-        Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
+    match &requirement.source {
+        RequirementSource::Registry { specifier, .. } => {
+            // TODO(konsti): We're currently losing the index information here, but we need
+            // either pass it to `PubGrubPackage` or the `ResolverProvider` beforehand.
             // If the specifier is an exact version, and the user requested a local version that's
             // more precise than the specifier, use the local version instead.
             let version = if let Some(expected) = locals.get(&requirement.name) {
-                specifiers
+                specifier
                     .iter()
                     .map(|specifier| {
                         Locals::map(expected, specifier)
@@ -208,7 +203,7 @@ fn to_pubgrub(
                         range.intersection(&specifier.into())
                     })?
             } else {
-                specifiers
+                specifier
                     .iter()
                     .map(PubGrubSpecifier::try_from)
                     .fold_ok(Range::full(), |range, specifier| {
@@ -221,13 +216,11 @@ fn to_pubgrub(
                 version,
             ))
         }
-
-        // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
-        Some(VersionOrUrl::Url(url)) => {
+        RequirementSource::Url { url, .. } => {
             let Some(expected) = urls.get(&requirement.name) else {
                 return Err(ResolveError::DisallowedUrl(
                     requirement.name.clone(),
-                    url.verbatim().to_string(),
+                    url.to_string(),
                 ));
             };
 
@@ -235,7 +228,49 @@ fn to_pubgrub(
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
                     expected.verbatim().to_string(),
-                    url.verbatim().to_string(),
+                    url.to_string(),
+                ));
+            }
+
+            Ok((
+                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
+                Range::full(),
+            ))
+        }
+        RequirementSource::Git { url, .. } => {
+            let Some(expected) = urls.get(&requirement.name) else {
+                return Err(ResolveError::DisallowedUrl(
+                    requirement.name.clone(),
+                    url.to_string(),
+                ));
+            };
+
+            if !Urls::is_allowed(expected, url) {
+                return Err(ResolveError::ConflictingUrlsTransitive(
+                    requirement.name.clone(),
+                    expected.verbatim().to_string(),
+                    url.to_string(),
+                ));
+            }
+
+            Ok((
+                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
+                Range::full(),
+            ))
+        }
+        RequirementSource::Path { url, .. } => {
+            let Some(expected) = urls.get(&requirement.name) else {
+                return Err(ResolveError::DisallowedUrl(
+                    requirement.name.clone(),
+                    url.to_string(),
+                ));
+            };
+
+            if !Urls::is_allowed(expected, url) {
+                return Err(ResolveError::ConflictingUrlsTransitive(
+                    requirement.name.clone(),
+                    expected.verbatim().to_string(),
+                    url.to_string(),
                 ));
             }
 

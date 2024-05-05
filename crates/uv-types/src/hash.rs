@@ -3,10 +3,12 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{DistributionMetadata, HashPolicy, PackageId};
-use pep508_rs::{MarkerEnvironment, VersionOrUrl};
+use distribution_types::{
+    DistributionMetadata, HashPolicy, PackageId, Requirement, RequirementSource,
+    UnresolvedRequirement,
+};
+use pep508_rs::MarkerEnvironment;
 use pypi_types::{HashDigest, HashError};
-use requirements_txt::RequirementsTxtRequirement;
 use uv_normalize::PackageName;
 
 #[derive(Debug, Clone)]
@@ -81,9 +83,9 @@ impl HashStrategy {
         }
     }
 
-    /// Generate the required hashes from a set of [`RequirementsTxtRequirement`] entries.
+    /// Generate the required hashes from a set of [`UnresolvedRequirement`] entries.
     pub fn from_requirements<'a>(
-        requirements: impl Iterator<Item = (&'a RequirementsTxtRequirement, &'a [String])>,
+        requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
         markers: &MarkerEnvironment,
     ) -> Result<Self, HashStrategyError> {
         let mut hashes = FxHashMap::<PackageId, Vec<HashDigest>>::default();
@@ -97,37 +99,10 @@ impl HashStrategy {
 
             // Every requirement must be either a pinned version or a direct URL.
             let id = match &requirement {
-                RequirementsTxtRequirement::Pep508(requirement) => {
-                    match requirement.version_or_url.as_ref() {
-                        Some(VersionOrUrl::Url(url)) => {
-                            // Direct URLs are always allowed.
-                            PackageId::from_url(url)
-                        }
-                        Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
-                            // Must be a single specifier.
-                            let [specifier] = specifiers.as_ref() else {
-                                return Err(HashStrategyError::UnpinnedRequirement(
-                                    requirement.to_string(),
-                                ));
-                            };
-
-                            // Must be pinned to a specific version.
-                            if *specifier.operator() != pep440_rs::Operator::Equal {
-                                return Err(HashStrategyError::UnpinnedRequirement(
-                                    requirement.to_string(),
-                                ));
-                            }
-
-                            PackageId::from_registry(requirement.name.clone())
-                        }
-                        None => {
-                            return Err(HashStrategyError::UnpinnedRequirement(
-                                requirement.to_string(),
-                            ));
-                        }
-                    }
+                UnresolvedRequirement::Named(requirement) => {
+                    uv_requirement_to_package_id(requirement)?
                 }
-                RequirementsTxtRequirement::Unnamed(requirement) => {
+                UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
                     PackageId::from_url(&requirement.url)
                 }
@@ -149,6 +124,31 @@ impl HashStrategy {
 
         Ok(Self::Validate(hashes))
     }
+}
+
+fn uv_requirement_to_package_id(requirement: &Requirement) -> Result<PackageId, HashStrategyError> {
+    Ok(match &requirement.source {
+        RequirementSource::Registry { specifier, .. } => {
+            // Must be a single specifier.
+            let [specifier] = specifier.as_ref() else {
+                return Err(HashStrategyError::UnpinnedRequirement(
+                    requirement.to_string(),
+                ));
+            };
+
+            // Must be pinned to a specific version.
+            if *specifier.operator() != pep440_rs::Operator::Equal {
+                return Err(HashStrategyError::UnpinnedRequirement(
+                    requirement.to_string(),
+                ));
+            }
+
+            PackageId::from_registry(requirement.name.clone())
+        }
+        RequirementSource::Url { url, .. }
+        | RequirementSource::Git { url, .. }
+        | RequirementSource::Path { url, .. } => PackageId::from_url(url),
+    })
 }
 
 #[derive(thiserror::Error, Debug)]

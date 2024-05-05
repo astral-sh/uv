@@ -46,6 +46,7 @@ fn run() -> Result<(), uv_virtualenv::Error> {
         &interpreter,
         Prompt::from_args(cli.prompt),
         cli.system_site_packages,
+        false,
     )?;
     Ok(())
 }

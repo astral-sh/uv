@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "inflection",
@@ -35,7 +35,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "upsidedown",
@@ -65,7 +65,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "numpy",
@@ -84,7 +84,7 @@ RequirementsTxt {
             ),
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "pandas",

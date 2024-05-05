@@ -19,19 +19,21 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 pep440_rs = { workspace = true }
 uv-fs = { workspace = true }
+uv-git = { workspace = true }
 uv-normalize = { workspace = true }
 
 derivative = { workspace = true }
+indexmap = { workspace = true }
 once_cell = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }
 regex = { workspace = true }
-serde = { workspace = true, features = ["derive"], optional = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
-url = { workspace = true }
+url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 insta = { version = "1.36.1" }
@@ -41,8 +43,6 @@ testing_logger = { version = "0.1.1" }
 
 [features]
 pyo3 = ["dep:pyo3", "pep440_rs/pyo3", "pyo3-log", "tracing", "tracing/log"]
-rkyv = ["pep440_rs/rkyv", "uv-normalize/rkyv"]
-serde = ["dep:serde", "pep440_rs/serde", "uv-normalize/serde", "url/serde"]
 tracing = ["dep:tracing", "pep440_rs/tracing"]
 # PEP 508 allows only URLs such as `foo @ https://example.org/foo` or `foo @ file:///home/ferris/foo`, and
 # arguably does not allow relative paths in file URLs (`foo @ file://./foo`,

@@ -11,9 +11,9 @@ use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
+use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::PythonVersion;
 
 use crate::commands::{extra_name_with_clap_error, ListFormat, VersionFormat};
 use crate::compat;
@@ -370,8 +370,11 @@ pub(crate) struct PipCompileArgs {
     pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
+
+    #[arg(long, overrides_with("refresh"), hide = true)]
+    pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
@@ -474,8 +477,11 @@ pub(crate) struct PipCompileArgs {
     pub(crate) no_system: bool,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
-    #[arg(long, short = 'U')]
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
     pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
     /// file.
@@ -500,7 +506,12 @@ pub(crate) struct PipCompileArgs {
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long, overrides_with("build_isolation"))]
+    #[arg(
+        long,
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("build_isolation")
+    )]
     pub(crate) no_build_isolation: bool,
 
     #[arg(long, overrides_with("no_build_isolation"), hide = true)]
@@ -619,8 +630,11 @@ pub(crate) struct PipSyncArgs {
     pub(crate) src_file: Vec<PathBuf>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
-    #[arg(long, alias = "force-reinstall")]
+    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub(crate) reinstall: bool,
+
+    #[arg(long, overrides_with("reinstall"), hide = true)]
+    pub(crate) no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[arg(long)]
@@ -639,8 +653,11 @@ pub(crate) struct PipSyncArgs {
     pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
+
+    #[arg(long, overrides_with("refresh"), hide = true)]
+    pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
@@ -738,7 +755,13 @@ pub(crate) struct PipSyncArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// Install packages into the system Python.
@@ -795,7 +818,13 @@ pub(crate) struct PipSyncArgs {
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long, overrides_with("build_isolation"))]
+
+    #[arg(
+        long,
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("build_isolation")
+    )]
     pub(crate) no_build_isolation: bool,
 
     #[arg(long, overrides_with("no_build_isolation"), hide = true)]
@@ -954,16 +983,22 @@ pub(crate) struct PipInstallArgs {
     pub(crate) no_all_extras: bool,
 
     /// Allow package upgrades.
-    #[arg(long, short = 'U')]
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
     pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
 
     /// Allow upgrade of a specific package.
     #[arg(long, short = 'P')]
     pub(crate) upgrade_package: Vec<PackageName>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
-    #[arg(long, alias = "force-reinstall")]
+    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub(crate) reinstall: bool,
+
+    #[arg(long, overrides_with("reinstall"), hide = true)]
+    pub(crate) no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[arg(long)]
@@ -982,8 +1017,11 @@ pub(crate) struct PipInstallArgs {
     pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
+
+    #[arg(long, overrides_with("refresh"), hide = true)]
+    pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
@@ -1107,7 +1145,13 @@ pub(crate) struct PipInstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// Install packages into the system Python.
@@ -1164,7 +1208,12 @@ pub(crate) struct PipInstallArgs {
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long, overrides_with("build_isolation"))]
+    #[arg(
+        long,
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("build_isolation")
+    )]
     pub(crate) no_build_isolation: bool,
 
     #[arg(long, overrides_with("no_build_isolation"), hide = true)]
@@ -1280,6 +1329,9 @@ pub(crate) struct PipInstallArgs {
     /// print the resulting plan.
     #[arg(long)]
     pub(crate) dry_run: bool,
+
+    #[arg(long, hide = true)]
+    pub(crate) unstable_uv_lock_file: Option<String>,
 }
 
 #[derive(Args)]
@@ -1306,7 +1358,13 @@ pub(crate) struct PipUninstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
@@ -1395,7 +1453,13 @@ pub(crate) struct PipFreezeArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1458,7 +1522,13 @@ pub(crate) struct PipListArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1500,7 +1570,13 @@ pub(crate) struct PipCheckArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1550,7 +1626,13 @@ pub(crate) struct PipShowArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1588,7 +1670,13 @@ pub(crate) struct VenvArgs {
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// Use the system Python to uninstall packages.
@@ -1614,6 +1702,15 @@ pub(crate) struct VenvArgs {
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
     #[arg(long)]
     pub(crate) seed: bool,
+
+    /// Overwrite the directory at the specified path when creating the virtual environment.
+    ///
+    /// By default, `uv venv` will remove an existing virtual environment at the given path, and
+    /// exit with an error if the path is non-empty but _not_ a virtual environment. The `--force`
+    /// option will instead write to the given path, regardless of its contents, and without
+    /// clearing it beforehand.
+    #[clap(long)]
+    pub(crate) force: bool,
 
     /// The path to the virtual environment to create.
     #[arg(default_value = ".venv")]
@@ -1743,7 +1840,13 @@ pub(crate) struct RunArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
     pub(crate) python: Option<String>,
 
     /// Run without the current workspace installed.

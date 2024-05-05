@@ -1,8 +1,8 @@
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
@@ -14,8 +14,7 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// See:
 /// - <https://peps.python.org/pep-0685/#specification/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ExtraName(String);
 
@@ -34,7 +33,6 @@ impl FromStr for ExtraName {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for ExtraName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

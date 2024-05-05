@@ -6,11 +6,12 @@ use std::path::PathBuf;
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
-use uv_toolchain::PythonVersion;
 use uv_warnings::warn_user_once;
 
 use crate::interpreter::InterpreterInfoError;
-use crate::python_environment::{detect_python_executable, detect_virtual_env};
+use crate::py_launcher::{py_list_paths, Error as PyLauncherError, PyListPath};
+use crate::virtualenv::{detect_virtualenv, virtualenv_python_executable};
+use crate::PythonVersion;
 use crate::{Error, Interpreter};
 
 /// Find a Python of a specific version, a binary with a name or a path to a binary.
@@ -202,7 +203,7 @@ fn find_python(
 
     if cfg!(windows) && !use_override {
         // Use `py` to find the python installation on the system.
-        match windows::py_list_paths() {
+        match py_list_paths() {
             Ok(paths) => {
                 for entry in paths {
                     let installation = PythonInstallation::PyListPath(entry);
@@ -211,19 +212,16 @@ fn find_python(
                     }
                 }
             }
-            Err(Error::PyList(error)) => {
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    debug!("`py` is not installed");
-                }
-            }
-            Err(error) => return Err(error),
+            // Do not error when `py` is not available
+            Err(PyLauncherError::NotFound) => debug!("`py` is not installed"),
+            Err(error) => return Err(Error::PyLauncher(error)),
         }
     }
 
     Ok(None)
 }
 
-/// Find the Python interpreter in `PATH` matching the given name (e.g., `python3`, respecting
+/// Find the Python interpreter in `PATH` matching the given name (e.g., `python3`), respecting
 /// `UV_PYTHON_PATH`.
 ///
 /// Returns `Ok(None)` if not found.
@@ -263,7 +261,7 @@ fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
 
     if cfg!(windows) && !use_override {
         // Use `py` to find the python installation on the system.
-        match windows::py_list_paths() {
+        match py_list_paths() {
             Ok(paths) => {
                 for entry in paths {
                     // Ex) `--python python3.12.exe`
@@ -281,23 +279,13 @@ fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
                     }
                 }
             }
-            Err(Error::PyList(error)) => {
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    debug!("`py` is not installed");
-                }
-            }
-            Err(error) => return Err(error),
+            // Do not error when `py` is not available
+            Err(PyLauncherError::NotFound) => debug!("`py` is not installed"),
+            Err(error) => return Err(Error::PyLauncher(error)),
         }
     }
 
     Ok(None)
-}
-
-#[derive(Debug, Clone)]
-struct PyListPath {
-    major: u8,
-    minor: u8,
-    executable_path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -518,8 +506,8 @@ fn find_version(
 
     // Check if the venv Python matches.
     if !system {
-        if let Some(venv) = detect_virtual_env()? {
-            let executable = detect_python_executable(venv);
+        if let Some(venv) = detect_virtualenv()? {
+            let executable = virtualenv_python_executable(venv);
             let interpreter = Interpreter::query(executable, cache)?;
 
             if version_matches(&interpreter) {
@@ -545,75 +533,6 @@ fn find_version(
 }
 
 mod windows {
-    use std::path::PathBuf;
-    use std::process::Command;
-
-    use once_cell::sync::Lazy;
-    use regex::Regex;
-    use tracing::info_span;
-
-    use crate::find_python::PyListPath;
-    use crate::Error;
-
-    /// ```text
-    /// -V:3.12          C:\Users\Ferris\AppData\Local\Programs\Python\Python312\python.exe
-    /// -V:3.8           C:\Users\Ferris\AppData\Local\Programs\Python\Python38\python.exe
-    /// ```
-    static PY_LIST_PATHS: Lazy<Regex> = Lazy::new(|| {
-        // Without the `R` flag, paths have trailing \r
-        Regex::new(r"(?mR)^ -(?:V:)?(\d).(\d+)-?(?:arm)?\d*\s*\*?\s*(.*)$").unwrap()
-    });
-
-    /// Run `py --list-paths` to find the installed pythons.
-    ///
-    /// The command takes 8ms on my machine.
-    /// TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
-    pub(super) fn py_list_paths() -> Result<Vec<PyListPath>, Error> {
-        let output = info_span!("py_list_paths")
-            .in_scope(|| Command::new("py").arg("--list-paths").output())
-            .map_err(Error::PyList)?;
-
-        // `py` sometimes prints "Installed Pythons found by py Launcher for Windows" to stderr which we ignore.
-        if !output.status.success() {
-            return Err(Error::PythonSubcommandOutput {
-                message: format!(
-                    "Running `py --list-paths` failed with status {}",
-                    output.status
-                ),
-                exit_code: output.status,
-                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            });
-        }
-
-        // Find the first python of the version we want in the list
-        let stdout =
-            String::from_utf8(output.stdout).map_err(|err| Error::PythonSubcommandOutput {
-                message: format!("The stdout of `py --list-paths` isn't UTF-8 encoded: {err}"),
-                exit_code: output.status,
-                stdout: String::from_utf8_lossy(err.as_bytes()).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            })?;
-
-        Ok(PY_LIST_PATHS
-            .captures_iter(&stdout)
-            .filter_map(|captures| {
-                let (_, [major, minor, path]) = captures.extract();
-                if let (Some(major), Some(minor)) =
-                    (major.parse::<u8>().ok(), minor.parse::<u8>().ok())
-                {
-                    Some(PyListPath {
-                        major,
-                        minor,
-                        executable_path: PathBuf::from(path),
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect())
-    }
-
     /// On Windows we might encounter the Windows Store proxy shim (enabled in:
     /// Settings/Apps/Advanced app settings/App execution aliases). When Python is _not_ installed
     /// via the Windows Store, but the proxy shim is enabled, then executing `python.exe` or

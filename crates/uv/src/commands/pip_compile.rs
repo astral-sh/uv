@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use std::borrow::Cow;
 use std::env;
 use std::fmt::Write;
@@ -15,21 +16,25 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
+use distribution_types::{IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, Verbatim};
+use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
+
 use platform_tags::Tags;
+use pypi_types::Metadata23;
 use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
-    Upgrade,
+    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, PreviewMode,
+    SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
+use uv_interpreter::PythonVersion;
 use uv_interpreter::{find_best_python, find_requested_python, PythonEnvironment};
 use uv_normalize::{ExtraName, PackageName, Source};
 use uv_requirements::{
@@ -41,7 +46,6 @@ use uv_resolver::{
     InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
     Resolver,
 };
-use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -89,6 +93,7 @@ pub(crate) async fn pip_compile(
     uv_lock: bool,
     native_tls: bool,
     quiet: bool,
+    preview: PreviewMode,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -128,6 +133,7 @@ pub(crate) async fn pip_compile(
         overrides,
         &extras,
         &client_builder,
+        preview,
     )
     .await?;
 
@@ -410,17 +416,33 @@ pub(crate) async fn pip_compile(
 
         // Build all editables.
         let editable_wheel_dir = tempdir_in(cache.root())?;
-        let editables: Vec<_> = downloader
+        let editables: Vec<(LocalEditable, Metadata23, Requirements)> = downloader
             .build_editables(editables, editable_wheel_dir.path())
             .await
             .context("Failed to build editables")?
             .into_iter()
-            .map(|built_editable| (built_editable.editable, built_editable.metadata))
-            .collect();
+            .map(|built_editable| {
+                let requirements = Requirements {
+                    dependencies: built_editable
+                        .metadata
+                        .requires_dist
+                        .iter()
+                        .cloned()
+                        .map(Requirement::from_pep508)
+                        .collect::<Result<_, ParsedUrlError>>()?,
+                    optional_dependencies: IndexMap::default(),
+                };
+                Ok::<_, ParsedUrlError>((
+                    built_editable.editable,
+                    built_editable.metadata,
+                    requirements,
+                ))
+            })
+            .collect::<Result<_, _>>()?;
 
         // Validate that the editables are compatible with the target Python version.
         let requirement = PythonRequirement::new(&interpreter, &markers);
-        for (.., metadata) in &editables {
+        for (_, metadata, _) in &editables {
             if let Some(python_requires) = metadata.requires_python.as_ref() {
                 if !python_requires.contains(requirement.target()) {
                     return Err(anyhow!(
@@ -562,7 +584,7 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        let relevant_markers = resolution.marker_tree(&manifest, &top_level_index, &markers);
+        let relevant_markers = resolution.marker_tree(&manifest, &top_level_index, &markers)?;
         writeln!(
             writer,
             "{}",

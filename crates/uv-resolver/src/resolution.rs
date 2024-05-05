@@ -13,8 +13,8 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ResolvedDist, Verbatim, VersionId,
-    VersionOrUrl,
+    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ParsedUrlError, Requirement,
+    ResolvedDist, Verbatim, VersionId, VersionOrUrl,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -35,13 +35,9 @@ use crate::{Manifest, ResolveError};
 
 /// Indicate the style of annotation comments, used to indicate the dependencies that requested each
 /// package.
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(deny_unknown_fields, rename_all = "kebab-case")
-)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum AnnotationStyle {
     /// Render the annotations on a single, comma-separated line.
@@ -94,7 +90,8 @@ impl ResolutionGraph {
             match package {
                 PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
-                    let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
+                    let pinned_package = if let Some((editable, _, _)) = editables.get(package_name)
+                    {
                         Dist::from_editable(package_name.clone(), editable.clone())?.into()
                     } else {
                         pins.get(package_name, version)
@@ -127,7 +124,8 @@ impl ResolutionGraph {
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
                     // Create the distribution.
-                    let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
+                    let pinned_package = if let Some((editable, _, _)) = editables.get(package_name)
+                    {
                         Dist::from_editable(package_name.clone(), editable.clone())?
                     } else {
                         let url = to_precise(url)
@@ -160,7 +158,7 @@ impl ResolutionGraph {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_registry(package_name, version);
 
-                    if let Some((editable, metadata)) = editables.get(package_name) {
+                    if let Some((editable, metadata, _)) = editables.get(package_name) {
                         if metadata.provides_extras.contains(extra) {
                             extras
                                 .entry(package_name.clone())
@@ -214,7 +212,7 @@ impl ResolutionGraph {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_url(package_name, url);
 
-                    if let Some((editable, metadata)) = editables.get(package_name) {
+                    if let Some((editable, metadata, _)) = editables.get(package_name) {
                         if metadata.provides_extras.contains(extra) {
                             extras
                                 .entry(package_name.clone())
@@ -383,7 +381,7 @@ impl ResolutionGraph {
         manifest: &Manifest,
         index: &InMemoryIndex,
         marker_env: &MarkerEnvironment,
-    ) -> pep508_rs::MarkerTree {
+    ) -> Result<pep508_rs::MarkerTree, Box<ParsedUrlError>> {
         use pep508_rs::{
             MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
             MarkerValueVersion,
@@ -453,7 +451,14 @@ impl ResolutionGraph {
                     dist.version_id()
                 )
             };
-            for req in manifest.apply(&archive.metadata.requires_dist) {
+            let requirements: Vec<_> = archive
+                .metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(Requirement::from_pep508)
+                .collect::<Result<_, _>>()?;
+            for req in manifest.apply(requirements.iter()) {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
                 };
@@ -466,7 +471,7 @@ impl ResolutionGraph {
             manifest
                 .editables
                 .iter()
-                .flat_map(|(_, metadata)| &metadata.requires_dist),
+                .flat_map(|(_, _, uv_requirements)| &uv_requirements.dependencies),
         );
         for direct_req in manifest.apply(direct_reqs) {
             let Some(ref marker_tree) = direct_req.marker else {
@@ -499,7 +504,7 @@ impl ResolutionGraph {
             };
             conjuncts.push(MarkerTree::Expression(expr));
         }
-        MarkerTree::And(conjuncts)
+        Ok(MarkerTree::And(conjuncts))
     }
 
     pub fn lock(&self) -> Result<Lock, LockError> {
@@ -661,7 +666,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     return None;
                 }
 
-                let node = if let Some((editable, _)) = self.resolution.editables.get(name) {
+                let node = if let Some((editable, _, _)) = self.resolution.editables.get(name) {
                     Node::Editable(name, editable)
                 } else if self.include_extras {
                     Node::Distribution(

@@ -1,17 +1,14 @@
+use distribution_types::RequirementSource;
 use rustc_hash::FxHashSet;
 
-use pep508_rs::{MarkerEnvironment, VersionOrUrl};
+use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
 use crate::{DependencyMode, Manifest};
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(deny_unknown_fields, rename_all = "kebab-case")
-)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum PreReleaseMode {
     /// Disallow all pre-release versions.
@@ -70,16 +67,11 @@ impl PreReleaseStrategy {
                 manifest
                     .requirements(markers, dependencies)
                     .filter(|requirement| {
-                        let Some(version_or_url) = &requirement.version_or_url else {
+                        let RequirementSource::Registry { specifier, .. } = &requirement.source
+                        else {
                             return false;
                         };
-                        let version_specifiers = match version_or_url {
-                            VersionOrUrl::VersionSpecifier(version_specifiers) => {
-                                version_specifiers
-                            }
-                            VersionOrUrl::Url(_) => return false,
-                        };
-                        version_specifiers
+                        specifier
                             .iter()
                             .any(pep440_rs::VersionSpecifier::any_prerelease)
                     })
@@ -90,16 +82,11 @@ impl PreReleaseStrategy {
                 manifest
                     .requirements(markers, dependencies)
                     .filter(|requirement| {
-                        let Some(version_or_url) = &requirement.version_or_url else {
+                        let RequirementSource::Registry { specifier, .. } = &requirement.source
+                        else {
                             return false;
                         };
-                        let version_specifiers = match version_or_url {
-                            VersionOrUrl::VersionSpecifier(version_specifiers) => {
-                                version_specifiers
-                            }
-                            VersionOrUrl::Url(_) => return false,
-                        };
-                        version_specifiers
+                        specifier
                             .iter()
                             .any(pep440_rs::VersionSpecifier::any_prerelease)
                     })

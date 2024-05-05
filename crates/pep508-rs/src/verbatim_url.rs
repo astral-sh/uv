@@ -10,17 +10,13 @@ use url::{ParseError, Url};
 use uv_fs::normalize_path;
 
 /// A wrapper around [`Url`] that preserves the original string.
-#[derive(Debug, Clone, Eq, derivative::Derivative)]
+#[derive(Debug, Clone, Eq, derivative::Derivative, serde::Deserialize, serde::Serialize)]
 #[derivative(PartialEq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VerbatimUrl {
     /// The parsed URL.
-    #[cfg_attr(
-        feature = "serde",
-        serde(
-            serialize_with = "Url::serialize_internal",
-            deserialize_with = "Url::deserialize_internal"
-        )
+    #[serde(
+        serialize_with = "Url::serialize_internal",
+        deserialize_with = "Url::deserialize_internal"
     )]
     url: Url,
     /// The URL as it was provided by the user.

@@ -32,7 +32,6 @@ use pyo3::{
     create_exception, exceptions::PyNotImplementedError, pyclass, pyclass::CompareOp, pymethods,
     pymodule, types::PyModule, IntoPy, PyObject, PyResult, Python,
 };
-#[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
@@ -183,7 +182,6 @@ impl Display for Requirement {
 }
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Requirement {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -195,7 +193,6 @@ impl<'de> Deserialize<'de> for Requirement {
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-#[cfg(feature = "serde")]
 impl Serialize for Requirement {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -481,12 +478,23 @@ pub enum VersionOrUrl {
 }
 
 /// Unowned version specifier or URL to install.
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum VersionOrUrlRef<'a> {
     /// A PEP 440 version specifier set
     VersionSpecifier(&'a VersionSpecifiers),
     /// A installable URL
     Url(&'a VerbatimUrl),
+}
+
+impl<'a> From<&'a VersionOrUrl> for VersionOrUrlRef<'a> {
+    fn from(value: &'a VersionOrUrl) -> Self {
+        match value {
+            VersionOrUrl::VersionSpecifier(version_specifier) => {
+                VersionOrUrlRef::VersionSpecifier(version_specifier)
+            }
+            VersionOrUrl::Url(url) => VersionOrUrlRef::Url(url),
+        }
+    }
 }
 
 /// A [`Cursor`] over a string.
@@ -2012,10 +2020,11 @@ mod tests {
     fn error_invalid_prerelease() {
         assert_snapshot!(
             parse_pepe508_err("name==1.0.org1"),
-            @"
-            after parsing 1.0, found \".org1\" after it, which is not part of a valid version
-            name==1.0.org1
-                ^^^^^^^^^^"
+            @r###"
+        after parsing '1.0', found '.org1', which is not part of a valid version
+        name==1.0.org1
+            ^^^^^^^^^^
+        "###
         );
     }
 

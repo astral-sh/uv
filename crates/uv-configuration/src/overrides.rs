@@ -3,7 +3,7 @@ use std::hash::BuildHasherDefault;
 use itertools::Either;
 use rustc_hash::FxHashMap;
 
-use pep508_rs::Requirement;
+use distribution_types::Requirement;
 use uv_normalize::PackageName;
 
 /// A set of overrides for a set of requirements.

@@ -3,9 +3,9 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
+use distribution_types::{ParsedUrlError, Requirement, RequirementSource};
 use pep440_rs::{Operator, Version};
-use pep508_rs::UnnamedRequirement;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
 use pypi_types::{HashDigest, HashError};
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_normalize::PackageName;
@@ -16,6 +16,8 @@ pub enum PreferenceError {
     Bare(UnnamedRequirement),
     #[error(transparent)]
     Hash(#[from] HashError),
+    #[error(transparent)]
+    ParsedUrl(#[from] Box<ParsedUrlError>),
 }
 
 /// A pinned requirement, as extracted from a `requirements.txt` file.
@@ -30,7 +32,9 @@ impl Preference {
     pub fn from_entry(entry: RequirementEntry) -> Result<Self, PreferenceError> {
         Ok(Self {
             requirement: match entry.requirement {
-                RequirementsTxtRequirement::Pep508(requirement) => requirement,
+                RequirementsTxtRequirement::Named(requirement) => {
+                    Requirement::from_pep508(requirement).map_err(Box::new)?
+                }
                 RequirementsTxtRequirement::Unnamed(requirement) => {
                     return Err(PreferenceError::Bare(requirement));
                 }
@@ -96,10 +100,9 @@ impl Preferences {
                         );
                         return None;
                     }
-                    match requirement.version_or_url.as_ref() {
-                        Some(VersionOrUrl::VersionSpecifier(version_specifiers)) =>
-                            {
-                                let [version_specifier] = version_specifiers.as_ref() else {
+                    match &requirement.source {
+                        RequirementSource::Registry { specifier, ..} => {
+                            let [version_specifier] = specifier.as_ref() else {
                                     trace!(
                                     "Excluding {requirement} from preferences due to multiple version specifiers."
                                 );
@@ -119,13 +122,10 @@ impl Preferences {
                                     },
                                 ))
                             }
-                        Some(VersionOrUrl::Url(_)) => {
+                        RequirementSource::Url {..} | RequirementSource::Git { .. } | RequirementSource::Path { .. }=> {
                             trace!(
                                 "Excluding {requirement} from preferences due to URL dependency."
                             );
-                            None
-                        }
-                        _ => {
                             None
                         }
                     }
