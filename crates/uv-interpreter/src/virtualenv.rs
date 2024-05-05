@@ -73,7 +73,8 @@ pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
 
 /// Locate a virtual environment by searching the file system.
 ///
-/// Finds a `.venv` directory in the current or any parent directory.
+/// Checks if the working directory is a virtual environment.
+/// If not, finds a `.venv` directory in the current or any parent directory.
 pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
     let current_dir = env::current_dir().expect("Failed to detect current directory");
     if current_dir.join("pyvenv.cfg").is_file() {
