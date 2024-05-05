@@ -1585,7 +1585,7 @@ mod tests {
     #[cfg(windows)]
     fn direct_url_extras() {
         let numpy =
-            UnnamedRequirement::from_str("C:\\path\\to\\numpy-1.26.4-cp312-cp312-win32.whl[dev]")
+            UnnamedRequirement::tracked_from_str("C:\\path\\to\\numpy-1.26.4-cp312-cp312-win32.whl[dev]", None, None)
                 .unwrap();
         assert_eq!(
             numpy.url.to_string(),
