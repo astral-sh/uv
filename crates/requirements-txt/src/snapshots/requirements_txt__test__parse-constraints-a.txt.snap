@@ -25,13 +25,13 @@ RequirementsTxt {
                     ),
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/constraints-a.txt",
+                        "<REQUIREMENTS_DIR>constraints-a.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/constraints-a.txt",
+                "<REQUIREMENTS_DIR>constraints-a.txt",
             ),
         },
     ],
@@ -55,7 +55,7 @@ RequirementsTxt {
             ),
             marker: None,
             path: Some(
-                "<REQUIREMENTS_DIR>/constraints-b.txt",
+                "<REQUIREMENTS_DIR>constraints-b.txt",
             ),
         },
         Requirement {
@@ -77,7 +77,7 @@ RequirementsTxt {
             ),
             marker: None,
             path: Some(
-                "<REQUIREMENTS_DIR>/constraints-b.txt",
+                "<REQUIREMENTS_DIR>constraints-b.txt",
             ),
         },
     ],

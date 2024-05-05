@@ -25,13 +25,13 @@ RequirementsTxt {
                     ),
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/small.txt",
+                        "<REQUIREMENTS_DIR>small.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/small.txt",
+                "<REQUIREMENTS_DIR>small.txt",
             ),
         },
         RequirementEntry {
@@ -55,13 +55,13 @@ RequirementsTxt {
                     ),
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/small.txt",
+                        "<REQUIREMENTS_DIR>small.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/small.txt",
+                "<REQUIREMENTS_DIR>small.txt",
             ),
         },
     ],
