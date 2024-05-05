@@ -1357,6 +1357,17 @@ mod test {
         PathBuf::from("./test-data").canonicalize().unwrap()
     }
 
+    fn safe_filter_path(path: &Path) -> String {
+        format!(
+            // Trim the trailing separator for cross-platform directories filters
+            r"{}\\?/?",
+            regex::escape(&path.simplified_display().to_string())
+                // Make separators platform agnostic because on Windows we will display
+                // paths with Unix-style separators sometimes
+                .replace(r"\\", r"(\\|\/)")
+        )
+    }
+
     #[test_case(Path::new("basic.txt"))]
     #[test_case(Path::new("constraints-a.txt"))]
     #[test_case(Path::new("constraints-b.txt"))]
@@ -1431,7 +1442,8 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
-        let filters = vec![(temp_dir.path().to_str().unwrap(), "<REQUIREMENTS_DIR>")];
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
             filters => filters,
         }, {
@@ -1474,12 +1486,7 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("parse-windows-{}", path.to_string_lossy());
-        let pattern = regex::escape(
-            &working_dir
-                .simplified_display()
-                .to_string()
-                .replace('\\', "/"),
-        );
+        let pattern = safe_filter_path(&working_dir);
         let filters = vec![(pattern.as_str(), "[WORKSPACE_DIR]")];
         insta::with_settings!({
             filters => filters
@@ -1799,7 +1806,8 @@ mod test {
         )
         .await
         .unwrap();
-        let filters = vec![(temp_dir.path().to_str().unwrap(), "<REQUIREMENTS_DIR>")];
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
                         filters => filters,
                     }, {
@@ -1816,13 +1824,13 @@ mod test {
                                     version_or_url: None,
                                     marker: None,
                                     path: Some(
-                                        "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                        "<REQUIREMENTS_DIR>subdir/sibling.txt",
                                     ),
                                 },
                             ),
                             hashes: [],
                             path: Some(
-                                "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                "<REQUIREMENTS_DIR>subdir/sibling.txt",
                             ),
                         },
                     ],
@@ -1864,7 +1872,8 @@ mod test {
         )
         .await
         .unwrap();
-        let filters = vec![(temp_dir.path().to_str().unwrap(), "<REQUIREMENTS_DIR>")];
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
             filters => filters,
         }, {
@@ -1881,13 +1890,13 @@ mod test {
                                 version_or_url: None,
                                 marker: None,
                                 path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                    "<REQUIREMENTS_DIR>requirements.txt",
                                 ),
                             },
                         ),
                         hashes: [],
                         path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
+                            "<REQUIREMENTS_DIR>requirements.txt",
                         ),
                     },
                 ],
@@ -2057,7 +2066,8 @@ mod test {
         )
         .await
         .unwrap();
-        let filters = vec![(temp_dir.path().to_str().unwrap(), "<REQUIREMENTS_DIR>")];
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
             filters => filters,
         }, {
@@ -2074,13 +2084,13 @@ mod test {
                                 version_or_url: None,
                                 marker: None,
                                 path: Some(
-                                    "<REQUIREMENTS_DIR>/./sibling.txt",
+                                    "<REQUIREMENTS_DIR>./sibling.txt",
                                 ),
                             },
                         ),
                         hashes: [],
                         path: Some(
-                            "<REQUIREMENTS_DIR>/./sibling.txt",
+                            "<REQUIREMENTS_DIR>./sibling.txt",
                         ),
                     },
                     RequirementEntry {
@@ -2104,7 +2114,7 @@ mod test {
                                 ),
                                 marker: None,
                                 path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                    "<REQUIREMENTS_DIR>requirements.txt",
                                 ),
                             },
                         ),
@@ -2112,7 +2122,7 @@ mod test {
                             "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
                         ],
                         path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
+                            "<REQUIREMENTS_DIR>requirements.txt",
                         ),
                     },
                     RequirementEntry {
@@ -2136,7 +2146,7 @@ mod test {
                                 ),
                                 marker: None,
                                 path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                    "<REQUIREMENTS_DIR>requirements.txt",
                                 ),
                             },
                         ),
@@ -2144,7 +2154,7 @@ mod test {
                             "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
                         ],
                         path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
+                            "<REQUIREMENTS_DIR>requirements.txt",
                         ),
                     },
                     RequirementEntry {
@@ -2168,13 +2178,13 @@ mod test {
                                 ),
                                 marker: None,
                                 path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                    "<REQUIREMENTS_DIR>requirements.txt",
                                 ),
                             },
                         ),
                         hashes: [],
                         path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
+                            "<REQUIREMENTS_DIR>requirements.txt",
                         ),
                     },
                     RequirementEntry {
@@ -2198,13 +2208,13 @@ mod test {
                                 ),
                                 marker: None,
                                 path: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                    "<REQUIREMENTS_DIR>requirements.txt",
                                 ),
                             },
                         ),
                         hashes: [],
                         path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
+                            "<REQUIREMENTS_DIR>requirements.txt",
                         ),
                     },
                 ],

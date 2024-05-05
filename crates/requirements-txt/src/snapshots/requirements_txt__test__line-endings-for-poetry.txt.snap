@@ -25,13 +25,13 @@ RequirementsTxt {
                     ),
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        "<REQUIREMENTS_DIR>for-poetry.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/for-poetry.txt",
+                "<REQUIREMENTS_DIR>for-poetry.txt",
             ),
         },
         RequirementEntry {
@@ -55,13 +55,13 @@ RequirementsTxt {
                     ),
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        "<REQUIREMENTS_DIR>for-poetry.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/for-poetry.txt",
+                "<REQUIREMENTS_DIR>for-poetry.txt",
             ),
         },
         RequirementEntry {
@@ -74,13 +74,13 @@ RequirementsTxt {
                     version_or_url: None,
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        "<REQUIREMENTS_DIR>for-poetry.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/for-poetry.txt",
+                "<REQUIREMENTS_DIR>for-poetry.txt",
             ),
         },
         RequirementEntry {
@@ -112,13 +112,13 @@ RequirementsTxt {
                     ),
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        "<REQUIREMENTS_DIR>for-poetry.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/for-poetry.txt",
+                "<REQUIREMENTS_DIR>for-poetry.txt",
             ),
         },
     ],

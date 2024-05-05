@@ -15,7 +15,7 @@ RequirementsTxt {
                             password: None,
                             host: None,
                             port: None,
-                            path: "/[WORKSPACE_DIR]/scripts/packages/black_editable",
+                            path: "[WORKSPACE_DIR]scripts/packages/black_editable",
                             query: None,
                             fragment: None,
                         },
@@ -25,9 +25,15 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "[WORKSPACE_DIR]bare-url.txt",
+            ),
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -40,7 +46,7 @@ RequirementsTxt {
                             password: None,
                             host: None,
                             port: None,
-                            path: "/[WORKSPACE_DIR]/scripts/packages/black_editable",
+                            path: "[WORKSPACE_DIR]scripts/packages/black_editable",
                             query: None,
                             fragment: None,
                         },
@@ -54,9 +60,15 @@ RequirementsTxt {
                         ),
                     ],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "[WORKSPACE_DIR]bare-url.txt",
+            ),
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -69,7 +81,7 @@ RequirementsTxt {
                             password: None,
                             host: None,
                             port: None,
-                            path: "/[WORKSPACE_DIR]/scripts/packages/black_editable",
+                            path: "/scripts/packages/black_editable",
                             query: None,
                             fragment: None,
                         },
@@ -79,9 +91,15 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "[WORKSPACE_DIR]bare-url.txt",
+            ),
         },
     ],
     constraints: [],

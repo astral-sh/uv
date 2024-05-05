@@ -14,13 +14,13 @@ RequirementsTxt {
                     version_or_url: None,
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/editable.txt",
+                        "<REQUIREMENTS_DIR>editable.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/editable.txt",
+                "<REQUIREMENTS_DIR>editable.txt",
             ),
         },
         RequirementEntry {
@@ -60,13 +60,13 @@ RequirementsTxt {
                     ),
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>/editable.txt",
+                        "<REQUIREMENTS_DIR>editable.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>/editable.txt",
+                "<REQUIREMENTS_DIR>editable.txt",
             ),
         },
     ],
