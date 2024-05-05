@@ -6317,7 +6317,8 @@ fn expand_env_var_requirements_txt() -> Result<()> {
     requirements_dev_in.write_str("anyio")?;
 
     let mut filters = context.filters();
-    filters.push((context.temp_dir.to_str().unwrap(), "[TEMP_DIR]"));
+    let temp_dir_pattern = TestContext::path_pattern(&context.temp_dir);
+    filters.push((temp_dir_pattern.as_str(), "[TEMP_DIR]"));
 
     uv_snapshot!(filters, context.compile()
             .arg("requirements.in"), @r###"

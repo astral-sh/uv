@@ -1392,7 +1392,8 @@ mod test {
         .unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
-        let filters = vec![(working_dir.to_str().unwrap(), "<REQUIREMENTS_DIR>")];
+        let filter_path = safe_filter_path(&working_dir);
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
             filters => filters,
         }, {
