@@ -261,7 +261,7 @@ impl TestContext {
     }
 
     /// Generate an escaped regex pattern for the given path.
-    pub fn path_pattern(path: impl AsRef<Path>) -> String {
+    fn path_pattern(path: impl AsRef<Path>) -> String {
         format!(
             // Trim the trailing separator for cross-platform directories filters
             r"{}\\?/?",
