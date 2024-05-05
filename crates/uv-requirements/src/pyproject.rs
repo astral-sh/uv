@@ -9,11 +9,11 @@ use std::collections::HashMap;
 use std::io;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use glob::Pattern;
 use indexmap::IndexMap;
 use path_absolutize::Absolutize;
+use pep440_rs::TrackedFromStr;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -244,6 +244,7 @@ impl Pep621Metadata {
         workspace_sources: &HashMap<PackageName, Source>,
         workspace_packages: &HashMap<PackageName, String>,
         preview: PreviewMode,
+        pyproject_path: &Path,
     ) -> Result<Option<Self>, Pep621Error> {
         let project_sources = pyproject
             .tool
@@ -289,6 +290,7 @@ impl Pep621Metadata {
             workspace_sources,
             workspace_packages,
             preview,
+            pyproject_path,
         )?;
 
         // Parse out the project requirements.
@@ -328,11 +330,16 @@ pub(crate) fn lower_requirements(
     workspace_sources: &HashMap<PackageName, Source>,
     workspace_packages: &HashMap<PackageName, String>,
     preview: PreviewMode,
+    pyproject_path: &Path,
 ) -> Result<Requirements, Pep621Error> {
     let dependencies = dependencies
         .iter()
         .map(|dependency| {
-            let requirement = pep508_rs::Requirement::from_str(dependency)?;
+            let requirement = pep508_rs::Requirement::tracked_from_str(
+                dependency,
+                Some(pyproject_path),
+                Some(project_dir),
+            )?;
             let name = requirement.name.clone();
             lower_requirement(
                 requirement,
@@ -352,7 +359,11 @@ pub(crate) fn lower_requirements(
             let dependencies: Vec<_> = dependencies
                 .iter()
                 .map(|dependency| {
-                    let requirement = pep508_rs::Requirement::from_str(dependency)?;
+                    let requirement = pep508_rs::Requirement::tracked_from_str(
+                        dependency,
+                        Some(pyproject_path),
+                        Some(project_dir),
+                    )?;
                     let name = requirement.name.clone();
                     lower_requirement(
                         requirement,

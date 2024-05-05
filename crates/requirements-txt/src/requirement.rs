@@ -41,6 +41,7 @@ impl RequirementsTxtRequirement {
                     // If that fails, attempt to parse as a direct URL requirement.
                     Ok(Self::Unnamed(UnnamedRequirement::parse(
                         input,
+                        source,
                         &working_dir,
                     )?))
                 }

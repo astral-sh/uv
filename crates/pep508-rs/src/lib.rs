@@ -1333,6 +1333,7 @@ fn parse_pep508_requirement(
 /// Unlike pip, we allow extras on URLs and paths.
 fn parse_unnamed_requirement(
     cursor: &mut Cursor,
+    source: Option<&Path>,
     working_dir: Option<&Path>,
 ) -> Result<UnnamedRequirement, Pep508Error> {
     cursor.eat_whitespace();
@@ -1383,6 +1384,7 @@ fn parse_unnamed_requirement(
         url,
         extras,
         marker,
+        path: source.map(|p| p.to_string_lossy().to_string()),
     })
 }
 
@@ -1439,7 +1441,9 @@ mod tests {
     }
 
     fn parse_unnamed_err(input: &str) -> String {
-        UnnamedRequirement::from_str(input).unwrap_err().to_string()
+        UnnamedRequirement::tracked_from_str(input, None, None)
+            .unwrap_err()
+            .to_string()
     }
 
     #[cfg(windows)]
@@ -1556,7 +1560,7 @@ mod tests {
 
     #[test]
     fn direct_url_no_extras() {
-        let numpy = UnnamedRequirement::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
+        let numpy = UnnamedRequirement::tracked_from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl", None, None).unwrap();
         assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
         assert_eq!(numpy.extras, vec![]);
     }
@@ -1564,9 +1568,12 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn direct_url_extras() {
-        let numpy =
-            UnnamedRequirement::from_str("/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]")
-                .unwrap();
+        let numpy = UnnamedRequirement::tracked_from_str(
+            "/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]",
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(
             numpy.url.to_string(),
             "file:///path/to/numpy-1.26.4-cp312-cp312-win32.whl"

@@ -25,6 +25,9 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]/bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],
@@ -57,6 +60,9 @@ RequirementsTxt {
                         ),
                     ],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]/bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],
@@ -85,6 +91,9 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]/bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],

@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::path::Path;
-use std::str::FromStr;
 
+use pep440_rs::TrackedFromStr;
 #[cfg(feature = "pyo3")]
 use pyo3::pyclass;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -27,6 +27,8 @@ pub struct UnnamedRequirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
+    /// Source of the requirement
+    pub path: Option<String>,
 }
 
 impl UnnamedRequirement {
@@ -68,7 +70,7 @@ impl<'de> Deserialize<'de> for UnnamedRequirement {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        TrackedFromStr::tracked_from_str(&s, None, None).map_err(de::Error::custom)
     }
 }
 
@@ -82,18 +84,30 @@ impl Serialize for UnnamedRequirement {
     }
 }
 
-impl FromStr for UnnamedRequirement {
+impl TrackedFromStr for UnnamedRequirement {
     type Err = Pep508Error;
 
     /// Parse a PEP 508-like direct URL requirement without a package name.
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        crate::parse_unnamed_requirement(&mut Cursor::new(input), None)
+    fn tracked_from_str(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Self::Err> {
+        crate::parse_unnamed_requirement(&mut Cursor::new(input), source, working_dir)
     }
 }
 
 impl UnnamedRequirement {
     /// Parse a PEP 508-like direct URL requirement without a package name.
-    pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
-        crate::parse_unnamed_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
+    pub fn parse(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: impl AsRef<Path>,
+    ) -> Result<Self, Pep508Error> {
+        crate::parse_unnamed_requirement(
+            &mut Cursor::new(input),
+            source,
+            Some(working_dir.as_ref()),
+        )
     }
 }

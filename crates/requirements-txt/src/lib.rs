@@ -326,7 +326,7 @@ impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
                 }
             },
             hashes: value.hashes,
-            path: None,
+            path: value.path,
         })
     }
 }
@@ -1801,95 +1801,95 @@ mod test {
         .unwrap();
         let filters = vec![(temp_dir.path().to_str().unwrap(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
-                    filters => filters,
-                }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "flask",
+                        filters => filters,
+                    }, {
+                insta::assert_debug_snapshot!(requirements, @r###"
+                RequirementsTxt {
+                    requirements: [
+                        RequirementEntry {
+                            requirement: Named(
+                                Requirement {
+                                    name: PackageName(
+                                        "flask",
+                                    ),
+                                    extras: [],
+                                    version_or_url: None,
+                                    marker: None,
+                                    path: Some(
+                                        "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                    ),
+                                },
                             ),
-                            extras: [],
-                            version_or_url: None,
-                            marker: None,
+                            hashes: [],
+                            path: Some(
+                                "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                            ),
                         },
-                    ),
-                    hashes: [],
-                },
-            ],
-            constraints: [],
-            editables: [],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: false,
-            no_binary: None,
-            only_binary: None,
-        }
-        "###);
+                    ],
+                    constraints: [],
+                    editables: [],
+                    index_url: None,
+                    extra_index_urls: [],
+                    find_links: [],
+                    no_index: false,
+                    no_binary: None,
+                    only_binary: None,
+                }
+                "###);
+        });
 
+        Ok(())
+    }
 
-            Ok(())
-        }
+    #[tokio::test]
+    async fn nested_no_binary() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
 
-        #[tokio::test]
-        async fn nested_no_binary() -> Result<()> {
-            let temp_dir = assert_fs::TempDir::new()?;
-
-            let requirements_txt = temp_dir.child("requirements.txt");
-            requirements_txt.write_str(indoc! {"
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
             flask
             --no-binary :none:
             -r child.txt
         "})?;
 
-            let child = temp_dir.child("child.txt");
-            child.write_str(indoc! {"
+        let child = temp_dir.child("child.txt");
+        child.write_str(indoc! {"
             --no-binary flask
         "})?;
 
-            let requirements = RequirementsTxt::parse(
-                requirements_txt.path(),
-                temp_dir.path(),
-                &BaseClientBuilder::new(),
-            )
-            .await
-            .unwrap();
+        let requirements = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap();
         let filters = vec![(temp_dir.path().to_str().unwrap(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
             filters => filters,
         }, {
             insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "flask",
-                            ),
-                            extras: [],
-                            version_or_url: None,
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-            ],
-            constraints: [],
-            editables: [],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: false,
-            no_binary: Packages(
-                [
-                    PackageName(
-                        "flask",
-                    ),
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "flask",
+                                ),
+                                extras: [],
+                                version_or_url: None,
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
+                    },
                 ],
                 constraints: [],
                 editables: [],
@@ -1907,7 +1907,6 @@ mod test {
                 only_binary: None,
             }
             "###);
-            });
         });
 
         Ok(())
@@ -2074,9 +2073,15 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/./sibling.txt",
+                                ),
                             },
                         ),
                         hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/./sibling.txt",
+                        ),
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2098,11 +2103,17 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
                             },
                         ),
                         hashes: [
                             "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
                         ],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2124,11 +2135,17 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
                             },
                         ),
                         hashes: [
                             "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
                         ],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2150,9 +2167,15 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
                             },
                         ),
                         hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2172,49 +2195,50 @@ mod test {
                                             ],
                                         ),
                                     ),
-                                    marker: None,
-                                    path: Some(
-                                        "<REQUIREMENTS_DIR>/requirements.txt",
-                                    ),
-                                },
-                            ),
-                            hashes: [],
-                            path: Some(
-                                "<REQUIREMENTS_DIR>/requirements.txt",
-                            ),
-                        },
-                    ],
-                    constraints: [],
-                    editables: [],
-                    index_url: Some(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "test.pypi.org",
-                                    ),
                                 ),
-                                port: None,
-                                path: "/simple/",
-                                query: None,
-                                fragment: None,
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
                             },
-                            given: Some(
-                                "https://test.pypi.org/simple/",
+                        ),
+                        hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
+                    },
+                ],
+                constraints: [],
+                editables: [],
+                index_url: Some(
+                    VerbatimUrl {
+                        url: Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "test.pypi.org",
+                                ),
                             ),
+                            port: None,
+                            path: "/simple/",
+                            query: None,
+                            fragment: None,
                         },
-                    ),
-                    extra_index_urls: [],
-                    find_links: [],
-                    no_index: false,
-                    no_binary: All,
-                    only_binary: None,
-                }
-                "###);
+                        given: Some(
+                            "https://test.pypi.org/simple/",
+                        ),
+                    },
+                ),
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: All,
+                only_binary: None,
+            }
+            "###);
         });
 
         Ok(())
