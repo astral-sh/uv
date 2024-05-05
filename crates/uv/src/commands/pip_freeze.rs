@@ -62,6 +62,9 @@ pub(crate) fn pip_freeze(
                     writeln!(printer.stdout(), "{} @ {}", dist.name().bold(), dist.url)?;
                 }
             }
+            InstalledDist::EggInfo(dist) => {
+                writeln!(printer.stdout(), "{}=={}", dist.name().bold(), dist.version)?;
+            }
         }
     }
 
