@@ -4,6 +4,7 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
 use crate::common::{get_bin, uv_snapshot, TestContext};
@@ -207,6 +208,58 @@ fn freeze_with_editable() -> Result<()> {
     warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed.
     "###
     );
+
+    Ok(())
+}
+
+/// Show an `.egg-info` package in a virtual environment.
+#[test]
+fn freeze_with_egg_info() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    // Manually create a `.egg-info` directory.
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .create_dir_all()?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("top_level.txt")
+        .write_str("zstd")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("SOURCES.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("PKG-INFO")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("dependency_links.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("entry_points.txt")
+        .write_str("")?;
+
+    // Manually create the package directory.
+    site_packages.child("zstd").create_dir_all()?;
+    site_packages
+        .child("zstd")
+        .child("__init__.py")
+        .write_str("")?;
+
+    // Run `pip freeze`.
+    uv_snapshot!(context.filters(), command(&context), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    zstandard==0.22.0
+
+    ----- stderr -----
+    "###);
 
     Ok(())
 }

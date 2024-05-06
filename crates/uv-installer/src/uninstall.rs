@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use distribution_types::InstalledDist;
+use distribution_types::{Format, InstalledDist};
 
 /// Uninstall a package from the specified Python environment.
 pub async fn uninstall(
@@ -8,7 +8,11 @@ pub async fn uninstall(
 ) -> Result<install_wheel_rs::Uninstall, UninstallError> {
     let uninstall = tokio::task::spawn_blocking({
         let path = dist.path().to_owned();
-        move || install_wheel_rs::uninstall_wheel(&path)
+        let format = dist.format();
+        move || match format {
+            Format::DistInfo => install_wheel_rs::uninstall_wheel(&path),
+            Format::EggInfo => install_wheel_rs::uninstall_egg(&path),
+        }
     })
     .await??;
 

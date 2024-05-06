@@ -2,6 +2,7 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
 use common::uv_snapshot;
@@ -220,7 +221,7 @@ fn missing_record() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot uninstall package; RECORD file not found at: [SITE_PACKAGES]/MarkupSafe-2.1.3.dist-info/RECORD
+    error: Cannot uninstall package; `RECORD` file not found at: [SITE_PACKAGES]/MarkupSafe-2.1.3.dist-info/RECORD
     "###
     );
 
@@ -415,6 +416,60 @@ fn uninstall_duplicate() -> Result<()> {
      - pip==22.1.1
     "###
     );
+
+    Ok(())
+}
+
+/// Uninstall a `.egg-info` package in a virtual environment.
+#[test]
+fn uninstall_egg_info() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    // Manually create a `.egg-info` directory.
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .create_dir_all()?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("top_level.txt")
+        .write_str("zstd")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("SOURCES.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("PKG-INFO")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("dependency_links.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("entry_points.txt")
+        .write_str("")?;
+
+    // Manually create the package directory.
+    site_packages.child("zstd").create_dir_all()?;
+    site_packages
+        .child("zstd")
+        .child("__init__.py")
+        .write_str("")?;
+
+    // Run `pip uninstall`.
+    uv_snapshot!(uninstall_command(&context)
+        .arg("zstandard"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - zstandard==0.22.0
+    "###);
 
     Ok(())
 }

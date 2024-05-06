@@ -320,10 +320,12 @@ Unlike `pip`, uv does not enable keyring authentication by default.
 Unlike `pip`, uv does not wait until a request returns a HTTP 401 before searching for
 authentication. uv attaches authentication to all requests for hosts with credentials available.
 
-## Legacy features
+## `egg` support
 
 uv does not support features that are considered legacy or deprecated in `pip`. For example,
 uv does not support `.egg`-style distributions.
 
-uv does not plan to support features that the `pip` maintainers explicitly recommend against,
-like `--target`.
+However, uv does have partial support for `.egg-info`-style distributions, which are occasionally
+found in Docker images and Conda environments. Specifically, uv does not support installing new
+`.egg-info`-style distributions, but it will respect any existing `.egg-info`-style distributions
+during resolution, and can uninstall `.egg-info` distributions with `uv pip uninstall`.
