@@ -2178,7 +2178,7 @@ mod test {
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
             numpy>=1,<2
-              --borken
+              --broken
             tqdm
         "})?;
 
@@ -2207,15 +2207,15 @@ mod test {
         Ok(())
     }
 
-    #[test_case("numpy>=1,<2\n  @-borken\ntqdm", "2:4"; "ASCII Character with LF")]
-    #[test_case("numpy>=1,<2\r\n  #-borken\ntqdm", "2:4"; "ASCII Character with CRLF")]
-    #[test_case("numpy>=1,<2\n  \n-borken\ntqdm", "3:1"; "ASCII Character LF then LF")]
-    #[test_case("numpy>=1,<2\n  \r-borken\ntqdm", "3:1"; "ASCII Character LF then CR but no LF")]
-    #[test_case("numpy>=1,<2\n  \r\n-borken\ntqdm", "3:1"; "ASCII Character LF then CRLF")]
-    #[test_case("numpy>=1,<2\n  🚀-borken\ntqdm", "2:4"; "Emoji (Wide) Character")]
-    #[test_case("numpy>=1,<2\n  中-borken\ntqdm", "2:4"; "Fullwidth character")]
-    #[test_case("numpy>=1,<2\n  e\u{0301}-borken\ntqdm", "2:5"; "Two codepoints")]
-    #[test_case("numpy>=1,<2\n  a\u{0300}\u{0316}-borken\ntqdm", "2:6"; "Three codepoints")]
+    #[test_case("numpy>=1,<2\n  @-broken\ntqdm", "2:4"; "ASCII Character with LF")]
+    #[test_case("numpy>=1,<2\r\n  #-broken\ntqdm", "2:4"; "ASCII Character with CRLF")]
+    #[test_case("numpy>=1,<2\n  \n-broken\ntqdm", "3:1"; "ASCII Character LF then LF")]
+    #[test_case("numpy>=1,<2\n  \r-broken\ntqdm", "3:1"; "ASCII Character LF then CR but no LF")]
+    #[test_case("numpy>=1,<2\n  \r\n-broken\ntqdm", "3:1"; "ASCII Character LF then CRLF")]
+    #[test_case("numpy>=1,<2\n  🚀-broken\ntqdm", "2:4"; "Emoji (Wide) Character")]
+    #[test_case("numpy>=1,<2\n  中-broken\ntqdm", "2:4"; "Fullwidth character")]
+    #[test_case("numpy>=1,<2\n  e\u{0301}-broken\ntqdm", "2:5"; "Two codepoints")]
+    #[test_case("numpy>=1,<2\n  a\u{0300}\u{0316}-broken\ntqdm", "2:6"; "Three codepoints")]
     fn test_calculate_line_column_pair(input: &str, expected: &str) {
         let mut s = Scanner::new(input);
         // Place cursor right after the character we want to test

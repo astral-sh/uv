@@ -228,8 +228,8 @@ mod tests {
         let mut settings = ConfigSettings::default();
         settings.0.insert(
             "key".to_string(),
-            ConfigSettingValue::String("val\\1 {}ue".to_string()),
+            ConfigSettingValue::String("val\\1 {}value".to_string()),
         );
-        assert_eq!(settings.escape_for_python(), r#"{"key":"val\\1 {}ue"}"#);
+        assert_eq!(settings.escape_for_python(), r#"{"key":"val\\1 {}value"}"#);
     }
 }

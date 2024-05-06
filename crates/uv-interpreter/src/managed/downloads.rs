@@ -133,7 +133,7 @@ impl FromStr for PythonDownloadRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // TOOD(zanieb): Implement parsing of additional request parts
+        // TODO(zanieb): Implement parsing of additional request parts
         let version = PythonVersion::from_str(s).map_err(Error::InvalidPythonVersion)?;
         Ok(Self::new(Some(version), None, None, None, None))
     }

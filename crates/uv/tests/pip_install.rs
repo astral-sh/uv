@@ -4638,7 +4638,7 @@ fn tool_uv_sources() -> Result<()> {
             "boltons==24.0.0"
         ]
         dont_install_me = [
-            "borken @ https://example.org/does/not/exist"
+            "broken @ https://example.org/does/not/exist"
         ]
 
         [tool.uv.sources]
