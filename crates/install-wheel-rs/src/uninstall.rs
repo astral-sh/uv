@@ -2,6 +2,8 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
 use fs_err as fs;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 use tracing::debug;
 use uv_fs::write_atomic_sync;
 
@@ -209,6 +211,8 @@ pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
     })
 }
 
+static EASY_INSTALL_PTH: Lazy<Mutex<i32>> = Lazy::new(Mutex::default);
+
 /// Uninstall the legacy editable represented by the `.egg-link` file.
 ///
 /// See: <https://github.com/pypa/pip/blob/41587f5e0017bcd849f42b314dc8a34a7db75621/src/pip/_internal/req/req_uninstall.py#L534-L552>
@@ -237,7 +241,11 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
     ))?;
     let easy_install = site_package.join("easy-install.pth");
 
-    // Note concurrent use of `easy-install.pth` may result in lost writes
+    // Since uv has an environment lock, it's enough to add a mutex here to ensure we never
+    // lose writes to easy-install.pth (this is the only place in uv where easy-install.pth
+    // is modified)
+    let _guard = EASY_INSTALL_PTH.lock().unwrap();
+
     let content = fs::read_to_string(&easy_install)?;
     let mut new_content = String::new();
     let mut removed = false;
