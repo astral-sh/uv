@@ -7,7 +7,7 @@ use url::Url;
 
 use distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, LocalEditable, Name, SourceDist,
-    VersionOrUrl,
+    VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 
@@ -200,12 +200,12 @@ impl ResolverReporter {
         self
     }
 
-    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrl) {
+    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrlRef) {
         match version_or_url {
-            VersionOrUrl::Version(version) => {
+            VersionOrUrlRef::Version(version) => {
                 self.progress.set_message(format!("{name}=={version}"));
             }
-            VersionOrUrl::Url(url) => {
+            VersionOrUrlRef::Url(url) => {
                 self.progress.set_message(format!("{name} @ {url}"));
             }
         }
@@ -276,7 +276,7 @@ impl ResolverReporter {
 }
 
 impl uv_resolver::ResolverReporter for ResolverReporter {
-    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrl) {
+    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrlRef) {
         self.on_progress(name, version_or_url);
     }
 

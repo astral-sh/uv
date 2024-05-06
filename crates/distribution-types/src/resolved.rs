@@ -4,7 +4,7 @@ use pep508_rs::PackageName;
 
 use crate::{
     Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist, Name,
-    ResourceId, VersionOrUrl,
+    ResourceId, VersionOrUrlRef,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -69,9 +69,9 @@ impl Name for ResolvedDistRef<'_> {
 }
 
 impl DistributionMetadata for ResolvedDistRef<'_> {
-    fn version_or_url(&self) -> VersionOrUrl {
+    fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
-            Self::Installed(installed) => VersionOrUrl::Version(installed.version()),
+            Self::Installed(installed) => VersionOrUrlRef::Version(installed.version()),
             Self::Installable(dist) => dist.version_or_url(),
         }
     }
@@ -103,7 +103,7 @@ impl Name for ResolvedDist {
 }
 
 impl DistributionMetadata for ResolvedDist {
-    fn version_or_url(&self) -> VersionOrUrl {
+    fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
             Self::Installed(installed) => installed.version_or_url(),
             Self::Installable(dist) => dist.version_or_url(),

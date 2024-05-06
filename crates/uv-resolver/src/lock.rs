@@ -8,7 +8,7 @@ use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, Dist, DistributionMetadata, FileLocation,
     GitSourceDist, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistrySourceDist, Resolution, ResolvedDist, ToUrlError, VersionOrUrl,
+    RegistrySourceDist, Resolution, ResolvedDist, ToUrlError, VersionOrUrlRef,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -279,11 +279,11 @@ impl DistributionId {
     fn from_resolved_dist(resolved_dist: &ResolvedDist) -> DistributionId {
         let name = resolved_dist.name().clone();
         let version = match resolved_dist.version_or_url() {
-            VersionOrUrl::Version(v) => v.clone(),
+            VersionOrUrlRef::Version(v) => v.clone(),
             // TODO: We need a way to thread the version number for these
             // cases down into this routine. The version number isn't yet in a
             // `ResolutionGraph`, so this will require a bit of refactoring.
-            VersionOrUrl::Url(_) => todo!(),
+            VersionOrUrlRef::Url(_) => todo!(),
         };
         let source = Source::from_resolved_dist(resolved_dist);
         DistributionId {

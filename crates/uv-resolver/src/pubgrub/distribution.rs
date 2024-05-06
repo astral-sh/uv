@@ -1,4 +1,4 @@
-use distribution_types::{DistributionMetadata, Name, VersionOrUrl};
+use distribution_types::{DistributionMetadata, Name, VersionOrUrlRef};
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use uv_normalize::PackageName;
@@ -29,10 +29,10 @@ impl Name for PubGrubDistribution<'_> {
 }
 
 impl DistributionMetadata for PubGrubDistribution<'_> {
-    fn version_or_url(&self) -> VersionOrUrl {
+    fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
-            Self::Registry(_, version) => VersionOrUrl::Version(version),
-            Self::Url(_, url) => VersionOrUrl::Url(url),
+            Self::Registry(_, version) => VersionOrUrlRef::Version(version),
+            Self::Url(_, url) => VersionOrUrlRef::Url(url),
         }
     }
 }

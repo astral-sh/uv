@@ -14,7 +14,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
     Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ParsedUrlError, Requirement,
-    ResolvedDist, Verbatim, VersionId, VersionOrUrl,
+    ResolvedDist, Verbatim, VersionId, VersionOrUrlRef,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -436,10 +436,10 @@ impl ResolutionGraph {
         for i in self.petgraph.node_indices() {
             let dist = &self.petgraph[i];
             let version_id = match dist.version_or_url() {
-                VersionOrUrl::Version(version) => {
+                VersionOrUrlRef::Version(version) => {
                     VersionId::from_registry(dist.name().clone(), version.clone())
                 }
-                VersionOrUrl::Url(verbatim_url) => VersionId::from_url(verbatim_url.raw()),
+                VersionOrUrlRef::Url(verbatim_url) => VersionId::from_url(verbatim_url.raw()),
             };
             let res = index
                 .distributions
