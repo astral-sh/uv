@@ -26,7 +26,7 @@ pub enum LookaheadError {
     #[error(transparent)]
     UnsupportedUrl(#[from] distribution_types::Error),
     #[error(transparent)]
-    InvalidRequirement(#[from] distribution_types::ParsedUrlError),
+    InvalidRequirement(#[from] Box<distribution_types::ParsedUrlError>),
 }
 
 /// A resolver for resolving lookahead requirements from direct URLs.

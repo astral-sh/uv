@@ -33,7 +33,7 @@ impl Preference {
         Ok(Self {
             requirement: match entry.requirement {
                 RequirementsTxtRequirement::Named(requirement) => {
-                    Requirement::from_pep508(requirement).map_err(Box::new)?
+                    Requirement::from_pep508(requirement)?
                 }
                 RequirementsTxtRequirement::Unnamed(requirement) => {
                     return Err(PreferenceError::Bare(requirement));

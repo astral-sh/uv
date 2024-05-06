@@ -105,7 +105,7 @@ pub enum Error {
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
     #[error("Failed to parse requirements from build backend")]
-    DirectUrl(#[source] ParsedUrlError),
+    DirectUrl(#[source] Box<ParsedUrlError>),
 }
 
 #[derive(Debug)]

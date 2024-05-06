@@ -8,8 +8,12 @@ use uv_git::{GitSha, GitUrl};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {
-    #[error("Unsupported URL prefix `{prefix}` in URL: `{url}`")]
-    UnsupportedUrlPrefix { prefix: String, url: Url },
+    #[error("Unsupported URL prefix `{prefix}` in URL: `{url}` ({message})")]
+    UnsupportedUrlPrefix {
+        prefix: String,
+        url: Url,
+        message: &'static str,
+    },
     #[error("Invalid path in file URL: `{0}`")]
     InvalidFileUrl(Url),
     #[error("Failed to parse Git reference from URL: `{0}`")]
@@ -123,9 +127,25 @@ impl TryFrom<Url> for ParsedUrl {
         if let Some((prefix, ..)) = url.scheme().split_once('+') {
             match prefix {
                 "git" => Ok(Self::Git(ParsedGitUrl::try_from(url)?)),
+                "bzr" => Err(ParsedUrlError::UnsupportedUrlPrefix {
+                    prefix: prefix.to_string(),
+                    url: url.clone(),
+                    message: "Bazaar is not supported",
+                }),
+                "hg" => Err(ParsedUrlError::UnsupportedUrlPrefix {
+                    prefix: prefix.to_string(),
+                    url: url.clone(),
+                    message: "Mercurial is not supported",
+                }),
+                "svn" => Err(ParsedUrlError::UnsupportedUrlPrefix {
+                    prefix: prefix.to_string(),
+                    url: url.clone(),
+                    message: "Subversion is not supported",
+                }),
                 _ => Err(ParsedUrlError::UnsupportedUrlPrefix {
                     prefix: prefix.to_string(),
                     url: url.clone(),
+                    message: "Unknown scheme",
                 }),
             }
         } else if url.scheme().eq_ignore_ascii_case("file") {

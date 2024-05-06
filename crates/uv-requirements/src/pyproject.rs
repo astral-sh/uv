@@ -407,7 +407,7 @@ pub(crate) fn lower_requirement(
         return if requirement.version_or_url.is_none() && &requirement.name != project_name {
             Err(LoweringError::UnconstrainedVersion)
         } else {
-            Ok(Requirement::from_pep508(requirement).map_err(Box::new)?)
+            Ok(Requirement::from_pep508(requirement)?)
         };
     };
 
