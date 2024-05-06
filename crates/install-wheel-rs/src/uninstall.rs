@@ -216,7 +216,8 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
     let mut file_count = 0usize;
 
     let contents = fs::read_to_string(egg_link)?;
-    let target_line = if let Some(line) = contents.lines().next() {
+
+    let target_line = if let Some(line) = contents.lines().find(|line| !line.is_empty()) {
         line.trim()
     } else {
         return Err(Error::InvalidEggLink(egg_link.to_path_buf()));
