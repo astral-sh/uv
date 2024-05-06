@@ -7,7 +7,7 @@ use crate::resolver::Urls;
 
 /// A PubGrub-compatible wrapper around a "Python package", with two notable characteristics:
 ///
-/// 1. Includes a [`PubGrubPackage::Root`] variant, to satisfy `PubGrub`'s requirement that a
+/// 1. Includes a [`PubGrubPackage::Root`] variant, to satisfy PubGrub's requirement that a
 ///    resolution starts from a single root.
 /// 2. Uses the same strategy as pip and posy to handle extras: for each extra, we create a virtual
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
@@ -26,7 +26,7 @@ pub enum PubGrubPackage {
         /// The URL of the package, if it was specified in the requirement.
         ///
         /// There are a few challenges that come with URL-based packages, and how they map to
-        /// `PubGrub`.
+        /// PubGrub.
         ///
         /// If the user declares a direct URL dependency, and then a transitive dependency
         /// appears for the same package, we need to ensure that the direct URL dependency can
@@ -70,9 +70,9 @@ pub enum PubGrubPackage {
     ///
     /// The benefit of the proxy package (versus `PubGrubPackage::Package("black", Some("colorama")`
     /// on its own) is that it enables us to avoid attempting to retrieve metadata for irrelevant
-    /// versions the extra variants by making it clear to `PubGrub` that the extra variant must match
+    /// versions the extra variants by making it clear to PubGrub that the extra variant must match
     /// the exact same version of the base variant. Without the proxy package, then when provided
-    /// requirements like `black==23.0.1` and `black[colorama]`, `PubGrub` may attempt to retrieve
+    /// requirements like `black==23.0.1` and `black[colorama]`, PubGrub may attempt to retrieve
     /// metadata for `black[colorama]` versions other than `23.0.1`.
     Extra(PackageName, ExtraName, Option<VerbatimUrl>),
 }

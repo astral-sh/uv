@@ -281,7 +281,7 @@ impl<
         }
     }
 
-    /// Run the `PubGrub` solver.
+    /// Run the PubGrub solver.
     #[instrument(skip_all)]
     async fn solve(
         &self,
