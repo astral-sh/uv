@@ -50,16 +50,21 @@ impl<'a> SitePackages<'a> {
             let site_packages = match fs::read_dir(site_packages) {
                 Ok(site_packages) => {
                     // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let directories: BTreeSet<_> = site_packages
+                    let dist_likes: BTreeSet<_> = site_packages
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
-                                Ok(file_type) => file_type.is_dir().then_some(Ok(entry.path())),
+                                Ok(file_type) => (file_type.is_dir()
+                                    || entry
+                                        .path()
+                                        .extension()
+                                        .map_or(false, |ext| ext == "egg-link"))
+                                .then_some(Ok(entry.path())),
                                 Err(err) => Some(Err(err)),
                             },
                             Err(err) => Some(Err(err)),
                         })
                         .collect::<Result<_, std::io::Error>>()?;
-                    directories
+                    dist_likes
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     return Ok(Self {

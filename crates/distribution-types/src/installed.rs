@@ -22,6 +22,8 @@ pub enum InstalledDist {
     Url(InstalledDirectUrlDist),
     /// The distribution was derived from pre-existing `.egg-info` directory.
     EggInfo(InstalledEggInfo),
+    /// The distribution was derived from an `.egg-link` pointer
+    LegacyEditable(InstalledLegacyEditable),
 }
 
 #[derive(Debug, Clone)]
@@ -48,11 +50,14 @@ pub struct InstalledEggInfo {
     pub path: PathBuf,
 }
 
-/// The format of the distribution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Format {
-    DistInfo,
-    EggInfo,
+#[derive(Debug, Clone)]
+pub struct InstalledLegacyEditable {
+    pub name: PackageName,
+    pub version: Version,
+    pub egg_link: PathBuf,
+    pub target: PathBuf,
+    pub target_url: Url,
+    pub egg_info: PathBuf,
 }
 
 impl InstalledDist {
@@ -125,16 +130,61 @@ impl InstalledDist {
             })));
         }
 
-        Ok(None)
-    }
+        // Ex) `zstandard.egg-link`
+        if path.extension().is_some_and(|ext| ext == "egg-link") {
+            let Some(file_stem) = path.file_stem() else {
+                return Ok(None);
+            };
+            let Some(file_stem) = file_stem.to_str() else {
+                return Ok(None);
+            };
 
-    /// Return the [`Format`] of the distribution.
-    pub fn format(&self) -> Format {
-        match self {
-            Self::Registry(_) => Format::DistInfo,
-            Self::Url(_) => Format::DistInfo,
-            Self::EggInfo(_) => Format::EggInfo,
+            // https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#egg-links
+            // https://github.com/pypa/pip/blob/946f95d17431f645da8e2e0bf4054a72db5be766/src/pip/_internal/metadata/importlib/_envs.py#L86-L108
+            let contents = fs::read_to_string(path)?;
+            let target = if let Some(line) = contents.lines().find(|line| !line.is_empty()) {
+                PathBuf::from(line.trim())
+            } else {
+                warn!("Invalid .egg-link file: {path:?}");
+                return Ok(None);
+            };
+            // Match pip, but note setuptools only puts absolute paths in .egg-link files
+            let target = path
+                .parent()
+                .ok_or(anyhow!("Invalid egg-link path"))?
+                .join(target);
+            // Normalisation comes from `pkg_resources.to_filename`
+            let egg_info = target.join(file_stem.replace('-', "_") + ".egg-info");
+            let url =
+                Url::from_file_path(&target).map_err(|()| anyhow!("Invalid egg-link target"))?;
+
+            // Mildly unfortunate that we must read metadata to get the version
+            let content = match fs::read(egg_info.join("PKG-INFO")) {
+                Ok(content) => content,
+                Err(err) => {
+                    warn!("Failed to read metadata for {path:?}: {err}");
+                    return Ok(None);
+                }
+            };
+            let metadata = match pypi_types::Metadata23::parse_pkg_info(&content) {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    warn!("Failed to parse metadata for {path:?}: {err}");
+                    return Ok(None);
+                }
+            };
+
+            return Ok(Some(Self::LegacyEditable(InstalledLegacyEditable {
+                name: metadata.name,
+                version: metadata.version,
+                egg_link: path.to_path_buf(),
+                target,
+                target_url: url,
+                egg_info,
+            })));
         }
+
+        Ok(None)
     }
 
     /// Return the [`Path`] at which the distribution is stored on-disk.
@@ -143,6 +193,7 @@ impl InstalledDist {
             Self::Registry(dist) => &dist.path,
             Self::Url(dist) => &dist.path,
             Self::EggInfo(dist) => &dist.path,
+            Self::LegacyEditable(dist) => &dist.egg_info,
         }
     }
 
@@ -152,6 +203,7 @@ impl InstalledDist {
             Self::Registry(dist) => &dist.version,
             Self::Url(dist) => &dist.version,
             Self::EggInfo(dist) => &dist.version,
+            Self::LegacyEditable(dist) => &dist.version,
         }
     }
 
@@ -167,8 +219,8 @@ impl InstalledDist {
 
     /// Read the `METADATA` file from a `.dist-info` directory.
     pub fn metadata(&self) -> Result<pypi_types::Metadata23> {
-        match self.format() {
-            Format::DistInfo => {
+        match self {
+            Self::Registry(_) | Self::Url(_) => {
                 let path = self.path().join("METADATA");
                 let contents = fs::read(&path)?;
                 // TODO(zanieb): Update this to use thiserror so we can unpack parse errors downstream
@@ -179,8 +231,12 @@ impl InstalledDist {
                     )
                 })
             }
-            Format::EggInfo => {
-                let path = self.path().join("PKG-INFO");
+            Self::EggInfo(_) | Self::LegacyEditable(_) => {
+                let path = match self {
+                    Self::EggInfo(dist) => dist.path.join("PKG-INFO"),
+                    Self::LegacyEditable(dist) => dist.egg_info.join("PKG-INFO"),
+                    _ => unreachable!(),
+                };
                 let contents = fs::read(&path)?;
                 pypi_types::Metadata23::parse_metadata(&contents).with_context(|| {
                     format!(
@@ -208,6 +264,7 @@ impl InstalledDist {
             Self::Registry(_) => false,
             Self::Url(dist) => dist.editable,
             Self::EggInfo(_) => false,
+            Self::LegacyEditable(_) => true,
         }
     }
 
@@ -217,6 +274,7 @@ impl InstalledDist {
             Self::Registry(_) => None,
             Self::Url(dist) => dist.editable.then_some(&dist.url),
             Self::EggInfo(_) => None,
+            Self::LegacyEditable(dist) => Some(&dist.target_url),
         }
     }
 }
@@ -245,12 +303,19 @@ impl Name for InstalledEggInfo {
     }
 }
 
+impl Name for InstalledLegacyEditable {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+}
+
 impl Name for InstalledDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
             Self::Url(dist) => dist.name(),
             Self::EggInfo(dist) => dist.name(),
+            Self::LegacyEditable(dist) => dist.name(),
         }
     }
 }
@@ -273,12 +338,19 @@ impl InstalledMetadata for InstalledEggInfo {
     }
 }
 
+impl InstalledMetadata for InstalledLegacyEditable {
+    fn installed_version(&self) -> InstalledVersion {
+        InstalledVersion::Version(&self.version)
+    }
+}
+
 impl InstalledMetadata for InstalledDist {
     fn installed_version(&self) -> InstalledVersion {
         match self {
             Self::Registry(dist) => dist.installed_version(),
             Self::Url(dist) => dist.installed_version(),
             Self::EggInfo(dist) => dist.installed_version(),
+            Self::LegacyEditable(dist) => dist.installed_version(),
         }
     }
 }
