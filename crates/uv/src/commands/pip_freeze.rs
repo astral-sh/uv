@@ -65,6 +65,9 @@ pub(crate) fn pip_freeze(
             InstalledDist::EggInfo(dist) => {
                 writeln!(printer.stdout(), "{}=={}", dist.name().bold(), dist.version)?;
             }
+            InstalledDist::LegacyEditable(dist) => {
+                writeln!(printer.stdout(), "-e {}", dist.target.display())?;
+            }
         }
     }
 

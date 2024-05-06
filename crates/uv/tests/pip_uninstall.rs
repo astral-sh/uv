@@ -473,3 +473,60 @@ fn uninstall_egg_info() -> Result<()> {
 
     Ok(())
 }
+
+/// Uninstall a legacy editable package in a virtual environment.
+#[test]
+fn uninstall_legacy_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    let target = context.temp_dir.child("zstandard_project");
+    target.child("zstd").create_dir_all()?;
+    target.child("zstd").child("__init__.py").write_str("")?;
+
+    target.child("zstandard.egg-info").create_dir_all()?;
+    target
+        .child("zstandard.egg-info")
+        .child("PKG-INFO")
+        .write_str(
+            "Metadata-Version: 2.2
+Name: zstandard
+Version: 0.22.0
+",
+        )?;
+
+    site_packages
+        .child("zstandard.egg-link")
+        .write_str(target.path().to_str().unwrap())?;
+
+    site_packages.child("easy-install.pth").write_str(&format!(
+        "something\n{}\nanother thing\n",
+        target.path().to_str().unwrap()
+    ))?;
+
+    // Run `pip uninstall`.
+    uv_snapshot!(uninstall_command(&context)
+        .arg("zstandard"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - zstandard==0.22.0
+    "###);
+
+    // The entry in `easy-install.pth` should be removed.
+    assert_eq!(
+        fs_err::read_to_string(site_packages.child("easy-install.pth"))?,
+        "something\nanother thing\n",
+        "easy-install.pth should not contain the path to the uninstalled package"
+    );
+    // The `.egg-link` file should be removed.
+    assert!(!site_packages.child("zstandard.egg-link").exists());
+    // The `.egg-info` directory should still exist.
+    assert!(target.child("zstandard.egg-info").exists());
+
+    Ok(())
+}

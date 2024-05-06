@@ -11,7 +11,7 @@ use zip::result::ZipError;
 use pep440_rs::Version;
 use platform_tags::{Arch, Os};
 use pypi_types::Scheme;
-pub use uninstall::{uninstall_egg, uninstall_wheel, Uninstall};
+pub use uninstall::{uninstall_egg, uninstall_legacy_editable, uninstall_wheel, Uninstall};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
@@ -108,4 +108,6 @@ pub enum Error {
     MismatchedName(PackageName, PackageName),
     #[error("Wheel version does not match filename: {0} != {1}")]
     MismatchedVersion(Version, Version),
+    #[error("Invalid egg-link")]
+    InvalidEggLink(PathBuf),
 }
