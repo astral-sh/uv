@@ -11,7 +11,7 @@ use pypi_types::DirectUrl;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
-use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrl};
+use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
 
 /// A built distribution (wheel) that is installed in a virtual environment.
 #[derive(Debug, Clone)]
@@ -150,8 +150,8 @@ impl InstalledDist {
 }
 
 impl DistributionMetadata for InstalledDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(self.version())
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Version(self.version())
     }
 }
 
