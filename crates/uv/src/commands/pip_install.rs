@@ -694,7 +694,7 @@ async fn resolve(
                 .cloned()
                 .map(Requirement::from_pep508)
                 .collect::<Result<_, _>>()?;
-            Ok::<_, ParsedUrlError>((
+            Ok::<_, Box<ParsedUrlError>>((
                 built_editable.editable.clone(),
                 built_editable.metadata.clone(),
                 Requirements {
@@ -704,7 +704,7 @@ async fn resolve(
             ))
         })
         .collect::<Result<_, _>>()
-        .map_err(|err| Error::ParsedUrl(Box::new(err)))?;
+        .map_err(Error::ParsedUrl)?;
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {

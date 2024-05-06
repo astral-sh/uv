@@ -892,8 +892,7 @@ impl<
                         .iter()
                         .cloned()
                         .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()
-                        .map_err(Box::new)?;
+                        .collect::<Result<_, _>>()?;
                     let constraints = PubGrubDependencies::from_requirements(
                         &requirements,
                         &self.constraints,
@@ -1008,8 +1007,7 @@ impl<
                     .iter()
                     .cloned()
                     .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()
-                    .map_err(Box::new)?;
+                    .collect::<Result<_, _>>()?;
                 let constraints = PubGrubDependencies::from_requirements(
                     &requirements,
                     &self.constraints,

@@ -311,7 +311,7 @@ pub struct RequirementEntry {
 // `UnresolvedRequirementSpecification` is defined in `distribution-types` and `requirements-txt`
 // depends on `distribution-types`.
 impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
-    type Error = ParsedUrlError;
+    type Error = Box<ParsedUrlError>;
 
     fn try_from(value: RequirementEntry) -> Result<Self, Self::Error> {
         Ok(Self {

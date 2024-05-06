@@ -41,7 +41,7 @@ impl Requirement {
     }
 
     /// Convert a [`pep508_rs::Requirement`] to a [`Requirement`].
-    pub fn from_pep508(requirement: pep508_rs::Requirement) -> Result<Self, ParsedUrlError> {
+    pub fn from_pep508(requirement: pep508_rs::Requirement) -> Result<Self, Box<ParsedUrlError>> {
         let source = match requirement.version_or_url {
             None => RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),

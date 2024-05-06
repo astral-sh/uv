@@ -5224,7 +5224,7 @@ fn unsupported_scheme() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio`
+    error: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio` (Bazaar is not supported)
     "###
     );
 
