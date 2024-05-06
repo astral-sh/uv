@@ -228,7 +228,7 @@ fn to_pubgrub(
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
                     expected.verbatim().to_string(),
-                    url.to_string(),
+                    url.verbatim().to_string(),
                 ));
             }
 
@@ -249,7 +249,7 @@ fn to_pubgrub(
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
                     expected.verbatim().to_string(),
-                    url.to_string(),
+                    url.verbatim().to_string(),
                 ));
             }
 
@@ -270,7 +270,7 @@ fn to_pubgrub(
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
                     expected.verbatim().to_string(),
-                    url.to_string(),
+                    url.verbatim().to_string(),
                 ));
             }
 
