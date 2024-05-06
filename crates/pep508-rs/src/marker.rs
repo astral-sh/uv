@@ -9,7 +9,8 @@
 //! outcomes. This implementation tries to carefully validate everything and emit warnings whenever
 //! bogus comparisons with unintended semantics are made.
 
-use crate::{Cursor, Pep508Error, Pep508ErrorSource};
+use crate::cursor::Cursor;
+use crate::{Pep508Error, Pep508ErrorSource};
 use pep440_rs::{Version, VersionPattern, VersionSpecifier};
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -908,7 +909,7 @@ impl FromStr for MarkerExpression {
                     "Unexpected character '{unexpected}', expected end of input"
                 )),
                 start: pos,
-                len: chars.chars.clone().count(),
+                len: chars.remaining(),
                 input: chars.to_string(),
             });
         }
@@ -1417,7 +1418,7 @@ fn parse_marker_op(
 }
 
 /// ```text
-/// marker        = marker_or
+/// marker        = marker_or^
 /// ```
 pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
     let marker = parse_marker_or(cursor)?;
@@ -1430,7 +1431,7 @@ pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep5
                 "Unexpected character '{unexpected}', expected 'and', 'or' or end of input"
             )),
             start: pos,
-            len: cursor.chars.clone().count(),
+            len: cursor.remaining(),
             input: cursor.to_string(),
         });
     };

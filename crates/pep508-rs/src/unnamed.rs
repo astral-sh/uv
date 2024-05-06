@@ -8,7 +8,8 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use uv_normalize::ExtraName;
 
-use crate::{Cursor, MarkerEnvironment, MarkerTree, Pep508Error, VerbatimUrl};
+use crate::cursor::Cursor;
+use crate::{MarkerEnvironment, MarkerTree, Pep508Error, VerbatimUrl};
 
 /// A PEP 508-like, direct URL dependency specifier without a package name.
 ///
