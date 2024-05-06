@@ -18,7 +18,7 @@ use crate::ResolveError;
 pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
 
 impl PubGrubDependencies {
-    /// Generate a set of `PubGrub` dependencies from a set of requirements.
+    /// Generate a set of PubGrub dependencies from a set of requirements.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_requirements(
         requirements: &[Requirement],
@@ -178,7 +178,7 @@ impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
     }
 }
 
-/// Convert a [`Requirement`] to a `PubGrub`-compatible package and range.
+/// Convert a [`Requirement`] to a PubGrub-compatible package and range.
 fn to_pubgrub(
     requirement: &Requirement,
     extra: Option<ExtraName>,

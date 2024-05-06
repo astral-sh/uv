@@ -2,20 +2,21 @@ use std::path::Path;
 
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[allow(clippy::doc_markdown)]
 pub(crate) enum Shell {
-    /// Bourne Again `SHell` (bash)
+    /// Bourne Again SHell (bash)
     Bash,
-    /// Friendly Interactive `SHell` (fish)
+    /// Friendly Interactive SHell (fish)
     Fish,
-    /// `PowerShell`
+    /// PowerShell
     Powershell,
     /// Cmd (Command Prompt)
     Cmd,
-    /// Z `SHell` (zsh)
+    /// Z SHell (zsh)
     Zsh,
     /// Nushell
     Nushell,
-    /// C `SHell` (csh)
+    /// C SHell (csh)
     Csh,
 }
 
