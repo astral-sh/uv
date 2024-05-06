@@ -1,5 +1,6 @@
 use std::io;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use futures::{FutureExt, TryStreamExt};
@@ -45,7 +46,7 @@ pub struct DistributionDatabase<'a, Context: BuildContext> {
     client: &'a RegistryClient,
     build_context: &'a Context,
     builder: SourceDistributionBuilder<'a, Context>,
-    locks: Arc<Locks>,
+    locks: Rc<Locks>,
 }
 
 impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
@@ -54,7 +55,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             client,
             build_context,
             builder: SourceDistributionBuilder::new(client, build_context),
-            locks: Arc::new(Locks::default()),
+            locks: Rc::new(Locks::default()),
         }
     }
 
