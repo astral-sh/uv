@@ -404,8 +404,8 @@ pub enum InterpreterInfoError {
     LibcNotFound,
     #[error("Unknown operation system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
-    #[error("Python 2 is not supported. Please use Python 3.8 or newer.")]
-    UnsupportedPythonVersion,
+    #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
+    UnsupportedPythonVersion { python_version: String },
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
