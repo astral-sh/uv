@@ -229,7 +229,11 @@ impl CachedClient {
     {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let cached_response = match Self::read_cache(cache_entry).await {
-            Some(cached) => self.send_cached(req, cache_control, cached).boxed_local().await?,
+            Some(cached) => {
+                self.send_cached(req, cache_control, cached)
+                    .boxed_local()
+                    .await?
+            }
             None => {
                 debug!("No cache entry for: {}", req.url());
                 let (response, cache_policy) = self.fresh_request(req).await?;

@@ -207,7 +207,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git(source, resource, tags, hashes).boxed_local().await?
+                self.git(source, resource, tags, hashes)
+                    .boxed_local()
+                    .await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 if resource.path.is_dir() {
@@ -348,7 +350,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git_metadata(source, resource, hashes).boxed_local().await?
+                self.git_metadata(source, resource, hashes)
+                    .boxed_local()
+                    .await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 if resource.path.is_dir() {

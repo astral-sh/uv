@@ -1058,9 +1058,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
             match response? {
                 Some(Response::Package(package_name, version_map)) => {
                     trace!("Received package metadata for: {package_name}");
-                    self.index
-                        .packages
-                        .done(package_name, Rc::new(version_map));
+                    self.index.packages.done(package_name, Rc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
