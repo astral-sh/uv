@@ -19,6 +19,7 @@ pub(crate) use pip_uninstall::pip_uninstall;
 pub(crate) use run::run;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
+pub(crate) use sync::sync;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
@@ -44,6 +45,7 @@ mod reporters;
 mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
+mod sync;
 mod venv;
 mod version;
 

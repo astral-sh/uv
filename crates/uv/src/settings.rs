@@ -17,7 +17,7 @@ use uv_workspace::{PipOptions, Workspace};
 
 use crate::cli::{
     ColorChoice, GlobalArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
-    PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, VenvArgs,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -105,6 +105,27 @@ impl RunSettings {
             target,
             args,
             with,
+            python,
+        }
+    }
+}
+
+/// The resolved settings to use for a `sync` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct SyncSettings {
+    // CLI-only settings.
+    pub(crate) python: Option<String>,
+}
+
+impl SyncSettings {
+    /// Resolve the [`SyncSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: SyncArgs, _workspace: Option<Workspace>) -> Self {
+        let SyncArgs { python } = args;
+
+        Self {
+            // CLI-only settings.
             python,
         }
     }

@@ -1,26 +1,22 @@
-use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::ExitStatus;
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
-use crate::printer::Printer;
-use anyhow::{Context, Result};
-use distribution_types::{
-    IndexLocations, InstalledMetadata, LocalDist, Name, Requirement, Resolution,
-};
-use install_wheel_rs::linker::LinkMode;
-use itertools::Itertools;
-use owo_colors::OwoColorize;
-use pep508_rs::{MarkerEnvironment, PackageName};
-use platform_tags::Tags;
-use pypi_types::Yanked;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::{env, iter};
+
+use anyhow::{Context, Result};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tempfile::{tempdir_in, TempDir};
 use tokio::process::Command;
 use tracing::debug;
-use uv_warnings::warn_user;
 
+use distribution_types::{
+    IndexLocations, InstalledMetadata, LocalDist, Name, Requirement, Resolution,
+};
+use install_wheel_rs::linker::LinkMode;
+use pep508_rs::{MarkerEnvironment, PackageName};
+use platform_tags::Tags;
+use pypi_types::Yanked;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -40,6 +36,12 @@ use uv_resolver::{
     Resolver,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+use uv_warnings::warn_user;
+
+use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
+use crate::commands::ExitStatus;
+use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
+use crate::printer::Printer;
 
 /// Run a command.
 #[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
