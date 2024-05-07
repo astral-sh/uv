@@ -315,6 +315,24 @@ dependencies = ["flask==1.0.x"]
 }
 
 #[test]
+fn missing_pip() {
+    uv_snapshot!(Command::new(get_bin()).arg("install"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: unrecognized subcommand 'install'
+
+      tip: a similar subcommand exists: 'uv pip install'
+
+    Usage: uv [OPTIONS] <COMMAND>
+
+    For more information, try '--help'.
+    "###);
+}
+
+#[test]
 fn no_solution() {
     let context = TestContext::new("3.12");
 

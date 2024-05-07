@@ -18,20 +18,16 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::PythonEnvironment;
-use uv_requirements::{
-    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
-};
+use uv_requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::reporters::ResolverReporter;
-use crate::commands::{project, ExitStatus};
+use crate::commands::{workspace, ExitStatus};
 use crate::printer::Printer;
 
 /// Run a command.
-#[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
     target: Option<String>,
     mut args: Vec<OsString>,
@@ -69,7 +65,7 @@ pub(crate) async fn run(
     let overrides = requirements.clone();
 
     if !isolated {
-        if let Some(workspace_requirements) = find_workspace_requirements()? {
+        if let Some(workspace_requirements) = workspace::find_workspace()? {
             requirements.extend(workspace_requirements);
         }
     }
@@ -99,7 +95,7 @@ pub(crate) async fn run(
         python_env.interpreter().python_version(),
         python_env.python_executable().user_display().cyan()
     );
-    let new_path = if let Some(path) = std::env::var_os("PATH") {
+    let new_path = if let Some(path) = env::var_os("PATH") {
         let python_env_path =
             iter::once(python_env.scripts().to_path_buf()).chain(env::split_paths(&path));
         env::join_paths(python_env_path)?
@@ -137,24 +133,6 @@ struct RunEnvironment {
     /// Included to ensure that the temporary directory exists for the length of the operation, but
     /// is dropped at the end as appropriate.
     _temp_dir_drop: Option<TempDir>,
-}
-
-fn find_workspace_requirements() -> Result<Option<Vec<RequirementsSource>>> {
-    // TODO(zanieb): Add/use workspace logic to load requirements for a workspace
-    // We cannot use `Workspace::find` yet because it depends on a `[tool.uv]` section
-    let pyproject_path = std::env::current_dir()?.join("pyproject.toml");
-    if pyproject_path.exists() {
-        debug!(
-            "Loading requirements from {}",
-            pyproject_path.user_display()
-        );
-        return Ok(Some(vec![
-            RequirementsSource::from_requirements_file(pyproject_path),
-            RequirementsSource::from_package(".".to_string()),
-        ]));
-    }
-
-    Ok(None)
 }
 
 /// Returns an environment for a `run` invocation.
@@ -253,7 +231,7 @@ async fn environment_for_run(
 
     // Create a virtual environment
     // TODO(zanieb): Move this path derivation elsewhere
-    let uv_state_path = std::env::current_dir()?.join(".uv");
+    let uv_state_path = env::current_dir()?.join(".uv");
     fs_err::create_dir_all(&uv_state_path)?;
     let tmpdir = tempdir_in(uv_state_path)?;
     let venv = uv_virtualenv::create_venv(
@@ -269,39 +247,25 @@ async fn environment_for_run(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
-    // Collect the set of required hashes.
-    // TODO(zanieb): Support hash checking
-    let hasher = HashStrategy::None;
-
-    // TODO(zanieb): Support index url configs
-    let index_locations = IndexLocations::default();
-
-    // TODO(zanieb): Support client options e.g. offline, tls, etc.
     // Initialize the registry client.
+    // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
         .markers(markers)
-        .platform(interpreter.platform())
+        .platform(venv.interpreter().platform())
         .build();
 
-    // TODO(zanieb): Consider support for find links
-    let flat_index = FlatIndex::default();
-
-    // TODO(zanieb): Consider support for shared builds
-    // Determine whether to enable build isolation.
-    let build_isolation = BuildIsolation::Isolated;
-
-    // TODO(zanieb): Consider no-binary and no-build support
-    let no_build = NoBuild::None;
-    let no_binary = NoBinary::None;
-
-    // Create a shared in-memory index.
-    let index = InMemoryIndex::default();
-
-    // Track in-flight downloads, builds, etc., across resolutions.
-    let in_flight = InFlight::default();
-
-    let link_mode = LinkMode::default();
+    // TODO(charlie): Respect project configuration.
+    let build_isolation = BuildIsolation::default();
     let config_settings = ConfigSettings::default();
+    let flat_index = FlatIndex::default();
+    let hasher = HashStrategy::default();
+    let in_flight = InFlight::default();
+    let index = InMemoryIndex::default();
+    let index_locations = IndexLocations::default();
+    let link_mode = LinkMode::default();
+    let no_binary = NoBinary::default();
+    let no_build = NoBuild::default();
+    let setup_py = SetupPyStrategy::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -312,48 +276,13 @@ async fn environment_for_run(
         &flat_index,
         &index,
         &in_flight,
-        SetupPyStrategy::default(),
+        setup_py,
         &config_settings,
         build_isolation,
         link_mode,
         &no_build,
         &no_binary,
     );
-    // TODO(zanieb): Consider `exclude-newer` support
-
-    // Resolve the requirements from the provided sources.
-    let requirements = {
-        // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(
-            spec.requirements,
-            &hasher,
-            &build_dispatch,
-            &client,
-            &index,
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
-
-        // Resolve any source trees into requirements.
-        if !spec.source_trees.is_empty() {
-            requirements.extend(
-                SourceTreeResolver::new(
-                    spec.source_trees,
-                    &ExtrasSpecification::None,
-                    &hasher,
-                    &build_dispatch,
-                    &client,
-                    &index,
-                )
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?,
-            );
-        }
-
-        requirements
-    };
 
     let options = OptionsBuilder::new()
         // TODO(zanieb): Support resolver options
@@ -364,9 +293,8 @@ async fn environment_for_run(
         .build();
 
     // Resolve the requirements.
-    let resolution = match project::resolve(
-        requirements,
-        spec.project,
+    let resolution = match workspace::resolve(
+        spec,
         &hasher,
         &interpreter,
         tags,
@@ -388,7 +316,7 @@ async fn environment_for_run(
     let in_flight = InFlight::default();
 
     // Sync the environment.
-    project::install(
+    workspace::install(
         &resolution,
         SitePackages::from_executable(&venv)?,
         &no_binary,

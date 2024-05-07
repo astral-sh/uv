@@ -3,21 +3,24 @@ use std::fmt::Write;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tracing::debug;
 
-use distribution_types::{
-    IndexLocations, InstalledMetadata, LocalDist, Name, Requirement, Resolution,
-};
+use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, Name, Resolution};
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::{MarkerEnvironment, PackageName};
+use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{Constraints, NoBinary, Overrides, Reinstall};
 use uv_dispatch::BuildDispatch;
+use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
-use uv_requirements::LookaheadResolver;
+use uv_requirements::{
+    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver,
+};
 use uv_resolver::{
     Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, ResolutionGraph, Resolver,
 };
@@ -27,11 +30,60 @@ use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverRepo
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
 
+pub(crate) mod lock;
+pub(crate) mod run;
+pub(crate) mod sync;
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum Error {
+    #[error(transparent)]
+    Resolve(#[from] uv_resolver::ResolveError),
+
+    #[error(transparent)]
+    Client(#[from] uv_client::Error),
+
+    #[error(transparent)]
+    Platform(#[from] platform_tags::PlatformError),
+
+    #[error(transparent)]
+    Hash(#[from] uv_types::HashStrategyError),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Fmt(#[from] std::fmt::Error),
+
+    #[error(transparent)]
+    Lookahead(#[from] uv_requirements::LookaheadError),
+
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+}
+
+/// Find the requirements for the current workspace.
+pub(crate) fn find_workspace() -> Result<Option<Vec<RequirementsSource>>> {
+    // TODO(zanieb): Add/use workspace logic to load requirements for a workspace
+    // We cannot use `Workspace::find` yet because it depends on a `[tool.uv]` section
+    let pyproject_path = std::env::current_dir()?.join("pyproject.toml");
+    if pyproject_path.exists() {
+        debug!(
+            "Loading requirements from {}",
+            pyproject_path.user_display()
+        );
+        return Ok(Some(vec![
+            RequirementsSource::from_requirements_file(pyproject_path),
+            RequirementsSource::from_package(".".to_string()),
+        ]));
+    }
+
+    Ok(None)
+}
+
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn resolve(
-    requirements: Vec<Requirement>,
-    project: Option<PackageName>,
+    spec: RequirementsSpecification,
     hasher: &HashStrategy,
     interpreter: &Interpreter,
     tags: &Tags,
@@ -42,14 +94,49 @@ pub(crate) async fn resolve(
     build_dispatch: &BuildDispatch<'_>,
     options: Options,
     printer: Printer,
-) -> Result<ResolutionGraph, ProjectError> {
+) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
+
     let exclusions = Exclusions::None;
     let preferences = Vec::new();
     let constraints = Constraints::default();
     let overrides = Overrides::default();
     let editables = Vec::new();
     let installed_packages = EmptyInstalledPackages;
+
+    // Resolve the requirements from the provided sources.
+    let requirements = {
+        // Convert from unnamed to named requirements.
+        let mut requirements = NamedRequirementsResolver::new(
+            spec.requirements,
+            hasher,
+            build_dispatch,
+            client,
+            index,
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
+
+        // Resolve any source trees into requirements.
+        if !spec.source_trees.is_empty() {
+            requirements.extend(
+                SourceTreeResolver::new(
+                    spec.source_trees,
+                    &ExtrasSpecification::None,
+                    hasher,
+                    build_dispatch,
+                    client,
+                    index,
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
+            );
+        }
+
+        requirements
+    };
 
     // Determine any lookahead requirements.
     let lookaheads = LookaheadResolver::new(
@@ -72,7 +159,7 @@ pub(crate) async fn resolve(
         constraints,
         overrides,
         preferences,
-        project,
+        spec.project,
         editables,
         exclusions,
         lookaheads,
@@ -137,7 +224,7 @@ pub(crate) async fn install(
     cache: &Cache,
     venv: &PythonEnvironment,
     printer: Printer,
-) -> Result<(), ProjectError> {
+) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
     let requirements = resolution.requirements();
@@ -311,31 +398,4 @@ pub(crate) async fn install(
     }
 
     Ok(())
-}
-
-#[derive(thiserror::Error, Debug)]
-pub(crate) enum ProjectError {
-    #[error(transparent)]
-    Resolve(#[from] uv_resolver::ResolveError),
-
-    #[error(transparent)]
-    Client(#[from] uv_client::Error),
-
-    #[error(transparent)]
-    Platform(#[from] platform_tags::PlatformError),
-
-    #[error(transparent)]
-    Hash(#[from] uv_types::HashStrategyError),
-
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    Fmt(#[from] std::fmt::Error),
-
-    #[error(transparent)]
-    Lookahead(#[from] uv_requirements::LookaheadError),
-
-    #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
 }
