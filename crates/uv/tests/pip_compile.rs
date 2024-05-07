@@ -8697,8 +8697,12 @@ fn tool_uv_sources() -> Result<()> {
             .join("poetry_editable/poetry_editable/__init__.py"),
     )?;
 
+    let mut filters = context.filters();
+    // Remove windows-only tqdm -> colorama dependency
+    filters.push(("    # via tqdm\n", ""));
+
     // Install the editable packages.
-    uv_snapshot!(context.filters(), windows_filters=false, context.compile()
+    uv_snapshot!(filters, windows_filters=false, context.compile()
         .arg("--preview")
         .arg(require_path)
         .arg("--extra")
