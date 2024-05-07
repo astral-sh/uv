@@ -219,7 +219,10 @@ impl Pep508Url for VerbatimUrl {
                             .with_given(url.to_string()));
                     }
 
-                    VerbatimUrl::parse_absolute_path(path.as_ref())
+                    Ok(
+                        VerbatimUrl::parse_absolute_path(path.as_ref())?
+                            .with_given(url.to_string()),
+                    )
                 }
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
