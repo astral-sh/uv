@@ -1332,6 +1332,9 @@ pub(crate) struct PipInstallArgs {
 
     #[arg(long, hide = true)]
     pub(crate) unstable_uv_lock_file: Option<String>,
+
+    #[command(flatten)]
+    pub(crate) compat_args: compat::PipInstallCompatArgs,
 }
 
 #[derive(Args)]

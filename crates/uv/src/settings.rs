@@ -456,6 +456,7 @@ impl PipInstallSettings {
             exclude_newer,
             dry_run,
             unstable_uv_lock_file,
+            compat_args: _,
         } = args;
 
         Self {
