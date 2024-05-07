@@ -1,12 +1,14 @@
+use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use rayon::prelude::*;
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHasher;
 use zip::ZipArchive;
 
 use crate::vendor::{CloneableSeekableReader, HasLength};
 use crate::Error;
+
+type FxDashSet<T> = dashmap::DashSet<T, BuildHasherDefault<FxHasher>>;
 
 /// Unzip a `.zip` archive into the target directory.
 pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
@@ -15,7 +17,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
 ) -> Result<(), Error> {
     // Unzip in parallel.
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
-    let directories = Mutex::new(FxHashSet::default());
+    let directories = FxDashSet::default();
     (0..archive.len())
         .into_par_iter()
         .map(|file_number| {
@@ -30,7 +32,6 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             // Create necessary parent directories.
             let path = target.join(enclosed_name);
             if file.is_dir() {
-                let mut directories = directories.lock().unwrap();
                 if directories.insert(path.clone()) {
                     fs_err::create_dir_all(path)?;
                 }
@@ -38,7 +39,6 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             }
 
             if let Some(parent) = path.parent() {
-                let mut directories = directories.lock().unwrap();
                 if directories.insert(parent.to_path_buf()) {
                     fs_err::create_dir_all(parent)?;
                 }
@@ -48,8 +48,8 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             let mut outfile = fs_err::File::create(&path)?;
             std::io::copy(&mut file, &mut outfile)?;
 
-            // See `uv_extract::stream::unzip`. For simplicity, this is identical with the code there except for being
-            // sync.
+            // See `uv_extract::stream::unzip`.
+            // For simplicity, this is identical with the code there except for being sync.
             #[cfg(unix)]
             {
                 use std::fs::Permissions;

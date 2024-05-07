@@ -4857,6 +4857,7 @@ version = "0.0.1"
 dependencies = [
  "async-compression",
  "async_zip",
+ "dashmap",
  "fs-err",
  "futures",
  "md-5",

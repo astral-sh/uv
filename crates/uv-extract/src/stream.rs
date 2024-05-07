@@ -13,11 +13,7 @@ use crate::Error;
 /// This is useful for unzipping files as they're being downloaded. If the archive
 /// is already fully on disk, consider using `unzip_archive`, which can use multiple
 /// threads to work faster in that case.
-pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<(), Error> {
-    let target = target.as_ref();
+pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(reader: R, target: &Path) -> Result<(), Error> {
     let mut reader = futures::io::BufReader::with_capacity(128 * 1024, reader.compat());
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(&mut reader);
 
@@ -210,7 +206,7 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
     {
-        unzip(reader, target).await?;
+        unzip(reader, target.as_ref()).await?;
         return Ok(());
     }
 
