@@ -22,7 +22,7 @@ pub enum InstalledDist {
     Url(InstalledDirectUrlDist),
     /// The distribution was derived from pre-existing `.egg-info` directory.
     EggInfo(InstalledEggInfo),
-    /// The distribution was derived from an `.egg-link` pointer
+    /// The distribution was derived from an `.egg-link` pointer.
     LegacyEditable(InstalledLegacyEditable),
 }
 
@@ -145,20 +145,22 @@ impl InstalledDist {
             let target = if let Some(line) = contents.lines().find(|line| !line.is_empty()) {
                 PathBuf::from(line.trim())
             } else {
-                warn!("Invalid .egg-link file: {path:?}");
+                warn!("Invalid `.egg-link` file: {path:?}");
                 return Ok(None);
             };
-            // Match pip, but note setuptools only puts absolute paths in .egg-link files
+
+            // Match pip, but note setuptools only puts absolute paths in `.egg-link` files.
             let target = path
                 .parent()
-                .ok_or(anyhow!("Invalid egg-link path"))?
+                .ok_or_else(|| anyhow!("Invalid `.egg-link` path: {}", path.user_display()))?
                 .join(target);
-            // Normalisation comes from `pkg_resources.to_filename`
-            let egg_info = target.join(file_stem.replace('-', "_") + ".egg-info");
-            let url =
-                Url::from_file_path(&target).map_err(|()| anyhow!("Invalid egg-link target"))?;
 
-            // Mildly unfortunate that we must read metadata to get the version
+            // Normalisation comes from `pkg_resources.to_filename`.
+            let egg_info = target.join(file_stem.replace('-', "_") + ".egg-info");
+            let url = Url::from_file_path(&target)
+                .map_err(|()| anyhow!("Invalid `.egg-link` target: {}", target.user_display()))?;
+
+            // Mildly unfortunate that we must read metadata to get the version.
             let content = match fs::read(egg_info.join("PKG-INFO")) {
                 Ok(content) => content,
                 Err(err) => {
