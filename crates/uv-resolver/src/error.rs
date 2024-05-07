@@ -23,7 +23,8 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{
-    IncompletePackage, SharedMap, SharedSet, UnavailablePackage, UnavailableReason, VersionsResponse,
+    IncompletePackage, SharedMap, SharedSet, UnavailablePackage, UnavailableReason,
+    VersionsResponse,
 };
 
 #[derive(Debug, thiserror::Error)]
