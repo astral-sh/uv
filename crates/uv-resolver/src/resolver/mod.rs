@@ -1,12 +1,14 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::Result;
-use dashmap::{DashMap, DashSet};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
@@ -107,11 +109,10 @@ enum ResolverVersion {
     Unavailable(Version, UnavailableVersion),
 }
 
-pub struct Resolver<
-    'a,
-    Provider: ResolverProvider,
-    InstalledPackages: InstalledPackagesProvider + Send + Sync,
-> {
+pub(crate) type SharedMap<K, V> = Rc<RefCell<HashMap<K, V>>>;
+pub(crate) type SharedSet<K> = Rc<RefCell<HashSet<K>>>;
+
+pub struct Resolver<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
@@ -129,20 +130,17 @@ pub struct Resolver<
     index: &'a InMemoryIndex,
     installed_packages: &'a InstalledPackages,
     /// Incompatibilities for packages that are entirely unavailable.
-    unavailable_packages: DashMap<PackageName, UnavailablePackage>,
+    unavailable_packages: SharedMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: DashMap<PackageName, DashMap<Version, IncompletePackage>>,
+    incomplete_packages: SharedMap<PackageName, SharedMap<Version, IncompletePackage>>,
     /// The set of all registry-based packages visited during resolution.
-    visited: DashSet<PackageName>,
+    visited: SharedSet<PackageName>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
 }
 
-impl<
-        'a,
-        Context: BuildContext + Send + Sync,
-        InstalledPackages: InstalledPackagesProvider + Send + Sync,
-    > Resolver<'a, DefaultResolverProvider<'a, Context>, InstalledPackages>
+impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
+    Resolver<'a, DefaultResolverProvider<'a, Context>, InstalledPackages>
 {
     /// Initialize a new resolver using the default backend doing real requests.
     ///
@@ -186,11 +184,8 @@ impl<
     }
 }
 
-impl<
-        'a,
-        Provider: ResolverProvider,
-        InstalledPackages: InstalledPackagesProvider + Send + Sync,
-    > Resolver<'a, Provider, InstalledPackages>
+impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
+    Resolver<'a, Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
     #[allow(clippy::too_many_arguments)]
@@ -206,9 +201,9 @@ impl<
     ) -> Result<Self, ResolveError> {
         Ok(Self {
             index,
-            unavailable_packages: DashMap::default(),
-            incomplete_packages: DashMap::default(),
-            visited: DashSet::default(),
+            unavailable_packages: SharedMap::default(),
+            incomplete_packages: SharedMap::default(),
+            visited: SharedSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers, options.dependency_mode)?,
@@ -251,7 +246,7 @@ impl<
         let requests_fut = self.fetch(request_stream).fuse();
 
         // Run the solver.
-        let resolve_fut = self.solve(request_sink).boxed().fuse();
+        let resolve_fut = self.solve(request_sink).boxed_local().fuse();
 
         // Wait for both to complete.
         match tokio::try_join!(requests_fut, resolve_fut) {
@@ -368,6 +363,7 @@ impl<
                         if let PubGrubPackage::Package(ref package_name, _, _) = next {
                             // Check if the decision was due to the package being unavailable
                             self.unavailable_packages
+                                .borrow()
                                 .get(package_name)
                                 .map(|entry| match *entry {
                                     UnavailablePackage::NoIndex => {
@@ -648,25 +644,26 @@ impl<
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::Offline);
                         return Ok(None);
                     }
                     MetadataResponse::InvalidMetadata(err) => {
-                        self.unavailable_packages.insert(
+                        self.unavailable_packages.borrow_mut().insert(
                             package_name.clone(),
                             UnavailablePackage::InvalidMetadata(err.to_string()),
                         );
                         return Ok(None);
                     }
                     MetadataResponse::InconsistentMetadata(err) => {
-                        self.unavailable_packages.insert(
+                        self.unavailable_packages.borrow_mut().insert(
                             package_name.clone(),
                             UnavailablePackage::InvalidMetadata(err.to_string()),
                         );
                         return Ok(None);
                     }
                     MetadataResponse::InvalidStructure(err) => {
-                        self.unavailable_packages.insert(
+                        self.unavailable_packages.borrow_mut().insert(
                             package_name.clone(),
                             UnavailablePackage::InvalidStructure(err.to_string()),
                         );
@@ -707,22 +704,25 @@ impl<
                     .instrument(info_span!("package_wait", %package_name))
                     .await
                     .ok_or(ResolveError::Unregistered)?;
-                self.visited.insert(package_name.clone());
+                self.visited.borrow_mut().insert(package_name.clone());
 
                 let version_maps = match *versions_response {
                     VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
                         &[]
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::Offline);
                         &[]
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
                         &[]
                     }
@@ -925,7 +925,11 @@ impl<
                 let version_id = dist.version_id();
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
-                if self.unavailable_packages.get(package_name).is_some()
+                if self
+                    .unavailable_packages
+                    .borrow()
+                    .get(package_name)
+                    .is_some()
                     && self
                         .installed_packages
                         .get_packages(package_name)
@@ -953,8 +957,10 @@ impl<
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.incomplete_packages
+                            .borrow_mut()
                             .entry(package_name.clone())
                             .or_default()
+                            .borrow_mut()
                             .insert(version.clone(), IncompletePackage::Offline);
                         return Ok(Dependencies::Unavailable(
                             "network connectivity is disabled, but the metadata wasn't found in the cache"
@@ -964,8 +970,10 @@ impl<
                     MetadataResponse::InvalidMetadata(err) => {
                         warn!("Unable to extract metadata for {package_name}: {err}");
                         self.incomplete_packages
+                            .borrow_mut()
                             .entry(package_name.clone())
                             .or_default()
+                            .borrow_mut()
                             .insert(
                                 version.clone(),
                                 IncompletePackage::InvalidMetadata(err.to_string()),
@@ -977,8 +985,10 @@ impl<
                     MetadataResponse::InconsistentMetadata(err) => {
                         warn!("Unable to extract metadata for {package_name}: {err}");
                         self.incomplete_packages
+                            .borrow_mut()
                             .entry(package_name.clone())
                             .or_default()
+                            .borrow_mut()
                             .insert(
                                 version.clone(),
                                 IncompletePackage::InconsistentMetadata(err.to_string()),
@@ -990,8 +1000,10 @@ impl<
                     MetadataResponse::InvalidStructure(err) => {
                         warn!("Unable to extract metadata for {package_name}: {err}");
                         self.incomplete_packages
+                            .borrow_mut()
                             .entry(package_name.clone())
                             .or_default()
+                            .borrow_mut()
                             .insert(
                                 version.clone(),
                                 IncompletePackage::InvalidStructure(err.to_string()),
@@ -1052,22 +1064,20 @@ impl<
         request_stream: tokio::sync::mpsc::Receiver<Request>,
     ) -> Result<(), ResolveError> {
         let mut response_stream = ReceiverStream::new(request_stream)
-            .map(|request| self.process_request(request).boxed())
+            .map(|request| self.process_request(request).boxed_local())
             .buffer_unordered(50);
 
         while let Some(response) = response_stream.next().await {
             match response? {
                 Some(Response::Package(package_name, version_map)) => {
                     trace!("Received package metadata for: {package_name}");
-                    self.index
-                        .packages
-                        .done(package_name, Arc::new(version_map));
+                    self.index.packages.done(package_name, Rc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions.done(
                         dist.version_id(),
-                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
+                        Rc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
                     );
                 }
                 Some(Response::Dist {
@@ -1086,7 +1096,7 @@ impl<
                     }
                     self.index
                         .distributions
-                        .done(dist.version_id(), Arc::new(metadata));
+                        .done(dist.version_id(), Rc::new(metadata));
                 }
                 Some(Response::Dist {
                     dist: Dist::Source(dist),
@@ -1104,7 +1114,7 @@ impl<
                     }
                     self.index
                         .distributions
-                        .done(dist.version_id(), Arc::new(metadata));
+                        .done(dist.version_id(), Rc::new(metadata));
                 }
                 None => {}
             }
@@ -1121,7 +1131,7 @@ impl<
                 let package_versions = self
                     .provider
                     .get_package_versions(&package_name)
-                    .boxed()
+                    .boxed_local()
                     .await
                     .map_err(ResolveError::Client)?;
 
@@ -1133,7 +1143,7 @@ impl<
                 let metadata = self
                     .provider
                     .get_or_build_wheel_metadata(&dist)
-                    .boxed()
+                    .boxed_local()
                     .await
                     .map_err(|err| match dist.clone() {
                         Dist::Built(BuiltDist::Path(built_dist)) => {
@@ -1172,18 +1182,21 @@ impl<
                     // Short-circuit if we did not find any versions for the package
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
 
                         return Ok(None);
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::Offline);
 
                         return Ok(None);
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
 
                         return Ok(None);
@@ -1217,7 +1230,7 @@ impl<
                             let metadata = self
                                 .provider
                                 .get_or_build_wheel_metadata(&dist)
-                                .boxed()
+                                .boxed_local()
                                 .await
                                 .map_err(|err| match dist.clone() {
                                     Dist::Built(BuiltDist::Path(built_dist)) => {
