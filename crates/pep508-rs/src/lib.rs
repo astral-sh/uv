@@ -1063,7 +1063,7 @@ mod tests {
         parse_markers_cursor, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
-    use crate::{parse_url, Requirement, VerbatimUrl, VersionOrUrl};
+    use crate::{Requirement, VerbatimUrl, VersionOrUrl};
 
     fn parse_pep508_err(input: &str) -> String {
         Requirement::<VerbatimUrl>::from_str(input)
