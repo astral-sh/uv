@@ -2,7 +2,10 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
 use fs_err as fs;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 use tracing::debug;
+use uv_fs::write_atomic_sync;
 
 use crate::wheel::read_record_file;
 use crate::Error;
@@ -205,6 +208,71 @@ pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
     Ok(Uninstall {
         file_count,
         dir_count,
+    })
+}
+
+static EASY_INSTALL_PTH: Lazy<Mutex<i32>> = Lazy::new(Mutex::default);
+
+/// Uninstall the legacy editable represented by the `.egg-link` file.
+///
+/// See: <https://github.com/pypa/pip/blob/41587f5e0017bcd849f42b314dc8a34a7db75621/src/pip/_internal/req/req_uninstall.py#L534-L552>
+pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
+    let mut file_count = 0usize;
+
+    // Find the target line in the `.egg-link` file.
+    let contents = fs::read_to_string(egg_link)?;
+    let target_line = contents
+        .lines()
+        .find_map(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                None
+            } else {
+                Some(line)
+            }
+        })
+        .ok_or_else(|| Error::InvalidEggLink(egg_link.to_path_buf()))?;
+
+    match fs::remove_file(egg_link) {
+        Ok(()) => {
+            debug!("Removed file: {}", egg_link.display());
+            file_count += 1;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    let site_package = egg_link.parent().ok_or(Error::BrokenVenv(
+        "`.egg-link` file is not in a directory".to_string(),
+    ))?;
+    let easy_install = site_package.join("easy-install.pth");
+
+    // Since uv has an environment lock, it's enough to add a mutex here to ensure we never
+    // lose writes to `easy-install.pth` (this is the only place in uv where `easy-install.pth`
+    // is modified).
+    let _guard = EASY_INSTALL_PTH.lock().unwrap();
+
+    let content = fs::read_to_string(&easy_install)?;
+    let mut new_content = String::with_capacity(content.len());
+    let mut removed = false;
+
+    // https://github.com/pypa/pip/blob/41587f5e0017bcd849f42b314dc8a34a7db75621/src/pip/_internal/req/req_uninstall.py#L634
+    for line in content.lines() {
+        if !removed && line.trim() == target_line {
+            removed = true;
+        } else {
+            new_content.push_str(line);
+            new_content.push('\n');
+        }
+    }
+    if removed {
+        write_atomic_sync(&easy_install, new_content)?;
+        debug!("Removed line from `easy-install.pth`: {target_line}");
+    }
+
+    Ok(Uninstall {
+        file_count,
+        dir_count: 0usize,
     })
 }
 

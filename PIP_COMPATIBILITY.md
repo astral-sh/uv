@@ -325,7 +325,10 @@ authentication. uv attaches authentication to all requests for hosts with creden
 uv does not support features that are considered legacy or deprecated in `pip`. For example,
 uv does not support `.egg`-style distributions.
 
-However, uv does have partial support for `.egg-info`-style distributions, which are occasionally
-found in Docker images and Conda environments. Specifically, uv does not support installing new
-`.egg-info`-style distributions, but it will respect any existing `.egg-info`-style distributions
-during resolution, and can uninstall `.egg-info` distributions with `uv pip uninstall`.
+However, uv does have partial support for (1) `.egg-info`-style distributions (which are
+occasionally found in Docker images and Conda environments) and (2) legacy editable
+`.egg-link`-style distributions.
+
+Specifically, uv does not support installing new `.egg-info`- or `.egg-link`-style distributions,
+but will respect any such existing distributions during resolution, list them with `uv pip list` and
+`uv pip freeze`, and uninstall them with `uv pip uninstall`.
