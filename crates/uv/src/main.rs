@@ -530,9 +530,9 @@ async fn run() -> Result<ExitStatus> {
         }
         Commands::Sync(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, workspace);
+            let args = settings::SyncSettings::resolve(args, workspace);
 
-            commands::sync(args.python).await
+            commands::sync(globals.preview, &cache, printer).await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {

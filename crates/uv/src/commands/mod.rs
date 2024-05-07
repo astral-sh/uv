@@ -41,6 +41,7 @@ mod pip_list;
 mod pip_show;
 mod pip_sync;
 mod pip_uninstall;
+mod project;
 mod reporters;
 mod run;
 #[cfg(feature = "self-update")]
