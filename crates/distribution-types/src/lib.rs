@@ -41,7 +41,8 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
-use pep508_rs::{Pep508Url, Scheme, VerbatimUrl};
+use pep508_rs::{Pep508Url, VerbatimUrl};
+use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
 pub use crate::any::*;
@@ -166,6 +167,10 @@ pub struct DirectUrlBuiltDist {
     /// We require that wheel urls end in the full wheel filename, e.g.
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
+    /// The url without subdirectory fragment.
+    pub location: Url,
+    pub subdirectory: Option<PathBuf>,
+    /// The url with subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -191,6 +196,10 @@ pub struct DirectUrlSourceDist {
     /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
+    /// The url without subdirectory fragment.
+    pub location: Url,
+    pub subdirectory: Option<PathBuf>,
+    /// The url with subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -198,6 +207,9 @@ pub struct DirectUrlSourceDist {
 #[derive(Debug, Clone)]
 pub struct GitSourceDist {
     pub name: PackageName,
+    /// The url without revision and subdirectory fragment.
+    pub git: Box<GitUrl>,
+    pub subdirectory: Option<PathBuf>,
     pub url: VerbatimUrl,
 }
 
@@ -233,7 +245,12 @@ impl Dist {
 
     /// A remote built distribution (`.whl`) or source distribution from a `http://` or `https://`
     /// URL.
-    pub fn from_http_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
+    pub fn from_http_url(
+        name: PackageName,
+        location: Url,
+        subdirectory: Option<PathBuf>,
+        url: VerbatimUrl,
+    ) -> Result<Dist, Error> {
         if Path::new(url.path())
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
@@ -250,11 +267,15 @@ impl Dist {
 
             Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                 filename,
+                location,
+                subdirectory,
                 url,
             })))
         } else {
             Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                 name,
+                location,
+                subdirectory,
                 url,
             })))
         }
@@ -263,15 +284,12 @@ impl Dist {
     /// A local built or source distribution from a `file://` URL.
     pub fn from_file_url(
         name: PackageName,
-        url: VerbatimUrl,
+        path: &Path,
         editable: bool,
+        url: VerbatimUrl,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
-        let path = match url
-            .to_file_path()
-            .map_err(|()| Error::UrlFilename(url.to_url()))?
-            .canonicalize()
-        {
+        let path = match path.canonicalize() {
             Ok(path) => path,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::NotFound(url.to_url()));
@@ -313,67 +331,32 @@ impl Dist {
     }
 
     /// A remote source distribution from a `git+https://` or `git+ssh://` url.
-    pub fn from_git_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
-        Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
+    pub fn from_git_url(
+        name: PackageName,
+        url: VerbatimUrl,
+        git: GitUrl,
+        subdirectory: Option<PathBuf>,
+    ) -> Result<Dist, Error> {
+        Ok(Self::Source(SourceDist::Git(GitSourceDist {
+            name,
+            git: Box::new(git),
+            subdirectory,
+            url,
+        })))
     }
 
-    // TODO(konsti): We should carry the parsed URL through the codebase.
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: VerbatimParsedUrl) -> Result<Self, Error> {
-        match Scheme::parse(url.verbatim.scheme()) {
-            Some(Scheme::Http | Scheme::Https) => Self::from_http_url(name, url.verbatim),
-            Some(Scheme::File) => Self::from_file_url(name, url.verbatim, false),
-            Some(Scheme::GitSsh | Scheme::GitHttps) => Self::from_git_url(name, url.verbatim),
-            Some(Scheme::GitGit | Scheme::GitHttp) => Err(Error::UnsupportedScheme(
-                url.verbatim.scheme().to_owned(),
-                url.verbatim.verbatim().to_string(),
-                "insecure Git protocol".to_string(),
-            )),
-            Some(Scheme::GitFile) => Err(Error::UnsupportedScheme(
-                url.verbatim.scheme().to_owned(),
-                url.verbatim.verbatim().to_string(),
-                "local Git protocol".to_string(),
-            )),
-            Some(
-                Scheme::BzrHttp
-                | Scheme::BzrHttps
-                | Scheme::BzrSsh
-                | Scheme::BzrSftp
-                | Scheme::BzrFtp
-                | Scheme::BzrLp
-                | Scheme::BzrFile,
-            ) => Err(Error::UnsupportedScheme(
-                url.verbatim.scheme().to_owned(),
-                url.verbatim.verbatim().to_string(),
-                "Bazaar is not supported".to_string(),
-            )),
-            Some(
-                Scheme::HgFile
-                | Scheme::HgHttp
-                | Scheme::HgHttps
-                | Scheme::HgSsh
-                | Scheme::HgStaticHttp,
-            ) => Err(Error::UnsupportedScheme(
-                url.verbatim.scheme().to_owned(),
-                url.verbatim.verbatim().to_string(),
-                "Mercurial is not supported".to_string(),
-            )),
-            Some(
-                Scheme::SvnSsh
-                | Scheme::SvnHttp
-                | Scheme::SvnHttps
-                | Scheme::SvnSvn
-                | Scheme::SvnFile,
-            ) => Err(Error::UnsupportedScheme(
-                url.verbatim.scheme().to_owned(),
-                url.verbatim.verbatim().to_string(),
-                "Subversion is not supported".to_string(),
-            )),
-            None => Err(Error::UnsupportedScheme(
-                url.verbatim.scheme().to_owned(),
-                url.verbatim.verbatim().to_string(),
-                "unknown scheme".to_string(),
-            )),
+        match url.parsed_url {
+            ParsedUrl::Archive(archive) => {
+                Self::from_http_url(name, archive.url, archive.subdirectory, url.verbatim)
+            }
+            ParsedUrl::LocalFile(file) => {
+                Self::from_file_url(name, &file.path, false, url.verbatim)
+            }
+            ParsedUrl::Git(git) => {
+                Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)
+            }
         }
     }
 
@@ -1077,20 +1060,19 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
-        // At time of writing, Unix is at 240, Windows is at 248.
         assert!(
-            std::mem::size_of::<Dist>() <= 248,
+            std::mem::size_of::<Dist>() <= 328,
             "{}",
             std::mem::size_of::<Dist>()
         );
         assert!(
-            std::mem::size_of::<BuiltDist>() <= 248,
+            std::mem::size_of::<BuiltDist>() <= 328,
             "{}",
             std::mem::size_of::<BuiltDist>()
         );
         // At time of writing, unix is at 168, windows is at 176.
         assert!(
-            std::mem::size_of::<SourceDist>() <= 176,
+            std::mem::size_of::<SourceDist>() <= 248,
             "{}",
             std::mem::size_of::<SourceDist>()
         );
