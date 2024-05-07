@@ -4944,6 +4944,7 @@ dependencies = [
  "uv-distribution",
  "uv-extract",
  "uv-fs",
+ "uv-git",
  "uv-interpreter",
  "uv-normalize",
  "uv-requirements",

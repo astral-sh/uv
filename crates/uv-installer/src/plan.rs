@@ -20,6 +20,7 @@ use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
 use uv_fs::Simplified;
+use uv_git::GitUrl;
 use uv_interpreter::PythonEnvironment;
 use uv_types::HashStrategy;
 
@@ -223,7 +224,11 @@ impl<'a> Planner<'a> {
                         continue;
                     }
                 }
-                RequirementSource::Url { url, .. } => {
+                RequirementSource::Url {
+                    subdirectory,
+                    location,
+                    url,
+                } => {
                     // Check if we have a wheel or a source distribution.
                     if Path::new(url.path())
                         .extension()
@@ -242,6 +247,8 @@ impl<'a> Planner<'a> {
 
                         let wheel = DirectUrlBuiltDist {
                             filename,
+                            location: location.clone(),
+                            subdirectory: subdirectory.clone(),
                             url: url.clone(),
                         };
 
@@ -287,6 +294,8 @@ impl<'a> Planner<'a> {
                     } else {
                         let sdist = DirectUrlSourceDist {
                             name: requirement.name.clone(),
+                            location: location.clone(),
+                            subdirectory: subdirectory.clone(),
                             url: url.clone(),
                         };
                         // Find the most-compatible wheel from the cache, since we don't know
@@ -299,9 +308,16 @@ impl<'a> Planner<'a> {
                         }
                     }
                 }
-                RequirementSource::Git { url, .. } => {
+                RequirementSource::Git {
+                    repository,
+                    reference,
+                    subdirectory,
+                    url,
+                } => {
                     let sdist = GitSourceDist {
                         name: requirement.name.clone(),
+                        git: Box::new(GitUrl::new(repository.clone(), reference.clone())),
+                        subdirectory: subdirectory.clone(),
                         url: url.clone(),
                     };
                     // Find the most-compatible wheel from the cache, since we don't know
