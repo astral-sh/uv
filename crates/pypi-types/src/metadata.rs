@@ -9,7 +9,7 @@ use thiserror::Error;
 use tracing::warn;
 
 use pep440_rs::{Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError};
-use pep508_rs::{Pep508Error, Requirement};
+use pep508_rs::{Pep508Error, Requirement, VerbatimUrl};
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
 use crate::lenient_requirement::LenientRequirement;
@@ -29,7 +29,7 @@ pub struct Metadata23 {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
-    pub requires_dist: Vec<Requirement>,
+    pub requires_dist: Vec<Requirement<VerbatimUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
 }
@@ -50,7 +50,7 @@ pub enum MetadataError {
     #[error(transparent)]
     Pep440Error(#[from] VersionSpecifiersParseError),
     #[error(transparent)]
-    Pep508Error(#[from] Pep508Error),
+    Pep508Error(#[from] Pep508Error<VerbatimUrl>),
     #[error(transparent)]
     InvalidName(#[from] InvalidNameError),
     #[error("Invalid `Metadata-Version` field: {0}")]

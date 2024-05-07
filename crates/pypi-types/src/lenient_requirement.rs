@@ -7,7 +7,7 @@ use serde::{de, Deserialize, Deserializer, Serialize};
 use tracing::warn;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
-use pep508_rs::{Pep508Error, Requirement};
+use pep508_rs::{Pep508Error, Pep508Url, Requirement, VerbatimUrl};
 
 /// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
@@ -114,18 +114,18 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
 
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct LenientRequirement(Requirement);
+pub struct LenientRequirement<T: Pep508Url = VerbatimUrl>(Requirement<T>);
 
-impl FromStr for LenientRequirement {
-    type Err = Pep508Error;
+impl<T: Pep508Url> FromStr for LenientRequirement<T> {
+    type Err = Pep508Error<T>;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(Self(parse_with_fixups(input, "requirement")?))
     }
 }
 
-impl From<LenientRequirement> for Requirement {
-    fn from(requirement: LenientRequirement) -> Self {
+impl<T: Pep508Url> From<LenientRequirement<T>> for Requirement<T> {
+    fn from(requirement: LenientRequirement<T>) -> Self {
         requirement.0
     }
 }
