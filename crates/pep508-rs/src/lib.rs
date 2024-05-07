@@ -1083,7 +1083,7 @@ mod tests {
     fn test_preprocess_url_windows() {
         use std::path::PathBuf;
 
-        let actual = parse_url::<VerbatimUrl>(
+        let actual = crate::parse_url::<VerbatimUrl>(
             &mut Cursor::new("file:///C:/Users/ferris/wheel-0.42.0.tar.gz"),
             None,
         )
@@ -1208,11 +1208,12 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "non-pep508-extensions"))]
     fn direct_url_extras() {
-        let numpy =
-            UnnamedRequirement::from_str("C:\\path\\to\\numpy-1.26.4-cp312-cp312-win32.whl[dev]")
-                .unwrap();
+        let numpy = crate::UnnamedRequirement::from_str(
+            "C:\\path\\to\\numpy-1.26.4-cp312-cp312-win32.whl[dev]",
+        )
+        .unwrap();
         assert_eq!(
             numpy.url.to_string(),
             "file:///C:/path/to/numpy-1.26.4-cp312-cp312-win32.whl"
