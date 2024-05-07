@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 distribution-types = { workspace = true }
 pep440_rs = { workspace = true }
-pep508_rs = { workspace = true, features = ["non-pep508-extensions"] }
+pep508_rs = { workspace = true }
 uv-client = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }

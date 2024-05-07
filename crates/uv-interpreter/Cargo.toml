@@ -16,7 +16,7 @@ workspace = true
 cache-key = { workspace = true }
 install-wheel-rs = { workspace = true }
 pep440_rs = { workspace = true }
-pep508_rs = { workspace = true, features = ["non-pep508-extensions"] }
+pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-cache = { workspace = true }
