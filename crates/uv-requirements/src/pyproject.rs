@@ -530,7 +530,7 @@ fn path_source(
     project_dir: &Path,
     editable: Option<bool>,
 ) -> Result<RequirementSource, LoweringError> {
-    let url = VerbatimUrl::parse_path(&path, project_dir);
+    let url = VerbatimUrl::parse_path(&path, project_dir).with_given(path.clone());
     let path_buf = PathBuf::from(&path);
     let path_buf = path_buf
         .absolutize_from(project_dir)
