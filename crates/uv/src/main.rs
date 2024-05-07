@@ -484,7 +484,7 @@ async fn run() -> Result<ExitStatus> {
                 args.system_site_packages,
                 args.shared.connectivity,
                 args.seed,
-                args.force,
+                args.allow_existing,
                 args.shared.exclude_newer,
                 globals.native_tls,
                 &cache,
