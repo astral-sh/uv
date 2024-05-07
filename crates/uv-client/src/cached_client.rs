@@ -30,7 +30,7 @@ use crate::{
 /// `CachedClient::get_cacheable`. If your types fit into the
 /// `rkyvutil::OwnedArchive` mold, then an implementation of `Cacheable` is
 /// already provided for that type.
-pub trait Cacheable: Sized + Send {
+pub trait Cacheable: Sized {
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
@@ -54,7 +54,7 @@ pub struct SerdeCacheable<T> {
     inner: T,
 }
 
-impl<T: Send + Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
+impl<T: Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
     type Target = T;
 
     fn from_aligned_bytes(bytes: AlignedVec) -> Result<T, Error> {
@@ -75,7 +75,7 @@ impl<T: Send + Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
 /// All `OwnedArchive` values are cacheable.
 impl<A> Cacheable for OwnedArchive<A>
 where
-    A: rkyv::Archive + rkyv::Serialize<crate::rkyvutil::Serializer<4096>> + Send,
+    A: rkyv::Archive + rkyv::Serialize<crate::rkyvutil::Serializer<4096>>,
     A::Archived: for<'a> rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
         + rkyv::Deserialize<A, rkyv::de::deserializers::SharedDeserializeMap>,
 {
@@ -179,7 +179,7 @@ impl CachedClient {
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
     pub async fn get_serde<
-        Payload: Serialize + DeserializeOwned + Send + 'static,
+        Payload: Serialize + DeserializeOwned + 'static,
         CallBackError,
         Callback,
         CallbackReturn,
@@ -191,8 +191,8 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
-        Callback: FnOnce(Response) -> CallbackReturn + Send,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+        Callback: FnOnce(Response) -> CallbackReturn,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let payload = self
             .get_cacheable(req, cache_entry, cache_control, move |resp| async {
@@ -225,11 +225,15 @@ impl CachedClient {
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let cached_response = match Self::read_cache(cache_entry).await {
-            Some(cached) => self.send_cached(req, cache_control, cached).boxed().await?,
+            Some(cached) => {
+                self.send_cached(req, cache_control, cached)
+                    .boxed_local()
+                    .await?
+            }
             None => {
                 debug!("No cache entry for: {}", req.url());
                 let (response, cache_policy) = self.fresh_request(req).await?;
@@ -301,7 +305,7 @@ impl CachedClient {
 
     /// Make a request without checking whether the cache is fresh.
     pub async fn skip_cache<
-        Payload: Serialize + DeserializeOwned + Send + 'static,
+        Payload: Serialize + DeserializeOwned + 'static,
         CallBackError,
         Callback,
         CallbackReturn,
@@ -312,8 +316,8 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
-        Callback: FnOnce(Response) -> CallbackReturn + Send,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+        Callback: FnOnce(Response) -> CallbackReturn,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let (response, cache_policy) = self.fresh_request(req).await?;
 
@@ -335,7 +339,7 @@ impl CachedClient {
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
         let (response, cache_policy) = self.fresh_request(req).await?;
@@ -352,11 +356,11 @@ impl CachedClient {
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
         let data = response_callback(response)
-            .boxed()
+            .boxed_local()
             .await
             .map_err(|err| CachedClientError::Callback(err))?;
         let Some(cache_policy) = cache_policy else {
