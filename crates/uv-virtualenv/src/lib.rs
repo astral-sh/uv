@@ -51,10 +51,16 @@ pub fn create_venv(
     interpreter: Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    force: bool,
+    allow_existing: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
-    let virtualenv = create_bare_venv(location, &interpreter, prompt, system_site_packages, force)?;
+    let virtualenv = create_bare_venv(
+        location,
+        &interpreter,
+        prompt,
+        system_site_packages,
+        allow_existing,
+    )?;
 
     // Create the corresponding `PythonEnvironment`.
     let interpreter = interpreter.with_virtualenv(virtualenv);

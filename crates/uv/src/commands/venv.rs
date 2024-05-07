@@ -44,7 +44,7 @@ pub(crate) async fn venv(
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
-    force: bool,
+    allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
     cache: &Cache,
@@ -61,7 +61,7 @@ pub(crate) async fn venv(
         system_site_packages,
         connectivity,
         seed,
-        force,
+        allow_existing,
         exclude_newer,
         native_tls,
         cache,
@@ -109,7 +109,7 @@ async fn venv_impl(
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
-    force: bool,
+    allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
     cache: &Cache,
@@ -146,8 +146,14 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    let venv = uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, force)
-        .map_err(VenvError::Creation)?;
+    let venv = uv_virtualenv::create_venv(
+        path,
+        interpreter,
+        prompt,
+        system_site_packages,
+        allow_existing,
+    )
+    .map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {

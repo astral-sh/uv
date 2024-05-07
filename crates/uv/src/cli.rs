@@ -1706,14 +1706,17 @@ pub(crate) struct VenvArgs {
     #[arg(long)]
     pub(crate) seed: bool,
 
-    /// Overwrite the directory at the specified path when creating the virtual environment.
+    /// Preserve any existing files or directories at the target path.
     ///
     /// By default, `uv venv` will remove an existing virtual environment at the given path, and
-    /// exit with an error if the path is non-empty but _not_ a virtual environment. The `--force`
-    /// option will instead write to the given path, regardless of its contents, and without
-    /// clearing it beforehand.
+    /// exit with an error if the path is non-empty but _not_ a virtual environment. The
+    /// `--allow-existing` option will instead write to the given path, regardless of its contents,
+    /// and without clearing it beforehand.
+    ///
+    /// WARNING: This option can lead to unexpected behavior if the existing virtual environment
+    /// and the newly-created virtual environment are linked to different Python interpreters.
     #[clap(long)]
-    pub(crate) force: bool,
+    pub(crate) allow_existing: bool,
 
     /// The path to the virtual environment to create.
     #[arg(default_value = ".venv")]

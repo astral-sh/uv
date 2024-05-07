@@ -747,7 +747,7 @@ impl PipCheckSettings {
 pub(crate) struct VenvSettings {
     // CLI-only settings.
     pub(crate) seed: bool,
-    pub(crate) force: bool,
+    pub(crate) allow_existing: bool,
     pub(crate) name: PathBuf,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
@@ -764,7 +764,7 @@ impl VenvSettings {
             system,
             no_system,
             seed,
-            force,
+            allow_existing,
             name,
             prompt,
             system_site_packages,
@@ -783,7 +783,7 @@ impl VenvSettings {
         Self {
             // CLI-only settings.
             seed,
-            force,
+            allow_existing,
             name,
             prompt,
             system_site_packages,

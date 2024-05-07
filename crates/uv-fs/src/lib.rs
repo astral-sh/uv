@@ -93,13 +93,12 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     match std::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
-            // Create a symlink to the directory store, using a temporary file to ensure atomicity.
-            let temp_dir =
-                tempfile::tempdir_in(dst.as_ref().parent().expect("Cache entry to have parent"))?;
+            // Create a symlink, using a temporary file to ensure atomicity.
+            let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
             let temp_file = temp_dir.path().join("link");
             std::os::unix::fs::symlink(src, &temp_file)?;
 
-            // Move the symlink into the wheel cache.
+            // Move the symlink into the target location.
             fs_err::rename(&temp_file, dst.as_ref())?;
 
             Ok(())
