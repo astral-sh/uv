@@ -360,8 +360,8 @@ impl Deref for StringVersion {
 ///
 /// Some are `(String, Version)` because we have to support version comparison
 #[allow(missing_docs, clippy::unsafe_derive_deserialize)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 pub struct MarkerEnvironment {
     pub implementation_name: String,
     pub implementation_version: StringVersion,
