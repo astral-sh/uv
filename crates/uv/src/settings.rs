@@ -85,9 +85,7 @@ pub(crate) struct RunSettings {
     // CLI-only settings.
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
-    pub(crate) isolated: bool,
     pub(crate) with: Vec<String>,
-    pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
 }
 
@@ -98,9 +96,7 @@ impl RunSettings {
         let RunArgs {
             target,
             args,
-            isolated,
             with,
-            no_workspace,
             python,
         } = args;
 
@@ -108,9 +104,7 @@ impl RunSettings {
             // CLI-only settings.
             target,
             args,
-            isolated,
             with,
-            no_workspace,
             python,
         }
     }

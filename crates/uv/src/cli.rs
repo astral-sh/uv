@@ -1827,10 +1827,6 @@ pub(crate) struct RunArgs {
     #[arg(allow_hyphen_values = true)]
     pub(crate) args: Vec<OsString>,
 
-    /// Always use a new virtual environment for execution.
-    #[arg(long)]
-    pub(crate) isolated: bool,
-
     /// Run with the given packages installed.
     #[arg(long)]
     pub(crate) with: Vec<String>,
@@ -1854,11 +1850,6 @@ pub(crate) struct RunArgs {
         group = "discovery"
     )]
     pub(crate) python: Option<String>,
-
-    /// Run without the current workspace installed.
-    #[arg(long)]
-    pub(crate) no_workspace: bool,
-    // TODO(zanieb): Consider alternative names like `--no-project` or `--without-project`
 }
 
 #[derive(Args)]

@@ -49,7 +49,6 @@ pub(crate) async fn run(
     mut requirements: Vec<RequirementsSource>,
     python: Option<String>,
     isolated: bool,
-    no_workspace: bool,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -80,7 +79,7 @@ pub(crate) async fn run(
     // cannot be applied to transitive dependencies.
     let overrides = requirements.clone();
 
-    if !no_workspace {
+    if !isolated {
         if let Some(workspace_requirements) = find_workspace_requirements()? {
             requirements.extend(workspace_requirements);
         }
