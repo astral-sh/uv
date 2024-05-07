@@ -14,7 +14,6 @@ use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
-use pubgrub::term::Term;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, enabled, info_span, instrument, trace, warn, Instrument, Level};
@@ -69,56 +68,20 @@ mod urls;
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct UnavailableReason {
-    term: Term<Range<Version>>,
-    reason: UnavailableMetadataTypes,
-}
-
-impl UnavailableReason {
-    /// Returns a boolean indicating if the predicate following this package range should
-    /// be singular or plural e.g. if false use "<range> has <...>" and
-    /// if true use "<range> have <...>"
-    fn plural(&self) -> bool {
-        self.term == Term::Positive(Range::full())
-    }
-}
-
-impl Display for UnavailableReason {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.reason {
-            UnavailableMetadataTypes::Version(version) => Display::fmt(version, f),
-            UnavailableMetadataTypes::Package(package) => match package {
-                UnavailablePackage::NoIndex => {
-                    f.write_str(if self.plural() { "were" } else { "was" })?;
-                    f.write_str(" not found in the provided package locations")
-                }
-                UnavailablePackage::Offline => {
-                    f.write_str(if self.plural() { "were" } else { "was" })?;
-                    f.write_str(" not found in the cache")
-                }
-                UnavailablePackage::NotFound => {
-                    f.write_str(if self.plural() { "were" } else { "was" })?;
-                    f.write_str(" not found in the package registry")
-                }
-                UnavailablePackage::InvalidMetadata(_) => {
-                    f.write_str(if self.plural() { "have" } else { "has" })?;
-                    f.write_str(" invalid metadata")
-                }
-                UnavailablePackage::InvalidStructure(_) => {
-                    f.write_str(if self.plural() { "have" } else { "has" })?;
-                    f.write_str(" an invalid package format")
-                }
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum UnavailableMetadataTypes {
+pub(crate) enum UnavailableReason {
     /// The entire package cannot be used.
     Package(UnavailablePackage),
     /// A single version cannot be used.
     Version(UnavailableVersion),
+}
+
+impl Display for UnavailableReason {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Version(version) => Display::fmt(version, f),
+            Self::Package(package) => Display::fmt(package, f),
+        }
+    }
 }
 
 /// The package version is unavailable and cannot be used. Unlike [`PackageUnavailable`], this
@@ -170,6 +133,24 @@ pub(crate) enum UnavailablePackage {
     InvalidMetadata(String),
     /// The package has an invalid structure.
     InvalidStructure(String),
+}
+
+impl UnavailablePackage {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            UnavailablePackage::NoIndex => "was not found in the provided package locations",
+            UnavailablePackage::Offline => "was not found in the cache",
+            UnavailablePackage::NotFound => "was not found in the package registry",
+            UnavailablePackage::InvalidMetadata(_) => "has invalid metadata",
+            UnavailablePackage::InvalidStructure(_) => "has an invalid package format",
+        }
+    }
+}
+
+impl Display for UnavailablePackage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// The package is unavailable at specific versions.
@@ -444,15 +425,11 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
 
                     // Check if the decision was due to the package being unavailable
                     if let PubGrubPackage::Package(ref package_name, _, _) = next {
-                        if let Some(entry) = self.unavailable_packages.borrow()
-                                .get(package_name) {
+                        if let Some(entry) = self.unavailable_packages.borrow().get(package_name) {
                             state.add_incompatibility(Incompatibility::custom_term(
                                 next.clone(),
                                 term_intersection.clone(),
-                                UnavailableReason {
-                                    term: term_intersection.clone(),
-                                    reason: UnavailableMetadataTypes::Package(entry.clone()),
-                                },
+                                UnavailableReason::Package(entry.clone()),
                             ));
                             continue;
                         }
@@ -500,10 +477,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     state.add_incompatibility(Incompatibility::custom_version(
                         next.clone(),
                         version.clone(),
-                        UnavailableReason {
-                            term: term_intersection.clone(),
-                            reason: UnavailableMetadataTypes::Version(reason),
-                        },
+                        UnavailableReason::Version(reason),
                     ));
                     continue;
                 }
@@ -537,10 +511,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         state.add_incompatibility(Incompatibility::custom_version(
                             package.clone(),
                             version.clone(),
-                            UnavailableReason {
-                                term: term_intersection.clone(),
-                                reason: UnavailableMetadataTypes::Version(reason),
-                            },
+                            UnavailableReason::Version(reason),
                         ));
                         continue;
                     }

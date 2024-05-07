@@ -114,12 +114,19 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 PubGrubPackage::Root(None) => {
                     format!("your requirements cannot be used because {reason}")
                 }
-                _ => {
-                    format!(
-                        "{}{reason}",
-                        Padded::new("", &PackageRange::compatibility(package, set), " ")
-                    )
-                }
+                _ => match reason {
+                    UnavailableReason::Package(reason) => {
+                        // While there may be a term attached, this error applies to the entire
+                        // package, so we show it for the entire package
+                        format!("{}{reason}", Padded::new("", &package, " "))
+                    }
+                    UnavailableReason::Version(reason) => {
+                        format!(
+                            "{}{reason}",
+                            Padded::new("", &PackageRange::compatibility(package, set), " ")
+                        )
+                    }
+                },
             },
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);

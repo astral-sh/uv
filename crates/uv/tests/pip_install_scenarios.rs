@@ -91,7 +91,7 @@ fn requires_package_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of package-a were not found in the package registry and you require package-a, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because package-a was not found in the package registry and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -254,7 +254,7 @@ fn transitive_requires_package_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of package-b were not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because package-b was not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 

@@ -4560,7 +4560,7 @@ fn no_index_requirements_txt() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of tqdm were not found in the provided package locations and you require tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the provided package locations and you require tqdm, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -4668,7 +4668,7 @@ fn offline_registry() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because black==23.10.1 was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -4795,7 +4795,7 @@ fn offline_find_links() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of tqdm were not found in the cache and you require tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -4814,7 +4814,7 @@ fn offline_find_links() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of tqdm were not found in the cache and you require tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -5171,7 +5171,7 @@ fn index_url_in_requirements() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio<4 was not found in the package registry and you require anyio<4, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the package registry and you require anyio<4, we can conclude that the requirements are unsatisfiable.
     "###
     );
 

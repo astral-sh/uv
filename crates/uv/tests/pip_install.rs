@@ -994,7 +994,7 @@ fn install_no_index() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of flask were not found in the provided package locations and you require flask, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -1018,7 +1018,7 @@ fn install_no_index_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask==3.0.0 was not found in the provided package locations and you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -3564,7 +3564,7 @@ fn reinstall_no_index() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of anyio were not found in the provided package locations and you require anyio, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -3682,7 +3682,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of first-editable were not found in the provided package locations and second-editable==0.0.1 depends on first-editable, we can conclude that second-editable==0.0.1 cannot be used.
+      ╰─▶ Because first-editable was not found in the provided package locations and second-editable==0.0.1 depends on first-editable, we can conclude that second-editable==0.0.1 cannot be used.
           And because only second-editable==0.0.1 is available and you require second-editable, we can conclude that the requirements are unsatisfiable.
     "###
     );
@@ -3778,7 +3778,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of first-local were not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
+      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
           And because only second-local==0.1.0 is available and you require second-local, we can conclude that the requirements are unsatisfiable.
     "###
     );
@@ -3818,7 +3818,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of first-local were not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
+      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
           And because only second-local==0.1.0 is available and you require second-local, we can conclude that the requirements are unsatisfiable.
     "###
     );
@@ -3890,7 +3890,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.2.0 was not found in the provided package locations and you require anyio==4.2.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -4143,7 +4143,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of uv-public-pypackage were not found in the provided package locations and you require uv-public-pypackage, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###);
@@ -4188,7 +4188,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage==0.2.0 was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###);

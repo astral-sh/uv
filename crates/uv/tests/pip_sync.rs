@@ -850,7 +850,7 @@ fn install_no_index() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because markupsafe==2.1.3 was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because markupsafe was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -902,7 +902,7 @@ fn install_no_index_cached() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because markupsafe==2.1.3 was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because markupsafe was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -1107,7 +1107,7 @@ fn mismatched_name() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of foo have an invalid package format and you require foo, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that the requirements are unsatisfiable.
 
           hint: The structure of foo was invalid:
             The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
@@ -2643,7 +2643,7 @@ fn find_links_offline_no_match() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of numpy were not found in the cache and you require numpy, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because numpy was not found in the cache and you require numpy, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -2766,7 +2766,7 @@ fn offline() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because black==23.10.1 was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -4658,7 +4658,7 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because example-a-961b4c22==1.0.0 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because example-a-961b4c22 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
