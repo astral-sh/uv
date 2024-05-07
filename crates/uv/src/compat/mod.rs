@@ -249,7 +249,9 @@ impl CompatArgs for PipSyncCompatArgs {
         }
 
         if self.user {
-            return Err(anyhow!("pip-sync's `--user` is unsupported."));
+            return Err(anyhow!(
+                "pip-sync's `--user` is unsupported (use a virtual environment instead)."
+            ));
         }
 
         if self.client_cert.is_some() {
