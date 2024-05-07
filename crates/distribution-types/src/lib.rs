@@ -319,19 +319,19 @@ impl Dist {
 
     // TODO(konsti): We should carry the parsed URL through the codebase.
     /// Create a [`Dist`] for a URL-based distribution.
-    pub fn from_url(name: PackageName, url: VerbatimUrl) -> Result<Self, Error> {
-        match Scheme::parse(url.scheme()) {
-            Some(Scheme::Http | Scheme::Https) => Self::from_http_url(name, url),
-            Some(Scheme::File) => Self::from_file_url(name, url, false),
-            Some(Scheme::GitSsh | Scheme::GitHttps) => Self::from_git_url(name, url),
+    pub fn from_url(name: PackageName, url: VerbatimParsedUrl) -> Result<Self, Error> {
+        match Scheme::parse(url.verbatim.scheme()) {
+            Some(Scheme::Http | Scheme::Https) => Self::from_http_url(name, url.verbatim),
+            Some(Scheme::File) => Self::from_file_url(name, url.verbatim, false),
+            Some(Scheme::GitSsh | Scheme::GitHttps) => Self::from_git_url(name, url.verbatim),
             Some(Scheme::GitGit | Scheme::GitHttp) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
+                url.verbatim.scheme().to_owned(),
+                url.verbatim.verbatim().to_string(),
                 "insecure Git protocol".to_string(),
             )),
             Some(Scheme::GitFile) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
+                url.verbatim.scheme().to_owned(),
+                url.verbatim.verbatim().to_string(),
                 "local Git protocol".to_string(),
             )),
             Some(
@@ -343,8 +343,8 @@ impl Dist {
                 | Scheme::BzrLp
                 | Scheme::BzrFile,
             ) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
+                url.verbatim.scheme().to_owned(),
+                url.verbatim.verbatim().to_string(),
                 "Bazaar is not supported".to_string(),
             )),
             Some(
@@ -354,8 +354,8 @@ impl Dist {
                 | Scheme::HgSsh
                 | Scheme::HgStaticHttp,
             ) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
+                url.verbatim.scheme().to_owned(),
+                url.verbatim.verbatim().to_string(),
                 "Mercurial is not supported".to_string(),
             )),
             Some(
@@ -365,13 +365,13 @@ impl Dist {
                 | Scheme::SvnSvn
                 | Scheme::SvnFile,
             ) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
+                url.verbatim.scheme().to_owned(),
+                url.verbatim.verbatim().to_string(),
                 "Subversion is not supported".to_string(),
             )),
             None => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
+                url.verbatim.scheme().to_owned(),
+                url.verbatim.verbatim().to_string(),
                 "unknown scheme".to_string(),
             )),
         }

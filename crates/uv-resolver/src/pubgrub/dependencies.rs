@@ -224,10 +224,10 @@ fn to_pubgrub(
                 ));
             };
 
-            if !Urls::is_allowed(expected, url) {
+            if !Urls::is_allowed(&expected.verbatim, url) {
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
-                    expected.verbatim().to_string(),
+                    expected.verbatim.verbatim().to_string(),
                     url.verbatim().to_string(),
                 ));
             }
@@ -245,10 +245,10 @@ fn to_pubgrub(
                 ));
             };
 
-            if !Urls::is_allowed(expected, url) {
+            if !Urls::is_allowed(&expected.verbatim, url) {
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
-                    expected.verbatim().to_string(),
+                    expected.verbatim.verbatim().to_string(),
                     url.verbatim().to_string(),
                 ));
             }
@@ -266,10 +266,10 @@ fn to_pubgrub(
                 ));
             };
 
-            if !Urls::is_allowed(expected, url) {
+            if !Urls::is_allowed(&expected.verbatim, url) {
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
-                    expected.verbatim().to_string(),
+                    expected.verbatim.verbatim().to_string(),
                     url.verbatim().to_string(),
                 ));
             }
