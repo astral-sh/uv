@@ -8668,6 +8668,8 @@ fn tool_uv_sources() -> Result<()> {
           "packaging @ git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e",
           "poetry_editable",
           "urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl",
+          # Windows consistency
+          "colorama>0.4,<5",
         ]
 
         [project.optional-dependencies]
@@ -8716,6 +8718,7 @@ fn tool_uv_sources() -> Result<()> {
     anyio==4.3.0
         # via poetry-editable
     boltons @ git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0
+    colorama==0.4.6
     idna==3.6
         # via anyio
     packaging @ git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e
@@ -8726,7 +8729,7 @@ fn tool_uv_sources() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 8 packages in [TIME]
+    Resolved 9 packages in [TIME]
     "###
     );
 
