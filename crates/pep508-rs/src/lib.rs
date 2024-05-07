@@ -1063,7 +1063,7 @@ mod tests {
         parse_markers_cursor, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
-    use crate::{Requirement, UnnamedRequirement, VerbatimUrl, VersionOrUrl};
+    use crate::{parse_url, Requirement, VerbatimUrl, VersionOrUrl};
 
     fn parse_pep508_err(input: &str) -> String {
         Requirement::<VerbatimUrl>::from_str(input)
@@ -1071,8 +1071,11 @@ mod tests {
             .to_string()
     }
 
+    #[cfg(feature = "non-pep508-extensions")]
     fn parse_unnamed_err(input: &str) -> String {
-        UnnamedRequirement::from_str(input).unwrap_err().to_string()
+        crate::UnnamedRequirement::from_str(input)
+            .unwrap_err()
+            .to_string()
     }
 
     #[cfg(windows)]
@@ -1080,12 +1083,9 @@ mod tests {
     fn test_preprocess_url_windows() {
         use std::path::PathBuf;
 
-        let actual = crate::preprocess_url(
-            "file:///C:/Users/ferris/wheel-0.42.0.tar.gz",
+        let actual = parse_url::<VerbatimUrl>(
+            &mut Cursor::new("file:///C:/Users/ferris/wheel-0.42.0.tar.gz"),
             None,
-            &Cursor::new(""),
-            0,
-            0,
         )
         .unwrap()
         .to_file_path();
@@ -1187,17 +1187,18 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "non-pep508-extensions")]
     fn direct_url_no_extras() {
-        let numpy = UnnamedRequirement::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
+        let numpy = crate::UnnamedRequirement::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
         assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
         assert_eq!(numpy.extras, vec![]);
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(all(unix, feature = "non-pep508-extensions"))]
     fn direct_url_extras() {
         let numpy =
-            UnnamedRequirement::from_str("/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]")
+            crate::UnnamedRequirement::from_str("/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]")
                 .unwrap();
         assert_eq!(
             numpy.url.to_string(),
@@ -1693,6 +1694,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "non-pep508-extensions")]
     fn error_invalid_extra_unnamed_url() {
         assert_snapshot!(
             parse_unnamed_err("/foo-3.0.0-py3-none-any.whl[d,]"),
