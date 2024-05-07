@@ -1,6 +1,7 @@
 use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
 
+use dashmap::mapref::entry::Entry;
 use rayon::prelude::*;
 use rustc_hash::FxHasher;
 use zip::ZipArchive;
@@ -8,7 +9,7 @@ use zip::ZipArchive;
 use crate::vendor::{CloneableSeekableReader, HasLength};
 use crate::Error;
 
-type FxDashSet<T> = dashmap::DashSet<T, BuildHasherDefault<FxHasher>>;
+type FxDashMap<K, V> = dashmap::DashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 /// Unzip a `.zip` archive into the target directory.
 pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
@@ -17,7 +18,20 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
 ) -> Result<(), Error> {
     // Unzip in parallel.
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
-    let directories = FxDashSet::default();
+
+    let directories = FxDashMap::default();
+    let mkdir = |path: PathBuf| -> Result<(), Error> {
+        // We must use the `entry` API here as we want to hold the lock for the `create_dir_all` call too.
+        match directories.entry(path) {
+            Entry::Occupied(_) => {}
+            Entry::Vacant(entry) => {
+                fs_err::create_dir_all(entry.key())?;
+                entry.insert(());
+            }
+        }
+        Ok(())
+    };
+
     (0..archive.len())
         .into_par_iter()
         .map(|file_number| {
@@ -32,16 +46,12 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             // Create necessary parent directories.
             let path = target.join(enclosed_name);
             if file.is_dir() {
-                if directories.insert(path.clone()) {
-                    fs_err::create_dir_all(path)?;
-                }
+                mkdir(path)?;
                 return Ok(());
             }
 
             if let Some(parent) = path.parent() {
-                if directories.insert(parent.to_path_buf()) {
-                    fs_err::create_dir_all(parent)?;
-                }
+                mkdir(parent.to_path_buf())?;
             }
 
             // Copy the file contents.
