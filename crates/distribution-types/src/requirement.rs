@@ -177,7 +177,7 @@ impl RequirementSource {
     /// the PEP 508 string (after the `@`) as [`VerbatimUrl`].
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
-            ParsedUrl::LocalFile(local_file) => RequirementSource::Path {
+            ParsedUrl::Path(local_file) => RequirementSource::Path {
                 path: local_file.path,
                 url,
                 editable: None,

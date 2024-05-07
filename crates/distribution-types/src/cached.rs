@@ -9,7 +9,7 @@ use uv_normalize::PackageName;
 
 use crate::{
     BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
-    ParsedLocalFileUrl, ParsedUrl, SourceDist, VersionOrUrlRef,
+    ParsedPathUrl, ParsedUrl, SourceDist, VersionOrUrlRef,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
@@ -109,7 +109,7 @@ impl CachedDist {
             Self::Url(dist) => {
                 if dist.editable {
                     assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
-                    Ok(Some(ParsedUrl::LocalFile(ParsedLocalFileUrl {
+                    Ok(Some(ParsedUrl::Path(ParsedPathUrl {
                         url: dist.url.raw().clone(),
                         path: dist
                             .url

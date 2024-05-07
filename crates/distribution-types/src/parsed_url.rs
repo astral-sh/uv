@@ -41,7 +41,7 @@ pub struct VerbatimParsedUrl {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum ParsedUrl {
     /// The direct URL is a path to a local directory or file.
-    LocalFile(ParsedLocalFileUrl),
+    Path(ParsedPathUrl),
     /// The direct URL is path to a Git repository.
     Git(ParsedGitUrl),
     /// The direct URL is a URL to an archive.
@@ -53,7 +53,7 @@ pub enum ParsedUrl {
 /// Examples:
 /// * `file:///home/ferris/my_project`
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct ParsedLocalFileUrl {
+pub struct ParsedPathUrl {
     pub url: Url,
     pub path: PathBuf,
     pub editable: bool,
@@ -162,7 +162,7 @@ impl TryFrom<Url> for ParsedUrl {
             let path = url
                 .to_file_path()
                 .map_err(|()| ParsedUrlError::InvalidFileUrl(url.clone()))?;
-            Ok(Self::LocalFile(ParsedLocalFileUrl {
+            Ok(Self::Path(ParsedPathUrl {
                 url,
                 path,
                 editable: false,
@@ -178,17 +178,17 @@ impl TryFrom<&ParsedUrl> for pypi_types::DirectUrl {
 
     fn try_from(value: &ParsedUrl) -> std::result::Result<Self, Self::Error> {
         match value {
-            ParsedUrl::LocalFile(value) => Self::try_from(value),
+            ParsedUrl::Path(value) => Self::try_from(value),
             ParsedUrl::Git(value) => Self::try_from(value),
             ParsedUrl::Archive(value) => Self::try_from(value),
         }
     }
 }
 
-impl TryFrom<&ParsedLocalFileUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedPathUrl> for pypi_types::DirectUrl {
     type Error = Error;
 
-    fn try_from(value: &ParsedLocalFileUrl) -> Result<Self, Self::Error> {
+    fn try_from(value: &ParsedPathUrl) -> Result<Self, Self::Error> {
         Ok(Self::LocalDirectory {
             url: value.url.to_string(),
             dir_info: pypi_types::DirInfo {
@@ -232,15 +232,15 @@ impl TryFrom<&ParsedGitUrl> for pypi_types::DirectUrl {
 impl From<ParsedUrl> for Url {
     fn from(value: ParsedUrl) -> Self {
         match value {
-            ParsedUrl::LocalFile(value) => value.into(),
+            ParsedUrl::Path(value) => value.into(),
             ParsedUrl::Git(value) => value.into(),
             ParsedUrl::Archive(value) => value.into(),
         }
     }
 }
 
-impl From<ParsedLocalFileUrl> for Url {
-    fn from(value: ParsedLocalFileUrl) -> Self {
+impl From<ParsedPathUrl> for Url {
+    fn from(value: ParsedPathUrl) -> Self {
         value.url
     }
 }

@@ -2,7 +2,7 @@ use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use distribution_types::{
-    ParsedArchiveUrl, ParsedGitUrl, ParsedLocalFileUrl, ParsedUrl, RequirementSource, Verbatim,
+    ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, RequirementSource, Verbatim,
     VerbatimParsedUrl,
 };
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -27,7 +27,7 @@ impl Urls {
         // Add the editables themselves to the list of required URLs.
         for (editable, metadata, _) in &manifest.editables {
             let editable_url = VerbatimParsedUrl {
-                parsed_url: ParsedUrl::LocalFile(ParsedLocalFileUrl {
+                parsed_url: ParsedUrl::Path(ParsedPathUrl {
                     url: editable.url.to_url(),
                     path: editable.path.clone(),
                     editable: true,
@@ -85,7 +85,7 @@ impl Urls {
                     url,
                 } => {
                     let url = VerbatimParsedUrl {
-                        parsed_url: ParsedUrl::LocalFile(ParsedLocalFileUrl {
+                        parsed_url: ParsedUrl::Path(ParsedPathUrl {
                             url: url.to_url(),
                             path: path.clone(),
                             editable: (*editable).unwrap_or_default(),
