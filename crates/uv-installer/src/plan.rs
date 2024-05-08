@@ -141,7 +141,7 @@ impl<'a> Planner<'a> {
 
         for requirement in self.requirements {
             // Filter out incompatible requirements.
-            if !requirement.evaluate_markers(venv.interpreter().markers(), &[]) {
+            if !requirement.evaluate_markers(Some(venv.interpreter().markers()), &[]) {
                 continue;
             }
 

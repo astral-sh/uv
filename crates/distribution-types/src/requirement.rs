@@ -33,24 +33,11 @@ pub struct Requirement {
 
 impl Requirement {
     /// Returns whether the markers apply for the given environment.
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate(env, extras)
-        } else {
-            true
-        }
-    }
-
-    /// Returns whether the markers apply only for the given extras.
     ///
     /// When `env` is `None`, this specifically evaluates all marker
     /// expressions based on the environment to `true`. That is, this provides
     /// environment independent marker evaluation.
-    pub fn evaluate_optional_environment(
-        &self,
-        env: Option<&MarkerEnvironment>,
-        extras: &[ExtraName],
-    ) -> bool {
+    pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
         if let Some(marker) = &self.marker {
             marker.evaluate_optional_environment(env, extras)
         } else {

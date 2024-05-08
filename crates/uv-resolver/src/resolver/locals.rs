@@ -21,7 +21,7 @@ impl Locals {
     /// Determine the set of permitted local versions in the [`Manifest`].
     pub(crate) fn from_manifest(
         manifest: &Manifest,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Self {
         let mut required: FxHashMap<PackageName, Version> = FxHashMap::default();

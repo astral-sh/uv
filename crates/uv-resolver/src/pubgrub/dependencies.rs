@@ -28,7 +28,7 @@ impl PubGrubDependencies {
         source_extra: Option<&ExtraName>,
         urls: &Urls,
         locals: &Locals,
-        env: &MarkerEnvironment,
+        env: Option<&MarkerEnvironment>,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = Vec::default();
         let mut seen = FxHashSet::default();
@@ -70,7 +70,7 @@ fn add_requirements(
     source_extra: Option<&ExtraName>,
     urls: &Urls,
     locals: &Locals,
-    env: &MarkerEnvironment,
+    env: Option<&MarkerEnvironment>,
     dependencies: &mut Vec<(PubGrubPackage, Range<Version>)>,
     seen: &mut FxHashSet<ExtraName>,
 ) -> Result<(), ResolveError> {

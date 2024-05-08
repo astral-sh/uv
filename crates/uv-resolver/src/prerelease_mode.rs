@@ -56,7 +56,7 @@ impl PreReleaseStrategy {
     pub(crate) fn from_mode(
         mode: PreReleaseMode,
         manifest: &Manifest,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Self {
         match mode {

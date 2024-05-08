@@ -31,7 +31,9 @@ use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
-use uv_resolver::{DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
+use uv_resolver::{
+    DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
+};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -191,7 +193,7 @@ pub(crate) async fn pip_sync(
             requirements
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            &markers,
+            Some(&markers),
         )?
     } else {
         HashStrategy::None
@@ -354,6 +356,7 @@ pub(crate) async fn pip_sync(
         let interpreter = venv.interpreter();
         let tags = interpreter.tags()?;
         let markers = interpreter.markers();
+        let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
 
         // Resolve with `--no-deps`.
         let options = OptionsBuilder::new()
@@ -367,8 +370,8 @@ pub(crate) async fn pip_sync(
         let resolver = Resolver::new(
             Manifest::simple(remote),
             options,
-            markers,
-            interpreter,
+            &python_requirement,
+            Some(markers),
             tags,
             &client,
             &flat_index,

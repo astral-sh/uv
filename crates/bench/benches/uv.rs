@@ -50,7 +50,9 @@ mod resolver {
     use uv_client::RegistryClient;
     use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
     use uv_interpreter::{Interpreter, PythonEnvironment};
-    use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, ResolutionGraph, Resolver};
+    use uv_resolver::{
+        FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph, Resolver,
+    };
     use uv_types::{
         BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceBuildTrait,
     };
@@ -93,12 +95,13 @@ mod resolver {
         let build_context = Context::new(cache, interpreter.clone());
         let hashes = HashStrategy::None;
         let installed_packages = EmptyInstalledPackages;
+        let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &MARKERS);
 
         let resolver = Resolver::new(
             manifest,
             Options::default(),
-            &MARKERS,
-            &interpreter,
+            &python_requirement,
+            Some(&MARKERS),
             &TAGS,
             client,
             &flat_index,

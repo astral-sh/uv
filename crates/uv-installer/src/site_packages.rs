@@ -296,7 +296,7 @@ impl<'a> SitePackages<'a> {
         for entry in requirements {
             if entry
                 .requirement
-                .evaluate_markers(self.venv.interpreter().markers(), &[])
+                .evaluate_markers(Some(self.venv.interpreter().markers()), &[])
             {
                 if seen.insert(entry.clone()) {
                     stack.push(entry.clone());

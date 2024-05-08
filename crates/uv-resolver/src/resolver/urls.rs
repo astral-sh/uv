@@ -15,7 +15,7 @@ pub(crate) struct Urls(FxHashMap<PackageName, VerbatimUrl>);
 impl Urls {
     pub(crate) fn from_manifest(
         manifest: &Manifest,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Result<Self, ResolveError> {
         let mut urls: FxHashMap<PackageName, VerbatimUrl> = FxHashMap::default();

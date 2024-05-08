@@ -37,7 +37,7 @@ impl ResolutionStrategy {
     pub(crate) fn from_mode(
         mode: ResolutionMode,
         manifest: &Manifest,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Self {
         match mode {

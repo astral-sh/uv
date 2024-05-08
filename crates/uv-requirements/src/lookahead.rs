@@ -96,9 +96,14 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     }
 
     /// Resolve the requirements from the provided source trees.
+    ///
+    /// When the environment is not given, this treats all marker expressions
+    /// that reference the environment as true. In other words, it does
+    /// environment independent expression evaluation. (Which in turn devolves
+    /// to "only evaluate marker expressions that reference an extra name.")
     pub async fn resolve(
         self,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
     ) -> Result<Vec<RequestedRequirements>, LookaheadError> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();

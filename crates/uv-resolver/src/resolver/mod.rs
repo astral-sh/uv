@@ -32,7 +32,6 @@ pub(crate) use urls::Urls;
 use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
-use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
@@ -188,8 +187,9 @@ pub struct Resolver<'a, Provider: ResolverProvider, InstalledPackages: Installed
     locals: Locals,
     dependency_mode: DependencyMode,
     hasher: &'a HashStrategy,
-    markers: &'a MarkerEnvironment,
-    python_requirement: PythonRequirement,
+    /// When not set, the resolver is in "universal" mode.
+    markers: Option<&'a MarkerEnvironment>,
+    python_requirement: &'a PythonRequirement,
     selector: CandidateSelector,
     index: &'a InMemoryIndex,
     installed_packages: &'a InstalledPackages,
@@ -209,12 +209,27 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
     /// Initialize a new resolver using the default backend doing real requests.
     ///
     /// Reads the flat index entries.
+    ///
+    /// # Marker environment
+    ///
+    /// The marker environment is optional.
+    ///
+    /// When a marker environment is not provided, the resolver is said to be
+    /// in "universal" mode. When in universal mode, the resolution produced
+    /// may contain multiple versions of the same package. And thus, in order
+    /// to use the resulting resolution, there must be a "universal"-aware
+    /// reader of the resolution that knows to exclude distributions that can't
+    /// be used in the current environment.
+    ///
+    /// When a marker environment is provided, the reslver is in
+    /// "non-universal" mode, which corresponds to standard `pip` behavior that
+    /// works only for a specific marker environment.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         manifest: Manifest,
         options: Options,
-        markers: &'a MarkerEnvironment,
-        interpreter: &'a Interpreter,
+        python_requirement: &'a PythonRequirement,
+        markers: Option<&'a MarkerEnvironment>,
         tags: &'a Tags,
         client: &'a RegistryClient,
         flat_index: &'a FlatIndex,
@@ -228,7 +243,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             DistributionDatabase::new(client, build_context),
             flat_index,
             tags,
-            PythonRequirement::new(interpreter, markers),
+            python_requirement.clone(),
             AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
@@ -240,7 +255,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             options,
             hasher,
             markers,
-            PythonRequirement::new(interpreter, markers),
+            python_requirement,
             index,
             provider,
             installed_packages,
@@ -257,8 +272,8 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
         manifest: Manifest,
         options: Options,
         hasher: &'a HashStrategy,
-        markers: &'a MarkerEnvironment,
-        python_requirement: PythonRequirement,
+        markers: Option<&'a MarkerEnvironment>,
+        python_requirement: &'a PythonRequirement,
         index: &'a InMemoryIndex,
         provider: Provider,
         installed_packages: &'a InstalledPackages,
@@ -323,12 +338,12 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 Err(if let ResolveError::NoSolution(err) = err {
                     ResolveError::NoSolution(
                         err.with_available_versions(
-                            &self.python_requirement,
+                            self.python_requirement,
                             &self.visited,
                             &self.index.packages,
                         )
                         .with_selector(self.selector.clone())
-                        .with_python_requirement(&self.python_requirement)
+                        .with_python_requirement(self.python_requirement)
                         .with_index_locations(self.provider.index_locations())
                         .with_unavailable_packages(&self.unavailable_packages)
                         .with_incomplete_packages(&self.incomplete_packages),

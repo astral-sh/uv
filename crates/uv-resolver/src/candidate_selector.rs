@@ -29,7 +29,7 @@ impl CandidateSelector {
     pub(crate) fn for_resolution(
         options: Options,
         manifest: &Manifest,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
     ) -> Self {
         Self {
             resolution_strategy: ResolutionStrategy::from_mode(
