@@ -285,6 +285,7 @@ pub(crate) struct Project {
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata10 {
     pub name: PackageName,
+    pub version: String,
 }
 
 impl Metadata10 {
@@ -296,7 +297,10 @@ impl Metadata10 {
                 .get_first_value("Name")
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
         )?;
-        Ok(Self { name })
+        let version = headers
+            .get_first_value("Version")
+            .ok_or(MetadataError::FieldNotFound("Version"))?;
+        Ok(Self { name, version })
     }
 }
 

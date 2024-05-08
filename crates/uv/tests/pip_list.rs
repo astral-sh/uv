@@ -583,7 +583,7 @@ fn list_legacy_editable() -> Result<()> {
         .child("zstandard.egg-info")
         .child("PKG-INFO")
         .write_str(
-            "Metadata-Version: 2.2
+            "Metadata-Version: 2.1
 Name: zstandard
 Version: 0.22.0
 ",
@@ -621,6 +621,55 @@ Version: 0.22.0
     zstandard 0.22.0 [TEMP_DIR]/zstandard_project
 
     ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn list_legacy_editable_invalid_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    let target = context.temp_dir.child("paramiko_project");
+    target.child("paramiko.egg-info").create_dir_all()?;
+    target
+        .child("paramiko.egg-info")
+        .child("PKG-INFO")
+        .write_str(
+            "Metadata-Version: 1.0
+Name: paramiko
+Version: 0.1-bulbasaur
+",
+        )?;
+    site_packages
+        .child("paramiko.egg-link")
+        .write_str(target.path().to_str().unwrap())?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("list")
+        .arg("--editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: Failed to read metadata: from [SITE_PACKAGES]/paramiko.egg-link
+ Caused by: after parsing '0.1b0', found 'ulbasaur', which is not part of a valid version
     "###
     );
 
