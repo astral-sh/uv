@@ -519,6 +519,7 @@ impl RegistryClient {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
                     self.uncached_client().client(),
                     response,
+                    url.clone(),
                     headers,
                 )
                 .await
