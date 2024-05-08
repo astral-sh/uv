@@ -238,11 +238,11 @@ impl Pep621Metadata {
     pub(crate) fn try_from(
         pyproject: PyProjectToml,
         extras: &ExtrasSpecification,
+        pyproject_path: &Path,
         project_dir: &Path,
         workspace_sources: &HashMap<PackageName, Source>,
         workspace_packages: &HashMap<PackageName, String>,
         preview: PreviewMode,
-        pyproject_path: &Path,
     ) -> Result<Option<Self>, Pep621Error> {
         let project_sources = pyproject
             .tool
@@ -282,13 +282,13 @@ impl Pep621Metadata {
         let requirements = lower_requirements(
             &project.dependencies.unwrap_or_default(),
             &project.optional_dependencies.unwrap_or_default(),
+            pyproject_path,
             &project.name,
             project_dir,
             &project_sources.unwrap_or_default(),
             workspace_sources,
             workspace_packages,
             preview,
-            pyproject_path,
         )?;
 
         // Parse out the project requirements.
@@ -322,13 +322,13 @@ impl Pep621Metadata {
 pub(crate) fn lower_requirements(
     dependencies: &[String],
     optional_dependencies: &IndexMap<ExtraName, Vec<String>>,
+    pyproject_path: &Path,
     project_name: &PackageName,
     project_dir: &Path,
     project_sources: &HashMap<PackageName, Source>,
     workspace_sources: &HashMap<PackageName, Source>,
     workspace_packages: &HashMap<PackageName, String>,
     preview: PreviewMode,
-    pyproject_path: &Path,
 ) -> Result<Requirements, Pep621Error> {
     let dependencies = dependencies
         .iter()

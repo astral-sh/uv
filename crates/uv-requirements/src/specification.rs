@@ -184,7 +184,7 @@ impl RequirementsSpecification {
     pub(crate) fn parse_direct_pyproject_toml(
         contents: &str,
         extras: &ExtrasSpecification,
-        path: &Path,
+        pyproject_path: &Path,
         preview: PreviewMode,
     ) -> Result<Self> {
         let pyproject = toml::from_str::<PyProjectToml>(contents)?;
@@ -192,21 +192,21 @@ impl RequirementsSpecification {
         // We need use this path as base for the relative paths inside pyproject.toml, so
         // we need the absolute path instead of a potentially relative path. E.g. with
         // `foo = { path = "../foo" }`, we will join `../foo` onto this path.
-        let absolute_path = uv_fs::absolutize_path(path)?;
+        let absolute_path = uv_fs::absolutize_path(pyproject_path)?;
+        let project_dir = absolute_path
+            .parent()
+            .context("`pyproject.toml` has no parent directory")?;
 
         let workspace_sources = HashMap::default();
         let workspace_packages = HashMap::default();
-        let project_dir = absolute_path
-            .parent()
-            .context("pyproject.toml has no parent directory")?;
         match Pep621Metadata::try_from(
             pyproject,
             extras,
+            pyproject_path,
             project_dir,
             &workspace_sources,
             &workspace_packages,
             preview,
-            path,
         ) {
             Ok(Some(project)) => {
                 // Partition into editable and non-editable requirements.
@@ -229,7 +229,7 @@ impl RequirementsSpecification {
                             Either::Right(UnresolvedRequirementSpecification {
                                 requirement: UnresolvedRequirement::Named(requirement),
                                 hashes: vec![],
-                                path: Some(path.to_string_lossy().to_string()),
+                                path: Some(pyproject_path.to_string_lossy().to_string()),
                             })
                         }
                     });
@@ -243,8 +243,11 @@ impl RequirementsSpecification {
                 })
             }
             Ok(None) => {
-                debug!("Dynamic pyproject.toml at: `{}`", path.user_display());
-                let path = fs_err::canonicalize(path)?;
+                debug!(
+                    "Dynamic pyproject.toml at: `{}`",
+                    pyproject_path.user_display()
+                );
+                let path = fs_err::canonicalize(pyproject_path)?;
                 let source_tree = path.parent().ok_or_else(|| {
                     anyhow::anyhow!(
                         "The file `{}` appears to be a `pyproject.toml` file, which must be in a directory",

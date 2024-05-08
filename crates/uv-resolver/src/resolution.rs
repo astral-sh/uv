@@ -543,7 +543,7 @@ pub struct DisplayResolutionGraph<'a> {
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
-    /// Sources of the packages - requirements, constraints and overrides
+    /// External sources for each package: requirements, constraints, and overrides.
     sources: FxHashMap<PackageName, FxHashSet<SourceAnnotation>>,
 }
 
@@ -564,8 +564,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
 
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
-    #[allow(clippy::fn_params_excessive_bools)]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
         sources: FxHashMap<PackageName, FxHashSet<SourceAnnotation>>,
