@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::warn;
 
-use pep440_rs::{
-    TrackedFromStr, Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError,
-};
+use pep440_rs::{Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
@@ -83,8 +81,7 @@ impl Metadata23 {
         let requires_dist = headers
             .get_all_values("Requires-Dist")
             .map(|requires_dist| {
-                LenientRequirement::tracked_from_str(&requires_dist, None, None)
-                    .map(Requirement::from)
+                LenientRequirement::from_str(&requires_dist).map(Requirement::from)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let requires_python = headers
@@ -159,8 +156,7 @@ impl Metadata23 {
         let requires_dist = headers
             .get_all_values("Requires-Dist")
             .map(|requires_dist| {
-                LenientRequirement::tracked_from_str(&requires_dist, None, None)
-                    .map(Requirement::from)
+                LenientRequirement::from_str(&requires_dist).map(Requirement::from)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let requires_python = headers

@@ -1,6 +1,6 @@
 #[cfg(feature = "pyo3")]
 use std::hash::{Hash, Hasher};
-use std::{cmp::Ordering, path::Path, str::FromStr};
+use std::{cmp::Ordering, str::FromStr};
 
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -14,8 +14,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
 use crate::{
-    tracked_from_str::TrackedFromStr, version, Operator, OperatorParseError, Version,
-    VersionPattern, VersionPatternParseError,
+    version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
 };
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
@@ -67,23 +66,11 @@ impl FromIterator<VersionSpecifier> for VersionSpecifiers {
     }
 }
 
-impl TrackedFromStr for VersionSpecifiers {
-    type Err = VersionSpecifiersParseError;
-
-    fn tracked_from_str(
-        input: &str,
-        _source: Option<&Path>,
-        _working_dir: Option<&Path>,
-    ) -> Result<Self, Self::Err> {
-        parse_version_specifiers(input).map(Self)
-    }
-}
-
 impl FromStr for VersionSpecifiers {
     type Err = VersionSpecifiersParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::tracked_from_str(s, None, None)
+        parse_version_specifiers(s).map(Self)
     }
 }
 
