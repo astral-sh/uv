@@ -48,8 +48,20 @@ impl schemars::JsonSchema for PythonVersion {
         String::from("PythonVersion")
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        <String>::json_schema(gen)
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            string: Some(Box::new(schemars::schema::StringValidation {
+                pattern: Some(r"^3\.\d+(\.\d+)?$".to_string()),
+                ..schemars::schema::StringValidation::default()
+            })),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some("A Python version specifier, e.g. `3.7` or `3.8.0`.".to_string()),
+                ..schemars::schema::Metadata::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
     }
 }
 

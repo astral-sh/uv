@@ -21,46 +21,57 @@ pub enum TargetTriple {
 
     /// An x86 Windows target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-pc-windows-msvc"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-pc-windows-msvc"))]
     X8664PcWindowsMsvc,
 
     /// An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-gnu"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-unknown-linux-gnu"))]
     X8664UnknownLinuxGnu,
 
     /// An ARM-based macOS target, as seen on Apple Silicon devices.
     #[cfg_attr(feature = "clap", value(name = "aarch64-apple-darwin"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-apple-darwin"))]
     Aarch64AppleDarwin,
 
     /// An x86 macOS target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-apple-darwin"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-apple-darwin"))]
     X8664AppleDarwin,
 
     /// An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_17`.
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-gnu"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-unknown-linux-gnu"))]
     Aarch64UnknownLinuxGnu,
 
     /// An ARM64 Linux target.
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-musl"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-unknown-linux-musl"))]
     Aarch64UnknownLinuxMusl,
 
     /// An `x86_64` Linux target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-musl"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-unknown-linux-musl"))]
     X8664UnknownLinuxMusl,
 
     /// An `x86_64` target for the `manylinux_2_17` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_17"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_17"))]
     X8664Manylinux217,
 
     /// An `x86_64` target for the `manylinux_2_28` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_28"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_28"))]
     X8664Manylinux228,
 
     /// An ARM64 target for the `manylinux_2_17` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_17"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_17"))]
     Aarch64Manylinux217,
 
     /// An ARM64 target for the `manylinux_2_28` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_28"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_28"))]
     Aarch64Manylinux228,
 }
 

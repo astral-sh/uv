@@ -7,8 +7,8 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 
 /// The normalized name of a package.
 ///
-/// Converts the name to lowercase and collapses any run of the characters `-`, `_` and `.`
-/// down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.
+/// Converts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.
+/// For example, `---`, `.`, and `__` are all converted to a single `-`.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/name-normalization/>
 #[derive(

@@ -75,6 +75,10 @@ impl schemars::JsonSchema for PackageNameSpecifier {
                 ),
                 ..schemars::schema::StringValidation::default()
             })),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some("The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.".to_string()),
+              ..schemars::schema::Metadata::default()
+            })),
             ..schemars::schema::SchemaObject::default()
         }
         .into()
