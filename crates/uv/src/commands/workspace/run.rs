@@ -1,11 +1,10 @@
+use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::{env, iter};
 
 use anyhow::Result;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
-use tempfile::{tempdir_in, TempDir};
+use tempfile::tempdir_in;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -15,7 +14,6 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::PythonEnvironment;
 use uv_requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
@@ -31,7 +29,7 @@ use crate::printer::Printer;
 pub(crate) async fn run(
     target: Option<String>,
     mut args: Vec<OsString>,
-    mut requirements: Vec<RequirementsSource>,
+    requirements: Vec<RequirementsSource>,
     python: Option<String>,
     isolated: bool,
     preview: PreviewMode,
@@ -58,52 +56,111 @@ pub(crate) async fn run(
         "python".to_string()
     };
 
-    // Copy the requirements into a set of overrides; we'll use this to prioritize
-    // requested requirements over those discovered in the project.
-    // We must retain these requirements as direct dependencies too, as overrides
-    // cannot be applied to transitive dependencies.
-    let overrides = requirements.clone();
+    // Discover and sync the workspace.
+    let workspace_env = if isolated {
+        None
+    } else {
+        debug!("Syncing workspace environment.");
 
-    if !isolated {
-        if let Some(workspace_requirements) = workspace::find_workspace()? {
-            requirements.extend(workspace_requirements);
-        }
-    }
+        let Some(workspace_requirements) = workspace::find_workspace()? else {
+            return Err(anyhow::anyhow!(
+                "Unable to find `pyproject.toml` for project workspace."
+            ));
+        };
 
-    // Detect the current Python interpreter.
-    // TODO(zanieb): Create ephemeral environments
-    // TODO(zanieb): Accept `--python`
-    let run_env = environment_for_run(
-        &requirements,
-        &overrides,
-        python.as_deref(),
-        isolated,
-        preview,
-        cache,
-        printer,
-    )
-    .await?;
-    let python_env = run_env.python;
+        let venv = PythonEnvironment::from_virtualenv(cache)?;
+
+        // Install the workspace requirements.
+        Some(update_environment(venv, &workspace_requirements, preview, cache, printer).await?)
+    };
+
+    // If necessary, create an environment for the ephemeral requirements.
+    let tmpdir;
+    let ephemeral_env = if requirements.is_empty() {
+        None
+    } else {
+        debug!("Syncing ephemeral environment.");
+
+        // Discover an interpreter.
+        let interpreter = if let Some(workspace_env) = &workspace_env {
+            workspace_env.interpreter().clone()
+        } else if let Some(python) = python.as_ref() {
+            PythonEnvironment::from_requested_python(python, cache)?.into_interpreter()
+        } else {
+            PythonEnvironment::from_default_python(cache)?.into_interpreter()
+        };
+
+        // TODO(charlie): If the environment satisfies the requirements, skip creation.
+        // TODO(charlie): Pass the already-installed versions as preferences, or even as the
+        // "installed" packages, so that we can skip re-installing them in the ephemeral
+        // environment.
+
+        // Create a virtual environment
+        // TODO(zanieb): Move this path derivation elsewhere
+        let uv_state_path = env::current_dir()?.join(".uv");
+        fs_err::create_dir_all(&uv_state_path)?;
+        tmpdir = tempdir_in(uv_state_path)?;
+        let venv = uv_virtualenv::create_venv(
+            tmpdir.path(),
+            interpreter,
+            uv_virtualenv::Prompt::None,
+            false,
+            false,
+        )?;
+
+        // Install the ephemeral requirements.
+        Some(update_environment(venv, &requirements, preview, cache, printer).await?)
+    };
 
     // Construct the command
     let mut process = Command::new(&command);
     process.args(&args);
 
-    // Set up the PATH
-    debug!(
-        "Using Python {} environment at {}",
-        python_env.interpreter().python_version(),
-        python_env.python_executable().user_display().cyan()
-    );
-    let new_path = if let Some(path) = env::var_os("PATH") {
-        let python_env_path =
-            iter::once(python_env.scripts().to_path_buf()).chain(env::split_paths(&path));
-        env::join_paths(python_env_path)?
-    } else {
-        OsString::from(python_env.scripts())
-    };
-
+    // Construct the `PATH` environment variable.
+    let new_path = env::join_paths(
+        ephemeral_env
+            .as_ref()
+            .map(PythonEnvironment::scripts)
+            .into_iter()
+            .chain(
+                workspace_env
+                    .as_ref()
+                    .map(PythonEnvironment::scripts)
+                    .into_iter(),
+            )
+            .map(PathBuf::from)
+            .chain(
+                env::var_os("PATH")
+                    .as_ref()
+                    .iter()
+                    .flat_map(env::split_paths),
+            ),
+    )?;
     process.env("PATH", new_path);
+
+    // Construct the `PYTHONPATH` environment variable.
+    let new_python_path = env::join_paths(
+        ephemeral_env
+            .as_ref()
+            .map(PythonEnvironment::site_packages)
+            .into_iter()
+            .flatten()
+            .chain(
+                workspace_env
+                    .as_ref()
+                    .map(PythonEnvironment::site_packages)
+                    .into_iter()
+                    .flatten(),
+            )
+            .map(PathBuf::from)
+            .chain(
+                env::var_os("PYTHONPATH")
+                    .as_ref()
+                    .iter()
+                    .flat_map(env::split_paths),
+            ),
+    )?;
+    process.env("PYTHONPATH", new_python_path);
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
@@ -125,40 +182,14 @@ pub(crate) async fn run(
     }
 }
 
-struct RunEnvironment {
-    /// The Python environment to execute the run in.
-    python: PythonEnvironment,
-    /// A temporary directory, if a new virtual environment was created.
-    ///
-    /// Included to ensure that the temporary directory exists for the length of the operation, but
-    /// is dropped at the end as appropriate.
-    _temp_dir_drop: Option<TempDir>,
-}
-
-/// Returns an environment for a `run` invocation.
-///
-/// Will use the current virtual environment (if any) unless `isolated` is true.
-/// Will create virtual environments in a temporary directory (if necessary).
-async fn environment_for_run(
+/// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
+async fn update_environment(
+    venv: PythonEnvironment,
     requirements: &[RequirementsSource],
-    overrides: &[RequirementsSource],
-    python: Option<&str>,
-    isolated: bool,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
-) -> Result<RunEnvironment> {
-    let current_venv = if isolated {
-        None
-    } else {
-        // Find the active environment if it exists
-        match PythonEnvironment::from_virtualenv(cache) {
-            Ok(env) => Some(env),
-            Err(uv_interpreter::Error::VenvNotFound) => None,
-            Err(err) => return Err(err.into()),
-        }
-    };
-
+) -> Result<PythonEnvironment> {
     // TODO(zanieb): Support client configuration
     let client_builder = BaseClientBuilder::default();
 
@@ -168,79 +199,41 @@ async fn environment_for_run(
     let spec = RequirementsSpecification::from_sources(
         requirements,
         &[],
-        overrides,
+        &[],
         &ExtrasSpecification::None,
         &client_builder,
         preview,
     )
     .await?;
 
-    // Determine an interpreter to use
-    let python_env = if let Some(python) = python {
-        PythonEnvironment::from_requested_python(python, cache)?
-    } else {
-        PythonEnvironment::from_default_python(cache)?
-    };
-
     // Check if the current environment satisfies the requirements
-    if let Some(venv) = current_venv {
-        // Ensure it matches the selected interpreter
-        // TODO(zanieb): We should check if a version was requested and see if the environment meets that
-        //               too but this can wait until we refactor interpreter discovery
-        if venv.root() == python_env.root() {
-            // Determine the set of installed packages.
-            let site_packages = SitePackages::from_executable(&venv)?;
+    let site_packages = SitePackages::from_executable(&venv)?;
 
-            // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
-            // enough to let us remove this check. But right now, for large environments, it's an order of
-            // magnitude faster to validate the environment than to resolve the requirements.
-            if spec.source_trees.is_empty() {
-                match site_packages.satisfies(
-                    &spec.requirements,
-                    &spec.editables,
-                    &spec.constraints,
-                )? {
-                    SatisfiesResult::Fresh {
-                        recursive_requirements,
-                    } => {
-                        debug!(
-                            "All requirements satisfied: {}",
-                            recursive_requirements
-                                .iter()
-                                .map(|entry| entry.requirement.to_string())
-                                .sorted()
-                                .join(" | ")
-                        );
-                        debug!(
-                            "All editables satisfied: {}",
-                            spec.editables.iter().map(ToString::to_string).join(", ")
-                        );
-                        return Ok(RunEnvironment {
-                            python: venv,
-                            _temp_dir_drop: None,
-                        });
-                    }
-                    SatisfiesResult::Unsatisfied(requirement) => {
-                        debug!("At least one requirement is not satisfied: {requirement}");
-                    }
-                }
+    // If the requirements are already satisfied, we're done.
+    if spec.source_trees.is_empty() {
+        match site_packages.satisfies(&spec.requirements, &spec.editables, &spec.constraints)? {
+            SatisfiesResult::Fresh {
+                recursive_requirements,
+            } => {
+                debug!(
+                    "All requirements satisfied: {}",
+                    recursive_requirements
+                        .iter()
+                        .map(|entry| entry.requirement.to_string())
+                        .sorted()
+                        .join(" | ")
+                );
+                debug!(
+                    "All editables satisfied: {}",
+                    spec.editables.iter().map(ToString::to_string).join(", ")
+                );
+                return Ok(venv);
+            }
+            SatisfiesResult::Unsatisfied(requirement) => {
+                debug!("At least one requirement is not satisfied: {requirement}");
             }
         }
     }
-    // Otherwise, we need a new environment
-
-    // Create a virtual environment
-    // TODO(zanieb): Move this path derivation elsewhere
-    let uv_state_path = env::current_dir()?.join(".uv");
-    fs_err::create_dir_all(&uv_state_path)?;
-    let tmpdir = tempdir_in(uv_state_path)?;
-    let venv = uv_virtualenv::create_venv(
-        tmpdir.path(),
-        python_env.into_interpreter(),
-        uv_virtualenv::Prompt::None,
-        false,
-        false,
-    )?;
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter().clone();
@@ -333,8 +326,5 @@ async fn environment_for_run(
     )
     .await?;
 
-    Ok(RunEnvironment {
-        python: venv,
-        _temp_dir_drop: Some(tmpdir),
-    })
+    Ok(venv)
 }
