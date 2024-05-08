@@ -8654,7 +8654,6 @@ fn git_source_missing_tag() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
 fn warn_missing_constraint() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -8667,7 +8666,7 @@ fn warn_missing_constraint() -> Result<()> {
           "tqdm",
           "anyio==4.3.0",
         ]
-        
+
         [tool.uv.sources]
         anyio = { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }
     "#})?;
@@ -8688,7 +8687,7 @@ fn warn_missing_constraint() -> Result<()> {
     tqdm==4.66.2
 
     ----- stderr -----
-    warning: You did not specify a version constraint (e.g. a lower bound) for tqdm
+    warning: Missing version constraint (e.g. a lower bound) for tqdm
     Resolved 4 packages in [TIME]
     "###);
 

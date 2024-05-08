@@ -26,7 +26,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::ExtrasSpecification;
 
@@ -407,8 +407,8 @@ pub(crate) fn lower_requirement(
         // Support recursive editable inclusions.
         if has_sources && requirement.version_or_url.is_none() && &requirement.name != project_name
         {
-            warn_user!(
-                "You did not specify a version constraint (e.g. a lower bound) for {}",
+            warn_user_once!(
+                "Missing version constraint (e.g. a lower bound) for {}",
                 requirement.name
             );
         }
@@ -493,8 +493,8 @@ pub(crate) fn lower_requirement(
         }
         Source::Registry { index } => match requirement.version_or_url {
             None => {
-                warn_user!(
-                    "You did not specify a version constraint (e.g. a lower bound) for {}",
+                warn_user_once!(
+                    "Missing version constraint (e.g. a lower bound) for {}",
                     requirement.name
                 );
                 RequirementSource::Registry {
