@@ -556,9 +556,12 @@ pub struct MarkerExpression {
 
 impl MarkerExpression {
     /// Evaluate a <`marker_value`> <`marker_op`> <`marker_value`> expression
+    ///
+    /// When `env` is `None`, all expressions that reference the environment
+    /// will evaluate as `true`.
     fn evaluate(
         &self,
-        env: &MarkerEnvironment,
+        env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
         reporter: &mut impl FnMut(MarkerWarningKind, String, &Self),
     ) -> bool {
@@ -607,9 +610,10 @@ impl MarkerExpression {
                         return false;
                     }
                 };
-
-                let l_version = env.get_version(l_key);
-                specifier.contains(l_version)
+                env.map_or(true, |env| {
+                    let l_version = env.get_version(l_key);
+                    specifier.contains(l_version)
+                })
             }
             // This is half the same block as above inverted
             MarkerValue::MarkerEnvString(l_key) => {
@@ -623,8 +627,10 @@ impl MarkerExpression {
                     MarkerValue::QuotedString(r_string) => r_string,
                 };
 
-                let l_string = env.get_string(l_key);
-                self.compare_strings(l_string, r_string, reporter)
+                env.map_or(true, |env| {
+                    let l_string = env.get_string(l_key);
+                    self.compare_strings(l_string, r_string, reporter)
+                })
             }
             // `extra == '...'`
             MarkerValue::Extra => {
@@ -652,6 +658,8 @@ impl MarkerExpression {
                 match &self.r_value {
                     // The only sound choice for this is `<quoted PEP 440 version> <version op>` <version key>
                     MarkerValue::MarkerEnvVersion(r_key) => {
+                        let Some(env) = env else { return true };
+
                         let l_version = match Version::from_str(l_string) {
                             Ok(l_version) => l_version,
                             Err(err) => {
@@ -693,10 +701,10 @@ impl MarkerExpression {
                         specifier.contains(&l_version)
                     }
                     // This is half the same block as above inverted
-                    MarkerValue::MarkerEnvString(r_key) => {
+                    MarkerValue::MarkerEnvString(r_key) => env.map_or(true, |env| {
                         let r_string = env.get_string(r_key);
                         self.compare_strings(l_string, r_string, reporter)
-                    }
+                    }),
                     // `'...' == extra`
                     MarkerValue::Extra => match ExtraName::from_str(l_string) {
                         Ok(l_extra) => self.marker_compare(&l_extra, extras, reporter),
@@ -950,6 +958,21 @@ impl FromStr for MarkerTree {
 impl MarkerTree {
     /// Does this marker apply in the given environment?
     pub fn evaluate(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+        self.evaluate_optional_environment(Some(env), extras)
+    }
+
+    /// Evaluates this marker tree against an optional environment and a
+    /// possibly empty sequence of extras.
+    ///
+    /// When an environment is not provided, all marker expressions based on
+    /// the environment evaluate to `true`. That is, this provides environment
+    /// independent marker evaluation. In practice, this means only the extras
+    /// are evaluated when an environment is not provided.
+    pub fn evaluate_optional_environment(
+        &self,
+        env: Option<&MarkerEnvironment>,
+        extras: &[ExtraName],
+    ) -> bool {
         let mut reporter = |_kind, _message, _marker_expression: &MarkerExpression| {
             #[cfg(feature = "tracing")]
             {
@@ -1059,12 +1082,12 @@ impl MarkerTree {
         reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
     ) -> bool {
         self.report_deprecated_options(reporter);
-        self.evaluate_reporter_impl(env, extras, reporter)
+        self.evaluate_reporter_impl(Some(env), extras, reporter)
     }
 
     fn evaluate_reporter_impl(
         &self,
-        env: &MarkerEnvironment,
+        env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
         reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
     ) -> bool {
@@ -1117,7 +1140,7 @@ impl MarkerTree {
             warnings.push((kind, warning, marker.to_string()));
         };
         self.report_deprecated_options(&mut reporter);
-        let result = self.evaluate_reporter_impl(env, extras, &mut reporter);
+        let result = self.evaluate_reporter_impl(Some(env), extras, &mut reporter);
         (result, warnings)
     }
 

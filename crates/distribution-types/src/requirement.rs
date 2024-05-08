@@ -41,6 +41,23 @@ impl Requirement {
         }
     }
 
+    /// Returns whether the markers apply only for the given extras.
+    ///
+    /// When `env` is `None`, this specifically evaluates all marker
+    /// expressions based on the environment to `true`. That is, this provides
+    /// environment independent marker evaluation.
+    pub fn evaluate_optional_environment(
+        &self,
+        env: Option<&MarkerEnvironment>,
+        extras: &[ExtraName],
+    ) -> bool {
+        if let Some(marker) = &self.marker {
+            marker.evaluate_optional_environment(env, extras)
+        } else {
+            true
+        }
+    }
+
     /// Convert a [`pep508_rs::Requirement`] to a [`Requirement`].
     pub fn from_pep508(requirement: pep508_rs::Requirement) -> Result<Self, Box<ParsedUrlError>> {
         let source = match requirement.version_or_url {
