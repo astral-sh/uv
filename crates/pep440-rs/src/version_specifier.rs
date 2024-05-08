@@ -733,7 +733,7 @@ mod tests {
 
     use indoc::indoc;
 
-    use crate::{LocalSegment, PreRelease, PreReleaseKind};
+    use crate::LocalSegment;
 
     use super::*;
 
@@ -1437,10 +1437,7 @@ mod tests {
                 "==2.0a1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_pre(Some(PreRelease {
-                            kind: PreReleaseKind::Alpha,
-                            number: 1,
-                        })),
+                        version: "2.0a1".to_string(),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1451,10 +1448,7 @@ mod tests {
                 "!=2.0a1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_pre(Some(PreRelease {
-                            kind: PreReleaseKind::Alpha,
-                            number: 1,
-                        })),
+                        version: "2.0a1".to_string(),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1465,7 +1459,7 @@ mod tests {
                 "==2.0.post1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_post(Some(1)),
+                        version: "2.0.post1".to_string(),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1476,7 +1470,7 @@ mod tests {
                 "!=2.0.post1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_post(Some(1)),
+                        version: "2.0.post1".to_string(),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1487,7 +1481,7 @@ mod tests {
                 "==2.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_dev(Some(1)),
+                        version: "2.0.dev1".to_string(),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1498,7 +1492,7 @@ mod tests {
                 "!=2.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_dev(Some(1)),
+                        version: "2.0.dev1".to_string(),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1537,7 +1531,7 @@ mod tests {
                 "==1.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([1, 0]).with_dev(Some(1)),
+                        version: "1.0.dev1".to_string(),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1548,7 +1542,7 @@ mod tests {
                 "!=1.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([1, 0]).with_dev(Some(1)),
+                        version: "1.0.dev1".to_string(),
                         remaining: ".*".to_string(),
                     }
                     .into(),
