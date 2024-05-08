@@ -211,6 +211,14 @@ pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
     })
 }
 
+fn normcase(s: &str) -> String {
+    if cfg!(windows) {
+        s.replace('/', "\\").to_lowercase()
+    } else {
+        s.to_owned()
+    }
+}
+
 static EASY_INSTALL_PTH: Lazy<Mutex<i32>> = Lazy::new(Mutex::default);
 
 /// Uninstall the legacy editable represented by the `.egg-link` file.
@@ -232,6 +240,9 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
             }
         })
         .ok_or_else(|| Error::InvalidEggLink(egg_link.to_path_buf()))?;
+
+    // This comes from `pkg_resources.normalize_path`
+    let target_line = normcase(target_line);
 
     match fs::remove_file(egg_link) {
         Ok(()) => {
