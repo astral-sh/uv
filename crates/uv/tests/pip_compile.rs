@@ -8687,7 +8687,7 @@ fn warn_missing_constraint() -> Result<()> {
     tqdm==4.66.2
 
     ----- stderr -----
-    warning: Missing version constraint (e.g. a lower bound) for `tqdm`
+    warning: Missing version constraint (e.g., a lower bound) for `tqdm`
     Resolved 4 packages in [TIME]
     "###);
 
