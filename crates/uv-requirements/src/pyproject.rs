@@ -1,9 +1,10 @@
-//! Reading from `pyproject.toml`
-//! * `project.{dependencies,optional-dependencies}`,
-//! * `tool.uv.sources` and
+//! Reads the following fields from from `pyproject.toml`:
+//!
+//! * `project.{dependencies,optional-dependencies}`
+//! * `tool.uv.sources`
 //! * `tool.uv.workspace`
 //!
-//! and lowering them into a dependency specification.
+//! Then lowers them into a dependency specification.
 
 use std::collections::HashMap;
 use std::io;
@@ -75,7 +76,7 @@ pub enum LoweringError {
 pub struct PyProjectToml {
     /// PEP 621-compliant project metadata.
     pub project: Option<Project>,
-    /// Proprietary additions.
+    /// Tool-specific metadata.
     pub tool: Option<Tool>,
 }
 
@@ -99,14 +100,12 @@ pub struct Project {
     pub dynamic: Option<Vec<String>>,
 }
 
-/// `tool`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-/// `tool.uv`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -115,7 +114,6 @@ pub struct ToolUv {
     pub workspace: Option<ToolUvWorkspace>,
 }
 
-/// `tool.uv.workspace`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
