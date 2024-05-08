@@ -12,7 +12,7 @@ use crate::{
 /// Either an already-installed distribution or a distribution that can be installed.
 #[derive(Debug, Clone)]
 pub enum ResolvedDist {
-    Installed(InstalledDist),
+    Installed(Box<InstalledDist>),
     Installable(Dist),
 }
 
@@ -45,7 +45,7 @@ impl ResolvedDistRef<'_> {
     pub fn to_owned(&self) -> ResolvedDist {
         match self {
             Self::Installable(dist) => ResolvedDist::Installable((*dist).clone()),
-            Self::Installed(dist) => ResolvedDist::Installed((*dist).clone()),
+            Self::Installed(dist) => ResolvedDist::Installed(Box::new((*dist).clone())),
         }
     }
 }
@@ -135,7 +135,7 @@ impl From<Dist> for ResolvedDist {
 
 impl From<InstalledDist> for ResolvedDist {
     fn from(value: InstalledDist) -> Self {
-        ResolvedDist::Installed(value)
+        ResolvedDist::Installed(Box::new(value))
     }
 }
 

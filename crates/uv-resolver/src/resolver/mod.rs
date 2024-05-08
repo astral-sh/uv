@@ -1197,7 +1197,10 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 let metadata = dist
                     .metadata()
                     .map_err(|err| ResolveError::ReadInstalled(Box::new(dist.clone()), err))?;
-                Ok(Some(Response::Installed { dist, metadata }))
+                Ok(Some(Response::Installed {
+                    dist: Box::new(dist),
+                    metadata,
+                }))
             }
 
             // Pre-fetch the package and distribution metadata.
@@ -1283,9 +1286,9 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                             Response::Dist { dist, metadata }
                         }
                         ResolvedDist::Installed(dist) => {
-                            let metadata = dist.metadata().map_err(|err| {
-                                ResolveError::ReadInstalled(Box::new(dist.clone()), err)
-                            })?;
+                            let metadata = dist
+                                .metadata()
+                                .map_err(|err| ResolveError::ReadInstalled(dist.clone(), err))?;
                             Response::Installed { dist, metadata }
                         }
                     };
@@ -1366,7 +1369,7 @@ enum Response {
     },
     /// The returned metadata for an already-installed distribution.
     Installed {
-        dist: InstalledDist,
+        dist: Box<InstalledDist>,
         metadata: Metadata23,
     },
 }
