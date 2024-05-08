@@ -10,11 +10,11 @@ use std::collections::HashMap;
 use std::io;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use glob::Pattern;
 use indexmap::IndexMap;
 use path_absolutize::Absolutize;
-use pep440_rs::TrackedFromStr;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -333,11 +333,8 @@ pub(crate) fn lower_requirements(
     let dependencies = dependencies
         .iter()
         .map(|dependency| {
-            let requirement = pep508_rs::Requirement::tracked_from_str(
-                dependency,
-                Some(pyproject_path),
-                Some(project_dir),
-            )?;
+            let requirement = pep508_rs::Requirement::from_str(dependency)?
+                .with_source(Some(pyproject_path.to_path_buf()));
             let name = requirement.name.clone();
             lower_requirement(
                 requirement,
@@ -357,11 +354,8 @@ pub(crate) fn lower_requirements(
             let dependencies: Vec<_> = dependencies
                 .iter()
                 .map(|dependency| {
-                    let requirement = pep508_rs::Requirement::tracked_from_str(
-                        dependency,
-                        Some(pyproject_path),
-                        Some(project_dir),
-                    )?;
+                    let requirement = pep508_rs::Requirement::from_str(dependency)?
+                        .with_source(Some(pyproject_path.to_path_buf()));
                     let name = requirement.name.clone();
                     lower_requirement(
                         requirement,
@@ -543,10 +537,7 @@ pub(crate) fn lower_requirement(
         extras: requirement.extras,
         marker: requirement.marker,
         source,
-        path: project_dir
-            .join("pyproject.toml")
-            .to_str()
-            .map(ToString::to_string),
+        path: Some(project_dir.join("pyproject.toml")),
     })
 }
 

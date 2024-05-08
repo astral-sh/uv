@@ -28,7 +28,7 @@ pub struct Requirement {
     pub extras: Vec<ExtraName>,
     pub marker: Option<MarkerTree>,
     pub source: RequirementSource,
-    pub path: Option<String>,
+    pub path: Option<PathBuf>,
 }
 
 impl Requirement {

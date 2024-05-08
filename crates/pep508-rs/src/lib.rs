@@ -156,10 +156,7 @@ impl Requirement {
     /// Set the source file containing the requirement.
     #[must_use]
     pub fn with_source(self, path: Option<PathBuf>) -> Self {
-        Self {
-            path,
-            ..self
-        }
+        Self { path, ..self }
     }
 }
 
@@ -1032,6 +1029,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
         extras,
         version_or_url: requirement_kind,
         marker,
+        path: None,
     })
 }
 
@@ -1173,6 +1171,7 @@ mod tests {
                 operator: MarkerOperator::LessThan,
                 r_value: MarkerValue::QuotedString("2.7".to_string()),
             })),
+            path: None,
         };
         assert_eq!(requests, expected);
     }
@@ -1398,6 +1397,7 @@ mod tests {
             extras: vec![],
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
+            path: None,
         };
         assert_eq!(pip_url, expected);
     }

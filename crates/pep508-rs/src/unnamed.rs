@@ -30,7 +30,7 @@ pub struct UnnamedRequirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
-        /// The source file containing the requirement.
+    /// The source file containing the requirement.
     pub path: Option<PathBuf>,
 }
 
@@ -47,10 +47,7 @@ impl UnnamedRequirement {
     /// Set the source file containing the requirement.
     #[must_use]
     pub fn with_source(self, path: Option<PathBuf>) -> Self {
-        Self {
-            path,
-            ..self
-        }
+        Self { path, ..self }
     }
 }
 
@@ -170,6 +167,7 @@ fn parse_unnamed_requirement(
         url,
         extras,
         marker,
+        path: None,
     })
 }
 

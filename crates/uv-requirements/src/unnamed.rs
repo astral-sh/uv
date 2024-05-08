@@ -170,7 +170,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                 extras: requirement.extras,
                                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                 marker: requirement.marker,
-                                path: project_path.to_str().map(ToString::to_string),
+                                path: Some(project_path.clone()),
                             });
                         }
 
@@ -188,7 +188,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
-                                        path: project_path.to_str().map(ToString::to_string),
+                                        path: Some(project_path.clone()),
                                     });
                                 }
                             }

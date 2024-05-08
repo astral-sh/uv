@@ -1,4 +1,3 @@
-use indexmap::IndexMap;
 use std::borrow::Cow;
 use std::env;
 use std::fmt::Write;
@@ -10,16 +9,18 @@ use std::str::FromStr;
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use fs_err as fs;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, Verbatim};
+use distribution_types::{
+    IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, SourceAnnotation, Verbatim,
+};
 use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
-
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 use requirements_txt::EditableRequirement;
@@ -36,7 +37,7 @@ use uv_fs::Simplified;
 use uv_installer::Downloader;
 use uv_interpreter::PythonVersion;
 use uv_interpreter::{find_best_python, find_requested_python, PythonEnvironment};
-use uv_normalize::{ExtraName, PackageName, Source};
+use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
@@ -353,9 +354,9 @@ pub(crate) async fn pip_compile(
     .resolve()
     .await?;
 
-    let mut sources: FxHashMap<PackageName, FxHashSet<Source>> = FxHashMap::default();
+    let mut sources: FxHashMap<PackageName, FxHashSet<SourceAnnotation>> = FxHashMap::default();
 
-    let mut insert_source = |package_name: &PackageName, source: Source| {
+    let mut insert_source = |package_name: &PackageName, source: SourceAnnotation| {
         if let Some(source_packages) = sources.get_mut(package_name) {
             source_packages.insert(source);
         } else {
@@ -370,29 +371,29 @@ pub(crate) async fn pip_compile(
             if path.ends_with("pyproject.toml") {
                 insert_source(
                     &requirement.name,
-                    Source::PyProject {
+                    SourceAnnotation::PyProject {
                         path: path.clone(),
-                        project_name: project
-                            .as_ref()
-                            .map(ToString::to_string)
-                            .unwrap_or_default(),
+                        project_name: project.as_ref().map(ToString::to_string),
                     },
                 );
             } else {
-                insert_source(&requirement.name, Source::Requirement(path.clone()));
+                insert_source(
+                    &requirement.name,
+                    SourceAnnotation::Requirement(path.clone()),
+                );
             }
         }
     }
 
     for constraint in &constraints {
         if let Some(path) = &constraint.path {
-            insert_source(&constraint.name, Source::Constraint(path.clone()));
+            insert_source(&constraint.name, SourceAnnotation::Constraint(path.clone()));
         }
     }
 
     for ov in &overrides {
         if let Some(path) = &ov.path {
-            insert_source(&ov.name, Source::Override(path.clone()));
+            insert_source(&ov.name, SourceAnnotation::Override(path.clone()));
         }
     }
 

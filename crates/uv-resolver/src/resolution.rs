@@ -14,14 +14,14 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
     Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ParsedUrlError, Requirement,
-    ResolvedDist, Verbatim, VersionId, VersionOrUrlRef,
+    ResolvedDist, SourceAnnotation, Verbatim, VersionId, VersionOrUrlRef,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::HashDigest;
 use uv_distribution::to_precise;
-use uv_normalize::{ExtraName, PackageName, Source};
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
@@ -544,7 +544,7 @@ pub struct DisplayResolutionGraph<'a> {
     /// package.
     annotation_style: AnnotationStyle,
     /// Sources of the packages - requirements, constraints and overrides
-    sources: FxHashMap<PackageName, FxHashSet<Source>>,
+    sources: FxHashMap<PackageName, FxHashSet<SourceAnnotation>>,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
@@ -568,7 +568,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
-        sources: FxHashMap<PackageName, FxHashSet<Source>>,
+        sources: FxHashMap<PackageName, FxHashSet<SourceAnnotation>>,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -724,6 +724,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .map(|edge| &self.resolution.petgraph[edge.source()])
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
+
+                // Include all external sources (e.g., requirements files).
                 let source = self.sources.get(node.name()).cloned().unwrap_or_default();
 
                 match self.annotation_style {
@@ -733,12 +735,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let deps = edges
                                 .into_iter()
                                 .map(|dependency| format!("{}", dependency.name()))
-                                .chain(
-                                    source
-                                        .into_iter()
-                                        .map(|source| source.to_dependency_string())
-                                        .sorted(),
-                                )
+                                .chain(source.into_iter().map(|source| source.to_string()).sorted())
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -749,12 +746,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         [] if source.is_empty() => {}
                         [] if source.len() == 1 => {
                             let separator = "\n";
-                            let comment = format!(
-                                "    # via {}",
-                                source.iter().next().unwrap().to_dependency_string()
-                            )
-                            .green()
-                            .to_string();
+                            let comment =
+                                format!("    # via {}", source.iter().next().unwrap().to_string())
+                                    .green()
+                                    .to_string();
                             annotation = Some((separator, comment));
                         }
                         [edge] if source.is_empty() => {
@@ -766,7 +761,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let separator = "\n";
                             let deps = source
                                 .into_iter()
-                                .map(|source| source.to_dependency_string())
+                                .map(|source| source.to_string())
                                 .sorted()
                                 .chain(
                                     edges

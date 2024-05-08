@@ -119,8 +119,8 @@ pub struct LenientRequirement<T: Pep508Url = VerbatimUrl>(Requirement<T>);
 impl<T: Pep508Url> FromStr for LenientRequirement<T> {
     type Err = Pep508Error<T>;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_with_fixups(s, "requirement")?))
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Ok(Self(parse_with_fixups(input, "requirement")?))
     }
 }
 
@@ -139,8 +139,8 @@ pub struct LenientVersionSpecifiers(VersionSpecifiers);
 impl FromStr for LenientVersionSpecifiers {
     type Err = VersionSpecifiersParseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_with_fixups(s, "version specifier")?))
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Ok(Self(parse_with_fixups(input, "version specifier")?))
     }
 }
 
