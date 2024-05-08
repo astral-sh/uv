@@ -233,6 +233,14 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
         })
         .ok_or_else(|| Error::InvalidEggLink(egg_link.to_path_buf()))?;
 
+    let target_line = if cfg!(windows) {
+        // Do the equivalent of os.path.normcase
+        // This comes from `pkg_resources.normalize_path`
+        target_line.replace('\\', "/").to_lowercase()
+    } else {
+        target_line.to_owned()
+    };
+
     match fs::remove_file(egg_link) {
         Ok(()) => {
             debug!("Removed file: {}", egg_link.display());

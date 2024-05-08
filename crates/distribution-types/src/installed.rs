@@ -142,9 +142,14 @@ impl InstalledDist {
             // https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#egg-links
             // https://github.com/pypa/pip/blob/946f95d17431f645da8e2e0bf4054a72db5be766/src/pip/_internal/metadata/importlib/_envs.py#L86-L108
             let contents = fs::read_to_string(path)?;
-            let target = if let Some(line) = contents.lines().find(|line| !line.is_empty()) {
-                PathBuf::from(line.trim())
-            } else {
+            let Some(target) = contents.lines().find_map(|line| {
+                let line = line.trim();
+                if line.is_empty() {
+                    None
+                } else {
+                    Some(PathBuf::from(line))
+                }
+            }) else {
                 warn!("Invalid `.egg-link` file: {path:?}");
                 return Ok(None);
             };
