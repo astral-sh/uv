@@ -20,7 +20,7 @@ impl PythonRequirement {
     }
 
     pub fn from_marker_environment(interpreter: &Interpreter, env: &MarkerEnvironment) -> Self {
-        Self::new(interpreter, &env.python_full_version)
+        Self::new(interpreter, env.python_full_version())
     }
 
     /// Return the installed version of Python.

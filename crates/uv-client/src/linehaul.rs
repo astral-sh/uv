@@ -118,17 +118,17 @@ impl LineHaul {
                 name: Some("uv".to_string()),
                 version: Some(version().to_string()),
             }),
-            python: Some(markers.python_full_version.version.to_string()),
+            python: Some(markers.python_full_version().version.to_string()),
             implementation: Option::from(Implementation {
-                name: Some(markers.platform_python_implementation.to_string()),
-                version: Some(markers.python_full_version.version.to_string()),
+                name: Some(markers.platform_python_implementation().to_string()),
+                version: Some(markers.python_full_version().version.to_string()),
             }),
             distro,
             system: Option::from(System {
-                name: Some(markers.platform_system.to_string()),
-                release: Some(markers.platform_release.to_string()),
+                name: Some(markers.platform_system().to_string()),
+                release: Some(markers.platform_release().to_string()),
             }),
-            cpu: Some(markers.platform_machine.to_string()),
+            cpu: Some(markers.platform_machine().to_string()),
             // Should probably always be None in uv.
             openssl_version: None,
             // Should probably always be None in uv.

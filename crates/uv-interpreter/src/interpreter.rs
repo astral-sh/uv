@@ -202,31 +202,31 @@ impl Interpreter {
 
     /// Returns the Python version.
     #[inline]
-    pub const fn python_version(&self) -> &Version {
-        &self.markers.python_full_version.version
+    pub fn python_version(&self) -> &Version {
+        &self.markers.python_full_version().version
     }
 
     /// Returns the `python_full_version` marker corresponding to this Python version.
     #[inline]
-    pub const fn python_full_version(&self) -> &StringVersion {
-        &self.markers.python_full_version
+    pub fn python_full_version(&self) -> &StringVersion {
+        self.markers.python_full_version()
     }
 
     /// Return the major version of this Python version.
     pub fn python_major(&self) -> u8 {
-        let major = self.markers.python_full_version.version.release()[0];
+        let major = self.markers.python_full_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of this Python version.
     pub fn python_minor(&self) -> u8 {
-        let minor = self.markers.python_full_version.version.release()[1];
+        let minor = self.markers.python_full_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
     /// Return the patch version of this Python version.
     pub fn python_patch(&self) -> u8 {
-        let minor = self.markers.python_full_version.version.release()[2];
+        let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
 
@@ -237,13 +237,13 @@ impl Interpreter {
 
     /// Return the major version of the implementation (e.g., `CPython` or `PyPy`).
     pub fn implementation_major(&self) -> u8 {
-        let major = self.markers.implementation_version.version.release()[0];
+        let major = self.markers.implementation_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of the implementation (e.g., `CPython` or `PyPy`).
     pub fn implementation_minor(&self) -> u8 {
-        let minor = self.markers.implementation_version.version.release()[1];
+        let minor = self.markers.implementation_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
@@ -254,7 +254,7 @@ impl Interpreter {
 
     /// Returns the implementation name (e.g., `CPython` or `PyPy`).
     pub fn implementation_name(&self) -> &str {
-        &self.markers.implementation_name
+        self.markers.implementation_name()
     }
 
     /// Return the `sys.base_exec_prefix` path for this Python interpreter.
@@ -337,7 +337,7 @@ impl Interpreter {
         Layout {
             python_version: self.python_tuple(),
             sys_executable: self.sys_executable().to_path_buf(),
-            os_name: self.markers.os_name.clone(),
+            os_name: self.markers.os_name().to_string(),
             scheme: if let Some(target) = self.target.as_ref() {
                 target.scheme()
             } else {
@@ -540,7 +540,7 @@ impl InterpreterInfo {
                         if cached.timestamp == modified {
                             debug!(
                                 "Cached interpreter info for Python {}, skipping probing: {}",
-                                cached.data.markers.python_full_version,
+                                cached.data.markers.python_full_version(),
                                 executable.user_display()
                             );
                             return Ok(cached.data);
@@ -567,7 +567,7 @@ impl InterpreterInfo {
         let info = Self::query(executable, cache)?;
         debug!(
             "Found Python {} for: {}",
-            info.markers.python_full_version,
+            info.markers.python_full_version(),
             executable.display()
         );
 
@@ -670,7 +670,7 @@ mod tests {
         .unwrap();
         let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
-            interpreter.markers.python_version.version,
+            interpreter.markers.python_version().version,
             Version::from_str("3.12").unwrap()
         );
         fs::write(
@@ -683,7 +683,7 @@ mod tests {
         .unwrap();
         let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
-            interpreter.markers.python_version.version,
+            interpreter.markers.python_version().version,
             Version::from_str("3.13").unwrap()
         );
     }
