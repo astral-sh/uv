@@ -475,17 +475,6 @@ impl SourceDist {
         }
     }
 
-    #[must_use]
-    pub fn with_url(self, url: Url) -> Self {
-        match self {
-            Self::Git(dist) => Self::Git(GitSourceDist {
-                url: VerbatimUrl::unknown(url),
-                ..dist
-            }),
-            dist => dist,
-        }
-    }
-
     /// Return true if the distribution is editable.
     pub fn is_editable(&self) -> bool {
         match self {

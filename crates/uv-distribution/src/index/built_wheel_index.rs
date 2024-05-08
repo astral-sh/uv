@@ -1,6 +1,4 @@
-use distribution_types::{
-    git_reference, DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
-};
+use distribution_types::{DirectUrlSourceDist, GitSourceDist, Hashed, PathSourceDist};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
 use uv_fs::symlinks;
@@ -129,9 +127,7 @@ impl<'a> BuiltWheelIndex<'a> {
             return None;
         }
 
-        let Ok(Some(git_sha)) = git_reference(source_dist.url.to_url()) else {
-            return None;
-        };
+        let git_sha = source_dist.git.precise()?;
 
         let cache_shard = self.cache.shard(
             CacheBucket::BuiltWheels,
