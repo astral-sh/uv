@@ -1,4 +1,6 @@
-use distribution_types::{DirectUrlSourceDist, GitSourceDist, Hashed, PathSourceDist};
+use distribution_types::{
+    DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
+};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
 use uv_fs::symlinks;
