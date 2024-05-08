@@ -408,7 +408,7 @@ pub(crate) fn lower_requirement(
         if has_sources && requirement.version_or_url.is_none() && &requirement.name != project_name
         {
             warn_user_once!(
-                "Missing version constraint (e.g. a lower bound) for {}",
+                "Missing version constraint (e.g. a lower bound) for `{}`",
                 requirement.name
             );
         }
@@ -494,7 +494,7 @@ pub(crate) fn lower_requirement(
         Source::Registry { index } => match requirement.version_or_url {
             None => {
                 warn_user_once!(
-                    "Missing version constraint (e.g. a lower bound) for {}",
+                    "Missing version constraint (e.g. a lower bound) for `{}`",
                     requirement.name
                 );
                 RequirementSource::Registry {
