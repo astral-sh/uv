@@ -730,7 +730,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     Node::Editable(_package_name, local_editable) => {
                         local_editable.url.given().unwrap_or_default().to_string()
                     }
-                    ref other => other.name().to_string(),
+                    Node::Distribution(name, _, _) => name.to_string(),
                 };
 
                 let source = self.sources.get(&source_name).cloned().unwrap_or_default();

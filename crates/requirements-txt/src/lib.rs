@@ -273,7 +273,7 @@ impl EditableRequirement {
             url,
             extras,
             path,
-            source: source.map(|s| s.to_path_buf()),
+            source: source.map(Path::to_path_buf),
         })
     }
 
