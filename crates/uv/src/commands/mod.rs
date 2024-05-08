@@ -50,15 +50,12 @@ mod version;
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
     /// The command succeeded.
-    #[allow(unused)]
     Success,
 
     /// The command failed due to an error in the user input.
-    #[allow(unused)]
     Failure,
 
     /// The command failed with an unexpected error.
-    #[allow(unused)]
     Error,
 }
 
