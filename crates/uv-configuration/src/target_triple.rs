@@ -29,12 +29,13 @@ pub enum TargetTriple {
     #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-unknown-linux-gnu"))]
     X8664UnknownLinuxGnu,
 
-    /// An ARM-based macOS target, as seen on Apple Silicon devices.
+    /// An ARM-based macOS target, as seen on Apple Silicon devices, with support for the
+    /// least-recent, non-EOL macOS version (12.0).
     #[cfg_attr(feature = "clap", value(name = "aarch64-apple-darwin"))]
     #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-apple-darwin"))]
     Aarch64AppleDarwin,
 
-    /// An x86 macOS target.
+    /// An x86 macOS target, with support for the least-recent, non-EOL macOS version (12.0).
     #[cfg_attr(feature = "clap", value(name = "x86_64-apple-darwin"))]
     #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-apple-darwin"))]
     X8664AppleDarwin,
@@ -96,8 +97,8 @@ impl TargetTriple {
             ),
             Self::X8664AppleDarwin => Platform::new(
                 Os::Macos {
-                    major: 10,
-                    minor: 12,
+                    major: 12,
+                    minor: 0,
                 },
                 Arch::X86_64,
             ),
