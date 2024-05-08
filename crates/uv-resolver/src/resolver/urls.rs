@@ -69,7 +69,6 @@ impl Urls {
                         verbatim: url.clone(),
                     };
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
-                        // TODO(merge): use proper check
                         if !is_equal(&previous.verbatim, &url.verbatim) {
                             return Err(ResolveError::ConflictingUrlsDirect(
                                 requirement.name.clone(),
