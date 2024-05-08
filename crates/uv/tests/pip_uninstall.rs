@@ -498,7 +498,7 @@ fn uninstall_legacy_editable() -> Result<()> {
         .child("zstandard.egg-info")
         .child("PKG-INFO")
         .write_str(
-            "Metadata-Version: 2.2
+            "Metadata-Version: 2.1
 Name: zstandard
 Version: 0.22.0
 ",

@@ -173,7 +173,7 @@ impl InstalledDist {
                     return Ok(None);
                 }
             };
-            let metadata = match pypi_types::Metadata23::parse_pkg_info(&content) {
+            let metadata = match pypi_types::Metadata10::parse_pkg_info(&content) {
                 Ok(metadata) => metadata,
                 Err(err) => {
                     warn!("Failed to parse metadata for {path:?}: {err}");
@@ -183,7 +183,7 @@ impl InstalledDist {
 
             return Ok(Some(Self::LegacyEditable(InstalledLegacyEditable {
                 name: metadata.name,
-                version: metadata.version,
+                version: Version::from_str(&metadata.version)?,
                 egg_link: path.to_path_buf(),
                 target,
                 target_url: url,
