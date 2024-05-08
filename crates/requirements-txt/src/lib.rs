@@ -816,8 +816,9 @@ fn parse_requirement_and_hashes(
         }
     }
 
-    let requirement = RequirementsTxtRequirement::parse(requirement, source, working_dir).map_err(
-        |err| match err {
+    let requirement = RequirementsTxtRequirement::parse(requirement, working_dir)
+        .map(|requirement| requirement.with_source(source.map(Path::to_path_buf)))
+        .map_err(|err| match err {
             RequirementsTxtRequirementError::ParsedUrl(err) => {
                 RequirementsTxtParserError::ParsedUrl {
                     source: err,
@@ -841,8 +842,7 @@ fn parse_requirement_and_hashes(
                     }
                 }
             },
-        },
-    )?;
+        })?;
 
     let hashes = if has_hashes {
         parse_hashes(content, s)?

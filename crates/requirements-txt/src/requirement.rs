@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -18,6 +18,17 @@ pub enum RequirementsTxtRequirement {
     Unnamed(UnnamedRequirement),
 }
 
+impl RequirementsTxtRequirement {
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_source(self, path: Option<PathBuf>) -> Self {
+        match self {
+            Self::Named(requirement) => Self::Named(requirement.with_source(path)),
+            Self::Unnamed(requirement) => Self::Unnamed(requirement.with_source(path)),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum RequirementsTxtRequirementError {
     #[error(transparent)]
@@ -30,18 +41,16 @@ impl RequirementsTxtRequirement {
     /// Parse a requirement as seen in a `requirements.txt` file.
     pub fn parse(
         input: &str,
-        source: Option<&Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtRequirementError> {
         // Attempt to parse as a PEP 508-compliant requirement.
-        match pep508_rs::Requirement::parse(input, source, &working_dir) {
+        match pep508_rs::Requirement::parse(input, &working_dir) {
             Ok(requirement) => Ok(Self::Named(requirement)),
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     // If that fails, attempt to parse as a direct URL requirement.
                     Ok(Self::Unnamed(UnnamedRequirement::parse(
                         input,
-                        source,
                         &working_dir,
                     )?))
                 }

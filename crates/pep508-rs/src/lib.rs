@@ -16,17 +16,19 @@
 
 #![warn(missing_docs)]
 
+use cursor::Cursor;
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
-use std::fmt::{Display, Formatter};
+use std::error::Error;
+use std::fmt::{Debug, Display, Formatter};
 #[cfg(feature = "pyo3")]
 use std::hash::{Hash, Hasher};
-use std::path::Path;
-use std::str::{Chars, FromStr};
-
 #[cfg(feature = "pyo3")]
-use pep440_rs::PyVersion;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
 #[cfg(feature = "pyo3")]
 use pyo3::{
     create_exception, exceptions::PyNotImplementedError, pyclass, pyclass::CompareOp, pymethods,
@@ -35,20 +37,24 @@ use pyo3::{
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
+use url::Url;
 
 pub use marker::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
     MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
 };
-use pep440_rs::{TrackedFromStr, Version, VersionSpecifier, VersionSpecifiers};
-use uv_fs::normalize_url_path;
-// Parity with the crates.io version of pep508_rs
-use crate::verbatim_url::VerbatimUrlError;
+#[cfg(feature = "pyo3")]
+use pep440_rs::PyVersion;
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "non-pep508-extensions")]
 pub use unnamed::UnnamedRequirement;
+// Parity with the crates.io version of pep508_rs
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
-pub use verbatim_url::{expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl};
+pub use verbatim_url::{
+    expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,
+};
 
+mod cursor;
 mod marker;
 #[cfg(feature = "non-pep508-extensions")]
 mod unnamed;
@@ -56,9 +62,9 @@ mod verbatim_url;
 
 /// Error with a span attached. Not that those aren't `String` but `Vec<char>` indices.
 #[derive(Debug)]
-pub struct Pep508Error {
+pub struct Pep508Error<T: Pep508Url = VerbatimUrl> {
     /// Either we have an error string from our parser or an upstream error from `url`
-    pub message: Pep508ErrorSource,
+    pub message: Pep508ErrorSource<T>,
     /// Span start index
     pub start: usize,
     /// Span length
@@ -69,19 +75,19 @@ pub struct Pep508Error {
 
 /// Either we have an error string from our parser or an upstream error from `url`
 #[derive(Debug, Error)]
-pub enum Pep508ErrorSource {
+pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
     /// An error from our parser.
     #[error("{0}")]
     String(String),
     /// A URL parsing error.
     #[error(transparent)]
-    UrlError(#[from] VerbatimUrlError),
+    UrlError(T::Err),
     /// The version requirement is not supported.
     #[error("{0}")]
     UnsupportedRequirement(String),
 }
 
-impl Display for Pep508Error {
+impl<T: Pep508Url> Display for Pep508Error<T> {
     /// Pretty formatting with underline.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // We can use char indices here since it's a Vec<char>
@@ -115,7 +121,7 @@ impl Display for Pep508Error {
 }
 
 /// We need this to allow e.g. anyhow's `.context()`
-impl std::error::Error for Pep508Error {}
+impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<T> {}
 
 #[cfg(feature = "pyo3")]
 create_exception!(
@@ -127,8 +133,7 @@ create_exception!(
 
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
-pub struct Requirement {
+pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// The distribution name such as `numpy` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     pub name: PackageName,
@@ -138,16 +143,27 @@ pub struct Requirement {
     /// The version specifier such as `>= 2.8.1`, `== 2.8.*` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// or a url
-    pub version_or_url: Option<VersionOrUrl>,
+    pub version_or_url: Option<VersionOrUrl<T>>,
     /// The markers such as `python_version > "3.8"` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
-    /// Source of the original file (where existing)
-    pub path: Option<String>,
+    /// The source file containing the requirement.
+    pub path: Option<PathBuf>,
 }
 
-impl Display for Requirement {
+impl Requirement {
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_source(self, path: Option<PathBuf>) -> Self {
+        Self {
+            path,
+            ..self
+        }
+    }
+}
+
+impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
         if !self.extras.is_empty() {
@@ -182,18 +198,18 @@ impl Display for Requirement {
 }
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
-impl<'de> Deserialize<'de> for Requirement {
+impl<'de, T: Pep508Url + Deserialize<'de>> Deserialize<'de> for Requirement<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        TrackedFromStr::tracked_from_str(&s, None, None).map_err(de::Error::custom)
+        FromStr::from_str(&s).map_err(de::Error::custom)
     }
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-impl Serialize for Requirement {
+impl<T: Pep508Url> Serialize for Requirement<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -205,8 +221,23 @@ impl Serialize for Requirement {
 type MarkerWarning = (MarkerWarningKind, String, String);
 
 #[cfg(feature = "pyo3")]
+#[pyclass(module = "pep508", name = "Requirement")]
+#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+/// A PEP 508 dependency specifier.
+pub struct PyRequirement(Requirement);
+
+#[cfg(feature = "pyo3")]
+impl Deref for PyRequirement {
+    type Target = Requirement;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(feature = "pyo3")]
 #[pymethods]
-impl Requirement {
+impl PyRequirement {
     /// The distribution name such as `numpy` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     #[getter]
@@ -231,7 +262,10 @@ impl Requirement {
     /// Parses a PEP 440 string
     #[new]
     pub fn py_new(requirement: &str) -> PyResult<Self> {
-        Self::from_str(requirement).map_err(|err| PyPep508Error::new_err(err.to_string()))
+        Ok(Self(
+            Requirement::from_str(requirement)
+                .map_err(|err| PyPep508Error::new_err(err.to_string()))?,
+        ))
     }
 
     #[getter]
@@ -252,7 +286,7 @@ impl Requirement {
     }
 
     fn __repr__(&self) -> String {
-        format!(r#""{self}""#)
+        self.to_string()
     }
 
     fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
@@ -335,7 +369,7 @@ impl Requirement {
     }
 }
 
-impl Requirement {
+impl<T: Pep508Url> Requirement<T> {
     /// Returns `true` if the [`Version`] satisfies the [`Requirement`].
     pub fn is_satisfied_by(&self, version: &Version) -> bool {
         let Some(version_or_url) = self.version_or_url.as_ref() else {
@@ -420,35 +454,62 @@ impl Requirement {
     }
 }
 
-impl TrackedFromStr for Requirement {
-    type Err = Pep508Error;
+/// Type to parse URLs from `name @ <url>` into. Defaults to [`url::Url`].
+pub trait Pep508Url: Clone + Display + Debug {
+    /// String to URL parsing error
+    type Err: Error + Debug;
 
-    /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
-    fn tracked_from_str(
-        input: &str,
-        source: Option<&Path>,
-        working_dir: Option<&Path>,
-    ) -> Result<Self, Self::Err> {
-        parse_pep508_requirement(&mut Cursor::new(input), source, working_dir)
+    /// Parse a url from `name @ <url>`. Defaults to [`url::Url::parse_url`].
+    fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err>;
+}
+
+impl Pep508Url for Url {
+    type Err = url::ParseError;
+
+    fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
+        Url::parse(url)
     }
 }
 
-impl FromStr for Requirement {
-    type Err = Pep508Error;
+impl<T: Pep508Url> FromStr for Requirement<T> {
+    type Err = Pep508Error<T>;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::tracked_from_str(s, None, None)
+    /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        parse_pep508_requirement::<T>(&mut Cursor::new(input), None)
     }
 }
 
-impl Requirement {
+impl<T: Pep508Url> Requirement<T> {
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
-    pub fn parse(
-        input: &str,
-        source: Option<&Path>,
-        working_dir: impl AsRef<Path>,
-    ) -> Result<Self, Pep508Error> {
-        parse_pep508_requirement(&mut Cursor::new(input), source, Some(working_dir.as_ref()))
+    pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error<T>> {
+        parse_pep508_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
+    }
+
+    /// Convert a requirement with one URL type into one with another URL type.
+    ///
+    /// Example: `Requirement<Url>` to `Requirement<VerbatimUrl>`.
+    pub fn convert_url<U: Pep508Url + From<T>>(self) -> Requirement<U> {
+        let Requirement {
+            name,
+            extras,
+            version_or_url,
+            marker,
+            path,
+        } = self;
+        Requirement {
+            name,
+            extras,
+            version_or_url: match version_or_url {
+                None => None,
+                Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+                    Some(VersionOrUrl::VersionSpecifier(specifier))
+                }
+                Some(VersionOrUrl::Url(url)) => Some(VersionOrUrl::Url(U::from(url))),
+            },
+            marker,
+            path,
+        }
     }
 }
 
@@ -458,8 +519,8 @@ pub struct Extras(Vec<ExtraName>);
 
 impl Extras {
     /// Parse a list of extras.
-    pub fn parse(input: &str) -> Result<Self, Pep508Error> {
-        Ok(Self(parse_extras(&mut Cursor::new(input))?))
+    pub fn parse<T: Pep508Url>(input: &str) -> Result<Self, Pep508Error<T>> {
+        Ok(Self(parse_extras_cursor(&mut Cursor::new(input))?))
     }
 
     /// Convert the [`Extras`] into a [`Vec`] of [`ExtraName`].
@@ -470,20 +531,20 @@ impl Extras {
 
 /// The actual version specifier or URL to install.
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub enum VersionOrUrl {
+pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),
     /// A installable URL
-    Url(VerbatimUrl),
+    Url(T),
 }
 
 /// Unowned version specifier or URL to install.
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
-pub enum VersionOrUrlRef<'a> {
+pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(&'a VersionSpecifiers),
     /// A installable URL
-    Url(&'a VerbatimUrl),
+    Url(&'a T),
 }
 
 impl<'a> From<&'a VersionOrUrl> for VersionOrUrlRef<'a> {
@@ -497,137 +558,7 @@ impl<'a> From<&'a VersionOrUrl> for VersionOrUrlRef<'a> {
     }
 }
 
-/// A [`Cursor`] over a string.
-#[derive(Debug, Clone)]
-pub struct Cursor<'a> {
-    input: &'a str,
-    chars: Chars<'a>,
-    pos: usize,
-}
-
-impl<'a> Cursor<'a> {
-    /// Convert from `&str`.
-    pub fn new(input: &'a str) -> Self {
-        Self {
-            input,
-            chars: input.chars(),
-            pos: 0,
-        }
-    }
-
-    /// Returns a new cursor starting at the given position.
-    pub fn at(self, pos: usize) -> Self {
-        Self {
-            input: self.input,
-            chars: self.input[pos..].chars(),
-            pos,
-        }
-    }
-
-    /// Returns the current byte position of the cursor.
-    fn pos(&self) -> usize {
-        self.pos
-    }
-
-    /// Returns a slice over the input string.
-    fn slice(&self, start: usize, len: usize) -> &str {
-        &self.input[start..start + len]
-    }
-
-    /// Peeks the next character and position from the input stream without consuming it.
-    fn peek(&self) -> Option<(usize, char)> {
-        self.chars.clone().next().map(|char| (self.pos, char))
-    }
-
-    /// Peeks the next character from the input stream without consuming it.
-    fn peek_char(&self) -> Option<char> {
-        self.chars.clone().next()
-    }
-
-    /// Eats the next character from the input stream if it matches the given token.
-    fn eat_char(&mut self, token: char) -> Option<usize> {
-        let (start_pos, peek_char) = self.peek()?;
-        if peek_char == token {
-            self.next();
-            Some(start_pos)
-        } else {
-            None
-        }
-    }
-
-    /// Consumes whitespace from the cursor.
-    fn eat_whitespace(&mut self) {
-        while let Some(char) = self.peek_char() {
-            if char.is_whitespace() {
-                self.next();
-            } else {
-                return;
-            }
-        }
-    }
-
-    /// Returns the next character and position from the input stream and consumes it.
-    fn next(&mut self) -> Option<(usize, char)> {
-        let pos = self.pos;
-        let char = self.chars.next()?;
-        self.pos += char.len_utf8();
-        Some((pos, char))
-    }
-
-    /// Peeks over the cursor as long as the condition is met, without consuming it.
-    fn peek_while(&mut self, condition: impl Fn(char) -> bool) -> (usize, usize) {
-        let peeker = self.chars.clone();
-        let start = self.pos();
-        let len = peeker.take_while(|c| condition(*c)).count();
-        (start, len)
-    }
-
-    /// Consumes characters from the cursor as long as the condition is met.
-    fn take_while(&mut self, condition: impl Fn(char) -> bool) -> (usize, usize) {
-        let start = self.pos();
-        let mut len = 0;
-        while let Some(char) = self.peek_char() {
-            if !condition(char) {
-                break;
-            }
-
-            self.next();
-            len += char.len_utf8();
-        }
-        (start, len)
-    }
-
-    /// Consumes characters from the cursor, raising an error if it doesn't match the given token.
-    fn next_expect_char(&mut self, expected: char, span_start: usize) -> Result<(), Pep508Error> {
-        match self.next() {
-            None => Err(Pep508Error {
-                message: Pep508ErrorSource::String(format!(
-                    "Expected '{expected}', found end of dependency specification"
-                )),
-                start: span_start,
-                len: 1,
-                input: self.to_string(),
-            }),
-            Some((_, value)) if value == expected => Ok(()),
-            Some((pos, other)) => Err(Pep508Error {
-                message: Pep508ErrorSource::String(format!(
-                    "Expected '{expected}', found '{other}'"
-                )),
-                start: pos,
-                len: other.len_utf8(),
-                input: self.to_string(),
-            }),
-        }
-    }
-}
-
-impl Display for Cursor<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.input)
-    }
-}
-
-fn parse_name(cursor: &mut Cursor) -> Result<PackageName, Pep508Error> {
+fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Error<T>> {
     // https://peps.python.org/pep-0508/#names
     // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
     let start = cursor.pos();
@@ -724,7 +655,9 @@ fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
 }
 
 /// parses extras in the `[extra1,extra2] format`
-fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
+fn parse_extras_cursor<T: Pep508Url>(
+    cursor: &mut Cursor,
+) -> Result<Vec<ExtraName>, Pep508Error<T>> {
     let Some(bracket_pos) = cursor.eat_char('[') else {
         return Ok(vec![]);
     };
@@ -843,123 +776,10 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
 /// - `file:../editable/`
 /// - `../editable/`
 /// - `https://download.pytorch.org/whl/torch_stable.html`
-fn parse_url(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<VerbatimUrl, Pep508Error> {
-    // wsp*
-    cursor.eat_whitespace();
-    // <URI_reference>
-    let (start, len) = cursor.take_while(|char| !char.is_whitespace());
-    let url = cursor.slice(start, len);
-    if url.is_empty() {
-        return Err(Pep508Error {
-            message: Pep508ErrorSource::String("Expected URL".to_string()),
-            start,
-            len,
-            input: cursor.to_string(),
-        });
-    }
-
-    let url = preprocess_url(url, working_dir, cursor, start, len)?;
-
-    Ok(url)
-}
-
-/// Create a `VerbatimUrl` to represent the requirement.
-fn preprocess_url(
-    url: &str,
-    #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused))] working_dir: Option<&Path>,
-    cursor: &Cursor,
-    start: usize,
-    len: usize,
-) -> Result<VerbatimUrl, Pep508Error> {
-    // Expand environment variables in the URL.
-    let expanded = expand_env_vars(url);
-
-    if let Some((scheme, path)) = split_scheme(&expanded) {
-        match Scheme::parse(scheme) {
-            // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
-            Some(Scheme::File) => {
-                // Strip the leading slashes, along with the `localhost` host, if present.
-                let path = strip_host(path);
-
-                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                let path = normalize_url_path(path);
-
-                #[cfg(feature = "non-pep508-extensions")]
-                if let Some(working_dir) = working_dir {
-                    return Ok(VerbatimUrl::parse_path(path.as_ref(), working_dir)
-                        .with_given(url.to_string()));
-                }
-
-                Ok(VerbatimUrl::parse_absolute_path(path.as_ref())
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url.to_string()))
-            }
-            // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-            Some(_) => {
-                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                Ok(VerbatimUrl::parse_url(expanded.as_ref())
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(VerbatimUrlError::Url(err)),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url.to_string()))
-            }
-
-            // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
-            _ => {
-                #[cfg(feature = "non-pep508-extensions")]
-                if let Some(working_dir) = working_dir {
-                    return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)
-                        .with_given(url.to_string()));
-                }
-
-                Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url.to_string()))
-            }
-        }
-    } else {
-        // Ex) `../editable/`
-        #[cfg(feature = "non-pep508-extensions")]
-        if let Some(working_dir) = working_dir {
-            return Ok(
-                VerbatimUrl::parse_path(expanded.as_ref(), working_dir).with_given(url.to_string())
-            );
-        }
-
-        Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())
-            .map_err(|err| Pep508Error {
-                message: Pep508ErrorSource::UrlError(err),
-                start,
-                len,
-                input: cursor.to_string(),
-            })?
-            .with_given(url.to_string()))
-    }
-}
-
-/// Like [`parse_url`], but allows for extras to be present at the end of the URL, to comply
-/// with the non-PEP 508 extensions.
-///
-/// For example:
-/// - `https://download.pytorch.org/whl/torch_stable.html[dev]`
-/// - `../editable[dev]`
-fn parse_unnamed_url(
+fn parse_url<T: Pep508Url>(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
-) -> Result<(VerbatimUrl, Vec<ExtraName>), Pep508Error> {
+) -> Result<T, Pep508Error<T>> {
     // wsp*
     cursor.eat_whitespace();
     // <URI_reference>
@@ -974,125 +794,14 @@ fn parse_unnamed_url(
         });
     }
 
-    let url = preprocess_unnamed_url(url, working_dir, cursor, start, len)?;
+    let url = T::parse_url(url, working_dir).map_err(|err| Pep508Error {
+        message: Pep508ErrorSource::UrlError(err),
+        start,
+        len,
+        input: cursor.to_string(),
+    })?;
 
     Ok(url)
-}
-
-/// Create a `VerbatimUrl` to represent the requirement, and extracts any extras at the end of the
-/// URL, to comply with the non-PEP 508 extensions.
-fn preprocess_unnamed_url(
-    url: &str,
-    #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused))] working_dir: Option<&Path>,
-    cursor: &Cursor,
-    start: usize,
-    len: usize,
-) -> Result<(VerbatimUrl, Vec<ExtraName>), Pep508Error> {
-    // Split extras _before_ expanding the URL. We assume that the extras are not environment
-    // variables. If we parsed the extras after expanding the URL, then the verbatim representation
-    // of the URL itself would be ambiguous, since it would consist of the environment variable,
-    // which would expand to _more_ than the URL.
-    let (url, extras) = if let Some((url, extras)) = split_extras(url) {
-        (url, Some(extras))
-    } else {
-        (url, None)
-    };
-
-    // Parse the extras, if provided.
-    let extras = if let Some(extras) = extras {
-        parse_extras(&mut Cursor::new(extras)).map_err(|err| Pep508Error {
-            message: err.message,
-            start: start + url.len() + err.start,
-            len: err.len,
-            input: cursor.to_string(),
-        })?
-    } else {
-        vec![]
-    };
-
-    // Expand environment variables in the URL.
-    let expanded = expand_env_vars(url);
-
-    if let Some((scheme, path)) = split_scheme(&expanded) {
-        match Scheme::parse(scheme) {
-            // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
-            Some(Scheme::File) => {
-                // Strip the leading slashes, along with the `localhost` host, if present.
-                let path = strip_host(path);
-
-                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                let path = normalize_url_path(path);
-
-                #[cfg(feature = "non-pep508-extensions")]
-                if let Some(working_dir) = working_dir {
-                    let url = VerbatimUrl::parse_path(path.as_ref(), working_dir)
-                        .with_given(url.to_string());
-                    return Ok((url, extras));
-                }
-
-                let url = VerbatimUrl::parse_absolute_path(path.as_ref())
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url.to_string());
-                Ok((url, extras))
-            }
-            // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-            Some(_) => {
-                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                let url = VerbatimUrl::parse_url(expanded.as_ref())
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(VerbatimUrlError::Url(err)),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url.to_string());
-                Ok((url, extras))
-            }
-
-            // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
-            _ => {
-                #[cfg(feature = "non-pep508-extensions")]
-                if let Some(working_dir) = working_dir {
-                    let url = VerbatimUrl::parse_path(expanded.as_ref(), working_dir)
-                        .with_given(url.to_string());
-                    return Ok((url, extras));
-                }
-
-                let url = VerbatimUrl::parse_absolute_path(expanded.as_ref())
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url.to_string());
-                Ok((url, extras))
-            }
-        }
-    } else {
-        // Ex) `../editable/`
-        #[cfg(feature = "non-pep508-extensions")]
-        if let Some(working_dir) = working_dir {
-            let url =
-                VerbatimUrl::parse_path(expanded.as_ref(), working_dir).with_given(url.to_string());
-            return Ok((url, extras));
-        }
-
-        let url = VerbatimUrl::parse_absolute_path(expanded.as_ref())
-            .map_err(|err| Pep508Error {
-                message: Pep508ErrorSource::UrlError(err),
-                start,
-                len,
-                input: cursor.to_string(),
-            })?
-            .with_given(url.to_string());
-        Ok((url, extras))
-    }
 }
 
 /// Identify the extras in a relative URL (e.g., `../editable[dev]`).
@@ -1118,12 +827,12 @@ pub fn split_extras(given: &str) -> Option<(&str, &str)> {
 }
 
 /// PEP 440 wrapper
-fn parse_specifier(
+fn parse_specifier<T: Pep508Url>(
     cursor: &mut Cursor,
     buffer: &str,
     start: usize,
     end: usize,
-) -> Result<VersionSpecifier, Pep508Error> {
+) -> Result<VersionSpecifier, Pep508Error<T>> {
     VersionSpecifier::from_str(buffer).map_err(|err| Pep508Error {
         message: Pep508ErrorSource::String(err.to_string()),
         start,
@@ -1137,7 +846,9 @@ fn parse_specifier(
 /// ```text
 /// version_one (wsp* ',' version_one)*
 /// ```
-fn parse_version_specifier(cursor: &mut Cursor) -> Result<Option<VersionOrUrl>, Pep508Error> {
+fn parse_version_specifier<T: Pep508Url>(
+    cursor: &mut Cursor,
+) -> Result<Option<VersionOrUrl<T>>, Pep508Error<T>> {
     let mut start = cursor.pos();
     let mut specifiers = Vec::new();
     let mut buffer = String::new();
@@ -1172,9 +883,9 @@ fn parse_version_specifier(cursor: &mut Cursor) -> Result<Option<VersionOrUrl>, 
 /// ```text
 /// '(' version_one (wsp* ',' version_one)* ')'
 /// ```
-fn parse_version_specifier_parentheses(
+fn parse_version_specifier_parentheses<T: Pep508Url>(
     cursor: &mut Cursor,
-) -> Result<Option<VersionOrUrl>, Pep508Error> {
+) -> Result<Option<VersionOrUrl<T>>, Pep508Error<T>> {
     let brace_pos = cursor.pos();
     cursor.next();
     // Makes for slightly better error underline
@@ -1209,11 +920,10 @@ fn parse_version_specifier_parentheses(
 }
 
 /// Parse a PEP 508-compliant [dependency specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers).
-fn parse_pep508_requirement(
+fn parse_pep508_requirement<T: Pep508Url>(
     cursor: &mut Cursor,
-    source: Option<&Path>,
     working_dir: Option<&Path>,
-) -> Result<Requirement, Pep508Error> {
+) -> Result<Requirement<T>, Pep508Error<T>> {
     let start = cursor.pos();
 
     // Technically, the grammar is:
@@ -1235,7 +945,7 @@ fn parse_pep508_requirement(
     // wsp*
     cursor.eat_whitespace();
     // extras?
-    let extras = parse_extras(cursor)?;
+    let extras = parse_extras_cursor(cursor)?;
     // wsp*
     cursor.eat_whitespace();
 
@@ -1257,7 +967,7 @@ fn parse_pep508_requirement(
             // a package name. pip supports this in `requirements.txt`, but it doesn't adhere to
             // the PEP 508 grammar.
             let mut clone = cursor.clone().at(start);
-            return if parse_url(&mut clone, working_dir).is_ok() {
+            return if parse_url::<T>(&mut clone, working_dir).is_ok() {
                 Err(Pep508Error {
                     message: Pep508ErrorSource::UnsupportedRequirement("URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).".to_string()),
                     start,
@@ -1277,7 +987,7 @@ fn parse_pep508_requirement(
         }
     };
 
-    let requirement_end = cursor.pos;
+    let requirement_end = cursor.pos();
 
     // wsp*
     cursor.eat_whitespace();
@@ -1285,7 +995,7 @@ fn parse_pep508_requirement(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        Some(marker::parse_markers_impl(cursor)?)
+        Some(marker::parse_markers_cursor(cursor)?)
     } else {
         None
     };
@@ -1293,70 +1003,7 @@ fn parse_pep508_requirement(
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
         if let Some(VersionOrUrl::Url(url)) = requirement_kind {
-            if let Some(given) = url.given() {
-                if given.ends_with(';') && marker.is_none() {
-                    return Err(Pep508Error {
-                        message: Pep508ErrorSource::String(
-                            "Missing space before ';', the end of the URL is ambiguous".to_string(),
-                        ),
-                        start: requirement_end - ';'.len_utf8(),
-                        len: ';'.len_utf8(),
-                        input: cursor.to_string(),
-                    });
-                }
-            }
-        }
-        let message = if marker.is_none() {
-            format!(r#"Expected end of input or ';', found '{char}'"#)
-        } else {
-            format!(r#"Expected end of input, found '{char}'"#)
-        };
-        return Err(Pep508Error {
-            message: Pep508ErrorSource::String(message),
-            start: pos,
-            len: char.len_utf8(),
-            input: cursor.to_string(),
-        });
-    }
-
-    Ok(Requirement {
-        name,
-        extras,
-        version_or_url: requirement_kind,
-        marker,
-        path: source.map(|p| p.to_string_lossy().to_string()),
-    })
-}
-
-/// Parse a PEP 508-like direct URL specifier without a package name.
-///
-/// Unlike pip, we allow extras on URLs and paths.
-fn parse_unnamed_requirement(
-    cursor: &mut Cursor,
-    source: Option<&Path>,
-    working_dir: Option<&Path>,
-) -> Result<UnnamedRequirement, Pep508Error> {
-    cursor.eat_whitespace();
-
-    // Parse the URL itself, along with any extras.
-    let (url, extras) = parse_unnamed_url(cursor, working_dir)?;
-    let requirement_end = cursor.pos;
-
-    // wsp*
-    cursor.eat_whitespace();
-    // quoted_marker?
-    let marker = if cursor.peek_char() == Some(';') {
-        // Skip past the semicolon
-        cursor.next();
-        Some(marker::parse_markers_impl(cursor)?)
-    } else {
-        None
-    };
-    // wsp*
-    cursor.eat_whitespace();
-    if let Some((pos, char)) = cursor.next() {
-        if let Some(given) = url.given() {
-            if given.ends_with(';') && marker.is_none() {
+            if marker.is_none() && url.to_string().ends_with(';') {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(
                         "Missing space before ';', the end of the URL is ambiguous".to_string(),
@@ -1380,11 +1027,11 @@ fn parse_unnamed_requirement(
         });
     }
 
-    Ok(UnnamedRequirement {
-        url,
+    Ok(Requirement {
+        name,
         extras,
+        version_or_url: requirement_kind,
         marker,
-        path: source.map(|p| p.to_string_lossy().to_string()),
     })
 }
 
@@ -1408,7 +1055,7 @@ pub fn python_module(py: Python<'_>, m: &pyo3::Bound<'_, PyModule>) -> PyResult<
     m.add_class::<PyVersion>()?;
     m.add_class::<VersionSpecifier>()?;
 
-    m.add_class::<Requirement>()?;
+    m.add_class::<PyRequirement>()?;
     m.add_class::<MarkerEnvironment>()?;
     m.add("Pep508Error", py.get_type_bound::<PyPep508Error>())?;
     Ok(())
@@ -1421,27 +1068,27 @@ mod tests {
     use std::str::FromStr;
 
     use insta::assert_snapshot;
+    use url::Url;
 
     use pep440_rs::{Operator, Version, VersionPattern, VersionSpecifier};
     use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
+    use crate::cursor::Cursor;
     use crate::marker::{
-        parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
+        parse_markers_cursor, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
-    use crate::{
-        parse_pep508_requirement, Cursor, Pep508Error, Requirement, TrackedFromStr,
-        UnnamedRequirement, VerbatimUrl, VersionOrUrl,
-    };
+    use crate::{Requirement, VerbatimUrl, VersionOrUrl};
 
-    fn parse_pepe508_err(input: &str) -> String {
-        parse_pep508_requirement(&mut Cursor::new(input), None, None)
+    fn parse_pep508_err(input: &str) -> String {
+        Requirement::<VerbatimUrl>::from_str(input)
             .unwrap_err()
             .to_string()
     }
 
+    #[cfg(feature = "non-pep508-extensions")]
     fn parse_unnamed_err(input: &str) -> String {
-        UnnamedRequirement::tracked_from_str(input, None, None)
+        crate::UnnamedRequirement::from_str(input)
             .unwrap_err()
             .to_string()
     }
@@ -1451,12 +1098,9 @@ mod tests {
     fn test_preprocess_url_windows() {
         use std::path::PathBuf;
 
-        let actual = crate::preprocess_url(
-            "file:///C:/Users/ferris/wheel-0.42.0.tar.gz",
+        let actual = crate::parse_url::<VerbatimUrl>(
+            &mut Cursor::new("file:///C:/Users/ferris/wheel-0.42.0.tar.gz"),
             None,
-            &Cursor::new(""),
-            0,
-            0,
         )
         .unwrap()
         .to_file_path();
@@ -1467,7 +1111,7 @@ mod tests {
     #[test]
     fn error_empty() {
         assert_snapshot!(
-            parse_pepe508_err(""),
+            parse_pep508_err(""),
             @r"
         Empty field is not allowed for PEP508
 
@@ -1478,7 +1122,7 @@ mod tests {
     #[test]
     fn error_start() {
         assert_snapshot!(
-            parse_pepe508_err("_name"),
+            parse_pep508_err("_name"),
             @"
             Expected package name starting with an alphanumeric character, found '_'
             _name
@@ -1489,7 +1133,7 @@ mod tests {
     #[test]
     fn error_end() {
         assert_snapshot!(
-            parse_pepe508_err("name_"),
+            parse_pep508_err("name_"),
             @"
             Package name must end with an alphanumeric character, not '_'
             name_
@@ -1500,7 +1144,7 @@ mod tests {
     #[test]
     fn basic_examples() {
         let input = r"requests[security,tests]>=2.8.1,==2.8.* ; python_version < '2.7'";
-        let requests = Requirement::tracked_from_str(input, None, None).unwrap();
+        let requests = Requirement::<Url>::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
             name: PackageName::from_str("requests").unwrap(),
@@ -1529,51 +1173,48 @@ mod tests {
                 operator: MarkerOperator::LessThan,
                 r_value: MarkerValue::QuotedString("2.7".to_string()),
             })),
-            path: None,
         };
         assert_eq!(requests, expected);
     }
 
     #[test]
     fn parenthesized_single() {
-        let numpy = Requirement::tracked_from_str("numpy ( >=1.19 )", None, None).unwrap();
+        let numpy = Requirement::<Url>::from_str("numpy ( >=1.19 )").unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn parenthesized_double() {
-        let numpy = Requirement::tracked_from_str("numpy ( >=1.19, <2.0 )", None, None).unwrap();
+        let numpy = Requirement::<Url>::from_str("numpy ( >=1.19, <2.0 )").unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn versions_single() {
-        let numpy = Requirement::tracked_from_str("numpy >=1.19 ", None, None).unwrap();
+        let numpy = Requirement::<Url>::from_str("numpy >=1.19 ").unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn versions_double() {
-        let numpy = Requirement::tracked_from_str("numpy >=1.19, <2.0 ", None, None).unwrap();
+        let numpy = Requirement::<Url>::from_str("numpy >=1.19, <2.0 ").unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
+    #[cfg(feature = "non-pep508-extensions")]
     fn direct_url_no_extras() {
-        let numpy = UnnamedRequirement::tracked_from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl", None, None).unwrap();
+        let numpy = crate::UnnamedRequirement::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
         assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
         assert_eq!(numpy.extras, vec![]);
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(all(unix, feature = "non-pep508-extensions"))]
     fn direct_url_extras() {
-        let numpy = UnnamedRequirement::tracked_from_str(
-            "/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]",
-            None,
-            None,
-        )
-        .unwrap();
+        let numpy =
+            crate::UnnamedRequirement::from_str("/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]")
+                .unwrap();
         assert_eq!(
             numpy.url.to_string(),
             "file:///path/to/numpy-1.26.4-cp312-cp312-win32.whl"
@@ -1582,12 +1223,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "non-pep508-extensions"))]
     fn direct_url_extras() {
-        let numpy = UnnamedRequirement::tracked_from_str(
+        let numpy = crate::UnnamedRequirement::from_str(
             "C:\\path\\to\\numpy-1.26.4-cp312-cp312-win32.whl[dev]",
-            None,
-            None,
         )
         .unwrap();
         assert_eq!(
@@ -1600,7 +1239,7 @@ mod tests {
     #[test]
     fn error_extras_eof1() {
         assert_snapshot!(
-            parse_pepe508_err("black["),
+            parse_pep508_err("black["),
             @"
             Missing closing bracket (expected ']', found end of dependency specification)
             black[
@@ -1611,7 +1250,7 @@ mod tests {
     #[test]
     fn error_extras_eof2() {
         assert_snapshot!(
-            parse_pepe508_err("black[d"),
+            parse_pep508_err("black[d"),
             @"
             Missing closing bracket (expected ']', found end of dependency specification)
             black[d
@@ -1622,7 +1261,7 @@ mod tests {
     #[test]
     fn error_extras_eof3() {
         assert_snapshot!(
-            parse_pepe508_err("black[d,"),
+            parse_pep508_err("black[d,"),
             @"
             Missing closing bracket (expected ']', found end of dependency specification)
             black[d,
@@ -1633,7 +1272,7 @@ mod tests {
     #[test]
     fn error_extras_illegal_start1() {
         assert_snapshot!(
-            parse_pepe508_err("black[ö]"),
+            parse_pep508_err("black[ö]"),
             @"
             Expected an alphanumeric character starting the extra name, found 'ö'
             black[ö]
@@ -1644,7 +1283,7 @@ mod tests {
     #[test]
     fn error_extras_illegal_start2() {
         assert_snapshot!(
-            parse_pepe508_err("black[_d]"),
+            parse_pep508_err("black[_d]"),
             @"
             Expected an alphanumeric character starting the extra name, found '_'
             black[_d]
@@ -1655,7 +1294,7 @@ mod tests {
     #[test]
     fn error_extras_illegal_start3() {
         assert_snapshot!(
-            parse_pepe508_err("black[,]"),
+            parse_pep508_err("black[,]"),
             @"
             Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
             black[,]
@@ -1666,7 +1305,7 @@ mod tests {
     #[test]
     fn error_extras_illegal_character() {
         assert_snapshot!(
-            parse_pepe508_err("black[jüpyter]"),
+            parse_pep508_err("black[jüpyter]"),
             @"
             Invalid character in extras name, expected an alphanumeric character, '-', '_', '.', ',' or ']', found 'ü'
             black[jüpyter]
@@ -1676,13 +1315,13 @@ mod tests {
 
     #[test]
     fn error_extras1() {
-        let numpy = Requirement::tracked_from_str("black[d]", None, None).unwrap();
+        let numpy = Requirement::<Url>::from_str("black[d]").unwrap();
         assert_eq!(numpy.extras, vec![ExtraName::from_str("d").unwrap()]);
     }
 
     #[test]
     fn error_extras2() {
-        let numpy = Requirement::tracked_from_str("black[d,jupyter]", None, None).unwrap();
+        let numpy = Requirement::<Url>::from_str("black[d,jupyter]").unwrap();
         assert_eq!(
             numpy.extras,
             vec![
@@ -1694,20 +1333,20 @@ mod tests {
 
     #[test]
     fn empty_extras() {
-        let black = Requirement::tracked_from_str("black[]", None, None).unwrap();
+        let black = Requirement::<Url>::from_str("black[]").unwrap();
         assert_eq!(black.extras, vec![]);
     }
 
     #[test]
     fn empty_extras_with_spaces() {
-        let black = Requirement::tracked_from_str("black[  ]", None, None).unwrap();
+        let black = Requirement::<Url>::from_str("black[  ]").unwrap();
         assert_eq!(black.extras, vec![]);
     }
 
     #[test]
     fn error_extra_with_trailing_comma() {
         assert_snapshot!(
-            parse_pepe508_err("black[d,]"),
+            parse_pep508_err("black[d,]"),
             @"
             Expected an alphanumeric character starting the extra name, found ']'
             black[d,]
@@ -1718,7 +1357,7 @@ mod tests {
     #[test]
     fn error_parenthesized_pep440() {
         assert_snapshot!(
-            parse_pepe508_err("numpy ( ><1.19 )"),
+            parse_pep508_err("numpy ( ><1.19 )"),
             @"
             no such comparison operator \"><\", must be one of ~= == != <= >= < > ===
             numpy ( ><1.19 )
@@ -1729,7 +1368,7 @@ mod tests {
     #[test]
     fn error_parenthesized_parenthesis() {
         assert_snapshot!(
-            parse_pepe508_err("numpy ( >=1.19"),
+            parse_pep508_err("numpy ( >=1.19"),
             @"
             Missing closing parenthesis (expected ')', found end of dependency specification)
             numpy ( >=1.19
@@ -1740,7 +1379,7 @@ mod tests {
     #[test]
     fn error_whats_that() {
         assert_snapshot!(
-            parse_pepe508_err("numpy % 1.16"),
+            parse_pep508_err("numpy % 1.16"),
             @"
             Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `%`
             numpy % 1.16
@@ -1751,15 +1390,14 @@ mod tests {
     #[test]
     fn url() {
         let pip_url =
-            Requirement::tracked_from_str("pip @ https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686", None, None)
+            Requirement::from_str("pip @ https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686")
                 .unwrap();
         let url = "https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686";
         let expected = Requirement {
             name: PackageName::from_str("pip").unwrap(),
             extras: vec![],
             marker: None,
-            version_or_url: Some(VersionOrUrl::Url(VerbatimUrl::from_str(url).unwrap())),
-            path: None,
+            version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
         };
         assert_eq!(pip_url, expected);
     }
@@ -1767,7 +1405,7 @@ mod tests {
     #[test]
     fn test_marker_parsing() {
         let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
-        let actual = parse_markers_impl(&mut Cursor::new(marker)).unwrap();
+        let actual = parse_markers_cursor::<Url>(&mut Cursor::new(marker)).unwrap();
         let expected = MarkerTree::And(vec![
             MarkerTree::Expression(MarkerExpression {
                 l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
@@ -1801,13 +1439,13 @@ mod tests {
 
     #[test]
     fn name_and_marker() {
-        Requirement::tracked_from_str(r#"numpy; sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython')"#, None, None).unwrap();
+        Requirement::<Url>::from_str(r#"numpy; sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython')"#).unwrap();
     }
 
     #[test]
     fn error_marker_incomplete1() {
         assert_snapshot!(
-            parse_pepe508_err(r"numpy; sys_platform"),
+            parse_pep508_err(r"numpy; sys_platform"),
             @"
                 Expected a valid marker operator (such as '>=' or 'not in'), found ''
                 numpy; sys_platform
@@ -1818,7 +1456,7 @@ mod tests {
     #[test]
     fn error_marker_incomplete2() {
         assert_snapshot!(
-            parse_pepe508_err(r"numpy; sys_platform =="),
+            parse_pep508_err(r"numpy; sys_platform =="),
             @r"
             Expected marker value, found end of dependency specification
             numpy; sys_platform ==
@@ -1829,7 +1467,7 @@ mod tests {
     #[test]
     fn error_marker_incomplete3() {
         assert_snapshot!(
-            parse_pepe508_err(r#"numpy; sys_platform == "win32" or"#),
+            parse_pep508_err(r#"numpy; sys_platform == "win32" or"#),
             @r#"
             Expected marker value, found end of dependency specification
             numpy; sys_platform == "win32" or
@@ -1840,7 +1478,7 @@ mod tests {
     #[test]
     fn error_marker_incomplete4() {
         assert_snapshot!(
-            parse_pepe508_err(r#"numpy; sys_platform == "win32" or (os_name == "linux""#),
+            parse_pep508_err(r#"numpy; sys_platform == "win32" or (os_name == "linux""#),
             @r#"
             Expected ')', found end of dependency specification
             numpy; sys_platform == "win32" or (os_name == "linux"
@@ -1851,7 +1489,7 @@ mod tests {
     #[test]
     fn error_marker_incomplete5() {
         assert_snapshot!(
-            parse_pepe508_err(r#"numpy; sys_platform == "win32" or (os_name == "linux" and"#),
+            parse_pep508_err(r#"numpy; sys_platform == "win32" or (os_name == "linux" and"#),
             @r#"
             Expected marker value, found end of dependency specification
             numpy; sys_platform == "win32" or (os_name == "linux" and
@@ -1862,7 +1500,7 @@ mod tests {
     #[test]
     fn error_pep440() {
         assert_snapshot!(
-            parse_pepe508_err(r"numpy >=1.1.*"),
+            parse_pep508_err(r"numpy >=1.1.*"),
             @r"
             Operator >= cannot be used with a wildcard version specifier
             numpy >=1.1.*
@@ -1873,7 +1511,7 @@ mod tests {
     #[test]
     fn error_no_name() {
         assert_snapshot!(
-            parse_pepe508_err(r"==0.0"),
+            parse_pep508_err(r"==0.0"),
             @r"
         Expected package name starting with an alphanumeric character, found '='
         ==0.0
@@ -1885,7 +1523,7 @@ mod tests {
     #[test]
     fn error_unnamedunnamed_url() {
         assert_snapshot!(
-            parse_pepe508_err(r"git+https://github.com/pallets/flask.git"),
+            parse_pep508_err(r"git+https://github.com/pallets/flask.git"),
             @"
             URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
             git+https://github.com/pallets/flask.git
@@ -1896,7 +1534,7 @@ mod tests {
     #[test]
     fn error_unnamed_file_path() {
         assert_snapshot!(
-            parse_pepe508_err(r"/path/to/flask.tar.gz"),
+            parse_pep508_err(r"/path/to/flask.tar.gz"),
             @r###"
         URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ /path/to/file`).
         /path/to/flask.tar.gz
@@ -1908,7 +1546,7 @@ mod tests {
     #[test]
     fn error_no_comma_between_extras() {
         assert_snapshot!(
-            parse_pepe508_err(r"name[bar baz]"),
+            parse_pep508_err(r"name[bar baz]"),
             @"
             Expected either ',' (separating extras) or ']' (ending the extras section), found 'b'
             name[bar baz]
@@ -1919,7 +1557,7 @@ mod tests {
     #[test]
     fn error_extra_comma_after_extras() {
         assert_snapshot!(
-            parse_pepe508_err(r"name[bar, baz,]"),
+            parse_pep508_err(r"name[bar, baz,]"),
             @"
             Expected an alphanumeric character starting the extra name, found ']'
             name[bar, baz,]
@@ -1930,7 +1568,7 @@ mod tests {
     #[test]
     fn error_extras_not_closed() {
         assert_snapshot!(
-            parse_pepe508_err(r"name[bar, baz >= 1.0"),
+            parse_pep508_err(r"name[bar, baz >= 1.0"),
             @"
             Expected either ',' (separating extras) or ']' (ending the extras section), found '>'
             name[bar, baz >= 1.0
@@ -1941,7 +1579,7 @@ mod tests {
     #[test]
     fn error_no_space_after_url() {
         assert_snapshot!(
-            parse_pepe508_err(r"name @ https://example.com/; extra == 'example'"),
+            parse_pep508_err(r"name @ https://example.com/; extra == 'example'"),
             @"
             Missing space before ';', the end of the URL is ambiguous
             name @ https://example.com/; extra == 'example'
@@ -1952,7 +1590,7 @@ mod tests {
     #[test]
     fn error_name_at_nothing() {
         assert_snapshot!(
-            parse_pepe508_err(r"name @"),
+            parse_pep508_err(r"name @"),
             @"
             Expected URL
             name @
@@ -1963,7 +1601,7 @@ mod tests {
     #[test]
     fn test_error_invalid_marker_key() {
         assert_snapshot!(
-            parse_pepe508_err(r"name; invalid_name"),
+            parse_pep508_err(r"name; invalid_name"),
             @"
             Expected a valid marker name, found 'invalid_name'
             name; invalid_name
@@ -1974,7 +1612,7 @@ mod tests {
     #[test]
     fn error_markers_invalid_order() {
         assert_snapshot!(
-            parse_pepe508_err("name; '3.7' <= invalid_name"),
+            parse_pep508_err("name; '3.7' <= invalid_name"),
             @"
             Expected a valid marker name, found 'invalid_name'
             name; '3.7' <= invalid_name
@@ -1985,7 +1623,7 @@ mod tests {
     #[test]
     fn error_markers_notin() {
         assert_snapshot!(
-            parse_pepe508_err("name; '3.7' notin python_version"),
+            parse_pep508_err("name; '3.7' notin python_version"),
             @"
             Expected a valid marker operator (such as '>=' or 'not in'), found 'notin'
             name; '3.7' notin python_version
@@ -1996,7 +1634,7 @@ mod tests {
     #[test]
     fn error_markers_inpython_version() {
         assert_snapshot!(
-            parse_pepe508_err("name; '3.6'inpython_version"),
+            parse_pep508_err("name; '3.6'inpython_version"),
             @"
             Expected a valid marker operator (such as '>=' or 'not in'), found 'inpython_version'
             name; '3.6'inpython_version
@@ -2007,7 +1645,7 @@ mod tests {
     #[test]
     fn error_markers_not_python_version() {
         assert_snapshot!(
-            parse_pepe508_err("name; '3.7' not python_version"),
+            parse_pep508_err("name; '3.7' not python_version"),
             @"
             Expected 'i', found 'p'
             name; '3.7' not python_version
@@ -2018,7 +1656,7 @@ mod tests {
     #[test]
     fn error_markers_invalid_operator() {
         assert_snapshot!(
-            parse_pepe508_err("name; '3.7' ~ python_version"),
+            parse_pep508_err("name; '3.7' ~ python_version"),
             @"
             Expected a valid marker operator (such as '>=' or 'not in'), found '~'
             name; '3.7' ~ python_version
@@ -2029,7 +1667,7 @@ mod tests {
     #[test]
     fn error_invalid_prerelease() {
         assert_snapshot!(
-            parse_pepe508_err("name==1.0.org1"),
+            parse_pep508_err("name==1.0.org1"),
             @r###"
         after parsing '1.0', found '.org1', which is not part of a valid version
         name==1.0.org1
@@ -2041,7 +1679,7 @@ mod tests {
     #[test]
     fn error_no_version_value() {
         assert_snapshot!(
-            parse_pepe508_err("name=="),
+            parse_pep508_err("name=="),
             @"
             Unexpected end of version specifier, expected version
             name==
@@ -2052,7 +1690,7 @@ mod tests {
     #[test]
     fn error_no_version_operator() {
         assert_snapshot!(
-            parse_pepe508_err("name 1.0"),
+            parse_pep508_err("name 1.0"),
             @"
             Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `1`
             name 1.0
@@ -2063,7 +1701,7 @@ mod tests {
     #[test]
     fn error_random_char() {
         assert_snapshot!(
-            parse_pepe508_err("name >= 1.0 #"),
+            parse_pep508_err("name >= 1.0 #"),
             @"
             Trailing `#` is not allowed
             name >= 1.0 #
@@ -2072,6 +1710,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "non-pep508-extensions")]
     fn error_invalid_extra_unnamed_url() {
         assert_snapshot!(
             parse_unnamed_err("/foo-3.0.0-py3-none-any.whl[d,]"),
@@ -2096,24 +1735,23 @@ mod tests {
 
         for requirement in requirements {
             assert_eq!(
-                Requirement::parse(requirement, None, &cwd).is_ok(),
+                Requirement::<VerbatimUrl>::parse(requirement, &cwd).is_ok(),
                 cfg!(feature = "non-pep508-extensions"),
                 "{}: {:?}",
                 requirement,
-                Requirement::parse(requirement, None, &cwd)
+                Requirement::<VerbatimUrl>::parse(requirement, &cwd)
             );
         }
     }
 
     #[test]
     fn no_space_after_operator() {
-        let requirement =
-            Requirement::tracked_from_str("pytest;'4.0'>=python_version", None, None).unwrap();
+        let requirement = Requirement::<Url>::from_str("pytest;'4.0'>=python_version").unwrap();
         assert_eq!(requirement.to_string(), "pytest ; '4.0' >= python_version");
     }
 
     #[test]
-    fn path_with_fragment() -> Result<(), Pep508Error> {
+    fn path_with_fragment() {
         let requirements = if cfg!(windows) {
             &[
                 "wheel @ file:///C:/Users/ferris/wheel-0.42.0.whl#hash=somehash",
@@ -2128,8 +1766,9 @@ mod tests {
 
         for requirement in requirements {
             // Extract the URL.
-            let Some(VersionOrUrl::Url(url)) =
-                Requirement::tracked_from_str(requirement, None, None)?.version_or_url
+            let Some(VersionOrUrl::Url(url)) = Requirement::<VerbatimUrl>::from_str(requirement)
+                .unwrap()
+                .version_or_url
             else {
                 unreachable!("Expected a URL")
             };
@@ -2142,39 +1781,27 @@ mod tests {
                 url.path()
             );
         }
-
-        Ok(())
     }
 
     #[test]
     fn add_extra_marker() -> Result<(), InvalidNameError> {
-        let requirement = Requirement::tracked_from_str("pytest", None, None).unwrap();
+        let requirement = Requirement::<Url>::from_str("pytest").unwrap();
+        let expected = Requirement::<Url>::from_str("pytest; extra == 'dotenv'").unwrap();
+        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        assert_eq!(actual, expected);
+
+        let requirement = Requirement::<Url>::from_str("pytest; '4.0' >= python_version").unwrap();
         let expected =
-            Requirement::tracked_from_str("pytest; extra == 'dotenv'", None, None).unwrap();
+            Requirement::from_str("pytest; '4.0' >= python_version and extra == 'dotenv'").unwrap();
         let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
         assert_eq!(actual, expected);
 
-        let requirement =
-            Requirement::tracked_from_str("pytest; '4.0' >= python_version", None, None).unwrap();
-        let expected = Requirement::tracked_from_str(
-            "pytest; '4.0' >= python_version and extra == 'dotenv'",
-            None,
-            None,
-        )
-        .unwrap();
-        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
-        assert_eq!(actual, expected);
-
-        let requirement = Requirement::tracked_from_str(
+        let requirement = Requirement::<Url>::from_str(
             "pytest; '4.0' >= python_version or sys_platform == 'win32'",
-            None,
-            None,
         )
         .unwrap();
-        let expected = Requirement::tracked_from_str(
+        let expected = Requirement::from_str(
             "pytest; ('4.0' >= python_version or sys_platform == 'win32') and extra == 'dotenv'",
-            None,
-            None,
         )
         .unwrap();
         let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);

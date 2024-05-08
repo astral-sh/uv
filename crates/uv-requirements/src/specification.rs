@@ -63,9 +63,8 @@ impl RequirementsSpecification {
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
-                let requirement =
-                    RequirementsTxtRequirement::parse(name, None, std::env::current_dir()?)
-                        .with_context(|| format!("Failed to parse `{name}`"))?;
+                let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
+                    .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
                     requirements: vec![UnresolvedRequirementSpecification::try_from(
