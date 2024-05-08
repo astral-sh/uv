@@ -411,6 +411,257 @@ impl MarkerEnvironment {
     }
 }
 
+/// APIs for retrieving specific parts of a marker environment.
+impl MarkerEnvironment {
+    /// Returns the name of the Python implementation for this environment.
+    ///
+    /// This is equivalent to `sys.implementation.name`.
+    ///
+    /// Some example values are: `cpython`.
+    #[inline]
+    pub fn implementation_name(&self) -> &str {
+        &self.implementation_name
+    }
+
+    /// Returns the Python implementation version for this environment.
+    ///
+    /// This value is derived from `sys.implementation.version`. See [PEP 508
+    /// environment markers] for full details.
+    ///
+    /// This is equivalent to `sys.implementation.name`.
+    ///
+    /// Some example values are: `3.4.0`, `3.5.0b1`.
+    ///
+    /// [PEP 508 environment markers]: https://peps.python.org/pep-0508/#environment-markers
+    #[inline]
+    pub fn implementation_version(&self) -> &StringVersion {
+        &self.implementation_version
+    }
+
+    /// Returns the name of the operating system for this environment.
+    ///
+    /// This is equivalent to `os.name`.
+    ///
+    /// Some example values are: `posix`, `java`.
+    #[inline]
+    pub fn os_name(&self) -> &str {
+        &self.os_name
+    }
+
+    /// Returns the name of the machine for this environment's platform.
+    ///
+    /// This is equivalent to `platform.machine()`.
+    ///
+    /// Some example values are: `x86_64`.
+    #[inline]
+    pub fn platform_machine(&self) -> &str {
+        &self.platform_machine
+    }
+
+    /// Returns the name of the Python implementation for this environment's
+    /// platform.
+    ///
+    /// This is equivalent to `platform.python_implementation()`.
+    ///
+    /// Some example values are: `CPython`, `Jython`.
+    #[inline]
+    pub fn platform_python_implementation(&self) -> &str {
+        &self.platform_python_implementation
+    }
+
+    /// Returns the release for this environment's platform.
+    ///
+    /// This is equivalent to `platform.release()`.
+    ///
+    /// Some example values are: `3.14.1-x86_64-linode39`, `14.5.0`, `1.8.0_51`.
+    #[inline]
+    pub fn platform_release(&self) -> &str {
+        &self.platform_release
+    }
+
+    /// Returns the system for this environment's platform.
+    ///
+    /// This is equivalent to `platform.system()`.
+    ///
+    /// Some example values are: `Linux`, `Windows`, `Java`.
+    #[inline]
+    pub fn platform_system(&self) -> &str {
+        &self.platform_system
+    }
+
+    /// Returns the version for this environment's platform.
+    ///
+    /// This is equivalent to `platform.version()`.
+    ///
+    /// Some example values are: `#1 SMP Fri Apr 25 13:07:35 EDT 2014`,
+    /// `Java HotSpot(TM) 64-Bit Server VM, 25.51-b03, Oracle Corporation`,
+    /// `Darwin Kernel Version 14.5.0: Wed Jul 29 02:18:53 PDT 2015;
+    /// root:xnu-2782.40.9~2/RELEASE_X86_64`.
+    #[inline]
+    pub fn platform_version(&self) -> &str {
+        &self.platform_version
+    }
+
+    /// Returns the full version of Python for this environment.
+    ///
+    /// This is equivalent to `platform.python_version()`.
+    ///
+    /// Some example values are: `3.4.0`, `3.5.0b1`.
+    #[inline]
+    pub fn python_full_version(&self) -> &StringVersion {
+        &self.python_full_version
+    }
+
+    /// Returns the version of Python for this environment.
+    ///
+    /// This is equivalent to `'.'.join(platform.python_version_tuple()[:2])`.
+    ///
+    /// Some example values are: `3.4`, `2.7`.
+    #[inline]
+    pub fn python_version(&self) -> &StringVersion {
+        &self.python_version
+    }
+
+    /// Returns the name of the system platform for this environment.
+    ///
+    /// This is equivalent to `sys.platform`.
+    ///
+    /// Some example values are: `linux`, `linux2`, `darwin`, `java1.8.0_51`
+    /// (note that `linux` is from Python3 and `linux2` from Python2).
+    #[inline]
+    pub fn sys_platform(&self) -> &str {
+        &self.sys_platform
+    }
+}
+
+/// APIs for setting specific parts of a marker environment.
+impl MarkerEnvironment {
+    /// Set the name of the Python implementation for this environment.
+    ///
+    /// See also [`MarkerEnvironment::implementation_name`].
+    #[inline]
+    pub fn with_implementation_name(self, value: impl Into<String>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            implementation_name: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the Python implementation version for this environment.
+    ///
+    /// See also [`MarkerEnvironment::implementation_version`].
+    #[inline]
+    pub fn with_implementation_version(self, value: impl Into<StringVersion>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            implementation_version: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the name of the operating system for this environment.
+    ///
+    /// See also [`MarkerEnvironment::os_name`].
+    #[inline]
+    pub fn with_os_name(self, value: impl Into<String>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            os_name: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the name of the machine for this environment's platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_machine`].
+    #[inline]
+    pub fn with_platform_machine(self, value: impl Into<String>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            platform_machine: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the name of the Python implementation for this environment's
+    /// platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_python_implementation`].
+    #[inline]
+    pub fn with_platform_python_implementation(
+        self,
+        value: impl Into<String>,
+    ) -> MarkerEnvironment {
+        MarkerEnvironment {
+            platform_python_implementation: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the release for this environment's platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_release`].
+    #[inline]
+    pub fn with_platform_release(self, value: impl Into<String>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            platform_release: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the system for this environment's platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_system`].
+    #[inline]
+    pub fn with_platform_system(self, value: impl Into<String>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            platform_system: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the version for this environment's platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_version`].
+    #[inline]
+    pub fn with_platform_version(self, value: impl Into<String>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            platform_version: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the full version of Python for this environment.
+    ///
+    /// See also [`MarkerEnvironment::python_full_version`].
+    #[inline]
+    pub fn with_python_full_version(self, value: impl Into<StringVersion>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            python_full_version: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the version of Python for this environment.
+    ///
+    /// See also [`MarkerEnvironment::python_full_version`].
+    #[inline]
+    pub fn with_python(self, value: impl Into<StringVersion>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            python_version: value.into(),
+            ..self
+        }
+    }
+
+    /// Set the name of the system platform for this environment.
+    ///
+    /// See also [`MarkerEnvironment::sys_platform`].
+    #[inline]
+    pub fn with_sys_platform(self, value: impl Into<String>) -> MarkerEnvironment {
+        MarkerEnvironment {
+            sys_platform: value.into(),
+            ..self
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl MarkerEnvironment {
