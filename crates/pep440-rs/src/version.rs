@@ -1487,8 +1487,8 @@ impl<'a> Parser<'a> {
         self.parse_local()?;
         self.bump_while(|byte| byte.is_ascii_whitespace());
         if !self.is_done() {
+            let version = String::from_utf8_lossy(&self.v[..self.i]).into_owned();
             let remaining = String::from_utf8_lossy(&self.v[self.i..]).into_owned();
-            let version = self.into_pattern().version;
             return Err(ErrorKind::UnexpectedEnd { version, remaining }.into());
         }
         Ok(self.into_pattern())
@@ -2149,7 +2149,7 @@ pub(crate) enum ErrorKind {
     /// trailing data in the string.
     UnexpectedEnd {
         /// The version that has been parsed so far.
-        version: Version,
+        version: String,
         /// The bytes that were remaining and not parsed.
         remaining: String,
     },
@@ -3141,7 +3141,7 @@ mod tests {
         assert_eq!(
             p("1.0-dev1.*").unwrap_err(),
             ErrorKind::UnexpectedEnd {
-                version: Version::new([1, 0]).with_dev(Some(1)),
+                version: "1.0-dev1".to_string(),
                 remaining: ".*".to_string()
             }
             .into(),
@@ -3149,10 +3149,7 @@ mod tests {
         assert_eq!(
             p("1.0a1.*").unwrap_err(),
             ErrorKind::UnexpectedEnd {
-                version: Version::new([1, 0]).with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Alpha,
-                    number: 1
-                })),
+                version: "1.0a1".to_string(),
                 remaining: ".*".to_string()
             }
             .into(),
@@ -3160,7 +3157,7 @@ mod tests {
         assert_eq!(
             p("1.0.post1.*").unwrap_err(),
             ErrorKind::UnexpectedEnd {
-                version: Version::new([1, 0]).with_post(Some(1)),
+                version: "1.0.post1".to_string(),
                 remaining: ".*".to_string()
             }
             .into(),
@@ -3525,7 +3522,7 @@ mod tests {
         assert_eq!(
             p("5.6./"),
             ErrorKind::UnexpectedEnd {
-                version: Version::new([5, 6]),
+                version: "5.6".to_string(),
                 remaining: "./".to_string()
             }
             .into()
@@ -3533,7 +3530,7 @@ mod tests {
         assert_eq!(
             p("5.6.-alpha2"),
             ErrorKind::UnexpectedEnd {
-                version: Version::new([5, 6]),
+                version: "5.6".to_string(),
                 remaining: ".-alpha2".to_string()
             }
             .into()
@@ -3557,7 +3554,7 @@ mod tests {
         assert_eq!(
             p("5.6-"),
             ErrorKind::UnexpectedEnd {
-                version: Version::new([5, 6]),
+                version: "5.6".to_string(),
                 remaining: "-".to_string()
             }
             .into()

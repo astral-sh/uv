@@ -663,13 +663,13 @@ Version: 0.1-bulbasaur
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
-success: false
-exit_code: 2
------ stdout -----
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
------ stderr -----
-error: Failed to read metadata: from [SITE_PACKAGES]/paramiko.egg-link
- Caused by: after parsing '0.1b0', found 'ulbasaur', which is not part of a valid version
+    ----- stderr -----
+    error: Failed to read metadata: from [SITE_PACKAGES]/paramiko.egg-link
+     Caused by: after parsing '0.1-b', found 'ulbasaur', which is not part of a valid version
     "###
     );
 
