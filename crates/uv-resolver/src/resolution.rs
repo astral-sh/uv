@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
@@ -544,14 +545,14 @@ pub struct DisplayResolutionGraph<'a> {
     /// package.
     annotation_style: AnnotationStyle,
     /// External sources for each package: requirements, constraints, and overrides.
-    sources: FxHashMap<PackageName, FxHashSet<SourceAnnotation>>,
+    sources: BTreeMap<PackageName, BTreeSet<SourceAnnotation>>,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
         Self::new(
             resolution,
-            FxHashMap::default(),
+            BTreeMap::default(),
             &[],
             false,
             false,
@@ -567,7 +568,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
-        sources: FxHashMap<PackageName, FxHashSet<SourceAnnotation>>,
+        sources: BTreeMap<PackageName, BTreeSet<SourceAnnotation>>,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -734,7 +735,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let deps = edges
                                 .into_iter()
                                 .map(|dependency| format!("{}", dependency.name()))
-                                .chain(source.into_iter().map(|source| source.to_string()).sorted())
+                                .chain(source.into_iter().map(|source| source.to_string()))
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -745,10 +746,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         [] if source.is_empty() => {}
                         [] if source.len() == 1 => {
                             let separator = "\n";
-                            let comment =
-                                format!("    # via {}", source.iter().next().unwrap().to_string())
-                                    .green()
-                                    .to_string();
+                            let comment = format!("    # via {}", source.iter().next().unwrap())
+                                .green()
+                                .to_string();
                             annotation = Some((separator, comment));
                         }
                         [edge] if source.is_empty() => {
@@ -761,7 +761,6 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let deps = source
                                 .into_iter()
                                 .map(|source| source.to_string())
-                                .sorted()
                                 .chain(
                                     edges
                                         .iter()

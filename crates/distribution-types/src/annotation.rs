@@ -5,17 +5,17 @@ use uv_fs::Simplified;
 /// Source of a dependency, e.g., a `-r requirements.txt` file.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum SourceAnnotation {
-    /// A `-r requirements.txt` file.
-    Requirement(PathBuf),
-    /// A `-c constraints.txt` file.
-    Constraint(PathBuf),
-    /// An `--override overrides.txt` file.
-    Override(PathBuf),
     /// A `pyproject.toml` file.
     PyProject {
         path: PathBuf,
         project_name: Option<String>,
     },
+    /// A `-c constraints.txt` file.
+    Constraint(PathBuf),
+    /// An `--override overrides.txt` file.
+    Override(PathBuf),
+    /// A `-r requirements.txt` file.
+    Requirement(PathBuf),
 }
 
 impl<'de> Deserialize<'de> for SourceAnnotation {

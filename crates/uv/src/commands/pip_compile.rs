@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write;
 use std::io::stdout;
@@ -12,7 +13,6 @@ use fs_err as fs;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use rustc_hash::{FxHashMap, FxHashSet};
 use tempfile::tempdir_in;
 use tracing::debug;
 
@@ -354,46 +354,41 @@ pub(crate) async fn pip_compile(
     .resolve()
     .await?;
 
-    let mut sources: FxHashMap<PackageName, FxHashSet<SourceAnnotation>> = FxHashMap::default();
-
-    let mut insert_source = |package_name: &PackageName, source: SourceAnnotation| {
-        if let Some(source_packages) = sources.get_mut(package_name) {
-            source_packages.insert(source);
-        } else {
-            let mut new_entry = FxHashSet::default();
-            new_entry.insert(source);
-            sources.insert(package_name.clone(), new_entry);
-        }
-    };
+    let mut sources: BTreeMap<PackageName, BTreeSet<SourceAnnotation>> = BTreeMap::new();
 
     for requirement in &requirements {
         if let Some(path) = &requirement.path {
             if path.ends_with("pyproject.toml") {
-                insert_source(
-                    &requirement.name,
+                sources.entry(requirement.name.clone()).or_default().insert(
                     SourceAnnotation::PyProject {
                         path: path.clone(),
                         project_name: project.as_ref().map(ToString::to_string),
                     },
                 );
             } else {
-                insert_source(
-                    &requirement.name,
-                    SourceAnnotation::Requirement(path.clone()),
-                );
+                sources
+                    .entry(requirement.name.clone())
+                    .or_default()
+                    .insert(SourceAnnotation::Requirement(path.clone()));
             }
         }
     }
 
-    for constraint in &constraints {
-        if let Some(path) = &constraint.path {
-            insert_source(&constraint.name, SourceAnnotation::Constraint(path.clone()));
+    for requirement in &constraints {
+        if let Some(path) = &requirement.path {
+            sources
+                .entry(requirement.name.clone())
+                .or_default()
+                .insert(SourceAnnotation::Constraint(path.clone()));
         }
     }
 
-    for ov in &overrides {
-        if let Some(path) = &ov.path {
-            insert_source(&ov.name, SourceAnnotation::Override(path.clone()));
+    for requirement in &overrides {
+        if let Some(path) = &requirement.path {
+            sources
+                .entry(requirement.name.clone())
+                .or_default()
+                .insert(SourceAnnotation::Override(path.clone()));
         }
     }
 
