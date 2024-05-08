@@ -545,7 +545,7 @@ pub struct DisplayResolutionGraph<'a> {
     /// package.
     annotation_style: AnnotationStyle,
     /// External sources for each package: requirements, constraints, and overrides.
-    sources: BTreeMap<PackageName, BTreeSet<SourceAnnotation>>,
+    sources: BTreeMap<String, BTreeSet<SourceAnnotation>>,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
@@ -568,7 +568,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
-        sources: BTreeMap<PackageName, BTreeSet<SourceAnnotation>>,
+        sources: BTreeMap<String, BTreeSet<SourceAnnotation>>,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -726,7 +726,14 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 edges.sort_unstable_by_key(|package| package.name());
 
                 // Include all external sources (e.g., requirements files).
-                let source = self.sources.get(node.name()).cloned().unwrap_or_default();
+                let source_name: String = match node {
+                    Node::Editable(_package_name, local_editable) => {
+                        local_editable.url.given().unwrap_or_default().to_string()
+                    }
+                    ref other => other.name().to_string(),
+                };
+
+                let source = self.sources.get(&source_name).cloned().unwrap_or_default();
 
                 match self.annotation_style {
                     AnnotationStyle::Line => {

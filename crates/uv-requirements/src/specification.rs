@@ -88,7 +88,7 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::Editable(name) => {
-                let requirement = EditableRequirement::parse(name, std::env::current_dir()?)
+                let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
@@ -224,6 +224,7 @@ impl RequirementsSpecification {
                                 url,
                                 path,
                                 extras: requirement.extras,
+                                source: Some(pyproject_path.to_path_buf()),
                             })
                         } else {
                             Either::Right(UnresolvedRequirementSpecification {

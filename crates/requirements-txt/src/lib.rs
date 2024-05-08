@@ -167,6 +167,9 @@ pub struct EditableRequirement {
     pub url: VerbatimUrl,
     pub extras: Vec<ExtraName>,
     pub path: PathBuf,
+
+    /// Path of the original file (where existing)
+    pub source: Option<PathBuf>,
 }
 
 impl EditableRequirement {
@@ -191,6 +194,7 @@ impl EditableRequirement {
     /// We disallow URLs with schemes other than `file://` (e.g., `https://...`).
     pub fn parse(
         given: &str,
+        source: Option<&Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtParserError> {
         // Identify the extras.
@@ -265,7 +269,12 @@ impl EditableRequirement {
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
         let url = url.with_given(requirement.to_string());
 
-        Ok(Self { url, extras, path })
+        Ok(Self {
+            url,
+            extras,
+            path,
+            source: source.map(|s| s.to_path_buf()),
+        })
     }
 
     /// Identify the extras in an editable URL (e.g., `../editable[dev]`).
@@ -626,8 +635,9 @@ fn parse_entry(
         }
     } else if s.eat_if("-e") || s.eat_if("--editable") {
         let path_or_url = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)
-            .map_err(|err| err.with_offset(start))?;
+        let editable_requirement =
+            EditableRequirement::parse(path_or_url, Some(requirements_txt), working_dir)
+                .map_err(|err| err.with_offset(start))?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
@@ -1951,40 +1961,49 @@ mod test {
         .await
         .unwrap();
 
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [],
-            constraints: [],
-            editables: [
-                EditableRequirement {
-                    url: VerbatimUrl {
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "/foo/bar",
-                            query: None,
-                            fragment: None,
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
+        insta::with_settings!({
+                filters => filters,
+            }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [],
+                constraints: [],
+                editables: [
+                    EditableRequirement {
+                        url: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/foo/bar",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "/foo/bar",
+                            ),
                         },
-                        given: Some(
-                            "/foo/bar",
+                        extras: [],
+                        path: "/foo/bar",
+                        source: Some(
+                            "<REQUIREMENTS_DIR>grandchild.txt",
                         ),
                     },
-                    extras: [],
-                    path: "/foo/bar",
-                },
-            ],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: true,
-            no_binary: None,
-            only_binary: None,
-        }
-        "###);
+                ],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: true,
+                no_binary: None,
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
     }
