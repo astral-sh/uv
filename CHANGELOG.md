@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.42
+
+This release includes stabilized support for persistent configuration in uv.
+
+uv will now read project configuration from a `pyproject.toml` or `uv.toml` file in the current
+directory or any parent directory, along with user configuration at `~/.config/uv/uv.toml`
+(or `$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, and `%APPDATA%\uv\uv.toml` on Windows.
+
+See: [Persistent Configuration](https://github.com/astral-sh/uv?tab=readme-ov-file#persistent-configuration) for more.
+
+### Enhancements
+
+- Respect `MACOSX_DEPLOYMENT_TARGET` in `--python-platform` ([#3470](https://github.com/astral-sh/uv/pull/3470))
+
+### Configuration
+
+- Add documentation for persistent configuration ([#3467](https://github.com/astral-sh/uv/pull/3467))
+- Add JSON Schema export to SchemaStore ([#3461](https://github.com/astral-sh/uv/pull/3461))
+- Merge user and workspace settings ([#3462](https://github.com/astral-sh/uv/pull/3462))
+
+### Bug fixes
+
+- Use Metadata10 to parse PKG-INFO of legacy editable ([#3450](https://github.com/astral-sh/uv/pull/3450))
+- Apply normcase to line from easy-install.pth ([#3451](https://github.com/astral-sh/uv/pull/3451))
+- Upgrade `async_http_range_reader` to v0.8.0 to respect redirects in range requests ([#3460](https://github.com/astral-sh/uv/pull/3460))
+- Use last non-EOL version for `--python-platform` macOS ([#3469](https://github.com/astral-sh/uv/pull/3469))
+
 ## 0.1.41
 
 ### Bug fixes
