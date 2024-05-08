@@ -3036,6 +3036,7 @@ fn compile() -> Result<()> {
 
 /// Test that the `PYC_INVALIDATION_MODE` option is recognized and that the error handling works.
 #[test]
+#[cfg_attr(macos, ignore = "The bytecode trace is spuriously different on macOS")]
 fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     let context = TestContext::new("3.12");
 
