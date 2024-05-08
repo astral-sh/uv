@@ -101,7 +101,7 @@ path-absolutize = { version = "3.1.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "c26e485213e39582c6f2e4d45c0328422670e7a7" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "0e684a874c9fb8f74738cd8875524c80e3d4820b" }
 pyo3 = { version = "0.21.0" }
 pyo3-log = { version = "0.10.0" }
 rand = { version = "0.8.5" }

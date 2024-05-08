@@ -2668,7 +2668,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
               attrs<=20.3.0
               attrs==21.1.0
               attrs>=21.2.0
-          and attrs==21.1.0 is unusable because it was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
+          and attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
           And because you require attrs>20.3.0,<21.2.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
@@ -4668,7 +4668,7 @@ fn offline_registry() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because black==23.10.1 was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -4898,7 +4898,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because validation==2.0.0 is unusable because the package metadata could not be parsed and you require validation==2.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Metadata for validation==2.0.0 could not be parsed:
             Failed to parse version: Unexpected end of version specifier, expected operator:
@@ -4930,7 +4930,7 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because validation==3.0.0 is unusable because the package has an invalid format and you require validation==3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because validation==3.0.0 has an invalid package format and you require validation==3.0.0, we can conclude that the requirements are unsatisfiable.
 
           hint: The structure of validation==3.0.0 was invalid:
             Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
@@ -5171,7 +5171,7 @@ fn index_url_in_requirements() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio<4 was not found in the package registry and you require anyio<4, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the package registry and you require anyio<4, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
