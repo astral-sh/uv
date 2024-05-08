@@ -1127,6 +1127,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
+ "derivative",
  "distribution-filename",
  "fs-err",
  "git2",
@@ -5085,6 +5086,7 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-distribution",
+ "uv-git",
  "uv-interpreter",
  "uv-normalize",
  "uv-types",

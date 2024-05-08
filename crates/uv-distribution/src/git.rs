@@ -155,15 +155,11 @@ pub(crate) async fn resolve_precise(
 ///
 /// This method will only return precise URLs for URLs that have already been resolved via
 /// [`resolve_precise`].
-pub fn to_precise(url: &Url) -> Option<Url> {
-    let ParsedGitUrl { url, subdirectory } = ParsedGitUrl::try_from(url.clone()).ok()?;
+pub fn git_url_to_precise(url: GitUrl) -> Option<GitUrl> {
     let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
     let reference = RepositoryReference::new(&url);
     let precise = resolved_git_refs.get(&reference)?;
-    Some(Url::from(ParsedGitUrl {
-        url: url.with_precise(*precise),
-        subdirectory,
-    }))
+    Some(url.with_precise(*precise))
 }
 
 /// Returns `true` if the URLs refer to the same Git commit.

@@ -1,16 +1,20 @@
 use rustc_hash::FxHashMap;
 use tracing::debug;
 
-use distribution_types::{RequirementSource, Verbatim};
+use distribution_types::{
+    ParsedArchiveUrl, ParsedGitUrl, ParsedLocalFileUrl, ParsedUrl, RequirementSource, Verbatim,
+    VerbatimParsedUrl,
+};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use uv_distribution::is_same_reference;
+use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
 use crate::{DependencyMode, Manifest, ResolveError};
 
 /// A map of package names to their associated, required URLs.
 #[derive(Debug, Default)]
-pub(crate) struct Urls(FxHashMap<PackageName, VerbatimUrl>);
+pub(crate) struct Urls(FxHashMap<PackageName, VerbatimParsedUrl>);
 
 impl Urls {
     pub(crate) fn from_manifest(
@@ -18,19 +22,30 @@ impl Urls {
         markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Result<Self, ResolveError> {
-        let mut urls: FxHashMap<PackageName, VerbatimUrl> = FxHashMap::default();
+        let mut urls: FxHashMap<PackageName, VerbatimParsedUrl> = FxHashMap::default();
 
         // Add the editables themselves to the list of required URLs.
         for (editable, metadata, _) in &manifest.editables {
-            if let Some(previous) = urls.insert(metadata.name.clone(), editable.url.clone()) {
-                if !is_equal(&previous, &editable.url) {
-                    if is_same_reference(&previous, &editable.url) {
-                        debug!("Allowing {} as a variant of {previous}", editable.url);
+            let editable_url = VerbatimParsedUrl {
+                parsed_url: ParsedUrl::LocalFile(ParsedLocalFileUrl {
+                    url: editable.url.to_url(),
+                    path: editable.path.clone(),
+                    editable: true,
+                }),
+                verbatim: editable.url.clone(),
+            };
+            if let Some(previous) = urls.insert(metadata.name.clone(), editable_url.clone()) {
+                if !is_equal(&previous.verbatim, &editable_url.verbatim) {
+                    if is_same_reference(&previous.verbatim, &editable_url.verbatim) {
+                        debug!(
+                            "Allowing {} as a variant of {}",
+                            editable_url.verbatim, previous.verbatim
+                        );
                     } else {
                         return Err(ResolveError::ConflictingUrlsDirect(
                             metadata.name.clone(),
-                            previous.verbatim().to_string(),
-                            editable.verbatim().to_string(),
+                            previous.verbatim.verbatim().to_string(),
+                            editable_url.verbatim.verbatim().to_string(),
                         ));
                     }
                 }
@@ -41,27 +56,77 @@ impl Urls {
         for requirement in manifest.requirements(markers, dependencies) {
             match &requirement.source {
                 RequirementSource::Registry { .. } => {}
-                RequirementSource::Url { url, .. } | RequirementSource::Path { url, .. } => {
+                RequirementSource::Url {
+                    subdirectory,
+                    location,
+                    url,
+                } => {
+                    let url = VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
+                            url: location.clone(),
+                            subdirectory: subdirectory.clone(),
+                        }),
+                        verbatim: url.clone(),
+                    };
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
-                        if !is_equal(&previous, url) {
+                        // TODO(merge): use proper check
+                        if !is_equal(&previous.verbatim, &url.verbatim) {
                             return Err(ResolveError::ConflictingUrlsDirect(
                                 requirement.name.clone(),
-                                previous.verbatim().to_string(),
-                                url.verbatim().to_string(),
+                                previous.verbatim.verbatim().to_string(),
+                                url.verbatim.verbatim().to_string(),
                             ));
                         }
                     }
                 }
-                RequirementSource::Git { url, .. } => {
+                RequirementSource::Path {
+                    path,
+                    editable,
+                    url,
+                } => {
+                    let url = VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::LocalFile(ParsedLocalFileUrl {
+                            url: url.to_url(),
+                            path: path.clone(),
+                            editable: (*editable).unwrap_or_default(),
+                        }),
+                        verbatim: url.clone(),
+                    };
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
-                        if !is_equal(&previous, url) {
-                            if is_same_reference(&previous, url) {
-                                debug!("Allowing {url} as a variant of {previous}");
+                        if !is_equal(&previous.verbatim, &url.verbatim) {
+                            return Err(ResolveError::ConflictingUrlsDirect(
+                                requirement.name.clone(),
+                                previous.verbatim.verbatim().to_string(),
+                                url.verbatim.verbatim().to_string(),
+                            ));
+                        }
+                    }
+                }
+                RequirementSource::Git {
+                    repository,
+                    reference,
+                    subdirectory,
+                    url,
+                } => {
+                    let url = VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::Git(ParsedGitUrl {
+                            url: GitUrl::new(repository.clone(), reference.clone()),
+                            subdirectory: subdirectory.clone(),
+                        }),
+                        verbatim: url.clone(),
+                    };
+                    if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
+                        if !is_equal(&previous.verbatim, &url.verbatim) {
+                            if is_same_reference(&previous.verbatim, &url.verbatim) {
+                                debug!(
+                                    "Allowing {} as a variant of {}",
+                                    &url.verbatim, previous.verbatim
+                                );
                             } else {
                                 return Err(ResolveError::ConflictingUrlsDirect(
                                     requirement.name.clone(),
-                                    previous.verbatim().to_string(),
-                                    url.verbatim().to_string(),
+                                    previous.verbatim.verbatim().to_string(),
+                                    url.verbatim.verbatim().to_string(),
                                 ));
                             }
                         }
@@ -74,7 +139,7 @@ impl Urls {
     }
 
     /// Return the [`VerbatimUrl`] associated with the given package name, if any.
-    pub(crate) fn get(&self, package: &PackageName) -> Option<&VerbatimUrl> {
+    pub(crate) fn get(&self, package: &PackageName) -> Option<&VerbatimParsedUrl> {
         self.0.get(package)
     }
 

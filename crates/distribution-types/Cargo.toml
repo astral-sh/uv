@@ -24,6 +24,7 @@ uv-git = { workspace = true, features = ["vendored-openssl"] }
 uv-normalize = { workspace = true }
 
 anyhow = { workspace = true }
+derivative = { workspace = true }
 fs-err = { workspace = true }
 git2 = { workspace = true }
 indexmap = { workspace = true }

@@ -316,6 +316,7 @@ fn link() -> Result<()> {
         .arg(context1.cache_dir.path())
         .env("VIRTUAL_ENV", context2.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
+        .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
         .current_dir(&context2.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {

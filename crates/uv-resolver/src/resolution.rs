@@ -21,7 +21,6 @@ use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::HashDigest;
-use uv_distribution::to_precise;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::dependency_provider::UvDependencyProvider;
@@ -30,7 +29,7 @@ use crate::lock::{self, Lock, LockError};
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
-use crate::redirect::apply_redirect;
+use crate::redirect::url_to_precise;
 use crate::resolver::{InMemoryIndex, MetadataResponse, VersionsResponse};
 use crate::{Manifest, ResolveError};
 
@@ -129,9 +128,7 @@ impl ResolutionGraph {
                     {
                         Dist::from_editable(package_name.clone(), editable.clone())?
                     } else {
-                        let url = to_precise(url)
-                            .map_or_else(|| url.clone(), |precise| apply_redirect(url, precise));
-                        Dist::from_url(package_name.clone(), url)?
+                        Dist::from_url(package_name.clone(), url_to_precise(url.clone()))?
                     };
 
                     // Add its hashes to the index, preserving those that were already present in
@@ -249,11 +246,8 @@ impl ResolutionGraph {
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let url = to_precise(url).map_or_else(
-                                || url.clone(),
-                                |precise| apply_redirect(url, precise),
-                            );
-                            let pinned_package = Dist::from_url(package_name.clone(), url)?;
+                            let pinned_package =
+                                Dist::from_url(package_name.clone(), url_to_precise(url.clone()))?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
                                 dist: pinned_package.into(),

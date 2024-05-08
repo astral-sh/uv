@@ -4,6 +4,8 @@ use anyhow::{Error, Result};
 use thiserror::Error;
 use url::Url;
 
+use derivative::Derivative;
+use pep508_rs::VerbatimUrl;
 use uv_git::{GitSha, GitUrl};
 
 #[derive(Debug, Error)]
@@ -22,13 +24,21 @@ pub enum ParsedUrlError {
     UrlParse(String, #[source] url::ParseError),
 }
 
+#[derive(Debug, Clone, Derivative)]
+#[derivative(Hash, PartialEq, Eq)]
+pub struct VerbatimParsedUrl {
+    #[derivative(PartialEq = "ignore", Hash = "ignore")]
+    pub parsed_url: ParsedUrl,
+    pub verbatim: VerbatimUrl,
+}
+
 /// We support three types of URLs for distributions:
 /// * The path to a file or directory (`file://`)
 /// * A Git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
 ///   string to checkout.
 /// * A remote archive (`https://`), optional with a subdirectory (source dist only)
 /// A URL in a requirement `foo @ <url>` must be one of the above.
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum ParsedUrl {
     /// The direct URL is a path to a local directory or file.
     LocalFile(ParsedLocalFileUrl),
@@ -42,7 +52,7 @@ pub enum ParsedUrl {
 ///
 /// Examples:
 /// * `file:///home/ferris/my_project`
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ParsedLocalFileUrl {
     pub url: Url,
     pub path: PathBuf,
@@ -54,7 +64,7 @@ pub struct ParsedLocalFileUrl {
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ParsedGitUrl {
     pub url: GitUrl,
     pub subdirectory: Option<PathBuf>,
@@ -87,7 +97,7 @@ impl TryFrom<Url> for ParsedGitUrl {
 /// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
 /// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
 /// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ParsedArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,

@@ -1,10 +1,13 @@
 use url::Url;
 
+use distribution_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 use pep508_rs::VerbatimUrl;
+use uv_distribution::git_url_to_precise;
+use uv_git::{GitReference, GitUrl};
 
 /// Given a [`VerbatimUrl`] and a redirect, apply the redirect to the URL while preserving as much
 /// of the verbatim representation as possible.
-pub(crate) fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
+fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
     let redirect = VerbatimUrl::from_url(redirect);
 
     // The redirect should be the "same" URL, but with a specific commit hash added after the `@`.
@@ -36,9 +39,50 @@ pub(crate) fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
     redirect
 }
 
+pub(crate) fn url_to_precise(url: VerbatimParsedUrl) -> VerbatimParsedUrl {
+    let ParsedUrl::Git(ParsedGitUrl {
+        url: git_url,
+        subdirectory,
+    }) = url.parsed_url.clone()
+    else {
+        return url;
+    };
+
+    // TODO(konsti): Remove once we carry more context on the `Dist`s.
+    let lowered_git_ref = git_url
+        .reference()
+        .as_str()
+        .map_or(GitReference::DefaultBranch, |rev| {
+            GitReference::from_rev(rev)
+        });
+    let git_url = GitUrl::new(git_url.repository().clone(), lowered_git_ref);
+
+    let Some(new_git_url) = git_url_to_precise(git_url.clone()) else {
+        if matches!(git_url.reference(), GitReference::FullCommit(_)) {
+            return url;
+        }
+        panic!("Unseen git url: {}, {:?}", url.verbatim, git_url);
+    };
+
+    let new_parsed_url = ParsedGitUrl {
+        url: new_git_url,
+        subdirectory,
+    };
+    let new_url = Url::from(new_parsed_url.clone());
+    let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
+    VerbatimParsedUrl {
+        parsed_url: ParsedUrl::Git(new_parsed_url),
+        verbatim: new_verbatim_url,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use url::Url;
+
+    use pep508_rs::VerbatimUrl;
+
+    use crate::redirect::apply_redirect;
 
     #[test]
     fn test_apply_redirect() -> Result<(), url::ParseError> {
