@@ -6,8 +6,8 @@ use std::collections::VecDeque;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, Dist, DistributionMetadata, FileLocation,
-    GitSourceDist, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, Dist, DistKind, DistributionMetadata,
+    FileLocation, GitSourceDist, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
     RegistrySourceDist, Resolution, ResolvedDist, ToUrlError, VersionOrUrlRef,
 };
 use pep440_rs::Version;
@@ -233,7 +233,7 @@ impl Distribution {
                         index,
                     };
                     let built_dist = BuiltDist::Registry(reg_dist);
-                    Dist::Built(built_dist)
+                    Dist::from(built_dist)
                 }
                 // TODO: Handle other kinds of sources.
                 _ => todo!(),
@@ -317,9 +317,9 @@ impl Source {
     }
 
     fn from_dist(dist: &Dist) -> Source {
-        match *dist {
-            Dist::Built(ref built_dist) => Source::from_built_dist(built_dist),
-            Dist::Source(ref source_dist) => Source::from_source_dist(source_dist),
+        match &**dist {
+            DistKind::Built(ref built_dist) => Source::from_built_dist(built_dist),
+            DistKind::Source(ref source_dist) => Source::from_source_dist(source_dist),
         }
     }
 
@@ -561,9 +561,11 @@ impl SourceDist {
     }
 
     fn from_dist(dist: &Dist) -> Result<Option<SourceDist>, LockError> {
-        match *dist {
-            Dist::Built(_) => Ok(None),
-            Dist::Source(ref source_dist) => SourceDist::from_source_dist(source_dist).map(Some),
+        match &**dist {
+            DistKind::Built(_) => Ok(None),
+            DistKind::Source(ref source_dist) => {
+                SourceDist::from_source_dist(source_dist).map(Some)
+            }
         }
     }
 
@@ -654,9 +656,9 @@ impl Wheel {
     }
 
     fn from_dist(dist: &Dist) -> Result<Option<Wheel>, LockError> {
-        match *dist {
-            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist).map(Some),
-            Dist::Source(_) => Ok(None),
+        match &**dist {
+            DistKind::Built(ref built_dist) => Wheel::from_built_dist(built_dist).map(Some),
+            DistKind::Source(_) => Ok(None),
         }
     }
 

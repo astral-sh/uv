@@ -12,7 +12,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, IndexLocations,
+    BuildableSource, BuiltDist, Dist, DistKind, FileLocation, HashPolicy, Hashed, IndexLocations,
     LocalEditable, Name, SourceDist,
 };
 use platform_tags::Tags;
@@ -96,9 +96,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        match dist {
-            Dist::Built(built) => self.get_wheel(built, hashes).await,
-            Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
+        match &**dist {
+            DistKind::Built(built) => self.get_wheel(built, hashes).await,
+            DistKind::Source(source) => self.build_wheel(source, tags, hashes).await,
         }
     }
 
@@ -113,9 +113,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        match dist {
-            Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
-            Dist::Source(source) => {
+        match &**dist {
+            DistKind::Built(built) => self.get_wheel_metadata(built, hashes).await,
+            DistKind::Source(source) => {
                 self.build_wheel_metadata(&BuildableSource::Dist(source), hashes)
                     .await
             }
@@ -200,7 +200,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                 {
                     Ok(archive) => Ok(LocalWheel {
-                        dist: Dist::Built(dist.clone()),
+                        dist: Dist::from(dist.clone()),
                         archive: self.build_context.cache().archive(&archive.id),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
@@ -216,7 +216,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             .download_wheel(url, &wheel.filename, &wheel_entry, dist, hashes)
                             .await?;
                         Ok(LocalWheel {
-                            dist: Dist::Built(dist.clone()),
+                            dist: Dist::from(dist.clone()),
                             archive: self.build_context.cache().archive(&archive.id),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
@@ -246,7 +246,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                 {
                     Ok(archive) => Ok(LocalWheel {
-                        dist: Dist::Built(dist.clone()),
+                        dist: Dist::from(dist.clone()),
                         archive: self.build_context.cache().archive(&archive.id),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
@@ -268,7 +268,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             )
                             .await?;
                         Ok(LocalWheel {
-                            dist: Dist::Built(dist.clone()),
+                            dist: Dist::from(dist.clone()),
                             archive: self.build_context.cache().archive(&archive.id),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
@@ -302,7 +302,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        let lock = self.locks.acquire(&Dist::Source(dist.clone())).await;
+        let lock = self.locks.acquire(&Dist::from(dist.clone())).await;
         let _guard = lock.lock().await;
 
         let built_wheel = self
@@ -316,7 +316,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match built_wheel.target.canonicalize() {
             Ok(archive) => {
                 return Ok(LocalWheel {
-                    dist: Dist::Source(dist.clone()),
+                    dist: Dist::from(dist.clone()),
                     archive,
                     filename: built_wheel.filename,
                     hashes: built_wheel.hashes,
@@ -332,7 +332,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await?;
 
         Ok(LocalWheel {
-            dist: Dist::Source(dist.clone()),
+            dist: Dist::from(dist.clone()),
             archive: self.build_context.cache().archive(&id),
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
@@ -635,7 +635,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the file is already unzipped, and the cache is up-to-date, return it.
         if let Some(archive) = archive {
             Ok(LocalWheel {
-                dist: Dist::Built(dist.clone()),
+                dist: Dist::from(dist.clone()),
                 archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),
@@ -652,7 +652,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             pointer.write_to(&pointer_entry).await?;
 
             Ok(LocalWheel {
-                dist: Dist::Built(dist.clone()),
+                dist: Dist::from(dist.clone()),
                 archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),
@@ -697,7 +697,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             pointer.write_to(&pointer_entry).await?;
 
             Ok(LocalWheel {
-                dist: Dist::Built(dist.clone()),
+                dist: Dist::from(dist.clone()),
                 archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),

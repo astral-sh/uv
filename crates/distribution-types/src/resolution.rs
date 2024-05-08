@@ -3,7 +3,8 @@ use rustc_hash::FxHashMap;
 use uv_normalize::PackageName;
 
 use crate::{
-    BuiltDist, Dist, Name, ParsedGitUrl, Requirement, RequirementSource, ResolvedDist, SourceDist,
+    BuiltDist, Dist, DistKind, Name, ParsedGitUrl, Requirement, RequirementSource, ResolvedDist,
+    SourceDist,
 };
 
 /// A set of packages pinned at specific versions.
@@ -75,14 +76,14 @@ impl Resolution {
 impl From<&ResolvedDist> for Requirement {
     fn from(resolved_dist: &ResolvedDist) -> Self {
         let source = match resolved_dist {
-            ResolvedDist::Installable(dist) => match dist {
-                Dist::Built(BuiltDist::Registry(wheel)) => RequirementSource::Registry {
+            ResolvedDist::Installable(dist) => match &**dist {
+                DistKind::Built(BuiltDist::Registry(wheel)) => RequirementSource::Registry {
                     specifier: pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(wheel.filename.version.clone()),
                     ),
                     index: None,
                 },
-                Dist::Built(BuiltDist::DirectUrl(wheel)) => {
+                DistKind::Built(BuiltDist::DirectUrl(wheel)) => {
                     let mut location = wheel.url.to_url();
                     location.set_fragment(None);
                     RequirementSource::Url {
@@ -91,18 +92,18 @@ impl From<&ResolvedDist> for Requirement {
                         subdirectory: None,
                     }
                 }
-                Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
+                DistKind::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
                     path: wheel.path.clone(),
                     url: wheel.url.clone(),
                     editable: None,
                 },
-                Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
+                DistKind::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
                     specifier: pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(sdist.filename.version.clone()),
                     ),
                     index: None,
                 },
-                Dist::Source(SourceDist::DirectUrl(sdist)) => {
+                DistKind::Source(SourceDist::DirectUrl(sdist)) => {
                     let mut location = sdist.url.to_url();
                     location.set_fragment(None);
                     RequirementSource::Url {
@@ -111,7 +112,7 @@ impl From<&ResolvedDist> for Requirement {
                         subdirectory: None,
                     }
                 }
-                Dist::Source(SourceDist::Git(sdist)) => {
+                DistKind::Source(SourceDist::Git(sdist)) => {
                     let git_url = ParsedGitUrl::try_from(sdist.url.to_url())
                         .expect("urls must be valid at this point");
                     RequirementSource::Git {
@@ -121,7 +122,7 @@ impl From<&ResolvedDist> for Requirement {
                         subdirectory: git_url.subdirectory,
                     }
                 }
-                Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
+                DistKind::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
                     path: sdist.path.clone(),
                     url: sdist.url.clone(),
                     editable: None,

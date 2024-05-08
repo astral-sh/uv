@@ -8,8 +8,8 @@ use pypi_types::HashDigest;
 use uv_normalize::PackageName;
 
 use crate::{
-    BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
-    ParsedPathUrl, ParsedUrl, SourceDist, VersionOrUrlRef,
+    BuiltDist, Dist, DistKind, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion,
+    Name, ParsedPathUrl, ParsedUrl, SourceDist, VersionOrUrlRef,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
@@ -45,46 +45,46 @@ impl CachedDist {
         hashes: Vec<HashDigest>,
         path: PathBuf,
     ) -> Self {
-        match remote {
-            Dist::Built(BuiltDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
+        match *remote.0 {
+            DistKind::Built(BuiltDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
                 filename,
                 path,
                 hashes,
             }),
-            Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
-                filename,
-                url: dist.url,
-                hashes,
-                path,
-                editable: false,
-            }),
-            Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
+            DistKind::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 hashes,
                 path,
                 editable: false,
             }),
-            Dist::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
-                filename,
-                path,
-                hashes,
-            }),
-            Dist::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
+            DistKind::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 hashes,
                 path,
                 editable: false,
             }),
-            Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
+            DistKind::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
+                filename,
+                path,
+                hashes,
+            }),
+            DistKind::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 hashes,
                 path,
                 editable: false,
             }),
-            Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
+            DistKind::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: dist.url,
+                hashes,
+                path,
+                editable: false,
+            }),
+            DistKind::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 hashes,

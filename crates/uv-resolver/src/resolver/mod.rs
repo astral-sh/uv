@@ -19,9 +19,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, enabled, info_span, instrument, trace, warn, Instrument, Level};
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist,
-    VersionOrUrlRef,
+    BuiltDist, Dist, DistKind, DistributionMetadata, IncompatibleDist, IncompatibleSource,
+    IncompatibleWheel, InstalledDist, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef,
+    SourceDist, VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -1083,11 +1083,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         Rc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
                     );
                 }
-                Some(Response::Dist {
-                    dist: Dist::Built(dist),
-                    metadata,
-                }) => {
-                    trace!("Received built distribution metadata for: {dist}");
+                Some(Response::Dist { dist, metadata }) => {
                     match &metadata {
                         MetadataResponse::InvalidMetadata(err) => {
                             warn!("Unable to extract metadata for {dist}: {err}");
@@ -1097,27 +1093,22 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         }
                         _ => {}
                     }
-                    self.index
-                        .distributions
-                        .done(dist.version_id(), Rc::new(metadata));
-                }
-                Some(Response::Dist {
-                    dist: Dist::Source(dist),
-                    metadata,
-                }) => {
-                    trace!("Received source distribution metadata for: {dist}");
-                    match &metadata {
-                        MetadataResponse::InvalidMetadata(err) => {
-                            warn!("Unable to extract metadata for {dist}: {err}");
+
+                    match &*dist {
+                        DistKind::Built(dist) => {
+                            trace!("Received built distribution metadata for: {dist}");
+
+                            self.index
+                                .distributions
+                                .done(dist.version_id(), Rc::new(metadata));
                         }
-                        MetadataResponse::InvalidStructure(err) => {
-                            warn!("Unable to extract metadata for {dist}: {err}");
+                        DistKind::Source(dist) => {
+                            trace!("Received source distribution metadata for: {dist}");
+                            self.index
+                                .distributions
+                                .done(dist.version_id(), Rc::new(metadata));
                         }
-                        _ => {}
                     }
-                    self.index
-                        .distributions
-                        .done(dist.version_id(), Rc::new(metadata));
                 }
                 None => {}
             }
@@ -1148,16 +1139,18 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     .get_or_build_wheel_metadata(&dist)
                     .boxed_local()
                     .await
-                    .map_err(|err| match dist.clone() {
-                        Dist::Built(BuiltDist::Path(built_dist)) => {
-                            ResolveError::Read(Box::new(built_dist), err)
+                    .map_err(|err| match &*dist {
+                        DistKind::Built(BuiltDist::Path(built_dist)) => {
+                            ResolveError::Read(Box::new(built_dist.clone()), err)
                         }
-                        Dist::Source(SourceDist::Path(source_dist)) => {
-                            ResolveError::Build(Box::new(source_dist), err)
+                        DistKind::Source(SourceDist::Path(source_dist)) => {
+                            ResolveError::Build(Box::new(source_dist.clone()), err)
                         }
-                        Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
-                        Dist::Source(source_dist) => {
-                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                        DistKind::Built(built_dist) => {
+                            ResolveError::Fetch(Box::new(built_dist.clone()), err)
+                        }
+                        DistKind::Source(source_dist) => {
+                            ResolveError::FetchAndBuild(Box::new(source_dist.clone()), err)
                         }
                     })?;
                 Ok(Some(Response::Dist { dist, metadata }))
@@ -1235,19 +1228,20 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                                 .get_or_build_wheel_metadata(&dist)
                                 .boxed_local()
                                 .await
-                                .map_err(|err| match dist.clone() {
-                                    Dist::Built(BuiltDist::Path(built_dist)) => {
-                                        ResolveError::Read(Box::new(built_dist), err)
+                                .map_err(|err| match &*dist {
+                                    DistKind::Built(BuiltDist::Path(built_dist)) => {
+                                        ResolveError::Read(Box::new(built_dist.clone()), err)
                                     }
-                                    Dist::Source(SourceDist::Path(source_dist)) => {
-                                        ResolveError::Build(Box::new(source_dist), err)
+                                    DistKind::Source(SourceDist::Path(source_dist)) => {
+                                        ResolveError::Build(Box::new(source_dist.clone()), err)
                                     }
-                                    Dist::Built(built_dist) => {
-                                        ResolveError::Fetch(Box::new(built_dist), err)
+                                    DistKind::Built(built_dist) => {
+                                        ResolveError::Fetch(Box::new(built_dist.clone()), err)
                                     }
-                                    Dist::Source(source_dist) => {
-                                        ResolveError::FetchAndBuild(Box::new(source_dist), err)
-                                    }
+                                    DistKind::Source(source_dist) => ResolveError::FetchAndBuild(
+                                        Box::new(source_dist.clone()),
+                                        err,
+                                    ),
                                 })?;
                             Response::Dist { dist, metadata }
                         }

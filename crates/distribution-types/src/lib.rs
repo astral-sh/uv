@@ -33,6 +33,7 @@
 //!
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 use std::borrow::Cow;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -129,7 +130,10 @@ impl std::fmt::Display for InstalledVersion<'_> {
 ///
 /// The location can be index, url or path (wheel) or index, url, path or git (source distribution)
 #[derive(Debug, Clone)]
-pub enum Dist {
+pub struct Dist(Box<DistKind>);
+
+#[derive(Debug, Clone)]
+pub enum DistKind {
     Built(BuiltDist),
     Source(SourceDist),
 }
@@ -222,25 +226,46 @@ pub struct PathSourceDist {
     pub editable: bool,
 }
 
+impl Deref for Dist {
+    type Target = DistKind;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<BuiltDist> for Dist {
+    fn from(built_dist: BuiltDist) -> Self {
+        Self(Box::new(DistKind::Built(built_dist)))
+    }
+}
+
+impl From<SourceDist> for Dist {
+    fn from(source_dist: SourceDist) -> Self {
+        Self(Box::new(DistKind::Source(source_dist)))
+    }
+}
+
 impl Dist {
     /// Create a [`Dist`] for a registry-based distribution.
     pub fn from_registry(filename: DistFilename, file: File, index: IndexUrl) -> Self {
-        match filename {
+        let inner = match filename {
             DistFilename::WheelFilename(filename) => {
-                Self::Built(BuiltDist::Registry(RegistryBuiltDist {
+                DistKind::Built(BuiltDist::Registry(RegistryBuiltDist {
                     filename,
                     file: Box::new(file),
                     index,
                 }))
             }
             DistFilename::SourceDistFilename(filename) => {
-                Self::Source(SourceDist::Registry(RegistrySourceDist {
+                DistKind::Source(SourceDist::Registry(RegistrySourceDist {
                     filename,
                     file: Box::new(file),
                     index,
                 }))
             }
-        }
+        };
+        Self(Box::new(inner))
     }
 
     /// A remote built distribution (`.whl`) or source distribution from a `http://` or `https://`
@@ -251,7 +276,7 @@ impl Dist {
         subdirectory: Option<PathBuf>,
         url: VerbatimUrl,
     ) -> Result<Dist, Error> {
-        if Path::new(url.path())
+        let inner = if Path::new(url.path())
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
@@ -265,20 +290,22 @@ impl Dist {
                 ));
             }
 
-            Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
+            DistKind::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                 filename,
                 location,
                 subdirectory,
                 url,
-            })))
+            }))
         } else {
-            Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
+            DistKind::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                 name,
                 location,
                 subdirectory,
                 url,
-            })))
-        }
+            }))
+        };
+
+        Ok(Self(Box::new(inner)))
     }
 
     /// A local built or source distribution from a `file://` URL.
@@ -297,7 +324,7 @@ impl Dist {
             Err(err) => return Err(err.into()),
         };
 
-        if path
+        let inner = if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
@@ -315,19 +342,20 @@ impl Dist {
                 return Err(Error::EditableFile(url));
             }
 
-            Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
+            DistKind::Built(BuiltDist::Path(PathBuiltDist {
                 filename,
                 url,
                 path,
-            })))
+            }))
         } else {
-            Ok(Self::Source(SourceDist::Path(PathSourceDist {
+            DistKind::Source(SourceDist::Path(PathSourceDist {
                 name,
                 url,
                 path,
                 editable,
-            })))
-        }
+            }))
+        };
+        Ok(Self(Box::new(inner)))
     }
 
     /// A remote source distribution from a `git+https://` or `git+ssh://` url.
@@ -337,12 +365,14 @@ impl Dist {
         git: GitUrl,
         subdirectory: Option<PathBuf>,
     ) -> Result<Dist, Error> {
-        Ok(Self::Source(SourceDist::Git(GitSourceDist {
-            name,
-            git: Box::new(git),
-            subdirectory,
-            url,
-        })))
+        Ok(Self(Box::new(DistKind::Source(SourceDist::Git(
+            GitSourceDist {
+                name,
+                git: Box::new(git),
+                subdirectory,
+                url,
+            },
+        )))))
     }
 
     /// Create a [`Dist`] for a URL-based distribution.
@@ -361,42 +391,44 @@ impl Dist {
     /// Create a [`Dist`] for a local editable distribution.
     pub fn from_editable(name: PackageName, editable: LocalEditable) -> Result<Self, Error> {
         let LocalEditable { url, path, .. } = editable;
-        Ok(Self::Source(SourceDist::Path(PathSourceDist {
-            name,
-            url,
-            path,
-            editable: true,
-        })))
+        Ok(Self(Box::new(DistKind::Source(SourceDist::Path(
+            PathSourceDist {
+                name,
+                url,
+                path,
+                editable: true,
+            },
+        )))))
     }
 
     /// Return true if the distribution is editable.
     pub fn is_editable(&self) -> bool {
-        match self {
-            Self::Source(dist) => dist.is_editable(),
-            Self::Built(_) => false,
+        match &**self {
+            DistKind::Source(dist) => dist.is_editable(),
+            DistKind::Built(_) => false,
         }
     }
 
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
-        match self {
-            Self::Built(dist) => dist.index(),
-            Self::Source(dist) => dist.index(),
+        match &**self {
+            DistKind::Built(dist) => dist.index(),
+            DistKind::Source(dist) => dist.index(),
         }
     }
 
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
-        match self {
-            Self::Built(built) => built.file(),
-            Self::Source(source) => source.file(),
+        match &**self {
+            DistKind::Built(built) => built.file(),
+            DistKind::Source(source) => source.file(),
         }
     }
 
     pub fn version(&self) -> Option<&Version> {
-        match self {
-            Self::Built(wheel) => Some(wheel.version()),
-            Self::Source(source_dist) => source_dist.version(),
+        match &**self {
+            DistKind::Built(wheel) => Some(wheel.version()),
+            DistKind::Source(source_dist) => source_dist.version(),
         }
     }
 }
@@ -545,9 +577,9 @@ impl Name for BuiltDist {
 
 impl Name for Dist {
     fn name(&self) -> &PackageName {
-        match self {
-            Self::Built(dist) => dist.name(),
-            Self::Source(dist) => dist.name(),
+        match &**self {
+            DistKind::Built(dist) => dist.name(),
+            DistKind::Source(dist) => dist.name(),
         }
     }
 }
@@ -617,9 +649,9 @@ impl DistributionMetadata for BuiltDist {
 
 impl DistributionMetadata for Dist {
     fn version_or_url(&self) -> VersionOrUrlRef {
-        match self {
-            Self::Built(dist) => dist.version_or_url(),
-            Self::Source(dist) => dist.version_or_url(),
+        match &**self {
+            DistKind::Built(dist) => dist.version_or_url(),
+            DistKind::Source(dist) => dist.version_or_url(),
         }
     }
 }
@@ -779,16 +811,16 @@ impl RemoteSource for BuiltDist {
 
 impl RemoteSource for Dist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
-        match self {
-            Self::Built(dist) => dist.filename(),
-            Self::Source(dist) => dist.filename(),
+        match &**self {
+            DistKind::Built(dist) => dist.filename(),
+            DistKind::Source(dist) => dist.filename(),
         }
     }
 
     fn size(&self) -> Option<u64> {
-        match self {
-            Self::Built(dist) => dist.size(),
-            Self::Source(dist) => dist.size(),
+        match &**self {
+            DistKind::Built(dist) => dist.size(),
+            DistKind::Source(dist) => dist.size(),
         }
     }
 }
@@ -973,16 +1005,16 @@ impl Identifier for InstalledDist {
 
 impl Identifier for Dist {
     fn distribution_id(&self) -> DistributionId {
-        match self {
-            Self::Built(dist) => dist.distribution_id(),
-            Self::Source(dist) => dist.distribution_id(),
+        match &**self {
+            DistKind::Built(dist) => dist.distribution_id(),
+            DistKind::Source(dist) => dist.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
-        match self {
-            Self::Built(dist) => dist.resource_id(),
-            Self::Source(dist) => dist.resource_id(),
+        match &**self {
+            DistKind::Built(dist) => dist.resource_id(),
+            DistKind::Source(dist) => dist.resource_id(),
         }
     }
 }
