@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.41
+
+### Bug fixes
+
+- Remove unconstrained version error from requirements ([#3443](https://github.com/astral-sh/uv/pull/3443))
+
 ## 0.1.40
 
 ### Enhancements
