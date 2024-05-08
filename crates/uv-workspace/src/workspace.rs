@@ -60,7 +60,7 @@ impl Workspace {
         Ok(None)
     }
 
-    /// Load a [`Workspace`] from a `pyproject.toml` or `uv.toml` file.
+    /// Load a [`Workspace`] from a `uv.toml` file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         Ok(Self {
             options: read_file(path.as_ref())?,
@@ -139,18 +139,12 @@ fn find_in_directory(dir: &Path) -> Result<Option<Options>, WorkspaceError> {
     Ok(None)
 }
 
-/// Load [`Options`] from a `pyproject.toml` or `uv.toml` file.
+/// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, WorkspaceError> {
     let content = fs_err::read_to_string(path)?;
-    if path.ends_with("pyproject.toml") {
-        let pyproject: PyProjectToml = toml::from_str(&content)
-            .map_err(|err| WorkspaceError::PyprojectToml(path.user_display().to_string(), err))?;
-        Ok(pyproject.tool.and_then(|tool| tool.uv).unwrap_or_default())
-    } else {
-        let options: Options = toml::from_str(&content)
-            .map_err(|err| WorkspaceError::UvToml(path.user_display().to_string(), err))?;
-        Ok(options)
-    }
+    let options: Options = toml::from_str(&content)
+        .map_err(|err| WorkspaceError::UvToml(path.user_display().to_string(), err))?;
+    Ok(options)
 }
 
 #[derive(thiserror::Error, Debug)]
