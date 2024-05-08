@@ -235,12 +235,15 @@ pub fn create_bare_venv(
         ),
         (
             "implementation".to_string(),
-            interpreter.markers().platform_python_implementation.clone(),
+            interpreter
+                .markers()
+                .platform_python_implementation()
+                .to_string(),
         ),
         ("uv".to_string(), version().to_string()),
         (
             "version_info".to_string(),
-            interpreter.markers().python_full_version.string.clone(),
+            interpreter.markers().python_full_version().string.clone(),
         ),
         (
             "include-system-site-packages".to_string(),

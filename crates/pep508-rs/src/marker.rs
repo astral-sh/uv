@@ -21,7 +21,7 @@ use pyo3::{
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use pep440_rs::{Version, VersionPattern, VersionSpecifier};
+use pep440_rs::{Version, VersionParseError, VersionPattern, VersionSpecifier};
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
@@ -311,12 +311,12 @@ pub struct StringVersion {
 }
 
 impl FromStr for StringVersion {
-    type Err = String;
+    type Err = VersionParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self {
             string: s.to_string(),
-            version: Version::from_str(s).map_err(|e| e.to_string())?,
+            version: Version::from_str(s)?,
         })
     }
 }
@@ -363,49 +363,49 @@ impl Deref for StringVersion {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 pub struct MarkerEnvironment {
-    pub implementation_name: String,
-    pub implementation_version: StringVersion,
-    pub os_name: String,
-    pub platform_machine: String,
-    pub platform_python_implementation: String,
-    pub platform_release: String,
-    pub platform_system: String,
-    pub platform_version: String,
-    pub python_full_version: StringVersion,
-    pub python_version: StringVersion,
-    pub sys_platform: String,
+    implementation_name: String,
+    implementation_version: StringVersion,
+    os_name: String,
+    platform_machine: String,
+    platform_python_implementation: String,
+    platform_release: String,
+    platform_system: String,
+    platform_version: String,
+    python_full_version: StringVersion,
+    python_version: StringVersion,
+    sys_platform: String,
 }
 
 impl MarkerEnvironment {
     /// Returns of the PEP 440 version typed value of the key in the current environment
     pub fn get_version(&self, key: &MarkerValueVersion) -> &Version {
         match key {
-            MarkerValueVersion::ImplementationVersion => &self.implementation_version.version,
-            MarkerValueVersion::PythonFullVersion => &self.python_full_version.version,
-            MarkerValueVersion::PythonVersion => &self.python_version.version,
+            MarkerValueVersion::ImplementationVersion => &self.implementation_version().version,
+            MarkerValueVersion::PythonFullVersion => &self.python_full_version().version,
+            MarkerValueVersion::PythonVersion => &self.python_version().version,
         }
     }
 
     /// Returns of the stringly typed value of the key in the current environment
     pub fn get_string(&self, key: &MarkerValueString) -> &str {
         match key {
-            MarkerValueString::ImplementationName => &self.implementation_name,
-            MarkerValueString::OsName | MarkerValueString::OsNameDeprecated => &self.os_name,
+            MarkerValueString::ImplementationName => self.implementation_name(),
+            MarkerValueString::OsName | MarkerValueString::OsNameDeprecated => self.os_name(),
             MarkerValueString::PlatformMachine | MarkerValueString::PlatformMachineDeprecated => {
-                &self.platform_machine
+                self.platform_machine()
             }
             MarkerValueString::PlatformPythonImplementation
             | MarkerValueString::PlatformPythonImplementationDeprecated
             | MarkerValueString::PythonImplementationDeprecated => {
-                &self.platform_python_implementation
+                self.platform_python_implementation()
             }
-            MarkerValueString::PlatformRelease => &self.platform_release,
-            MarkerValueString::PlatformSystem => &self.platform_system,
+            MarkerValueString::PlatformRelease => self.platform_release(),
+            MarkerValueString::PlatformSystem => self.platform_system(),
             MarkerValueString::PlatformVersion | MarkerValueString::PlatformVersionDeprecated => {
-                &self.platform_version
+                self.platform_version()
             }
             MarkerValueString::SysPlatform | MarkerValueString::SysPlatformDeprecated => {
-                &self.sys_platform
+                self.sys_platform()
             }
         }
     }
@@ -643,7 +643,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::python_full_version`].
     #[inline]
-    pub fn with_python(self, value: impl Into<StringVersion>) -> MarkerEnvironment {
+    pub fn with_python_version(self, value: impl Into<StringVersion>) -> MarkerEnvironment {
         MarkerEnvironment {
             python_version: value.into(),
             ..self
@@ -787,6 +787,50 @@ impl MarkerEnvironment {
             python_full_version,
             python_version,
             sys_platform: sys.getattr("platform")?.extract()?,
+        })
+    }
+}
+
+/// A builder for constructing a marker environment.
+///
+/// A value of this type can be fallibly converted to a full
+/// [`MarkerEnvironment`] via `MarkerEnvironment::try_from`. This can fail when
+/// the version strings given aren't valid.
+///
+/// The main utility of this type is for constructing dummy or test environment
+/// values.
+#[allow(missing_docs)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct MarkerEnvironmentBuilder<'a> {
+    pub implementation_name: &'a str,
+    pub implementation_version: &'a str,
+    pub os_name: &'a str,
+    pub platform_machine: &'a str,
+    pub platform_python_implementation: &'a str,
+    pub platform_release: &'a str,
+    pub platform_system: &'a str,
+    pub platform_version: &'a str,
+    pub python_full_version: &'a str,
+    pub python_version: &'a str,
+    pub sys_platform: &'a str,
+}
+
+impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
+    type Error = VersionParseError;
+
+    fn try_from(builder: MarkerEnvironmentBuilder<'a>) -> Result<Self, Self::Error> {
+        Ok(MarkerEnvironment {
+            implementation_name: builder.implementation_name.to_string(),
+            implementation_version: builder.implementation_version.parse()?,
+            os_name: builder.os_name.to_string(),
+            platform_machine: builder.platform_machine.to_string(),
+            platform_python_implementation: builder.platform_python_implementation.to_string(),
+            platform_release: builder.platform_release.to_string(),
+            platform_system: builder.platform_system.to_string(),
+            platform_version: builder.platform_version.to_string(),
+            python_full_version: builder.python_full_version.parse()?,
+            python_version: builder.python_version.parse()?,
+            sys_platform: builder.sys_platform.to_string(),
         })
     }
 }
@@ -1736,7 +1780,7 @@ mod test {
 
     use uv_normalize::ExtraName;
 
-    use crate::marker::{MarkerEnvironment, StringVersion};
+    use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use crate::{
         MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
         MarkerValueVersion,
@@ -1747,21 +1791,20 @@ mod test {
     }
 
     fn env37() -> MarkerEnvironment {
-        let v37 = StringVersion::from_str("3.7").unwrap();
-
-        MarkerEnvironment {
-            implementation_name: String::new(),
-            implementation_version: v37.clone(),
-            os_name: "linux".to_string(),
-            platform_machine: String::new(),
-            platform_python_implementation: String::new(),
-            platform_release: String::new(),
-            platform_system: String::new(),
-            platform_version: String::new(),
-            python_full_version: v37.clone(),
-            python_version: v37,
-            sys_platform: "linux".to_string(),
-        }
+        MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "",
+            implementation_version: "3.7",
+            os_name: "linux",
+            platform_machine: "",
+            platform_python_implementation: "",
+            platform_release: "",
+            platform_system: "",
+            platform_version: "",
+            python_full_version: "3.7",
+            python_version: "3.7",
+            sys_platform: "linux",
+        })
+        .unwrap()
     }
 
     /// Copied from <https://github.com/pypa/packaging/blob/85ff971a250dc01db188ef9775499c15553a8c95/tests/test_markers.py#L175-L221>
@@ -1803,20 +1846,20 @@ mod test {
 
     #[test]
     fn test_marker_evaluation() {
-        let v27 = StringVersion::from_str("2.7").unwrap();
-        let env27 = MarkerEnvironment {
-            implementation_name: String::new(),
-            implementation_version: v27.clone(),
-            os_name: "linux".to_string(),
-            platform_machine: String::new(),
-            platform_python_implementation: String::new(),
-            platform_release: String::new(),
-            platform_system: String::new(),
-            platform_version: String::new(),
-            python_full_version: v27.clone(),
-            python_version: v27,
-            sys_platform: "linux".to_string(),
-        };
+        let env27 = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "",
+            implementation_version: "2.7",
+            os_name: "linux",
+            platform_machine: "",
+            platform_python_implementation: "",
+            platform_release: "",
+            platform_system: "",
+            platform_version: "",
+            python_full_version: "2.7",
+            python_version: "2.7",
+            sys_platform: "linux",
+        })
+        .unwrap();
         let env37 = env37();
         let marker1 = MarkerTree::from_str("python_version == '2.7'").unwrap();
         let marker2 = MarkerTree::from_str(

@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 
 use distribution_types::{IndexLocations, Requirement, Resolution, SourceDist};
-use pep508_rs::{MarkerEnvironment, StringVersion};
+use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use platform_tags::{Arch, Os, Platform, Tags};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
@@ -724,19 +724,19 @@ async fn msgraph_sdk() -> Result<()> {
 }
 
 static MARKERS_311: Lazy<MarkerEnvironment> = Lazy::new(|| {
-    MarkerEnvironment {
-        implementation_name: "cpython".to_string(),
-        implementation_version: StringVersion::from_str("3.11.5").unwrap(),
-        os_name: "posix".to_string(),
-        platform_machine: "arm64".to_string(),
-        platform_python_implementation: "CPython".to_string(),
-        platform_release: "21.6.0".to_string(),
-        platform_system: "Darwin".to_string(),
-        platform_version: "Darwin Kernel Version 21.6.0: Mon Aug 22 20:19:52 PDT 2022; root:xnu-8020.140.49~2/RELEASE_ARM64_T6000".to_string(),
-        python_full_version: StringVersion::from_str("3.11.5").unwrap(),
-        python_version: StringVersion::from_str("3.11").unwrap(),
-        sys_platform: "darwin".to_string(),
-    }
+    MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+        implementation_name: "cpython",
+        implementation_version: "3.11.5",
+        os_name: "posix",
+        platform_machine: "arm64",
+        platform_python_implementation: "CPython",
+        platform_release: "21.6.0",
+        platform_system: "Darwin",
+        platform_version: "Darwin Kernel Version 21.6.0: Mon Aug 22 20:19:52 PDT 2022; root:xnu-8020.140.49~2/RELEASE_ARM64_T6000",
+        python_full_version: "3.11.5",
+        python_version: "3.11",
+        sys_platform: "darwin",
+    }).unwrap()
 });
 
 static TAGS_311: Lazy<Tags> = Lazy::new(|| {
@@ -757,19 +757,19 @@ static TAGS_311: Lazy<Tags> = Lazy::new(|| {
 });
 
 static MARKERS_310: Lazy<MarkerEnvironment> = Lazy::new(|| {
-    MarkerEnvironment {
-        implementation_name: "cpython".to_string(),
-        implementation_version: StringVersion::from_str("3.10.5").unwrap(),
-        os_name: "posix".to_string(),
-        platform_machine: "arm64".to_string(),
-        platform_python_implementation: "CPython".to_string(),
-        platform_release: "21.6.0".to_string(),
-        platform_system: "Darwin".to_string(),
-        platform_version: "Darwin Kernel Version 21.6.0: Mon Aug 22 20:19:52 PDT 2022; root:xnu-8020.140.49~2/RELEASE_ARM64_T6000".to_string(),
-        python_full_version: StringVersion::from_str("3.10.5").unwrap(),
-        python_version: StringVersion::from_str("3.10").unwrap(),
-        sys_platform: "darwin".to_string(),
-    }
+    MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+        implementation_name: "cpython",
+        implementation_version: "3.10.5",
+        os_name: "posix",
+        platform_machine: "arm64",
+        platform_python_implementation: "CPython",
+        platform_release: "21.6.0",
+        platform_system: "Darwin",
+        platform_version: "Darwin Kernel Version 21.6.0: Mon Aug 22 20:19:52 PDT 2022; root:xnu-8020.140.49~2/RELEASE_ARM64_T6000",
+        python_full_version: "3.10.5",
+        python_version: "3.10",
+        sys_platform: "darwin",
+    }).unwrap()
 });
 
 static TAGS_310: Lazy<Tags> = Lazy::new(|| {

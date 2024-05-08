@@ -40,8 +40,8 @@ use unicode_width::UnicodeWidthChar;
 use url::Url;
 
 pub use marker::{
-    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
-    MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
+    MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree,
+    MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
 };
 #[cfg(feature = "pyo3")]
 use pep440_rs::PyVersion;

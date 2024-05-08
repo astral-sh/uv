@@ -88,29 +88,29 @@ impl PythonVersion {
         let mut markers = base.clone();
 
         // Ex) `implementation_version == "3.12.0"`
-        if markers.implementation_name == "cpython" {
+        if markers.implementation_name() == "cpython" {
             let python_full_version = self.python_full_version();
-            markers.implementation_version = StringVersion {
+            markers = markers.with_implementation_version(StringVersion {
                 // Retain the verbatim representation, provided by the user.
                 string: self.0.to_string(),
                 version: python_full_version,
-            };
+            });
         }
 
         // Ex) `python_full_version == "3.12.0"`
         let python_full_version = self.python_full_version();
-        markers.python_full_version = StringVersion {
+        markers = markers.with_python_full_version(StringVersion {
             // Retain the verbatim representation, provided by the user.
             string: self.0.to_string(),
             version: python_full_version,
-        };
+        });
 
         // Ex) `python_version == "3.12"`
         let python_version = self.python_version();
-        markers.python_version = StringVersion {
+        markers = markers.with_python_version(StringVersion {
             string: python_version.to_string(),
             version: python_version,
-        };
+        });
 
         markers
     }
