@@ -26,6 +26,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
+use uv_warnings::warn_user;
 
 use crate::ExtrasSpecification;
 
@@ -282,6 +283,7 @@ impl Pep621Metadata {
         let requirements = lower_requirements(
             &project.dependencies.unwrap_or_default(),
             &project.optional_dependencies.unwrap_or_default(),
+            &project.name,
             project_dir,
             &project_sources.unwrap_or_default(),
             workspace_sources,
@@ -320,6 +322,7 @@ impl Pep621Metadata {
 pub(crate) fn lower_requirements(
     dependencies: &[String],
     optional_dependencies: &IndexMap<ExtraName, Vec<String>>,
+    project_name: &PackageName,
     project_dir: &Path,
     project_sources: &HashMap<PackageName, Source>,
     workspace_sources: &HashMap<PackageName, Source>,
@@ -333,6 +336,7 @@ pub(crate) fn lower_requirements(
             let name = requirement.name.clone();
             lower_requirement(
                 requirement,
+                project_name,
                 project_dir,
                 project_sources,
                 workspace_sources,
@@ -352,6 +356,7 @@ pub(crate) fn lower_requirements(
                     let name = requirement.name.clone();
                     lower_requirement(
                         requirement,
+                        project_name,
                         project_dir,
                         project_sources,
                         workspace_sources,
@@ -373,6 +378,7 @@ pub(crate) fn lower_requirements(
 /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
 pub(crate) fn lower_requirement(
     requirement: pep508_rs::Requirement,
+    project_name: &PackageName,
     project_dir: &Path,
     project_sources: &HashMap<PackageName, Source>,
     workspace_sources: &HashMap<PackageName, Source>,
@@ -397,7 +403,15 @@ pub(crate) fn lower_requirement(
     }
 
     let Some(source) = source else {
+        let has_sources = !project_sources.is_empty() || !workspace_sources.is_empty();
         // Support recursive editable inclusions.
+        if has_sources && requirement.version_or_url.is_none() && &requirement.name != project_name
+        {
+            warn_user!(
+                "You did not specify a version constraint (e.g. a lower bound) for {}",
+                requirement.name
+            );
+        }
         return Ok(Requirement::from_pep508(requirement)?);
     };
 
@@ -478,10 +492,16 @@ pub(crate) fn lower_requirement(
             path_source(path, project_dir, editable)?
         }
         Source::Registry { index } => match requirement.version_or_url {
-            None => RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
-                index: Some(index),
-            },
+            None => {
+                warn_user!(
+                    "You did not specify a version constraint (e.g. a lower bound) for {}",
+                    requirement.name
+                );
+                RequirementSource::Registry {
+                    specifier: VersionSpecifiers::empty(),
+                    index: Some(index),
+                }
+            }
             Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
                 specifier: version,
                 index: Some(index),
@@ -632,8 +652,8 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-    use uv_configuration::PreviewMode;
 
+    use uv_configuration::PreviewMode;
     use uv_fs::Simplified;
 
     use crate::{ExtrasSpecification, RequirementsSpecification};
@@ -756,6 +776,20 @@ mod test {
         data did not match any variant of untagged enum Source
 
         "###);
+    }
+
+    #[test]
+    fn missing_constraint() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm",
+            ]
+        "#};
+
+        assert!(from_source(input, "pyproject.toml", &ExtrasSpecification::None).is_ok());
     }
 
     #[test]
