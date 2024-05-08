@@ -46,12 +46,12 @@ pub enum MetadataResponse {
     Offline,
 }
 
-pub trait ResolverProvider: Send + Sync {
+pub trait ResolverProvider {
     /// Get the version map for a package.
     fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
-    ) -> impl Future<Output = PackageVersionsResult> + Send + 'io;
+    ) -> impl Future<Output = PackageVersionsResult> + 'io;
 
     /// Get the metadata for a distribution.
     ///
@@ -61,7 +61,7 @@ pub trait ResolverProvider: Send + Sync {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
-    ) -> impl Future<Output = WheelMetadataResult> + Send + 'io;
+    ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     fn index_locations(&self) -> &IndexLocations;
 
@@ -72,7 +72,7 @@ pub trait ResolverProvider: Send + Sync {
 
 /// The main IO backend for the resolver, which does cached requests network requests using the
 /// [`RegistryClient`] and [`DistributionDatabase`].
-pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
+pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
     /// The [`RegistryClient`] used to query the index.
@@ -88,7 +88,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     no_build: NoBuild,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
+impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -118,9 +118,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
     }
 }
 
-impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
-    for DefaultResolverProvider<'a, Context>
-{
+impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a, Context> {
     /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,

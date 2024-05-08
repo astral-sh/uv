@@ -41,7 +41,7 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
-use pep508_rs::{Scheme, VerbatimUrl};
+use pep508_rs::{Pep508Url, Scheme, VerbatimUrl};
 use uv_normalize::PackageName;
 
 pub use crate::any::*;
@@ -81,27 +81,27 @@ mod specified_requirement;
 mod traits;
 
 #[derive(Debug, Clone)]
-pub enum VersionOrUrl<'a> {
+pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier, used to identify a distribution in a registry.
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location.
-    Url(&'a VerbatimUrl),
+    Url(&'a T),
 }
 
-impl Verbatim for VersionOrUrl<'_> {
+impl Verbatim for VersionOrUrlRef<'_> {
     fn verbatim(&self) -> Cow<'_, str> {
         match self {
-            VersionOrUrl::Version(version) => Cow::Owned(format!("=={version}")),
-            VersionOrUrl::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
+            VersionOrUrlRef::Version(version) => Cow::Owned(format!("=={version}")),
+            VersionOrUrlRef::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
         }
     }
 }
 
-impl std::fmt::Display for VersionOrUrl<'_> {
+impl std::fmt::Display for VersionOrUrlRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VersionOrUrl::Version(version) => write!(f, "=={version}"),
-            VersionOrUrl::Url(url) => write!(f, " @ {url}"),
+            VersionOrUrlRef::Version(version) => write!(f, "=={version}"),
+            VersionOrUrlRef::Url(url) => write!(f, " @ {url}"),
         }
     }
 }
@@ -572,49 +572,49 @@ impl Name for Dist {
 }
 
 impl DistributionMetadata for RegistryBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.filename.version)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Version(&self.filename.version)
     }
 }
 
 impl DistributionMetadata for DirectUrlBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for PathBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for RegistrySourceDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.filename.version)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Version(&self.filename.version)
     }
 }
 
 impl DistributionMetadata for DirectUrlSourceDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for GitSourceDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for PathSourceDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for SourceDist {
-    fn version_or_url(&self) -> VersionOrUrl {
+    fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
@@ -625,7 +625,7 @@ impl DistributionMetadata for SourceDist {
 }
 
 impl DistributionMetadata for BuiltDist {
-    fn version_or_url(&self) -> VersionOrUrl {
+    fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
@@ -635,7 +635,7 @@ impl DistributionMetadata for BuiltDist {
 }
 
 impl DistributionMetadata for Dist {
-    fn version_or_url(&self) -> VersionOrUrl {
+    fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
             Self::Built(dist) => dist.version_or_url(),
             Self::Source(dist) => dist.version_or_url(),

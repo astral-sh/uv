@@ -2,6 +2,7 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
 use common::uv_snapshot;
@@ -220,7 +221,7 @@ fn missing_record() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot uninstall package; RECORD file not found at: [SITE_PACKAGES]/MarkupSafe-2.1.3.dist-info/RECORD
+    error: Cannot uninstall package; `RECORD` file not found at: [SITE_PACKAGES]/MarkupSafe-2.1.3.dist-info/RECORD
     "###
     );
 
@@ -415,6 +416,125 @@ fn uninstall_duplicate() -> Result<()> {
      - pip==22.1.1
     "###
     );
+
+    Ok(())
+}
+
+/// Uninstall a `.egg-info` package in a virtual environment.
+#[test]
+fn uninstall_egg_info() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    // Manually create a `.egg-info` directory.
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .create_dir_all()?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("top_level.txt")
+        .write_str("zstd")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("SOURCES.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("PKG-INFO")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("dependency_links.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("entry_points.txt")
+        .write_str("")?;
+
+    // Manually create the package directory.
+    site_packages.child("zstd").create_dir_all()?;
+    site_packages
+        .child("zstd")
+        .child("__init__.py")
+        .write_str("")?;
+
+    // Run `pip uninstall`.
+    uv_snapshot!(uninstall_command(&context)
+        .arg("zstandard"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - zstandard==0.22.0
+    "###);
+
+    Ok(())
+}
+
+fn normcase(s: &str) -> String {
+    if cfg!(windows) {
+        s.replace('/', "\\").to_lowercase()
+    } else {
+        s.to_owned()
+    }
+}
+
+/// Uninstall a legacy editable package in a virtual environment.
+#[test]
+fn uninstall_legacy_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    let target = context.temp_dir.child("zstandard_project");
+    target.child("zstd").create_dir_all()?;
+    target.child("zstd").child("__init__.py").write_str("")?;
+
+    target.child("zstandard.egg-info").create_dir_all()?;
+    target
+        .child("zstandard.egg-info")
+        .child("PKG-INFO")
+        .write_str(
+            "Metadata-Version: 2.1
+Name: zstandard
+Version: 0.22.0
+",
+        )?;
+
+    site_packages
+        .child("zstandard.egg-link")
+        .write_str(target.path().to_str().unwrap())?;
+
+    site_packages.child("easy-install.pth").write_str(&format!(
+        "something\n{}\nanother thing\n",
+        normcase(target.path().to_str().unwrap())
+    ))?;
+
+    // Run `pip uninstall`.
+    uv_snapshot!(uninstall_command(&context)
+        .arg("zstandard"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - zstandard==0.22.0
+    "###);
+
+    // The entry in `easy-install.pth` should be removed.
+    assert_eq!(
+        fs_err::read_to_string(site_packages.child("easy-install.pth"))?,
+        "something\nanother thing\n",
+        "easy-install.pth should not contain the path to the uninstalled package"
+    );
+    // The `.egg-link` file should be removed.
+    assert!(!site_packages.child("zstandard.egg-link").exists());
+    // The `.egg-info` directory should still exist.
+    assert!(target.child("zstandard.egg-info").exists());
 
     Ok(())
 }

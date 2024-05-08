@@ -1,9 +1,10 @@
-//! Reading from `pyproject.toml`
-//! * `project.{dependencies,optional-dependencies}`,
-//! * `tool.uv.sources` and
+//! Reads the following fields from from `pyproject.toml`:
+//!
+//! * `project.{dependencies,optional-dependencies}`
+//! * `tool.uv.sources`
 //! * `tool.uv.workspace`
 //!
-//! and lowering them into a dependency specification.
+//! Then lowers them into a dependency specification.
 
 use std::collections::HashMap;
 use std::io;
@@ -20,11 +21,13 @@ use thiserror::Error;
 use url::Url;
 
 use distribution_types::{ParsedUrlError, Requirement, RequirementSource, Requirements};
+use pep440_rs::VersionSpecifiers;
 use pep508_rs::{VerbatimUrl, VersionOrUrl};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
+use uv_warnings::warn_user_once;
 
 use crate::ExtrasSpecification;
 
@@ -50,8 +53,6 @@ pub enum LoweringError {
     PathToUrl(PathBuf),
     #[error("Package is not included as workspace package in `tool.uv.workspace`")]
     UndeclaredWorkspacePackage,
-    #[error("Must specify a version constraint")]
-    UnconstrainedVersion,
     #[error("Can only specify one of rev, tag, or branch")]
     MoreThanOneGitRef,
     #[error("Unable to combine options in `tool.uv.sources`")]
@@ -76,7 +77,7 @@ pub enum LoweringError {
 pub struct PyProjectToml {
     /// PEP 621-compliant project metadata.
     pub project: Option<Project>,
-    /// Proprietary additions.
+    /// Tool-specific metadata.
     pub tool: Option<Tool>,
 }
 
@@ -100,14 +101,12 @@ pub struct Project {
     pub dynamic: Option<Vec<String>>,
 }
 
-/// `tool`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-/// `tool.uv`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -116,7 +115,6 @@ pub struct ToolUv {
     pub workspace: Option<ToolUvWorkspace>,
 }
 
-/// `tool.uv.workspace`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -400,6 +398,7 @@ pub(crate) fn lower_requirement(
         .get(&requirement.name)
         .or(workspace_sources.get(&requirement.name))
         .cloned();
+
     if !matches!(
         source,
         Some(Source::Workspace {
@@ -413,13 +412,16 @@ pub(crate) fn lower_requirement(
     }
 
     let Some(source) = source else {
+        let has_sources = !project_sources.is_empty() || !workspace_sources.is_empty();
         // Support recursive editable inclusions.
-        // TODO(konsti): This is a workspace feature.
-        return if requirement.version_or_url.is_none() && &requirement.name != project_name {
-            Err(LoweringError::UnconstrainedVersion)
-        } else {
-            Ok(Requirement::from_pep508(requirement).map_err(Box::new)?)
-        };
+        if has_sources && requirement.version_or_url.is_none() && &requirement.name != project_name
+        {
+            warn_user_once!(
+                "Missing version constraint (e.g., a lower bound) for `{}`",
+                requirement.name
+            );
+        }
+        return Ok(Requirement::from_pep508(requirement)?);
     };
 
     if preview.is_disabled() {
@@ -499,7 +501,16 @@ pub(crate) fn lower_requirement(
             path_source(path, project_dir, editable)?
         }
         Source::Registry { index } => match requirement.version_or_url {
-            None => return Err(LoweringError::UnconstrainedVersion),
+            None => {
+                warn_user_once!(
+                    "Missing version constraint (e.g., a lower bound) for `{}`",
+                    requirement.name
+                );
+                RequirementSource::Registry {
+                    specifier: VersionSpecifiers::empty(),
+                    index: Some(index),
+                }
+            }
             Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
                 specifier: version,
                 index: Some(index),
@@ -545,7 +556,7 @@ fn path_source(
     project_dir: &Path,
     editable: Option<bool>,
 ) -> Result<RequirementSource, LoweringError> {
-    let url = VerbatimUrl::parse_path(&path, project_dir);
+    let url = VerbatimUrl::parse_path(&path, project_dir).with_given(path.clone());
     let path_buf = PathBuf::from(&path);
     let path_buf = path_buf
         .absolutize_from(project_dir)
@@ -654,8 +665,8 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-    use uv_configuration::PreviewMode;
 
+    use uv_configuration::PreviewMode;
     use uv_fs::Simplified;
 
     use crate::{ExtrasSpecification, RequirementsSpecification};
@@ -791,11 +802,7 @@ mod test {
             ]
         "#};
 
-        assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
-          Caused by: Failed to parse entry for: `tqdm`
-          Caused by: Must specify a version constraint
-        "###);
+        assert!(from_source(input, "pyproject.toml", &ExtrasSpecification::None).is_ok());
     }
 
     #[test]

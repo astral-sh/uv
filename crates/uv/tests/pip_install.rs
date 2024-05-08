@@ -315,6 +315,24 @@ dependencies = ["flask==1.0.x"]
 }
 
 #[test]
+fn missing_pip() {
+    uv_snapshot!(Command::new(get_bin()).arg("install"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: unrecognized subcommand 'install'
+
+      tip: a similar subcommand exists: 'uv pip install'
+
+    Usage: uv [OPTIONS] <COMMAND>
+
+    For more information, try '--help'.
+    "###);
+}
+
+#[test]
 fn no_solution() {
     let context = TestContext::new("3.12");
 
@@ -1018,7 +1036,7 @@ fn install_no_index_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask==3.0.0 was not found in the provided package locations and you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -1558,7 +1576,7 @@ fn only_binary_requirements_txt() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because django-allauth==0.51.0 is unusable because no wheels are usable and building from source is disabled and you require django-allauth==0.51.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because django-allauth==0.51.0 has no usable wheels and building from source is disabled and you require django-allauth==0.51.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 }
@@ -2230,13 +2248,10 @@ fn reinstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==21.3.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    context1
+        .install()
+        .arg("-r")
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context1.cache_dir.path())
-        .env("VIRTUAL_ENV", context1.venv.as_os_str())
         .assert()
         .success();
 
@@ -2246,13 +2261,10 @@ fn reinstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==22.1.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    context2
+        .install()
+        .arg("-r")
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context2.cache_dir.path())
-        .env("VIRTUAL_ENV", context2.venv.as_os_str())
         .assert()
         .success();
 
@@ -3890,7 +3902,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.2.0 was not found in the provided package locations and you require anyio==4.2.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -4188,7 +4200,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage==0.2.0 was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###);
@@ -4638,7 +4650,7 @@ fn tool_uv_sources() -> Result<()> {
             "boltons==24.0.0"
         ]
         dont_install_me = [
-            "borken @ https://example.org/does/not/exist"
+            "broken @ https://example.org/does/not/exist"
         ]
 
         [tool.uv.sources]

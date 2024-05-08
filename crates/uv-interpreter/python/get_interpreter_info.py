@@ -22,7 +22,15 @@ def format_full_version(info):
 
 
 if sys.version_info[0] < 3:
-    print(json.dumps({"result": "error", "kind": "unsupported_python_version"}))
+    print(
+        json.dumps(
+            {
+                "result": "error",
+                "kind": "unsupported_python_version",
+                "python_version": format_full_version(sys.version_info),
+            }
+        )
+    )
     sys.exit(0)
 
 if hasattr(sys, "implementation"):
@@ -435,6 +443,18 @@ def get_operating_system_and_architecture():
         architecture = version_arch
 
     if operating_system == "linux":
+        if sys.version_info < (3, 7):
+            print(
+                json.dumps(
+                    {
+                        "result": "error",
+                        "kind": "unsupported_python_version",
+                        "python_version": format_full_version(sys.version_info),
+                    }
+                )
+            )
+            sys.exit(0)
+
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version
 

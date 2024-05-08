@@ -21,7 +21,7 @@ use crate::ExtrasSpecification;
 ///
 /// Used, e.g., to determine the input requirements when a user specifies a `pyproject.toml`
 /// file, which may require running PEP 517 build hooks to extract metadata.
-pub struct SourceTreeResolver<'a, Context: BuildContext + Send + Sync> {
+pub struct SourceTreeResolver<'a, Context: BuildContext> {
     /// The requirements for the project.
     source_trees: Vec<PathBuf>,
     /// The extras to include when resolving requirements.
@@ -34,7 +34,7 @@ pub struct SourceTreeResolver<'a, Context: BuildContext + Send + Sync> {
     database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
+impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         source_trees: Vec<PathBuf>,

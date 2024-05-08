@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use url::Url;
 
-use distribution_types::{BuildableSource, VersionOrUrl};
+use distribution_types::{BuildableSource, VersionOrUrlRef};
 use uv_normalize::PackageName;
 
 pub type BuildId = usize;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
-    fn on_progress(&self, name: &PackageName, version: &VersionOrUrl);
+    fn on_progress(&self, name: &PackageName, version: &VersionOrUrlRef);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);

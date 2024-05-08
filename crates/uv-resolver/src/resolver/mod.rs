@@ -1,12 +1,14 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::Result;
-use dashmap::{DashMap, DashSet};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
@@ -19,7 +21,7 @@ use tracing::{debug, enabled, info_span, instrument, trace, warn, Instrument, Le
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
     InstalledDist, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist,
-    VersionOrUrl,
+    VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -64,16 +66,62 @@ mod provider;
 mod reporter;
 mod urls;
 
-/// The package version is unavailable and cannot be used
-/// Unlike [`PackageUnavailable`] this applies to a single version of the package
-#[derive(Debug, Clone)]
+/// The reason why a package or a version cannot be used.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) enum UnavailableReason {
+    /// The entire package cannot be used.
+    Package(UnavailablePackage),
+    /// A single version cannot be used.
+    Version(UnavailableVersion),
+}
+
+impl Display for UnavailableReason {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Version(version) => Display::fmt(version, f),
+            Self::Package(package) => Display::fmt(package, f),
+        }
+    }
+}
+
+/// The package version is unavailable and cannot be used. Unlike [`PackageUnavailable`], this
+/// applies to a single version of the package.
+///
+/// Most variant are from [`MetadataResponse`] without the error source (since we don't format
+/// the source).
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum UnavailableVersion {
     /// Version is incompatible because it has no usable distributions
     IncompatibleDist(IncompatibleDist),
+    /// The wheel metadata was found, but could not be parsed.
+    InvalidMetadata,
+    /// The wheel metadata was found, but the metadata was inconsistent.
+    InconsistentMetadata,
+    /// The wheel has an invalid structure.
+    InvalidStructure,
+    /// The wheel metadata was not found in the cache and the network is not available.
+    Offline,
+    /// Forward any kind of resolver error.
+    ResolverError(String),
+}
+
+impl Display for UnavailableVersion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnavailableVersion::IncompatibleDist(invalid_dist) => Display::fmt(invalid_dist, f),
+            UnavailableVersion::InvalidMetadata => f.write_str("has invalid metadata"),
+            UnavailableVersion::InconsistentMetadata => f.write_str("has inconsistent metadata"),
+            UnavailableVersion::InvalidStructure => f.write_str("has an invalid package format"),
+            UnavailableVersion::Offline => f.write_str(
+                "network connectivity is disabled, but the metadata wasn't found in the cache",
+            ),
+            UnavailableVersion::ResolverError(err) => f.write_str(err),
+        }
+    }
 }
 
 /// The package is unavailable and cannot be used.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum UnavailablePackage {
     /// Index lookups were disabled (i.e., `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`).
     NoIndex,
@@ -85,6 +133,24 @@ pub(crate) enum UnavailablePackage {
     InvalidMetadata(String),
     /// The package has an invalid structure.
     InvalidStructure(String),
+}
+
+impl UnavailablePackage {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            UnavailablePackage::NoIndex => "was not found in the provided package locations",
+            UnavailablePackage::Offline => "was not found in the cache",
+            UnavailablePackage::NotFound => "was not found in the package registry",
+            UnavailablePackage::InvalidMetadata(_) => "has invalid metadata",
+            UnavailablePackage::InvalidStructure(_) => "has an invalid package format",
+        }
+    }
+}
+
+impl Display for UnavailablePackage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// The package is unavailable at specific versions.
@@ -107,11 +173,10 @@ enum ResolverVersion {
     Unavailable(Version, UnavailableVersion),
 }
 
-pub struct Resolver<
-    'a,
-    Provider: ResolverProvider,
-    InstalledPackages: InstalledPackagesProvider + Send + Sync,
-> {
+pub(crate) type SharedMap<K, V> = Rc<RefCell<HashMap<K, V>>>;
+pub(crate) type SharedSet<K> = Rc<RefCell<HashSet<K>>>;
+
+pub struct Resolver<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
@@ -129,20 +194,17 @@ pub struct Resolver<
     index: &'a InMemoryIndex,
     installed_packages: &'a InstalledPackages,
     /// Incompatibilities for packages that are entirely unavailable.
-    unavailable_packages: DashMap<PackageName, UnavailablePackage>,
+    unavailable_packages: SharedMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: DashMap<PackageName, DashMap<Version, IncompletePackage>>,
+    incomplete_packages: SharedMap<PackageName, SharedMap<Version, IncompletePackage>>,
     /// The set of all registry-based packages visited during resolution.
-    visited: DashSet<PackageName>,
+    visited: SharedSet<PackageName>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
 }
 
-impl<
-        'a,
-        Context: BuildContext + Send + Sync,
-        InstalledPackages: InstalledPackagesProvider + Send + Sync,
-    > Resolver<'a, DefaultResolverProvider<'a, Context>, InstalledPackages>
+impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
+    Resolver<'a, DefaultResolverProvider<'a, Context>, InstalledPackages>
 {
     /// Initialize a new resolver using the default backend doing real requests.
     ///
@@ -186,11 +248,8 @@ impl<
     }
 }
 
-impl<
-        'a,
-        Provider: ResolverProvider,
-        InstalledPackages: InstalledPackagesProvider + Send + Sync,
-    > Resolver<'a, Provider, InstalledPackages>
+impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
+    Resolver<'a, Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
     #[allow(clippy::too_many_arguments)]
@@ -206,9 +265,9 @@ impl<
     ) -> Result<Self, ResolveError> {
         Ok(Self {
             index,
-            unavailable_packages: DashMap::default(),
-            incomplete_packages: DashMap::default(),
-            visited: DashSet::default(),
+            unavailable_packages: SharedMap::default(),
+            incomplete_packages: SharedMap::default(),
+            visited: SharedSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers, options.dependency_mode)?,
@@ -251,7 +310,7 @@ impl<
         let requests_fut = self.fetch(request_stream).fuse();
 
         // Run the solver.
-        let resolve_fut = self.solve(request_sink).boxed().fuse();
+        let resolve_fut = self.solve(request_sink).boxed_local().fuse();
 
         // Wait for both to complete.
         match tokio::try_join!(requests_fut, resolve_fut) {
@@ -281,7 +340,7 @@ impl<
         }
     }
 
-    /// Run the `PubGrub` solver.
+    /// Run the PubGrub solver.
     #[instrument(skip_all)]
     async fn solve(
         &self,
@@ -364,83 +423,61 @@ impl<
                         .term_intersection_for_package(&next)
                         .expect("a package was chosen but we don't have a term.");
 
-                    let reason = {
-                        if let PubGrubPackage::Package(ref package_name, _, _) = next {
-                            // Check if the decision was due to the package being unavailable
-                            self.unavailable_packages
-                                .get(package_name)
-                                .map(|entry| match *entry {
-                                    UnavailablePackage::NoIndex => {
-                                        "was not found in the provided package locations"
-                                    }
-                                    UnavailablePackage::Offline => "was not found in the cache",
-                                    UnavailablePackage::NotFound => {
-                                        "was not found in the package registry"
-                                    }
-                                    UnavailablePackage::InvalidMetadata(_) => {
-                                        "was found, but the metadata could not be parsed"
-                                    }
-                                    UnavailablePackage::InvalidStructure(_) => {
-                                        "was found, but has an invalid format"
-                                    }
-                                })
-                        } else {
-                            None
+                    // Check if the decision was due to the package being unavailable
+                    if let PubGrubPackage::Package(ref package_name, _, _) = next {
+                        if let Some(entry) = self.unavailable_packages.borrow().get(package_name) {
+                            state.add_incompatibility(Incompatibility::custom_term(
+                                next.clone(),
+                                term_intersection.clone(),
+                                UnavailableReason::Package(entry.clone()),
+                            ));
+                            continue;
                         }
-                    };
+                    }
 
-                    let inc = Incompatibility::no_versions(
+                    state.add_incompatibility(Incompatibility::no_versions(
                         next.clone(),
                         term_intersection.clone(),
-                        reason.map(ToString::to_string),
-                    );
-
-                    state.add_incompatibility(inc);
+                    ));
                     continue;
                 }
                 Some(version) => version,
             };
             let version = match version {
                 ResolverVersion::Available(version) => version,
-                ResolverVersion::Unavailable(version, unavailable) => {
-                    let reason = match unavailable {
-                        // Incompatible requires-python versions are special in that we track
-                        // them as incompatible dependencies instead of marking the package version
-                        // as unavailable directly
-                        UnavailableVersion::IncompatibleDist(
-                            IncompatibleDist::Source(IncompatibleSource::RequiresPython(
-                                requires_python,
-                            ))
-                            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
-                                requires_python,
-                            )),
-                        ) => {
-                            let python_version = requires_python
-                                .iter()
-                                .map(PubGrubSpecifier::try_from)
-                                .fold_ok(Range::full(), |range, specifier| {
-                                    range.intersection(&specifier.into())
-                                })?;
+                ResolverVersion::Unavailable(version, reason) => {
+                    // Incompatible requires-python versions are special in that we track
+                    // them as incompatible dependencies instead of marking the package version
+                    // as unavailable directly
+                    if let UnavailableVersion::IncompatibleDist(
+                        IncompatibleDist::Source(IncompatibleSource::RequiresPython(
+                            requires_python,
+                        ))
+                        | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python)),
+                    ) = reason
+                    {
+                        let python_version = requires_python
+                            .iter()
+                            .map(PubGrubSpecifier::try_from)
+                            .fold_ok(Range::full(), |range, specifier| {
+                                range.intersection(&specifier.into())
+                            })?;
 
-                            let package = &next;
-                            for kind in [PubGrubPython::Installed, PubGrubPython::Target] {
-                                state.add_incompatibility(Incompatibility::from_dependency(
-                                    package.clone(),
-                                    Range::singleton(version.clone()),
-                                    (PubGrubPackage::Python(kind), python_version.clone()),
-                                ));
-                            }
-                            state.partial_solution.add_decision(next.clone(), version);
-                            continue;
+                        let package = &next;
+                        for kind in [PubGrubPython::Installed, PubGrubPython::Target] {
+                            state.add_incompatibility(Incompatibility::from_dependency(
+                                package.clone(),
+                                Range::singleton(version.clone()),
+                                (PubGrubPackage::Python(kind), python_version.clone()),
+                            ));
                         }
-                        UnavailableVersion::IncompatibleDist(incompatibility) => {
-                            incompatibility.to_string()
-                        }
+                        state.partial_solution.add_decision(next.clone(), version);
+                        continue;
                     };
-                    state.add_incompatibility(Incompatibility::unavailable(
+                    state.add_incompatibility(Incompatibility::custom_version(
                         next.clone(),
                         version.clone(),
-                        reason,
+                        UnavailableReason::Version(reason),
                     ));
                     continue;
                 }
@@ -471,10 +508,10 @@ impl<
                     .await?
                 {
                     Dependencies::Unavailable(reason) => {
-                        state.add_incompatibility(Incompatibility::unavailable(
+                        state.add_incompatibility(Incompatibility::custom_version(
                             package.clone(),
                             version.clone(),
-                            reason.clone(),
+                            UnavailableReason::Version(reason),
                         ));
                         continue;
                     }
@@ -648,25 +685,26 @@ impl<
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::Offline);
                         return Ok(None);
                     }
                     MetadataResponse::InvalidMetadata(err) => {
-                        self.unavailable_packages.insert(
+                        self.unavailable_packages.borrow_mut().insert(
                             package_name.clone(),
                             UnavailablePackage::InvalidMetadata(err.to_string()),
                         );
                         return Ok(None);
                     }
                     MetadataResponse::InconsistentMetadata(err) => {
-                        self.unavailable_packages.insert(
+                        self.unavailable_packages.borrow_mut().insert(
                             package_name.clone(),
                             UnavailablePackage::InvalidMetadata(err.to_string()),
                         );
                         return Ok(None);
                     }
                     MetadataResponse::InvalidStructure(err) => {
-                        self.unavailable_packages.insert(
+                        self.unavailable_packages.borrow_mut().insert(
                             package_name.clone(),
                             UnavailablePackage::InvalidStructure(err.to_string()),
                         );
@@ -707,22 +745,25 @@ impl<
                     .instrument(info_span!("package_wait", %package_name))
                     .await
                     .ok_or(ResolveError::Unregistered)?;
-                self.visited.insert(package_name.clone());
+                self.visited.borrow_mut().insert(package_name.clone());
 
                 let version_maps = match *versions_response {
                     VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
                         &[]
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::Offline);
                         &[]
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
                         &[]
                     }
@@ -816,7 +857,9 @@ impl<
                 let mut constraints = match constraints {
                     Ok(constraints) => constraints,
                     Err(err) => {
-                        return Ok(Dependencies::Unavailable(uncapitalize(err.to_string())));
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::ResolverError(uncapitalize(err.to_string())),
+                        ));
                     }
                 };
 
@@ -892,8 +935,7 @@ impl<
                         .iter()
                         .cloned()
                         .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()
-                        .map_err(Box::new)?;
+                        .collect::<Result<_, _>>()?;
                     let constraints = PubGrubDependencies::from_requirements(
                         &requirements,
                         &self.constraints,
@@ -926,7 +968,11 @@ impl<
                 let version_id = dist.version_id();
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
-                if self.unavailable_packages.get(package_name).is_some()
+                if self
+                    .unavailable_packages
+                    .borrow()
+                    .get(package_name)
+                    .is_some()
                     && self
                         .installed_packages
                         .get_packages(package_name)
@@ -936,9 +982,9 @@ impl<
                         false,
                         "Dependencies were requested for a package that is not available"
                     );
-                    return Ok(Dependencies::Unavailable(
-                        "The package is unavailable".to_string(),
-                    ));
+                    return Err(ResolveError::Failure(format!(
+                        "The package is unavailable: {package_name}"
+                    )));
                 }
 
                 // Wait for the metadata to be available.
@@ -954,51 +1000,56 @@ impl<
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.incomplete_packages
+                            .borrow_mut()
                             .entry(package_name.clone())
                             .or_default()
+                            .borrow_mut()
                             .insert(version.clone(), IncompletePackage::Offline);
-                        return Ok(Dependencies::Unavailable(
-                            "network connectivity is disabled, but the metadata wasn't found in the cache"
-                                .to_string(),
-                        ));
+                        return Ok(Dependencies::Unavailable(UnavailableVersion::Offline));
                     }
                     MetadataResponse::InvalidMetadata(err) => {
                         warn!("Unable to extract metadata for {package_name}: {err}");
                         self.incomplete_packages
+                            .borrow_mut()
                             .entry(package_name.clone())
                             .or_default()
+                            .borrow_mut()
                             .insert(
                                 version.clone(),
                                 IncompletePackage::InvalidMetadata(err.to_string()),
                             );
                         return Ok(Dependencies::Unavailable(
-                            "the package metadata could not be parsed".to_string(),
+                            UnavailableVersion::InvalidMetadata,
                         ));
                     }
                     MetadataResponse::InconsistentMetadata(err) => {
                         warn!("Unable to extract metadata for {package_name}: {err}");
                         self.incomplete_packages
+                            .borrow_mut()
                             .entry(package_name.clone())
                             .or_default()
+                            .borrow_mut()
                             .insert(
                                 version.clone(),
                                 IncompletePackage::InconsistentMetadata(err.to_string()),
                             );
                         return Ok(Dependencies::Unavailable(
-                            "the package metadata was inconsistent".to_string(),
+                            UnavailableVersion::InconsistentMetadata,
                         ));
                     }
                     MetadataResponse::InvalidStructure(err) => {
                         warn!("Unable to extract metadata for {package_name}: {err}");
                         self.incomplete_packages
+                            .borrow_mut()
                             .entry(package_name.clone())
                             .or_default()
+                            .borrow_mut()
                             .insert(
                                 version.clone(),
                                 IncompletePackage::InvalidStructure(err.to_string()),
                             );
                         return Ok(Dependencies::Unavailable(
-                            "the package has an invalid format".to_string(),
+                            UnavailableVersion::InvalidStructure,
                         ));
                     }
                 };
@@ -1008,8 +1059,7 @@ impl<
                     .iter()
                     .cloned()
                     .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()
-                    .map_err(Box::new)?;
+                    .collect::<Result<_, _>>()?;
                 let constraints = PubGrubDependencies::from_requirements(
                     &requirements,
                     &self.constraints,
@@ -1054,22 +1104,20 @@ impl<
         request_stream: tokio::sync::mpsc::Receiver<Request>,
     ) -> Result<(), ResolveError> {
         let mut response_stream = ReceiverStream::new(request_stream)
-            .map(|request| self.process_request(request).boxed())
+            .map(|request| self.process_request(request).boxed_local())
             .buffer_unordered(50);
 
         while let Some(response) = response_stream.next().await {
             match response? {
                 Some(Response::Package(package_name, version_map)) => {
                     trace!("Received package metadata for: {package_name}");
-                    self.index
-                        .packages
-                        .done(package_name, Arc::new(version_map));
+                    self.index.packages.done(package_name, Rc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions.done(
                         dist.version_id(),
-                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
+                        Rc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
                     );
                 }
                 Some(Response::Dist {
@@ -1088,7 +1136,7 @@ impl<
                     }
                     self.index
                         .distributions
-                        .done(dist.version_id(), Arc::new(metadata));
+                        .done(dist.version_id(), Rc::new(metadata));
                 }
                 Some(Response::Dist {
                     dist: Dist::Source(dist),
@@ -1106,7 +1154,7 @@ impl<
                     }
                     self.index
                         .distributions
-                        .done(dist.version_id(), Arc::new(metadata));
+                        .done(dist.version_id(), Rc::new(metadata));
                 }
                 None => {}
             }
@@ -1123,7 +1171,7 @@ impl<
                 let package_versions = self
                     .provider
                     .get_package_versions(&package_name)
-                    .boxed()
+                    .boxed_local()
                     .await
                     .map_err(ResolveError::Client)?;
 
@@ -1135,7 +1183,7 @@ impl<
                 let metadata = self
                     .provider
                     .get_or_build_wheel_metadata(&dist)
-                    .boxed()
+                    .boxed_local()
                     .await
                     .map_err(|err| match dist.clone() {
                         Dist::Built(BuiltDist::Path(built_dist)) => {
@@ -1174,18 +1222,21 @@ impl<
                     // Short-circuit if we did not find any versions for the package
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
 
                         return Ok(None);
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::Offline);
 
                         return Ok(None);
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
+                            .borrow_mut()
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
 
                         return Ok(None);
@@ -1219,7 +1270,7 @@ impl<
                             let metadata = self
                                 .provider
                                 .get_or_build_wheel_metadata(&dist)
-                                .boxed()
+                                .boxed_local()
                                 .await
                                 .map_err(|err| match dist.clone() {
                                     Dist::Built(BuiltDist::Path(built_dist)) => {
@@ -1260,10 +1311,10 @@ impl<
                 PubGrubPackage::Python(_) => {}
                 PubGrubPackage::Extra(_, _, _) => {}
                 PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                    reporter.on_progress(package_name, &VersionOrUrl::Url(url));
+                    reporter.on_progress(package_name, &VersionOrUrlRef::Url(url));
                 }
                 PubGrubPackage::Package(package_name, _extra, None) => {
-                    reporter.on_progress(package_name, &VersionOrUrl::Version(version));
+                    reporter.on_progress(package_name, &VersionOrUrlRef::Version(version));
                 }
             }
         }
@@ -1331,7 +1382,7 @@ enum Response {
 #[derive(Clone)]
 enum Dependencies {
     /// Package dependencies are not available.
-    Unavailable(String),
+    Unavailable(UnavailableVersion),
     /// Container for all available package versions.
     Available(Vec<(PubGrubPackage, Range<Version>)>),
 }

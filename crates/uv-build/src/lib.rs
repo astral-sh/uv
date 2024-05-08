@@ -7,8 +7,8 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Output};
+use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{env, iter};
 
 use fs_err as fs;
@@ -105,7 +105,7 @@ pub enum Error {
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
     #[error("Failed to parse requirements from build backend")]
-    DirectUrl(#[source] ParsedUrlError),
+    DirectUrl(#[source] Box<ParsedUrlError>),
 }
 
 #[derive(Debug)]
@@ -335,13 +335,13 @@ impl Pep517Backend {
     }
 }
 
-/// Uses an [`Arc`] internally, clone freely.
+/// Uses an [`Rc`] internally, clone freely.
 #[derive(Debug, Default, Clone)]
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
-    default_resolution: Arc<Mutex<Option<Resolution>>>,
+    default_resolution: Rc<Mutex<Option<Resolution>>>,
     /// An in-memory resolution of the build requirements for `--legacy-setup-py` builds.
-    setup_py_resolution: Arc<Mutex<Option<Resolution>>>,
+    setup_py_resolution: Rc<Mutex<Option<Resolution>>>,
 }
 
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py

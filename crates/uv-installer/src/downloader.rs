@@ -37,7 +37,7 @@ pub enum Error {
 }
 
 /// Download, build, and unzip a set of distributions.
-pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
+pub struct Downloader<'a, Context: BuildContext> {
     tags: &'a Tags,
     cache: &'a Cache,
     hashes: &'a HashStrategy,
@@ -45,7 +45,7 @@ pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
+impl<'a, Context: BuildContext> Downloader<'a, Context> {
     pub fn new(
         cache: &'a Cache,
         tags: &'a Tags,
@@ -83,7 +83,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         futures::stream::iter(distributions)
             .map(|dist| async {
-                let wheel = self.get_wheel(dist, in_flight).boxed().await?;
+                let wheel = self.get_wheel(dist, in_flight).boxed_local().await?;
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
@@ -174,7 +174,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             let result = self
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
-                .boxed()
+                .boxed_local()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
                 .await
                 .and_then(|wheel: LocalWheel| {

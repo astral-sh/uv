@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.1.41
+
+### Bug fixes
+
+- Remove unconstrained version error from requirements ([#3443](https://github.com/astral-sh/uv/pull/3443))
+
+## 0.1.40
+
+### Enhancements
+
+- Add `--allow-existing` to overwrite existing virtualenv ([#2548](https://github.com/astral-sh/uv/pull/2548))
+- Respect and enable uninstalls of legacy editables (`.egg-link`) ([#3415](https://github.com/astral-sh/uv/pull/3415))
+- Respect and enable uninstalls of existing `.egg-info` packages ([#3380](https://github.com/astral-sh/uv/pull/3380))
+
+### CLI
+
+- Accept `--no-upgrade`, `--no-refresh`, etc. on the CLI ([#3328](https://github.com/astral-sh/uv/pull/3328))
+
+### Configuration
+
+- Expose `UV_NO_BUILD_ISOLATION` as environment variable ([#3318](https://github.com/astral-sh/uv/pull/3318))
+- Expose `UV_PYTHON` as an environment variable ([#3284](https://github.com/astral-sh/uv/pull/3284))
+- Expose `UV_LINK_MODE` as environment variable ([#3315](https://github.com/astral-sh/uv/pull/3315))
+- Add `UV_CUSTOM_COMPILE_COMMAND` to environment variable docs ([#3382](https://github.com/astral-sh/uv/pull/3382))
+
+### Bug fixes
+
+- Ignore 401 HTTP responses with multiple indexes ([#3292](https://github.com/astral-sh/uv/pull/3292))
+- Avoid panic for file URLs ([#3306](https://github.com/astral-sh/uv/pull/3306))
+- Quote version parse errors consistently ([#3325](https://github.com/astral-sh/uv/pull/3325))
+- Detect current environment when `uv` is invoked from within a virtualenv ([#3379](https://github.com/astral-sh/uv/pull/3379))
+- Unset target when creating virtual environments ([#3362](https://github.com/astral-sh/uv/pull/3362))
+- Update activation scripts from virtualenv ([#3376](https://github.com/astral-sh/uv/pull/3376))
+- Use canonical URLs in satisfaction check ([#3373](https://github.com/astral-sh/uv/pull/3373))
+
 ## 0.1.39
 
 ### Enhancements

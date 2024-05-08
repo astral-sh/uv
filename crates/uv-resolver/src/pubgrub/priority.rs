@@ -8,9 +8,9 @@ use uv_normalize::PackageName;
 
 use crate::pubgrub::package::PubGrubPackage;
 
-/// A prioritization map to guide the `PubGrub` resolution process.
+/// A prioritization map to guide the PubGrub resolution process.
 ///
-/// During resolution, `PubGrub` needs to decide which package to consider next. The priorities
+/// During resolution, PubGrub needs to decide which package to consider next. The priorities
 /// encoded here are used to guide that decision.
 ///
 /// Like `pip`, we prefer packages that are pinned to direct URLs over packages pinned to a single

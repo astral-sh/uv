@@ -49,7 +49,7 @@ pub fn create_bare_venv(
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    force: bool,
+    allow_existing: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
@@ -91,8 +91,8 @@ pub fn create_bare_venv(
                     format!("File exists at `{}`", location.user_display()),
                 )));
             } else if metadata.is_dir() {
-                if force {
-                    info!("Overwriting existing directory");
+                if allow_existing {
+                    info!("Allowing existing directory");
                 } else if location.join("pyvenv.cfg").is_file() {
                     info!("Removing existing directory");
                     fs::remove_dir_all(location)?;

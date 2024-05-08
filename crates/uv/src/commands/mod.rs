@@ -16,7 +16,6 @@ pub(crate) use pip_list::pip_list;
 pub(crate) use pip_show::pip_show;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
-pub(crate) use run::run;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 use uv_cache::Cache;
@@ -26,6 +25,9 @@ use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
+pub(crate) use workspace::lock::lock;
+pub(crate) use workspace::run::run;
+pub(crate) use workspace::sync::sync;
 
 use crate::printer::Printer;
 
@@ -41,24 +43,21 @@ mod pip_show;
 mod pip_sync;
 mod pip_uninstall;
 mod reporters;
-mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod venv;
 mod version;
+mod workspace;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
     /// The command succeeded.
-    #[allow(unused)]
     Success,
 
     /// The command failed due to an error in the user input.
-    #[allow(unused)]
     Failure,
 
     /// The command failed with an unexpected error.
-    #[allow(unused)]
     Error,
 }
 

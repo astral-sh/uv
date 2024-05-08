@@ -345,7 +345,7 @@ impl RegistryClient {
                 };
                 OwnedArchive::from_unarchived(&unarchived)
             }
-            .boxed()
+            .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         let result = self
@@ -519,6 +519,7 @@ impl RegistryClient {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
                     self.uncached_client().client(),
                     response,
+                    url.clone(),
                     headers,
                 )
                 .await
@@ -534,7 +535,7 @@ impl RegistryClient {
                 })?;
                 Ok::<Metadata23, CachedClientError<Error>>(metadata)
             }
-            .boxed()
+            .boxed_local()
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 

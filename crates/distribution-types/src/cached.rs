@@ -9,7 +9,7 @@ use uv_normalize::PackageName;
 
 use crate::{
     BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
-    ParsedLocalFileUrl, ParsedUrl, SourceDist, VersionOrUrl,
+    ParsedLocalFileUrl, ParsedUrl, SourceDist, VersionOrUrlRef,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
@@ -187,19 +187,19 @@ impl Name for CachedDist {
 }
 
 impl DistributionMetadata for CachedRegistryDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.filename.version)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Version(&self.filename.version)
     }
 }
 
 impl DistributionMetadata for CachedDirectUrlDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for CachedDist {
-    fn version_or_url(&self) -> VersionOrUrl {
+    fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::Url(dist) => dist.version_or_url(),

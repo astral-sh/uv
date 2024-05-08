@@ -9,19 +9,23 @@
 //! outcomes. This implementation tries to carefully validate everything and emit warnings whenever
 //! bogus comparisons with unintended semantics are made.
 
-use crate::{Cursor, Pep508Error, Pep508ErrorSource};
-use pep440_rs::{Version, VersionPattern, VersionSpecifier};
+use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+use std::str::FromStr;
+
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, types::PyAnyMethods, PyResult,
     Python,
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashSet;
-use std::fmt::{Display, Formatter};
-use std::ops::Deref;
-use std::str::FromStr;
+
+use pep440_rs::{Version, VersionPattern, VersionSpecifier};
 use uv_normalize::ExtraName;
+
+use crate::cursor::Cursor;
+use crate::{Pep508Error, Pep508ErrorSource, Pep508Url};
 
 /// Ways in which marker evaluation can fail
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
@@ -356,8 +360,8 @@ impl Deref for StringVersion {
 ///
 /// Some are `(String, Version)` because we have to support version comparison
 #[allow(missing_docs, clippy::unsafe_derive_deserialize)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 pub struct MarkerEnvironment {
     pub implementation_name: String,
     pub implementation_version: StringVersion,
@@ -908,7 +912,7 @@ impl FromStr for MarkerExpression {
                     "Unexpected character '{unexpected}', expected end of input"
                 )),
                 start: pos,
-                len: chars.chars.clone().count(),
+                len: chars.remaining(),
                 input: chars.to_string(),
             });
         }
@@ -1230,7 +1234,9 @@ impl Display for MarkerTree {
 /// marker_op     = version_cmp | (wsp* 'in') | (wsp* 'not' wsp+ 'in')
 /// ```
 /// The `wsp*` has already been consumed by the caller.
-fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Error> {
+fn parse_marker_operator<T: Pep508Url>(
+    cursor: &mut Cursor,
+) -> Result<MarkerOperator, Pep508Error<T>> {
     let (start, len) = if cursor.peek_char().is_some_and(|c| c.is_alphabetic()) {
         // "in" or "not"
         cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"')
@@ -1283,7 +1289,7 @@ fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Er
 /// '`os_name`', '`sys_platform`', '`platform_release`', '`platform_system`', '`platform_version`',
 /// '`platform_machine`', '`platform_python_implementation`', '`implementation_name`',
 /// '`implementation_version`', 'extra'
-fn parse_marker_value(cursor: &mut Cursor) -> Result<MarkerValue, Pep508Error> {
+fn parse_marker_value<T: Pep508Url>(cursor: &mut Cursor) -> Result<MarkerValue, Pep508Error<T>> {
     // > User supplied constants are always encoded as strings with either ' or " quote marks. Note
     // > that backslash escapes are not defined, but existing implementations do support them. They
     // > are not included in this specification because they add complexity and there is no observable
@@ -1327,7 +1333,9 @@ fn parse_marker_value(cursor: &mut Cursor) -> Result<MarkerValue, Pep508Error> {
 /// ```text
 /// marker_var:l marker_op:o marker_var:r
 /// ```
-fn parse_marker_key_op_value(cursor: &mut Cursor) -> Result<MarkerExpression, Pep508Error> {
+fn parse_marker_key_op_value<T: Pep508Url>(
+    cursor: &mut Cursor,
+) -> Result<MarkerExpression, Pep508Error<T>> {
     cursor.eat_whitespace();
     let lvalue = parse_marker_value(cursor)?;
     cursor.eat_whitespace();
@@ -1348,7 +1356,7 @@ fn parse_marker_key_op_value(cursor: &mut Cursor) -> Result<MarkerExpression, Pe
 /// marker_expr   = marker_var:l marker_op:o marker_var:r -> (o, l, r)
 ///               | wsp* '(' marker:m wsp* ')' -> m
 /// ```
-fn parse_marker_expr(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+fn parse_marker_expr<T: Pep508Url>(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error<T>> {
     cursor.eat_whitespace();
     if let Some(start_pos) = cursor.eat_char('(') {
         let marker = parse_marker_or(cursor)?;
@@ -1363,7 +1371,7 @@ fn parse_marker_expr(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
 /// marker_and    = marker_expr:l wsp* 'and' marker_expr:r -> ('and', l, r)
 ///               | marker_expr:m -> m
 /// ```
-fn parse_marker_and(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+fn parse_marker_and<T: Pep508Url>(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error<T>> {
     parse_marker_op(cursor, "and", MarkerTree::And, parse_marker_expr)
 }
 
@@ -1371,17 +1379,17 @@ fn parse_marker_and(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
 /// marker_or     = marker_and:l wsp* 'or' marker_and:r -> ('or', l, r)
 ///                   | marker_and:m -> m
 /// ```
-fn parse_marker_or(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+fn parse_marker_or<T: Pep508Url>(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error<T>> {
     parse_marker_op(cursor, "or", MarkerTree::Or, parse_marker_and)
 }
 
 /// Parses both `marker_and` and `marker_or`
-fn parse_marker_op(
+fn parse_marker_op<T: Pep508Url>(
     cursor: &mut Cursor,
     op: &str,
     op_constructor: fn(Vec<MarkerTree>) -> MarkerTree,
-    parse_inner: fn(&mut Cursor) -> Result<MarkerTree, Pep508Error>,
-) -> Result<MarkerTree, Pep508Error> {
+    parse_inner: fn(&mut Cursor) -> Result<MarkerTree, Pep508Error<T>>,
+) -> Result<MarkerTree, Pep508Error<T>> {
     // marker_and or marker_expr
     let first_element = parse_inner(cursor)?;
     // wsp*
@@ -1417,9 +1425,11 @@ fn parse_marker_op(
 }
 
 /// ```text
-/// marker        = marker_or
+/// marker        = marker_or^
 /// ```
-pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+pub(crate) fn parse_markers_cursor<T: Pep508Url>(
+    cursor: &mut Cursor,
+) -> Result<MarkerTree, Pep508Error<T>> {
     let marker = parse_marker_or(cursor)?;
     cursor.eat_whitespace();
     if let Some((pos, unexpected)) = cursor.next() {
@@ -1430,7 +1440,7 @@ pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep5
                 "Unexpected character '{unexpected}', expected 'and', 'or' or end of input"
             )),
             start: pos,
-            len: cursor.chars.clone().count(),
+            len: cursor.remaining(),
             input: cursor.to_string(),
         });
     };
@@ -1439,21 +1449,24 @@ pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep5
 
 /// Parses markers such as `python_version < '3.8'` or
 /// `python_version == "3.10" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))`
-fn parse_markers(markers: &str) -> Result<MarkerTree, Pep508Error> {
+fn parse_markers<T: Pep508Url>(markers: &str) -> Result<MarkerTree, Pep508Error<T>> {
     let mut chars = Cursor::new(markers);
-    parse_markers_impl(&mut chars)
+    parse_markers_cursor(&mut chars)
 }
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
+    use insta::assert_snapshot;
+
+    use uv_normalize::ExtraName;
+
     use crate::marker::{MarkerEnvironment, StringVersion};
     use crate::{
         MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
         MarkerValueVersion,
     };
-    use insta::assert_snapshot;
-    use std::str::FromStr;
-    use uv_normalize::ExtraName;
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()

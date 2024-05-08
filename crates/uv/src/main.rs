@@ -11,8 +11,8 @@ use owo_colors::OwoColorize;
 use tracing::instrument;
 
 use uv_cache::Cache;
-
 use uv_requirements::RequirementsSource;
+use uv_workspace::Combine;
 
 use crate::cli::{CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace};
 #[cfg(feature = "self-update")]
@@ -114,10 +114,10 @@ async fn run() -> Result<ExitStatus> {
         Some(uv_workspace::Workspace::from_file(config_file)?)
     } else if cli.isolated {
         None
-    } else if let Some(workspace) = uv_workspace::Workspace::find(env::current_dir()?)? {
-        Some(workspace)
     } else {
-        uv_workspace::Workspace::user()?
+        let project = uv_workspace::Workspace::find(env::current_dir()?)?;
+        let user = uv_workspace::Workspace::user()?;
+        project.combine(user)
     };
 
     // Resolve the global settings.
@@ -285,6 +285,7 @@ async fn run() -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
         }) => {
+            args.compat_args.validate()?;
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, workspace);
 
@@ -483,7 +484,7 @@ async fn run() -> Result<ExitStatus> {
                 args.system_site_packages,
                 args.shared.connectivity,
                 args.seed,
-                args.force,
+                args.allow_existing,
                 args.shared.exclude_newer,
                 globals.native_tls,
                 &cache,
@@ -520,13 +521,24 @@ async fn run() -> Result<ExitStatus> {
                 args.args,
                 requirements,
                 args.python,
-                args.isolated,
-                args.no_workspace,
+                cli.isolated,
                 globals.preview,
                 &cache,
                 printer,
             )
             .await
+        }
+        Commands::Sync(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let _args = settings::SyncSettings::resolve(args, workspace);
+
+            commands::sync(globals.preview, &cache, printer).await
+        }
+        Commands::Lock(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let _args = settings::LockSettings::resolve(args, workspace);
+
+            commands::lock(globals.preview, &cache, printer).await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {

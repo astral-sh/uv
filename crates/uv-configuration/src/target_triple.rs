@@ -1,3 +1,5 @@
+use tracing::debug;
+
 use pep508_rs::MarkerEnvironment;
 use platform_tags::{Arch, Os, Platform};
 
@@ -21,46 +23,63 @@ pub enum TargetTriple {
 
     /// An x86 Windows target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-pc-windows-msvc"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-pc-windows-msvc"))]
     X8664PcWindowsMsvc,
 
     /// An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-gnu"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-unknown-linux-gnu"))]
     X8664UnknownLinuxGnu,
 
-    /// An ARM-based macOS target, as seen on Apple Silicon devices.
+    /// An ARM-based macOS target, as seen on Apple Silicon devices
+    ///
+    /// By default, assumes the least-recent, non-EOL macOS version (12.0), but respects
+    /// the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "aarch64-apple-darwin"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-apple-darwin"))]
     Aarch64AppleDarwin,
 
     /// An x86 macOS target.
+    ///
+    /// By default, assumes the least-recent, non-EOL macOS version (12.0), but respects
+    /// the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "x86_64-apple-darwin"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-apple-darwin"))]
     X8664AppleDarwin,
 
     /// An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_17`.
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-gnu"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-unknown-linux-gnu"))]
     Aarch64UnknownLinuxGnu,
 
     /// An ARM64 Linux target.
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-musl"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-unknown-linux-musl"))]
     Aarch64UnknownLinuxMusl,
 
     /// An `x86_64` Linux target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-musl"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-unknown-linux-musl"))]
     X8664UnknownLinuxMusl,
 
     /// An `x86_64` target for the `manylinux_2_17` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_17"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_17"))]
     X8664Manylinux217,
 
     /// An `x86_64` target for the `manylinux_2_28` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_28"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_28"))]
     X8664Manylinux228,
 
     /// An ARM64 target for the `manylinux_2_17` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_17"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_17"))]
     Aarch64Manylinux217,
 
     /// An ARM64 target for the `manylinux_2_28` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_28"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_28"))]
     Aarch64Manylinux228,
 }
 
@@ -76,20 +95,20 @@ impl TargetTriple {
                 },
                 Arch::X86_64,
             ),
-            Self::Macos | Self::Aarch64AppleDarwin => Platform::new(
-                Os::Macos {
-                    major: 12,
-                    minor: 0,
-                },
-                Arch::Aarch64,
-            ),
-            Self::X8664AppleDarwin => Platform::new(
-                Os::Macos {
-                    major: 10,
-                    minor: 12,
-                },
-                Arch::X86_64,
-            ),
+            Self::Macos | Self::Aarch64AppleDarwin => {
+                let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
+                    debug!("Found macOS deployment target: {}.{}", major, minor);
+                    (major, minor)
+                });
+                Platform::new(Os::Macos { major, minor }, Arch::Aarch64)
+            }
+            Self::X8664AppleDarwin => {
+                let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
+                    debug!("Found macOS deployment target: {}.{}", major, minor);
+                    (major, minor)
+                });
+                Platform::new(Os::Macos { major, minor }, Arch::X86_64)
+            }
             Self::Aarch64UnknownLinuxGnu => Platform::new(
                 Os::Manylinux {
                     major: 2,
@@ -258,4 +277,18 @@ impl TargetTriple {
             python_version: base.python_version.clone(),
         }
     }
+}
+
+/// Return the macOS deployment target as parsed from the environment.
+fn macos_deployment_target() -> Option<(u16, u16)> {
+    let version = std::env::var("MACOSX_DEPLOYMENT_TARGET").ok()?;
+    let mut parts = version.split('.');
+
+    // Parse the major version (e.g., `12` in `12.0`).
+    let major = parts.next()?.parse::<u16>().ok()?;
+
+    // Parse the minor version (e.g., `0` in `12.0`), with a default of `0`.
+    let minor = parts.next().unwrap_or("0").parse::<u16>().ok()?;
+
+    Some((major, minor))
 }

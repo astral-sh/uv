@@ -381,11 +381,11 @@ fn non_empty_dir_exists() -> Result<()> {
 }
 
 #[test]
-fn non_empty_dir_exists_force() -> Result<()> {
+fn non_empty_dir_exists_allow_existing() -> Result<()> {
     let context = VenvTestContext::new(&["3.12"]);
 
     // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should
-    // succeed when `--force` is specified, but fail when it is not.
+    // succeed when `--allow-existing` is specified, but fail when it is not.
     context.venv.create_dir_all()?;
     context.venv.child("file").touch()?;
 
@@ -409,7 +409,7 @@ fn non_empty_dir_exists_force() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
-        .arg("--force")
+        .arg("--allow-existing")
         .arg("--python")
         .arg("3.12"), @r###"
     success: true
@@ -427,7 +427,7 @@ fn non_empty_dir_exists_force() -> Result<()> {
     // directories.
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
-        .arg("--force")
+        .arg("--allow-existing")
         .arg("--python")
         .arg("3.12"), @r###"
     success: true

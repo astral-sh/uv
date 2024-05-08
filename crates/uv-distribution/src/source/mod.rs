@@ -116,7 +116,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 tags,
                                 hashes,
                             )
-                            .boxed()
+                            .boxed_local()
                             .await;
                     }
                 };
@@ -130,7 +130,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     tags,
                     hashes,
                 )
-                .boxed()
+                .boxed_local()
                 .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
@@ -153,18 +153,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     tags,
                     hashes,
                 )
-                .boxed()
+                .boxed_local()
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
                 self.git(source, &GitSourceUrl::from(dist), tags, hashes)
-                    .boxed()
+                    .boxed_local()
                     .await?
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 if dist.path.is_dir() {
                     self.source_tree(source, &PathSourceUrl::from(dist), tags, hashes)
-                        .boxed()
+                        .boxed_local()
                         .await?
                 } else {
                     let cache_shard = self
@@ -178,7 +178,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         tags,
                         hashes,
                     )
-                    .boxed()
+                    .boxed_local()
                     .await?
                 }
             }
@@ -205,16 +205,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     tags,
                     hashes,
                 )
-                .boxed()
+                .boxed_local()
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git(source, resource, tags, hashes).boxed().await?
+                self.git(source, resource, tags, hashes)
+                    .boxed_local()
+                    .await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 if resource.path.is_dir() {
                     self.source_tree(source, resource, tags, hashes)
-                        .boxed()
+                        .boxed_local()
                         .await?
                 } else {
                     let cache_shard = self.build_context.cache().shard(
@@ -222,7 +224,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         WheelCache::Path(resource.url).root(),
                     );
                     self.archive(source, resource, &cache_shard, tags, hashes)
-                        .boxed()
+                        .boxed_local()
                         .await?
                 }
             }
@@ -268,7 +270,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 &cache_shard,
                                 hashes,
                             )
-                            .boxed()
+                            .boxed_local()
                             .await;
                     }
                 };
@@ -281,7 +283,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     hashes,
                 )
-                .boxed()
+                .boxed_local()
                 .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
@@ -303,18 +305,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     subdirectory.as_deref(),
                     hashes,
                 )
-                .boxed()
+                .boxed_local()
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
                 self.git_metadata(source, &GitSourceUrl::from(dist), hashes)
-                    .boxed()
+                    .boxed_local()
                     .await?
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 if dist.path.is_dir() {
                     self.source_tree_metadata(source, &PathSourceUrl::from(dist), hashes)
-                        .boxed()
+                        .boxed_local()
                         .await?
                 } else {
                     let cache_shard = self
@@ -322,7 +324,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .cache()
                         .shard(CacheBucket::BuiltWheels, WheelCache::Path(&dist.url).root());
                     self.archive_metadata(source, &PathSourceUrl::from(dist), &cache_shard, hashes)
-                        .boxed()
+                        .boxed_local()
                         .await?
                 }
             }
@@ -348,16 +350,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     subdirectory.as_deref(),
                     hashes,
                 )
-                .boxed()
+                .boxed_local()
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git_metadata(source, resource, hashes).boxed().await?
+                self.git_metadata(source, resource, hashes)
+                    .boxed_local()
+                    .await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 if resource.path.is_dir() {
                     self.source_tree_metadata(source, resource, hashes)
-                        .boxed()
+                        .boxed_local()
                         .await?
                 } else {
                     let cache_shard = self.build_context.cache().shard(
@@ -365,7 +369,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         WheelCache::Path(resource.url).root(),
                     );
                     self.archive_metadata(source, resource, &cache_shard, hashes)
-                        .boxed()
+                        .boxed_local()
                         .await?
                 }
             }
@@ -488,7 +492,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, source_dist_entry.path(), subdirectory)
-            .boxed()
+            .boxed_local()
             .await?
         {
             // Store the metadata.
@@ -569,7 +573,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 Ok(revision.with_hashes(hashes))
             }
-            .boxed()
+            .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
         };
         let req = self.request(url.clone())?;
@@ -706,7 +710,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, source_entry.path(), None)
-            .boxed()
+            .boxed_local()
             .await?
         {
             // Store the metadata.
@@ -903,7 +907,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, &resource.path, None)
-            .boxed()
+            .boxed_local()
             .await?
         {
             // Store the metadata.
@@ -1110,7 +1114,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, fetch.path(), subdirectory.as_deref())
-            .boxed()
+            .boxed_local()
             .await?
         {
             // Store the metadata.

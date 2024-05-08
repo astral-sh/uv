@@ -61,7 +61,7 @@ impl UnresolvedRequirement {
     }
 
     /// Return the version specifier or URL for the requirement.
-    pub fn source(&self) -> Result<Cow<'_, RequirementSource>, ParsedUrlError> {
+    pub fn source(&self) -> Result<Cow<'_, RequirementSource>, Box<ParsedUrlError>> {
         // TODO(konsti): This is a bad place to raise errors, we should have parsed the url earlier.
         match self {
             Self::Named(requirement) => Ok(Cow::Borrowed(&requirement.source)),

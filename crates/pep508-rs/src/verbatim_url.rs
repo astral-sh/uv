@@ -5,9 +5,12 @@ use std::path::{Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_fs::normalize_path;
+use uv_fs::{normalize_path, normalize_url_path};
+
+use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
 #[derive(Debug, Clone, Eq, derivative::Derivative, serde::Deserialize, serde::Serialize)]
@@ -182,8 +185,78 @@ impl Deref for VerbatimUrl {
     }
 }
 
+impl From<Url> for VerbatimUrl {
+    fn from(url: Url) -> Self {
+        VerbatimUrl::from_url(url)
+    }
+}
+
+impl Pep508Url for VerbatimUrl {
+    type Err = VerbatimUrlError;
+
+    /// Create a `VerbatimUrl` to represent the requirement.
+    fn parse_url(
+        url: &str,
+        #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_variables))]
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Self::Err> {
+        // Expand environment variables in the URL.
+        let expanded = expand_env_vars(url);
+
+        if let Some((scheme, path)) = split_scheme(&expanded) {
+            match Scheme::parse(scheme) {
+                // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
+                Some(Scheme::File) => {
+                    // Strip the leading slashes, along with the `localhost` host, if present.
+                    let path = strip_host(path);
+
+                    // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                    let path = normalize_url_path(path);
+
+                    #[cfg(feature = "non-pep508-extensions")]
+                    if let Some(working_dir) = working_dir {
+                        return Ok(VerbatimUrl::parse_path(path.as_ref(), working_dir)
+                            .with_given(url.to_string()));
+                    }
+
+                    Ok(
+                        VerbatimUrl::parse_absolute_path(path.as_ref())?
+                            .with_given(url.to_string()),
+                    )
+                }
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                Some(_) => {
+                    // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                    Ok(VerbatimUrl::parse_url(expanded.as_ref())?.with_given(url.to_string()))
+                }
+
+                // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
+                _ => {
+                    #[cfg(feature = "non-pep508-extensions")]
+                    if let Some(working_dir) = working_dir {
+                        return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)
+                            .with_given(url.to_string()));
+                    }
+
+                    Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())?
+                        .with_given(url.to_string()))
+                }
+            }
+        } else {
+            // Ex) `../editable/`
+            #[cfg(feature = "non-pep508-extensions")]
+            if let Some(working_dir) = working_dir {
+                return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)
+                    .with_given(url.to_string()));
+            }
+
+            Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())?.with_given(url.to_string()))
+        }
+    }
+}
+
 /// An error that can occur when parsing a [`VerbatimUrl`].
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]

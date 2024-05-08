@@ -53,59 +53,59 @@ impl Display for IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => {
-                    f.write_str("no source distribution is available and using wheels is disabled")
+                    f.write_str("has no available source distribution and using wheels is disabled")
                 }
                 IncompatibleWheel::Tag(tag) => match tag {
                     IncompatibleTag::Invalid => {
-                        f.write_str("no wheels are available with valid tags")
+                        f.write_str("has no wheels are available with valid tags")
                     }
-                    IncompatibleTag::Python => {
-                        f.write_str("no wheels are available with a matching Python implementation")
-                    }
+                    IncompatibleTag::Python => f.write_str(
+                        "has no wheels are available with a matching Python implementation",
+                    ),
                     IncompatibleTag::Abi => {
-                        f.write_str("no wheels are available with a matching Python ABI")
+                        f.write_str("has no wheels are available with a matching Python ABI")
                     }
                     IncompatibleTag::Platform => {
-                        f.write_str("no wheels are available with a matching platform")
+                        f.write_str("has no wheels are available with a matching platform")
                     }
                 },
                 IncompatibleWheel::Yanked(yanked) => match yanked {
-                    Yanked::Bool(_) => f.write_str("it was yanked"),
+                    Yanked::Bool(_) => f.write_str("was yanked"),
                     Yanked::Reason(reason) => write!(
                         f,
-                        "it was yanked (reason: {})",
+                        "was yanked (reason: {})",
                         reason.trim().trim_end_matches('.')
                     ),
                 },
                 IncompatibleWheel::ExcludeNewer(ts) => match ts {
-                    Some(_) => f.write_str("it was published after the exclude newer time"),
-                    None => f.write_str("it has no publish time"),
+                    Some(_) => f.write_str("was published after the exclude newer time"),
+                    None => f.write_str("has no publish time"),
                 },
                 IncompatibleWheel::RequiresPython(python) => {
-                    write!(f, "it requires at python {python}")
+                    write!(f, "requires at python {python}")
                 }
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => {
-                    f.write_str("no wheels are usable and building from source is disabled")
+                    f.write_str("has no usable wheels and building from source is disabled")
                 }
                 IncompatibleSource::Yanked(yanked) => match yanked {
-                    Yanked::Bool(_) => f.write_str("it was yanked"),
+                    Yanked::Bool(_) => f.write_str("was yanked"),
                     Yanked::Reason(reason) => write!(
                         f,
-                        "it was yanked (reason: {})",
+                        "was yanked (reason: {})",
                         reason.trim().trim_end_matches('.')
                     ),
                 },
                 IncompatibleSource::ExcludeNewer(ts) => match ts {
-                    Some(_) => f.write_str("it was published after the exclude newer time"),
-                    None => f.write_str("it has no publish time"),
+                    Some(_) => f.write_str("was published after the exclude newer time"),
+                    None => f.write_str("has no publish time"),
                 },
                 IncompatibleSource::RequiresPython(python) => {
-                    write!(f, "it requires python {python}")
+                    write!(f, "requires python {python}")
                 }
             },
-            Self::Unavailable => f.write_str("no distributions are available"),
+            Self::Unavailable => f.write_str("has no available distributions"),
         }
     }
 }

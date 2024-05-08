@@ -32,7 +32,7 @@ pub(crate) struct Cli {
     #[command(flatten)]
     pub(crate) cache_args: CacheArgs,
 
-    /// The path to a `pyproject.toml` or `uv.toml` file to use for configuration.
+    /// The path to a `uv.toml` file to use for configuration.
     #[arg(long, env = "UV_CONFIG_FILE", hide = true)]
     pub(crate) config_file: Option<PathBuf>,
 
@@ -133,8 +133,15 @@ pub(crate) enum Commands {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(hide = true)]
     Clean(CleanArgs),
+    /// Run a command in the project environment.
     #[clap(hide = true)]
     Run(RunArgs),
+    /// Sync the project's dependencies with the environment.
+    #[clap(hide = true)]
+    Sync(SyncArgs),
+    /// Resolve the project requirements into a lockfile.
+    #[clap(hide = true)]
+    Lock(LockArgs),
     /// Display uv's version
     Version {
         #[arg(long, value_enum, default_value = "text")]
@@ -1332,6 +1339,9 @@ pub(crate) struct PipInstallArgs {
 
     #[arg(long, hide = true)]
     pub(crate) unstable_uv_lock_file: Option<String>,
+
+    #[command(flatten)]
+    pub(crate) compat_args: compat::PipInstallCompatArgs,
 }
 
 #[derive(Args)]
@@ -1703,14 +1713,17 @@ pub(crate) struct VenvArgs {
     #[arg(long)]
     pub(crate) seed: bool,
 
-    /// Overwrite the directory at the specified path when creating the virtual environment.
+    /// Preserve any existing files or directories at the target path.
     ///
     /// By default, `uv venv` will remove an existing virtual environment at the given path, and
-    /// exit with an error if the path is non-empty but _not_ a virtual environment. The `--force`
-    /// option will instead write to the given path, regardless of its contents, and without
-    /// clearing it beforehand.
+    /// exit with an error if the path is non-empty but _not_ a virtual environment. The
+    /// `--allow-existing` option will instead write to the given path, regardless of its contents,
+    /// and without clearing it beforehand.
+    ///
+    /// WARNING: This option can lead to unexpected behavior if the existing virtual environment
+    /// and the newly-created virtual environment are linked to different Python interpreters.
     #[clap(long)]
-    pub(crate) force: bool,
+    pub(crate) allow_existing: bool,
 
     /// The path to the virtual environment to create.
     #[arg(default_value = ".venv")]
@@ -1821,10 +1834,6 @@ pub(crate) struct RunArgs {
     #[arg(allow_hyphen_values = true)]
     pub(crate) args: Vec<OsString>,
 
-    /// Always use a new virtual environment for execution.
-    #[arg(long)]
-    pub(crate) isolated: bool,
-
     /// Run with the given packages installed.
     #[arg(long)]
     pub(crate) with: Vec<String>,
@@ -1848,11 +1857,54 @@ pub(crate) struct RunArgs {
         group = "discovery"
     )]
     pub(crate) python: Option<String>,
+}
 
-    /// Run without the current workspace installed.
-    #[arg(long)]
-    pub(crate) no_workspace: bool,
-    // TODO(zanieb): Consider alternative names like `--no-project` or `--without-project`
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct SyncArgs {
+    /// The Python interpreter to use to build the run environment.
+    ///
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
+    /// option allows you to specify a different interpreter.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
+    pub(crate) python: Option<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct LockArgs {
+    /// The Python interpreter to use to build the run environment.
+    ///
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
+    /// option allows you to specify a different interpreter.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
+    pub(crate) python: Option<String>,
 }
 
 #[derive(Args)]

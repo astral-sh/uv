@@ -11,9 +11,10 @@ use pep508_rs::MarkerEnvironment;
 use pypi_types::{HashDigest, HashError};
 use uv_normalize::PackageName;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum HashStrategy {
     /// No hash policy is specified.
+    #[default]
     None,
     /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
     Generate,

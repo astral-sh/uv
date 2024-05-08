@@ -120,15 +120,18 @@
       }
     },
     "ExcludeNewer": {
+      "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).",
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2}))?$"
     },
     "ExtraName": {
-      "description": "The normalized name of an extra dependency group.\n\nConverts the name to lowercase and collapses any run of the characters `-`, `_` and `.` down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "description": "The normalized name of an extra dependency group.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
     },
     "FlatIndexLocation": {
-      "type": "string"
+      "description": "The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.",
+      "type": "string",
+      "format": "uri"
     },
     "IndexStrategy": {
       "oneOf": [
@@ -156,7 +159,9 @@
       ]
     },
     "IndexUrl": {
-      "type": "string"
+      "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).",
+      "type": "string",
+      "format": "uri"
     },
     "KeyringProviderType": {
       "description": "Keyring provider type to use for credential lookup.",
@@ -203,10 +208,11 @@
       ]
     },
     "PackageName": {
-      "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses any run of the characters `-`, `_` and `.` down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
     },
     "PackageNameSpecifier": {
+      "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
       "type": "string",
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
     },
@@ -565,7 +571,9 @@
       ]
     },
     "PythonVersion": {
-      "type": "string"
+      "description": "A Python version specifier, e.g. `3.7` or `3.8.0`.",
+      "type": "string",
+      "pattern": "^3\\.\\d+(\\.\\d+)?$"
     },
     "ResolutionMode": {
       "oneOf": [
@@ -796,28 +804,28 @@
           "description": "An x86 Windows target.",
           "type": "string",
           "enum": [
-            "x8664-pc-windows-msvc"
+            "x86_64-pc-windows-msvc"
           ]
         },
         {
           "description": "An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.",
           "type": "string",
           "enum": [
-            "x8664-unknown-linux-gnu"
+            "x86_64-unknown-linux-gnu"
           ]
         },
         {
-          "description": "An ARM-based macOS target, as seen on Apple Silicon devices.",
+          "description": "An ARM-based macOS target, as seen on Apple Silicon devices\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
             "aarch64-apple-darwin"
           ]
         },
         {
-          "description": "An x86 macOS target.",
+          "description": "An x86 macOS target.\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
-            "x8664-apple-darwin"
+            "x86_64-apple-darwin"
           ]
         },
         {
@@ -838,41 +846,40 @@
           "description": "An `x86_64` Linux target.",
           "type": "string",
           "enum": [
-            "x8664-unknown-linux-musl"
+            "x86_64-unknown-linux-musl"
           ]
         },
         {
           "description": "An `x86_64` target for the `manylinux_2_17` platform.",
           "type": "string",
           "enum": [
-            "x8664-manylinux217"
+            "x86_64-manylinux_2_17"
           ]
         },
         {
           "description": "An `x86_64` target for the `manylinux_2_28` platform.",
           "type": "string",
           "enum": [
-            "x8664-manylinux228"
+            "x86_64-manylinux_2_28"
           ]
         },
         {
           "description": "An ARM64 target for the `manylinux_2_17` platform.",
           "type": "string",
           "enum": [
-            "aarch64-manylinux217"
+            "aarch64-manylinux_2_17"
           ]
         },
         {
           "description": "An ARM64 target for the `manylinux_2_28` platform.",
           "type": "string",
           "enum": [
-            "aarch64-manylinux228"
+            "aarch64-manylinux_2_28"
           ]
         }
       ]
     },
     "ToolUvWorkspace": {
-      "description": "`tool.uv.workspace`.",
       "type": "object",
       "properties": {
         "exclude": {

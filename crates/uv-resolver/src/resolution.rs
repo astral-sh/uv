@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::hash::BuildHasherDefault;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -14,7 +14,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
     Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ParsedUrlError, Requirement,
-    ResolvedDist, Verbatim, VersionId, VersionOrUrl,
+    ResolvedDist, Verbatim, VersionId, VersionOrUrlRef,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -64,13 +64,13 @@ pub struct ResolutionGraph {
 }
 
 impl ResolutionGraph {
-    /// Create a new graph from the resolved `PubGrub` state.
+    /// Create a new graph from the resolved PubGrub state.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
-        packages: &OnceMap<PackageName, Arc<VersionsResponse>>,
-        distributions: &OnceMap<VersionId, Arc<MetadataResponse>>,
+        packages: &OnceMap<PackageName, Rc<VersionsResponse>>,
+        distributions: &OnceMap<VersionId, Rc<MetadataResponse>>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,
@@ -436,10 +436,10 @@ impl ResolutionGraph {
         for i in self.petgraph.node_indices() {
             let dist = &self.petgraph[i];
             let version_id = match dist.version_or_url() {
-                VersionOrUrl::Version(version) => {
+                VersionOrUrlRef::Version(version) => {
                     VersionId::from_registry(dist.name().clone(), version.clone())
                 }
-                VersionOrUrl::Url(verbatim_url) => VersionId::from_url(verbatim_url.raw()),
+                VersionOrUrlRef::Url(verbatim_url) => VersionId::from_url(verbatim_url.raw()),
             };
             let res = index
                 .distributions

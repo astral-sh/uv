@@ -429,10 +429,10 @@ pub(crate) async fn pip_compile(
                         .iter()
                         .cloned()
                         .map(Requirement::from_pep508)
-                        .collect::<Result<_, ParsedUrlError>>()?,
+                        .collect::<Result<_, _>>()?,
                     optional_dependencies: IndexMap::default(),
                 };
-                Ok::<_, ParsedUrlError>((
+                Ok::<_, Box<ParsedUrlError>>((
                     built_editable.editable,
                     built_editable.metadata,
                     requirements,

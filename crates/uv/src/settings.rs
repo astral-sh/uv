@@ -16,8 +16,9 @@ use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode,
 use uv_workspace::{PipOptions, Workspace};
 
 use crate::cli::{
-    ColorChoice, GlobalArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
-    PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, VenvArgs,
+    ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
+    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs,
+    VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -85,9 +86,7 @@ pub(crate) struct RunSettings {
     // CLI-only settings.
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
-    pub(crate) isolated: bool,
     pub(crate) with: Vec<String>,
-    pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
 }
 
@@ -98,9 +97,7 @@ impl RunSettings {
         let RunArgs {
             target,
             args,
-            isolated,
             with,
-            no_workspace,
             python,
         } = args;
 
@@ -108,9 +105,49 @@ impl RunSettings {
             // CLI-only settings.
             target,
             args,
-            isolated,
             with,
-            no_workspace,
+            python,
+        }
+    }
+}
+
+/// The resolved settings to use for a `sync` invocation.
+#[allow(clippy::struct_excessive_bools, dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct SyncSettings {
+    // CLI-only settings.
+    pub(crate) python: Option<String>,
+}
+
+impl SyncSettings {
+    /// Resolve the [`SyncSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: SyncArgs, _workspace: Option<Workspace>) -> Self {
+        let SyncArgs { python } = args;
+
+        Self {
+            // CLI-only settings.
+            python,
+        }
+    }
+}
+
+/// The resolved settings to use for a `lock` invocation.
+#[allow(clippy::struct_excessive_bools, dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct LockSettings {
+    // CLI-only settings.
+    pub(crate) python: Option<String>,
+}
+
+impl LockSettings {
+    /// Resolve the [`LockSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: LockArgs, _workspace: Option<Workspace>) -> Self {
+        let LockArgs { python } = args;
+
+        Self {
+            // CLI-only settings.
             python,
         }
     }
@@ -456,6 +493,7 @@ impl PipInstallSettings {
             exclude_newer,
             dry_run,
             unstable_uv_lock_file,
+            compat_args: _,
         } = args;
 
         Self {
@@ -746,7 +784,7 @@ impl PipCheckSettings {
 pub(crate) struct VenvSettings {
     // CLI-only settings.
     pub(crate) seed: bool,
-    pub(crate) force: bool,
+    pub(crate) allow_existing: bool,
     pub(crate) name: PathBuf,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
@@ -763,7 +801,7 @@ impl VenvSettings {
             system,
             no_system,
             seed,
-            force,
+            allow_existing,
             name,
             prompt,
             system_site_packages,
@@ -782,7 +820,7 @@ impl VenvSettings {
         Self {
             // CLI-only settings.
             seed,
-            force,
+            allow_existing,
             name,
             prompt,
             system_site_packages,

@@ -17,7 +17,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
     let directories = Mutex::new(FxHashSet::default());
     (0..archive.len())
-        .par_bridge()
+        .into_par_iter()
         .map(|file_number| {
             let mut archive = archive.clone();
             let mut file = archive.by_index(file_number)?;

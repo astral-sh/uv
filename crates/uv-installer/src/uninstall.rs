@@ -7,8 +7,16 @@ pub async fn uninstall(
     dist: &InstalledDist,
 ) -> Result<install_wheel_rs::Uninstall, UninstallError> {
     let uninstall = tokio::task::spawn_blocking({
-        let path = dist.path().to_owned();
-        move || install_wheel_rs::uninstall_wheel(&path)
+        let dist = dist.clone();
+        move || match dist {
+            InstalledDist::Registry(_) | InstalledDist::Url(_) => {
+                install_wheel_rs::uninstall_wheel(dist.path())
+            }
+            InstalledDist::EggInfo(_) => install_wheel_rs::uninstall_egg(dist.path()),
+            InstalledDist::LegacyEditable(dist) => {
+                install_wheel_rs::uninstall_legacy_editable(&dist.egg_link)
+            }
+        }
     })
     .await??;
 
