@@ -22,7 +22,8 @@ use uv_requirements::{
     RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, ResolutionGraph, Resolver,
+    Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph,
+    Resolver,
 };
 use uv_types::{EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -101,6 +102,7 @@ pub(crate) async fn resolve(
     let preferences = Vec::new();
     let constraints = Constraints::default();
     let overrides = Overrides::default();
+    let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
     let editables = Vec::new();
     let installed_packages = EmptyInstalledPackages;
 
@@ -150,7 +152,7 @@ pub(crate) async fn resolve(
         index,
     )
     .with_reporter(ResolverReporter::from(printer))
-    .resolve(markers)
+    .resolve(Some(markers))
     .await?;
 
     // Create a manifest of the requirements.
@@ -169,8 +171,8 @@ pub(crate) async fn resolve(
     let resolver = Resolver::new(
         manifest,
         options,
-        markers,
-        interpreter,
+        &python_requirement,
+        Some(markers),
         tags,
         client,
         flat_index,

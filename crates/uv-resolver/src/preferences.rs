@@ -79,7 +79,7 @@ impl Preferences {
     /// to an applicable subset.
     pub(crate) fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
         preferences: PreferenceIterator,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
     ) -> Self {
         Self(
             // TODO(zanieb): We should explicitly ensure that when a package name is seen multiple times

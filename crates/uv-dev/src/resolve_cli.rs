@@ -15,7 +15,9 @@ use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, Options, Resolver};
+use uv_resolver::{
+    ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver,
+};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 #[derive(ValueEnum, Default, Clone)]
@@ -98,6 +100,9 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
 
     // Copied from `BuildDispatch`
     let tags = venv.interpreter().tags()?;
+    let markers = venv.interpreter().markers();
+    let python_requirement =
+        PythonRequirement::from_marker_environment(venv.interpreter(), markers);
     let resolver = Resolver::new(
         Manifest::simple(
             args.requirements
@@ -107,8 +112,8 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
                 .collect::<Result<_, _>>()?,
         ),
         Options::default(),
-        venv.interpreter().markers(),
-        venv.interpreter(),
+        &python_requirement,
+        Some(venv.interpreter().markers()),
         tags,
         &client,
         &flat_index,

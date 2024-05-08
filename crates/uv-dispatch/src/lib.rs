@@ -19,7 +19,7 @@ use uv_client::RegistryClient;
 use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
-use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, Resolver};
+use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -135,12 +135,14 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let markers = self.interpreter.markers();
+        let python_requirement =
+            PythonRequirement::from_marker_environment(self.interpreter, markers);
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()),
             self.options,
-            markers,
-            self.interpreter,
+            &python_requirement,
+            Some(markers),
             tags,
             self.client,
             self.flat_index,

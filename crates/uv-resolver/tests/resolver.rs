@@ -19,7 +19,8 @@ use uv_configuration::{BuildKind, Constraints, NoBinary, NoBuild, Overrides, Set
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
-    OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
+    OptionsBuilder, PreReleaseMode, Preference, PythonRequirement, ResolutionGraph, ResolutionMode,
+    Resolver,
 };
 use uv_types::{
     BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceBuildTrait,
@@ -126,14 +127,15 @@ async fn resolve(
     let real_interpreter =
         find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
+    let python_requirement = PythonRequirement::from_marker_environment(&interpreter, markers);
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
     let hashes = HashStrategy::None;
     let installed_packages = EmptyInstalledPackages;
     let resolver = Resolver::new(
         manifest,
         options,
-        markers,
-        &interpreter,
+        &python_requirement,
+        Some(markers),
         tags,
         &client,
         &flat_index,

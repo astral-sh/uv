@@ -37,8 +37,17 @@ pub struct UnnamedRequirement {
 impl UnnamedRequirement {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+        self.evaluate_optional_environment(Some(env), extras)
+    }
+
+    /// Returns whether the markers apply for the given environment
+    pub fn evaluate_optional_environment(
+        &self,
+        env: Option<&MarkerEnvironment>,
+        extras: &[ExtraName],
+    ) -> bool {
         if let Some(marker) = &self.marker {
-            marker.evaluate(env, extras)
+            marker.evaluate_optional_environment(env, extras)
         } else {
             true
         }

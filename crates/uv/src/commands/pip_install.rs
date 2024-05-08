@@ -45,7 +45,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Lock, Manifest, Options,
-    OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
+    OptionsBuilder, PreReleaseMode, Preference, PythonRequirement, ResolutionGraph, ResolutionMode,
+    Resolver,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -268,7 +269,7 @@ pub(crate) async fn pip_install(
                 .iter()
                 .chain(overrides.iter())
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            &markers,
+            Some(&markers),
         )?
     } else {
         HashStrategy::None
@@ -688,6 +689,7 @@ async fn resolve(
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
+    let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
 
     // Map the editables to their metadata.
     let editables: Vec<_> = editables
@@ -726,7 +728,7 @@ async fn resolve(
                 index,
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve(markers)
+            .resolve(Some(markers))
             .await?
         }
         DependencyMode::Direct => Vec::new(),
@@ -748,8 +750,8 @@ async fn resolve(
     let resolver = Resolver::new(
         manifest,
         options,
-        markers,
-        interpreter,
+        &python_requirement,
+        Some(markers),
         tags,
         client,
         flat_index,

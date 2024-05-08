@@ -85,9 +85,14 @@ impl HashStrategy {
     }
 
     /// Generate the required hashes from a set of [`UnresolvedRequirement`] entries.
+    ///
+    /// When the environment is not given, this treats all marker expressions
+    /// that reference the environment as true. In other words, it does
+    /// environment independent expression evaluation. (Which in turn devolves
+    /// to "only evaluate marker expressions that reference an extra name.")
     pub fn from_requirements<'a>(
         requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
     ) -> Result<Self, HashStrategyError> {
         let mut hashes = FxHashMap::<PackageId, Vec<HashDigest>>::default();
 

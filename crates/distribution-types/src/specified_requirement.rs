@@ -45,10 +45,15 @@ impl Display for UnresolvedRequirement {
 
 impl UnresolvedRequirement {
     /// Returns whether the markers apply for the given environment.
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+    ///
+    /// When the environment is not given, this treats all marker expressions
+    /// that reference the environment as true. In other words, it does
+    /// environment independent expression evaluation. (Which in turn devolves
+    /// to "only evaluate marker expressions that reference an extra name.")
+    pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
         match self {
             Self::Named(requirement) => requirement.evaluate_markers(env, extras),
-            Self::Unnamed(requirement) => requirement.evaluate_markers(env, extras),
+            Self::Unnamed(requirement) => requirement.evaluate_optional_environment(env, extras),
         }
     }
 

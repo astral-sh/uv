@@ -238,6 +238,16 @@ pub(crate) async fn pip_compile(
         (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
         (None, None) => Cow::Borrowed(interpreter.markers()),
     };
+    // The marker environment to use for evaluating requirements. When
+    // `uv_lock` is enabled, we specifically do environment independent marker
+    // evaluation. (i.e., Only consider extras.)
+    let marker_filter = if uv_lock { None } else { Some(&*markers) };
+    // The Python requirement in "workspace-aware uv" should, I believe, come
+    // from the pyproject.toml. For now, we just take it from the markers
+    // (which does have its Python version set potentially from the CLI, which
+    // I think is spiritually equivalent to setting the Python version in
+    // pyproject.toml).
+    let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &markers);
 
     // Generate, but don't enforce hashes for the requirements.
     let hasher = if generate_hashes {
@@ -359,7 +369,7 @@ pub(crate) async fn pip_compile(
 
     for requirement in requirements
         .iter()
-        .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
+        .filter(|requirement| requirement.evaluate_markers(marker_filter, &[]))
     {
         if let Some(path) = &requirement.path {
             if path.ends_with("pyproject.toml") {
@@ -381,7 +391,7 @@ pub(crate) async fn pip_compile(
 
     for requirement in constraints
         .iter()
-        .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
+        .filter(|requirement| requirement.evaluate_markers(marker_filter, &[]))
     {
         if let Some(path) = &requirement.path {
             sources.add(
@@ -393,7 +403,7 @@ pub(crate) async fn pip_compile(
 
     for requirement in overrides
         .iter()
-        .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
+        .filter(|requirement| requirement.evaluate_markers(marker_filter, &[]))
     {
         if let Some(path) = &requirement.path {
             sources.add(&requirement.name, SourceAnnotation::Override(path.clone()));
@@ -469,15 +479,14 @@ pub(crate) async fn pip_compile(
             .collect::<Result<_, _>>()?;
 
         // Validate that the editables are compatible with the target Python version.
-        let requirement = PythonRequirement::new(&interpreter, &markers);
         for (_, metadata, _) in &editables {
             if let Some(python_requires) = metadata.requires_python.as_ref() {
-                if !python_requires.contains(requirement.target()) {
+                if !python_requires.contains(python_requirement.target()) {
                     return Err(anyhow!(
                         "Editable `{}` requires Python {}, but resolution targets Python {}",
                         metadata.name,
                         python_requires,
-                        requirement.target()
+                        python_requirement.target()
                     ));
                 }
             }
@@ -511,7 +520,7 @@ pub(crate) async fn pip_compile(
                 &top_level_index,
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve(&markers)
+            .resolve(marker_filter)
             .await?
         }
         DependencyMode::Direct => Vec::new(),
@@ -542,8 +551,8 @@ pub(crate) async fn pip_compile(
     let resolver = Resolver::new(
         manifest.clone(),
         options,
-        &markers,
-        &interpreter,
+        &python_requirement,
+        marker_filter,
         &tags,
         &client,
         &flat_index,
