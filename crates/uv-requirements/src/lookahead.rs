@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use thiserror::Error;
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, GitSourceDist, LocalEditable, Requirement,
+    BuiltDist, Dist, DistKind, DistributionMetadata, GitSourceDist, LocalEditable, Requirement,
     RequirementSource, Requirements, SourceDist,
 };
 use pep508_rs::MarkerEnvironment;
@@ -160,7 +160,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let dist = match requirement.source {
             RequirementSource::Registry { .. } => return Ok(None),
             RequirementSource::Url { url, .. } => Dist::from_http_url(requirement.name, url)?,
-            RequirementSource::Git { url, .. } => Dist::Source(SourceDist::Git(GitSourceDist {
+            RequirementSource::Git { url, .. } => Dist::from(SourceDist::Git(GitSourceDist {
                 name: requirement.name,
                 url,
             })),
@@ -200,9 +200,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .database
                     .get_or_build_wheel_metadata(&dist, self.hasher.get(&dist))
                     .await
-                    .map_err(|err| match &dist {
-                        Dist::Built(built) => LookaheadError::Download(built.clone(), err),
-                        Dist::Source(source) => {
+                    .map_err(|err| match &*dist {
+                        DistKind::Built(built) => LookaheadError::Download(built.clone(), err),
+                        DistKind::Source(source) => {
                             LookaheadError::DownloadAndBuild(source.clone(), err)
                         }
                     })?;
@@ -221,7 +221,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         };
 
         // Consider the dependencies to be "direct" if the requirement is a local source tree.
-        let direct = if let Dist::Source(source_dist) = &dist {
+        let direct = if let DistKind::Source(source_dist) = &*dist {
             source_dist.as_path().is_some_and(std::path::Path::is_dir)
         } else {
             false

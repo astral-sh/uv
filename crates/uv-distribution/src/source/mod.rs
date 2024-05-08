@@ -1417,7 +1417,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(|err| Error::BuildEditable(editable.to_string(), err))?;
         let filename = WheelFilename::from_str(&disk_filename)?;
         // We finally have the name of the package and can construct the dist.
-        let dist = Dist::Source(SourceDist::Path(PathSourceDist {
+        let dist = Dist::from(SourceDist::Path(PathSourceDist {
             name: filename.name.clone(),
             url: editable.url().clone(),
             path: editable.path.clone(),

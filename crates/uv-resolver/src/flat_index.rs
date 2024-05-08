@@ -80,7 +80,7 @@ impl FlatIndex {
 
                 let compatibility =
                     Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, no_binary);
-                let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+                let dist = Dist::from(BuiltDist::Registry(RegistryBuiltDist {
                     filename,
                     file: Box::new(file),
                     index,
@@ -97,7 +97,7 @@ impl FlatIndex {
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility =
                     Self::source_dist_compatibility(&filename, &file.hashes, hasher, no_build);
-                let dist = Dist::Source(SourceDist::Registry(RegistrySourceDist {
+                let dist = Dist::from(SourceDist::Registry(RegistrySourceDist {
                     filename: filename.clone(),
                     file: Box::new(file),
                     index,
