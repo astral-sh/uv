@@ -584,6 +584,9 @@ In addition, uv respects the following environment variables:
 - `ZSH_VERSION`: Used to detect the use of the Zsh shell.
 - `RAYON_NUM_THREADS`: Used to control the number of threads used when unzipping and installing
   packages. See the [rayon documentation](https://docs.rs/rayon/latest/rayon/) for more.
+- `MACOSX_DEPLOYMENT_TARGET`: Used with `--python-platform macos` and related variants to set the
+  deployment target (i.e., the minimum supported macOS version). Defaults to `12.0`, the
+  least-recent non-EOL macOS version at time of writing.
 
 ## Versioning
 
