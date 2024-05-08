@@ -312,12 +312,17 @@ impl<'a> Planner<'a> {
                 RequirementSource::Git {
                     repository,
                     reference,
+                    precise,
                     subdirectory,
                     url,
                 } => {
+                    let mut git = GitUrl::new(repository.clone(), reference.clone());
+                    if let Some(precise) = precise {
+                        git = git.with_precise(*precise);
+                    }
                     let sdist = GitSourceDist {
                         name: requirement.name.clone(),
-                        git: Box::new(GitUrl::new(repository.clone(), reference.clone())),
+                        git: Box::new(git),
                         subdirectory: subdirectory.clone(),
                         url: url.clone(),
                     };

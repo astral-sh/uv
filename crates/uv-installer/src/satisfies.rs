@@ -92,6 +92,7 @@ impl RequirementSatisfaction {
                 url: _,
                 repository: requested_repository,
                 reference: requested_reference,
+                precise: requested_precise,
                 subdirectory: requested_subdirectory,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
@@ -130,10 +131,12 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if installed_reference.as_deref() != requested_reference.as_str() {
+                if installed_reference.as_deref() != requested_reference.as_str()
+                    && installed_reference != &requested_precise.map(|git_sha| git_sha.to_string())
+                {
                     debug!(
-                        "Reference mismatch: {:?} vs. {:?}",
-                        installed_reference, requested_reference
+                        "Reference mismatch: {:?} vs. {:?} and {:?}",
+                        installed_reference, requested_reference, requested_precise
                     );
                     return Ok(Self::OutOfDate);
                 }
@@ -160,17 +163,29 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 };
 
-                if requested_editable != installed_editable {
+                if requested_editable.unwrap_or_default() != installed_editable.unwrap_or_default()
+                {
+                    trace!(
+                        "Editable mismatch: {:?} vs. {:?}",
+                        requested_editable.unwrap_or_default(),
+                        installed_editable.unwrap_or_default()
+                    );
                     return Ok(Self::Mismatch);
                 }
 
                 if !CanonicalUrl::parse(installed_url)
                     .is_ok_and(|installed_url| installed_url == CanonicalUrl::new(requested_url))
                 {
+                    trace!(
+                        "URL mismatch: {:?} vs. {:?}",
+                        CanonicalUrl::parse(installed_url),
+                        CanonicalUrl::new(requested_url)
+                    );
                     return Ok(Self::Mismatch);
                 }
 
                 if !ArchiveTimestamp::up_to_date_with(path, ArchiveTarget::Install(distribution))? {
+                    trace!("Out of date");
                     return Ok(Self::OutOfDate);
                 }
 
