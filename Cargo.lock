@@ -4736,6 +4736,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "tracing",
  "uv-auth",
  "uv-cache",
  "uv-normalize",
