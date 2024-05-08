@@ -22,10 +22,13 @@ impl Workspace {
         };
         let root = dir.join("uv");
         let file = root.join("uv.toml");
-        Ok(Some(Self {
-            options: read_file(&file).unwrap_or_default(),
-            root,
-        }))
+
+        debug!("Loading user configuration from: `{}`", file.display());
+        match read_file(&file) {
+            Ok(options) => Ok(Some(Self { options, root })),
+            Err(WorkspaceError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 
     /// Find the [`Workspace`] for the given path.

@@ -112,6 +112,42 @@ impl ConfigSettings {
     pub fn escape_for_python(&self) -> String {
         serde_json::to_string(self).expect("Failed to serialize config settings")
     }
+
+    /// Merge two sets of config settings, with the values in `self` taking precedence.
+    #[must_use]
+    pub fn merge(self, other: ConfigSettings) -> ConfigSettings {
+        let mut config = self.0;
+        for (key, value) in other.0 {
+            match config.entry(key) {
+                Entry::Vacant(vacant) => {
+                    vacant.insert(value);
+                }
+                Entry::Occupied(mut occupied) => match occupied.get_mut() {
+                    ConfigSettingValue::String(existing) => {
+                        let existing = existing.clone();
+                        match value {
+                            ConfigSettingValue::String(value) => {
+                                occupied.insert(ConfigSettingValue::List(vec![existing, value]));
+                            }
+                            ConfigSettingValue::List(mut values) => {
+                                values.insert(0, existing);
+                                occupied.insert(ConfigSettingValue::List(values));
+                            }
+                        }
+                    }
+                    ConfigSettingValue::List(existing) => match value {
+                        ConfigSettingValue::String(value) => {
+                            existing.push(value);
+                        }
+                        ConfigSettingValue::List(values) => {
+                            existing.extend(values);
+                        }
+                    },
+                },
+            }
+        }
+        Self(config)
+    }
 }
 
 impl serde::Serialize for ConfigSettings {

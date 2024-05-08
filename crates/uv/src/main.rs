@@ -11,8 +11,8 @@ use owo_colors::OwoColorize;
 use tracing::instrument;
 
 use uv_cache::Cache;
-
 use uv_requirements::RequirementsSource;
+use uv_workspace::Combine;
 
 use crate::cli::{CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace};
 #[cfg(feature = "self-update")]
@@ -114,10 +114,10 @@ async fn run() -> Result<ExitStatus> {
         Some(uv_workspace::Workspace::from_file(config_file)?)
     } else if cli.isolated {
         None
-    } else if let Some(workspace) = uv_workspace::Workspace::find(env::current_dir()?)? {
-        Some(workspace)
     } else {
-        uv_workspace::Workspace::user()?
+        let project = uv_workspace::Workspace::find(env::current_dir()?)?;
+        let user = uv_workspace::Workspace::user()?;
+        project.combine(user)
     };
 
     // Resolve the global settings.
