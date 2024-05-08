@@ -13,7 +13,7 @@ use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
 
-use common::{create_venv, python_path_with_versions, uv_snapshot, venv_to_interpreter};
+use common::{create_venv, uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
 use crate::common::{copy_dir_all, get_bin, TestContext};
@@ -295,60 +295,49 @@ fn noop() -> Result<()> {
 /// virtual environment.
 #[test]
 fn link() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let venv1 = &context.venv;
+    // Sync `anyio` into the first virtual environment.
+    let context1 = TestContext::new("3.12");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+    let requirements_txt = context1.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig==2.0.0")?;
 
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
-        .arg("requirements.txt")
+    command(&context1)
+        .arg(requirements_txt.path())
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", venv1.as_os_str())
-        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
-    let venv2 = context.temp_dir.child(".venv2");
-    let python_path = python_path_with_versions(&context.temp_dir, &["3.12"])
-        .expect("Failed to create Python test path");
-    Command::new(get_bin())
-        .arg("venv")
-        .arg(venv2.as_os_str())
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--python")
-        .arg("3.12")
-        .env("UV_TEST_PYTHON_PATH", python_path)
-        .current_dir(&context.temp_dir)
-        .assert()
-        .success();
-    venv2.assert(predicates::path::is_dir());
-
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
+    // Create a separate virtual environment, but reuse the same cache.
+    let context2 = TestContext::new("3.12");
+    let mut cmd = Command::new(get_bin());
+    cmd.arg("pip")
         .arg("sync")
-        .arg("requirements.txt")
-        .arg("--strict")
         .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", venv2.as_os_str())
-        .current_dir(&context.temp_dir), @r###"
+        .arg(context1.cache_dir.path())
+        .env("VIRTUAL_ENV", context2.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context2.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        cmd.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(cmd
+        .arg(requirements_txt.path())
+        .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed 1 package in [TIME]
-     + markupsafe==2.1.3
+     + iniconfig==2.0.0
     "###
     );
 
-    check_command(&venv2, "import markupsafe", &context.temp_dir);
+    check_command(&context2.venv, "import iniconfig", &context2.temp_dir);
 
     Ok(())
 }
@@ -360,7 +349,7 @@ fn add_remove() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+    requirements_txt.write_str("iniconfig==2.0.0")?;
 
     command(&context)
         .arg("requirements.txt")
@@ -383,7 +372,7 @@ fn add_remove() -> Result<()> {
     Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - markupsafe==2.1.3
+     - iniconfig==2.0.0
      + tomli==2.0.1
     "###
     );
@@ -401,7 +390,7 @@ fn install_sequential() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+    requirements_txt.write_str("iniconfig==2.0.0")?;
 
     command(&context)
         .arg("requirements.txt")
@@ -410,7 +399,7 @@ fn install_sequential() -> Result<()> {
         .success();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str("iniconfig==2.0.0\ntomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -428,7 +417,7 @@ fn install_sequential() -> Result<()> {
     );
 
     context
-        .assert_command("import markupsafe; import tomli")
+        .assert_command("import iniconfig; import tomli")
         .success();
 
     Ok(())
@@ -820,7 +809,7 @@ fn install_no_index() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+    requirements_txt.write_str("iniconfig==2.0.0")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -832,13 +821,13 @@ fn install_no_index() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because markupsafe was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
     );
 
-    context.assert_command("import markupsafe").failure();
+    context.assert_command("import iniconfig").failure();
 
     Ok(())
 }
@@ -850,7 +839,7 @@ fn install_no_index_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+    requirements_txt.write_str("iniconfig==2.0.0")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -863,14 +852,14 @@ fn install_no_index_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + markupsafe==2.1.3
+     + iniconfig==2.0.0
     "###
     );
 
-    context.assert_command("import markupsafe").success();
+    context.assert_command("import iniconfig").success();
 
     uninstall_command(&context)
-        .arg("markupsafe")
+        .arg("iniconfig")
         .assert()
         .success();
 
@@ -884,13 +873,13 @@ fn install_no_index_cached() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because markupsafe was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
     );
 
-    context.assert_command("import markupsafe").failure();
+    context.assert_command("import iniconfig").failure();
 
     Ok(())
 }

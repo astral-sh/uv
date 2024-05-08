@@ -2248,13 +2248,10 @@ fn reinstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==21.3.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    context1
+        .install()
+        .arg("-r")
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context1.cache_dir.path())
-        .env("VIRTUAL_ENV", context1.venv.as_os_str())
         .assert()
         .success();
 
@@ -2264,13 +2261,10 @@ fn reinstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==22.1.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    context2
+        .install()
+        .arg("-r")
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context2.cache_dir.path())
-        .env("VIRTUAL_ENV", context2.venv.as_os_str())
         .assert()
         .success();
 
