@@ -474,6 +474,14 @@ fn uninstall_egg_info() -> Result<()> {
     Ok(())
 }
 
+fn normcase(s: &str) -> String {
+    if cfg!(windows) {
+        s.replace('/', "\\").to_lowercase()
+    } else {
+        s.to_owned()
+    }
+}
+
 /// Uninstall a legacy editable package in a virtual environment.
 #[test]
 fn uninstall_legacy_editable() -> Result<()> {
@@ -499,14 +507,6 @@ Version: 0.22.0
     site_packages
         .child("zstandard.egg-link")
         .write_str(target.path().to_str().unwrap())?;
-
-    fn normcase(s: &str) -> String {
-        if cfg!(windows) {
-            s.replace('/', "\\").to_lowercase()
-        } else {
-            s.to_owned()
-        }
-    }
 
     site_packages.child("easy-install.pth").write_str(&format!(
         "something\n{}\nanother thing\n",
