@@ -1364,7 +1364,7 @@ mod test {
     use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
-        PathBuf::from("./test-data").canonicalize().unwrap()
+        Path::new("./test-data").simple_canonicalize().unwrap()
     }
 
     fn safe_filter_path(path: &Path) -> String {
@@ -1820,41 +1820,41 @@ mod test {
         let filter_path = safe_filter_path(temp_dir.path());
         let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
         insta::with_settings!({
-                        filters => filters,
-                    }, {
-                insta::assert_debug_snapshot!(requirements, @r###"
-                RequirementsTxt {
-                    requirements: [
-                        RequirementEntry {
-                            requirement: Named(
-                                Requirement {
-                                    name: PackageName(
-                                        "flask",
-                                    ),
-                                    extras: [],
-                                    version_or_url: None,
-                                    marker: None,
-                                    path: Some(
-                                        "<REQUIREMENTS_DIR>subdir/sibling.txt",
-                                    ),
-                                },
-                            ),
-                            hashes: [],
-                            path: Some(
-                                "<REQUIREMENTS_DIR>subdir/sibling.txt",
-                            ),
-                        },
-                    ],
-                    constraints: [],
-                    editables: [],
-                    index_url: None,
-                    extra_index_urls: [],
-                    find_links: [],
-                    no_index: false,
-                    no_binary: None,
-                    only_binary: None,
-                }
-                "###);
+            filters => filters,
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "flask",
+                                ),
+                                extras: [],
+                                version_or_url: None,
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>subdir/sibling.txt",
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>subdir/sibling.txt",
+                        ),
+                    },
+                ],
+                constraints: [],
+                editables: [],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: None,
+                only_binary: None,
+            }
+            "###);
         });
 
         Ok(())

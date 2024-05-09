@@ -22,6 +22,9 @@ pub trait Simplified {
     /// equivalent to [`std::path::Display`].
     fn simplified_display(&self) -> std::path::Display;
 
+    /// Canonicalize a path without a `\\?\` prefix on Windows.
+    fn simple_canonicalize(&self) -> std::io::Result<PathBuf>;
+
     /// Render a [`Path`] for user-facing display.
     ///
     /// Like [`simplified_display`], but relativizes the path against the current working directory.
@@ -35,6 +38,10 @@ impl<T: AsRef<Path>> Simplified for T {
 
     fn simplified_display(&self) -> std::path::Display {
         dunce::simplified(self.as_ref()).display()
+    }
+
+    fn simple_canonicalize(&self) -> std::io::Result<PathBuf> {
+        dunce::canonicalize(self.as_ref())
     }
 
     fn user_display(&self) -> std::path::Display {
@@ -136,7 +143,7 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 pub fn absolutize_path(path: &Path) -> Result<Cow<Path>, std::io::Error> {
     use path_absolutize::Absolutize;
 
-    path.absolutize_from(&*CWD)
+    path.absolutize_from(CWD.simplified())
 }
 
 /// Like `fs_err::canonicalize`, but with permissive failures on Windows.
