@@ -469,7 +469,7 @@ def get_operating_system_and_architecture():
                 "major": musl_version[0],
                 "minor": musl_version[1],
             }
-        elif glibc_version:
+        elif glibc_version != (-1, -1):
             operating_system = {
                 "name": "manylinux",
                 "major": glibc_version[0],
