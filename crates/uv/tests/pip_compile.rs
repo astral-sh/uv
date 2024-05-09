@@ -2301,6 +2301,7 @@ fn compile_exclude_newer() -> Result<()> {
             .arg(context.cache_dir.path())
             .env("VIRTUAL_ENV", context.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
             .current_dir(context.temp_dir.path()), @r###"
     success: true
     exit_code: 0
@@ -2327,6 +2328,7 @@ fn compile_exclude_newer() -> Result<()> {
             .arg(context.cache_dir.path())
             .env("VIRTUAL_ENV", context.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
             .current_dir(context.temp_dir.path()), @r###"
     success: true
     exit_code: 0
@@ -2352,6 +2354,7 @@ fn compile_exclude_newer() -> Result<()> {
             .arg(context.cache_dir.path())
             .env("VIRTUAL_ENV", context.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
             .current_dir(context.temp_dir.path()), @r###"
     success: false
     exit_code: 2
