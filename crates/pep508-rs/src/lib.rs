@@ -26,7 +26,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 #[cfg(feature = "pyo3")]
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 #[cfg(feature = "pyo3")]
@@ -49,6 +49,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "non-pep508-extensions")]
 pub use unnamed::UnnamedRequirement;
 // Parity with the crates.io version of pep508_rs
+pub use origin::RequirementOrigin;
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use verbatim_url::{
     expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,
@@ -56,6 +57,7 @@ pub use verbatim_url::{
 
 mod cursor;
 mod marker;
+mod origin;
 #[cfg(feature = "non-pep508-extensions")]
 mod unnamed;
 mod verbatim_url;
@@ -149,14 +151,14 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
     /// The source file containing the requirement.
-    pub source: Option<PathBuf>,
+    pub origin: Option<RequirementOrigin>,
 }
 
 impl Requirement {
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_source(self, source: Option<PathBuf>) -> Self {
-        Self { source, ..self }
+    pub fn with_origin(self, origin: Option<RequirementOrigin>) -> Self {
+        Self { origin, ..self }
     }
 }
 
@@ -492,7 +494,7 @@ impl<T: Pep508Url> Requirement<T> {
             extras,
             version_or_url,
             marker,
-            source,
+            origin,
         } = self;
         Requirement {
             name,
@@ -505,7 +507,7 @@ impl<T: Pep508Url> Requirement<T> {
                 Some(VersionOrUrl::Url(url)) => Some(VersionOrUrl::Url(U::from(url))),
             },
             marker,
-            source,
+            origin,
         }
     }
 }
@@ -1029,7 +1031,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
         extras,
         version_or_url: requirement_kind,
         marker,
-        source: None,
+        origin: None,
     })
 }
 
@@ -1171,7 +1173,7 @@ mod tests {
                 operator: MarkerOperator::LessThan,
                 r_value: MarkerValue::QuotedString("2.7".to_string()),
             })),
-            source: None,
+            origin: None,
         };
         assert_eq!(requests, expected);
     }
@@ -1397,7 +1399,7 @@ mod tests {
             extras: vec![],
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
-            source: None,
+            origin: None,
         };
         assert_eq!(pip_url, expected);
     }

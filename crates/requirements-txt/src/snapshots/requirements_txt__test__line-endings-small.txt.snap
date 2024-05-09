@@ -24,15 +24,14 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/small.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/small.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [],
-            path: Some(
-                "<REQUIREMENTS_DIR>/small.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -54,15 +53,14 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/small.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/small.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [],
-            path: Some(
-                "<REQUIREMENTS_DIR>/small.txt",
-            ),
         },
     ],
     constraints: [],

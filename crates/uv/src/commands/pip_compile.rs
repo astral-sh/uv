@@ -371,21 +371,11 @@ pub(crate) async fn pip_compile(
         .iter()
         .filter(|requirement| requirement.evaluate_markers(marker_filter, &[]))
     {
-        if let Some(path) = &requirement.path {
-            if path.ends_with("pyproject.toml") {
-                sources.add(
-                    &requirement.name,
-                    SourceAnnotation::PyProject {
-                        path: path.clone(),
-                        project_name: project.as_ref().map(ToString::to_string),
-                    },
-                );
-            } else {
-                sources.add(
-                    &requirement.name,
-                    SourceAnnotation::Requirement(path.clone()),
-                );
-            }
+        if let Some(origin) = &requirement.origin {
+            sources.add(
+                &requirement.name,
+                SourceAnnotation::Requirement(origin.clone()),
+            );
         }
     }
 
@@ -393,10 +383,10 @@ pub(crate) async fn pip_compile(
         .iter()
         .filter(|requirement| requirement.evaluate_markers(marker_filter, &[]))
     {
-        if let Some(path) = &requirement.path {
+        if let Some(origin) = &requirement.origin {
             sources.add(
                 &requirement.name,
-                SourceAnnotation::Constraint(path.clone()),
+                SourceAnnotation::Constraint(origin.clone()),
             );
         }
     }
@@ -405,27 +395,20 @@ pub(crate) async fn pip_compile(
         .iter()
         .filter(|requirement| requirement.evaluate_markers(marker_filter, &[]))
     {
-        if let Some(path) = &requirement.path {
-            sources.add(&requirement.name, SourceAnnotation::Override(path.clone()));
+        if let Some(origin) = &requirement.origin {
+            sources.add(
+                &requirement.name,
+                SourceAnnotation::Override(origin.clone()),
+            );
         }
     }
 
     for editable in &editables {
-        if let Some(source) = &editable.source {
-            if source.ends_with("pyproject.toml") {
-                sources.add_editable(
-                    editable.url(),
-                    SourceAnnotation::PyProject {
-                        path: source.clone(),
-                        project_name: project.as_ref().map(ToString::to_string),
-                    },
-                );
-            } else {
-                sources.add_editable(
-                    editable.url(),
-                    SourceAnnotation::Requirement(source.clone()),
-                );
-            }
+        if let Some(origin) = &editable.origin {
+            sources.add_editable(
+                editable.url(),
+                SourceAnnotation::Requirement(origin.clone()),
+            );
         }
     }
 
@@ -444,7 +427,7 @@ pub(crate) async fn pip_compile(
                 url,
                 extras,
                 path,
-                source: _,
+                origin: _,
             } = editable;
             LocalEditable { url, path, extras }
         }));

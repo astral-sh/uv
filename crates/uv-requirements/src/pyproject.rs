@@ -22,7 +22,7 @@ use url::Url;
 
 use distribution_types::{ParsedUrlError, Requirement, RequirementSource, Requirements};
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{VerbatimUrl, VersionOrUrl};
+use pep508_rs::{RequirementOrigin, VerbatimUrl, VersionOrUrl};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_git::GitReference;
@@ -333,8 +333,9 @@ pub(crate) fn lower_requirements(
     let dependencies = dependencies
         .iter()
         .map(|dependency| {
-            let requirement = pep508_rs::Requirement::from_str(dependency)?
-                .with_source(Some(pyproject_path.to_path_buf()));
+            let requirement = pep508_rs::Requirement::from_str(dependency)?.with_origin(Some(
+                RequirementOrigin::Project(pyproject_path.to_path_buf(), project_name.clone()),
+            ));
             let name = requirement.name.clone();
             lower_requirement(
                 requirement,
@@ -354,8 +355,12 @@ pub(crate) fn lower_requirements(
             let dependencies: Vec<_> = dependencies
                 .iter()
                 .map(|dependency| {
-                    let requirement = pep508_rs::Requirement::from_str(dependency)?
-                        .with_source(Some(pyproject_path.to_path_buf()));
+                    let requirement = pep508_rs::Requirement::from_str(dependency)?.with_origin(
+                        Some(RequirementOrigin::Project(
+                            pyproject_path.to_path_buf(),
+                            project_name.clone(),
+                        )),
+                    );
                     let name = requirement.name.clone();
                     lower_requirement(
                         requirement,
@@ -537,7 +542,7 @@ pub(crate) fn lower_requirement(
         extras: requirement.extras,
         marker: requirement.marker,
         source,
-        path: Some(project_dir.join("pyproject.toml")),
+        origin: requirement.origin,
     })
 }
 

@@ -8,6 +8,7 @@ use url::Url;
 use distribution_types::{
     BuildableSource, HashPolicy, PathSourceUrl, Requirement, SourceUrl, VersionId,
 };
+use pep508_rs::RequirementOrigin;
 
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
@@ -77,20 +78,27 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn resolve_source_tree(&self, source_tree: &Path) -> Result<Vec<pep508_rs::Requirement>> {
+    async fn resolve_source_tree(&self, path: &Path) -> Result<Vec<pep508_rs::Requirement>> {
         // Convert to a buildable source.
-        let path = fs_err::canonicalize(source_tree).with_context(|| {
+        let source_tree = fs_err::canonicalize(path).with_context(|| {
             format!(
                 "Failed to canonicalize path to source tree: {}",
-                source_tree.user_display()
+                path.user_display()
             )
         })?;
-        let Ok(url) = Url::from_directory_path(&path) else {
+        let source_tree = source_tree.parent().ok_or_else(|| {
+            anyhow::anyhow!(
+                "The file `{}` appears to be a `setup.py` or `setup.cfg` file, which must be in a directory",
+                path.user_display()
+            )
+        })?;
+
+        let Ok(url) = Url::from_directory_path(source_tree) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
         let source = SourceUrl::Path(PathSourceUrl {
             url: &url,
-            path: Cow::Owned(path),
+            path: Cow::Borrowed(source_tree),
         });
 
         // Determine the hash policy. Since we don't have a package name, we perform a
@@ -101,7 +109,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             HashStrategy::Validate { .. } => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",
-                    source_tree.user_display()
+                    path.user_display()
                 ));
             }
         };
@@ -136,15 +144,23 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         };
 
+        // Extract the origin.
+        let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
+
         // Determine the appropriate requirements to return based on the extras. This involves
         // evaluating the `extras` expression in any markers, but preserving the remaining marker
         // conditions.
         match self.extras {
-            ExtrasSpecification::None => Ok(metadata.requires_dist),
+            ExtrasSpecification::None => Ok(metadata
+                .requires_dist
+                .into_iter()
+                .map(|requirement| requirement.with_origin(Some(origin.clone())))
+                .collect()),
             ExtrasSpecification::All => Ok(metadata
                 .requires_dist
                 .into_iter()
                 .map(|requirement| pep508_rs::Requirement {
+                    origin: Some(origin.clone()),
                     marker: requirement
                         .marker
                         .and_then(|marker| marker.simplify_extras(&metadata.provides_extras)),
@@ -155,6 +171,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                 .requires_dist
                 .into_iter()
                 .map(|requirement| pep508_rs::Requirement {
+                    origin: Some(origin.clone()),
                     marker: requirement
                         .marker
                         .and_then(|marker| marker.simplify_extras(extras)),

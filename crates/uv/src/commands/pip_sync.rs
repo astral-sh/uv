@@ -691,7 +691,7 @@ async fn resolve_editables(
                 url,
                 path,
                 extras,
-                source: _,
+                origin: _,
             } = editable;
             LocalEditable {
                 url: url.clone(),

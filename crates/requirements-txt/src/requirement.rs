@@ -1,9 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use thiserror::Error;
 
 use distribution_types::ParsedUrlError;
-use pep508_rs::{Pep508Error, Pep508ErrorSource, UnnamedRequirement};
+use pep508_rs::{Pep508Error, Pep508ErrorSource, RequirementOrigin, UnnamedRequirement};
 
 /// A requirement specifier in a `requirements.txt` file.
 ///
@@ -21,10 +21,10 @@ pub enum RequirementsTxtRequirement {
 impl RequirementsTxtRequirement {
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_source(self, path: Option<PathBuf>) -> Self {
+    pub fn with_origin(self, origin: Option<RequirementOrigin>) -> Self {
         match self {
-            Self::Named(requirement) => Self::Named(requirement.with_source(path)),
-            Self::Unnamed(requirement) => Self::Unnamed(requirement.with_source(path)),
+            Self::Named(requirement) => Self::Named(requirement.with_origin(origin)),
+            Self::Unnamed(requirement) => Self::Unnamed(requirement.with_origin(origin)),
         }
     }
 }
