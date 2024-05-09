@@ -1,8 +1,15 @@
 use std::num::NonZeroUsize;
 
+/// Concurrency limit settings.
 #[derive(Copy, Clone, Debug)]
 pub struct Concurrency {
+    /// The maximum number of concurrent downloads.
+    ///
+    /// Note this value must be non-zero.
     pub downloads: usize,
+    /// The maximum number of concurrent builds.
+    ///
+    /// Note this value must be non-zero.
     pub builds: usize,
 }
 
