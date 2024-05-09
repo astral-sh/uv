@@ -58,10 +58,13 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl) -> VerbatimParsedUrl {
     let git_url = GitUrl::new(git_url.repository().clone(), lowered_git_ref);
 
     let Some(new_git_url) = git_url_to_precise(git_url.clone()) else {
-        if matches!(git_url.reference(), GitReference::FullCommit(_)) {
-            return url;
-        }
-        panic!("Unseen git url: {}, {:?}", url.verbatim, git_url);
+        debug_assert!(
+            matches!(git_url.reference(), GitReference::FullCommit(_)),
+            "Unseen git url: {}, {:?}",
+            url.verbatim,
+            git_url
+        );
+        return url;
     };
 
     let new_parsed_url = ParsedGitUrl {

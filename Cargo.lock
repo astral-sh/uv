@@ -1127,7 +1127,6 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
- "derivative",
  "distribution-filename",
  "fs-err",
  "git2",

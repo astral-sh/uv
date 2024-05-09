@@ -4,7 +4,6 @@ use anyhow::{Error, Result};
 use thiserror::Error;
 use url::Url;
 
-use derivative::Derivative;
 use pep508_rs::VerbatimUrl;
 use uv_git::{GitSha, GitUrl};
 
@@ -24,10 +23,8 @@ pub enum ParsedUrlError {
     UrlParse(String, #[source] url::ParseError),
 }
 
-#[derive(Debug, Clone, Derivative)]
-#[derivative(Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct VerbatimParsedUrl {
-    #[derivative(PartialEq = "ignore", Hash = "ignore")]
     pub parsed_url: ParsedUrl,
     pub verbatim: VerbatimUrl,
 }
