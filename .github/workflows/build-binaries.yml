@@ -297,10 +297,12 @@ jobs:
         run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
+        env:
+          # Workaround ring 0.17 build issue
+          CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
         with:
           target: ${{ matrix.platform.target }}
-          # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
-          manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
+          manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update
       - uses: uraimo/run-on-arch-action@v2
