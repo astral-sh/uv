@@ -357,7 +357,10 @@ pub(crate) async fn pip_compile(
     // Generate a map from requirement to originating source file.
     let mut sources = SourceAnnotations::default();
 
-    for requirement in &requirements {
+    for requirement in requirements
+        .iter()
+        .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
+    {
         if let Some(path) = &requirement.path {
             if path.ends_with("pyproject.toml") {
                 sources.add(
@@ -376,7 +379,10 @@ pub(crate) async fn pip_compile(
         }
     }
 
-    for requirement in &constraints {
+    for requirement in constraints
+        .iter()
+        .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
+    {
         if let Some(path) = &requirement.path {
             sources.add(
                 &requirement.name,
@@ -385,7 +391,10 @@ pub(crate) async fn pip_compile(
         }
     }
 
-    for requirement in &overrides {
+    for requirement in overrides
+        .iter()
+        .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
+    {
         if let Some(path) = &requirement.path {
             sources.add(&requirement.name, SourceAnnotation::Override(path.clone()));
         }
