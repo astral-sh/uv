@@ -1404,6 +1404,8 @@ mod test {
         let snapshot = format!("parse-{}", path.to_string_lossy());
         let filter_path = safe_filter_path(&working_dir);
         let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
+        println!("filters: {:?}", filters);
+
         insta::with_settings!({
             filters => filters,
         }, {
@@ -1455,6 +1457,8 @@ mod test {
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
         let filter_path = safe_filter_path(temp_dir.path());
         let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
+        println!("filters: {:?}", filters);
+
         insta::with_settings!({
             filters => filters,
         }, {
@@ -1819,6 +1823,9 @@ mod test {
         .unwrap();
         let filter_path = safe_filter_path(temp_dir.path());
         let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
+
+        println!("filters: {:?}", filters);
+
         insta::with_settings!({
             filters => filters,
         }, {
@@ -1885,6 +1892,9 @@ mod test {
         .unwrap();
         let filter_path = safe_filter_path(temp_dir.path());
         let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>")];
+
+        println!("filters: {:?}", filters);
+
         insta::with_settings!({
             filters => filters,
         }, {
