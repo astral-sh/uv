@@ -150,19 +150,77 @@ fn find_python(
 
                     let interpreter = match Interpreter::query(&path, cache) {
                         Ok(interpreter) => interpreter,
-                        Err(
-                            err @ Error::QueryScript {
-                                err: InterpreterInfoError::UnsupportedPythonVersion { .. },
-                                ..
-                            },
-                        ) => {
-                            if selector.major() <= Some(2) {
-                                return Err(err);
+
+                        // If the Python version is < 3.4, the `-I` flag is not supported, so
+                        // we can't run the script at all, and need to sniff it from the output.
+                        Err(Error::PythonSubcommandOutput { stderr, .. })
+                            if stderr.contains("Unknown option: -I")
+                                && stderr.contains("usage: python [option]") =>
+                        {
+                            // If the user _requested_ a version prior to 3.4, raise an error, as
+                            // 3.4 is the minimum supported version for invoking the interpreter
+                            // query script at all.
+                            match selector {
+                                PythonVersionSelector::Major(major) if major < 3 => {
+                                    return Err(Error::UnsupportedPython(major.to_string()));
+                                }
+                                PythonVersionSelector::MajorMinor(major, minor)
+                                    if (major, minor) < (3, 4) =>
+                                {
+                                    return Err(Error::UnsupportedPython(format!(
+                                        "{major}.{minor}"
+                                    )));
+                                }
+                                PythonVersionSelector::MajorMinorPatch(major, minor, patch)
+                                    if (major, minor) < (3, 4) =>
+                                {
+                                    return Err(Error::UnsupportedPython(format!(
+                                        "{major}.{minor}.{patch}"
+                                    )));
+                                }
+                                _ => {}
                             }
-                            // Skip over Python 2 or older installation when querying for a recent python installation.
-                            debug!("Found a Python 2 installation that isn't supported by uv, skipping.");
+
+                            debug!(
+                                "Found a Python installation that isn't supported by uv, skipping."
+                            );
                             continue;
                         }
+
+                        Err(Error::QueryScript {
+                            err: InterpreterInfoError::UnsupportedPythonVersion { .. },
+                            ..
+                        }) => {
+                            // If the user _requested_ a version prior to 3.7, raise an error, as
+                            // 3.7 is the minimum supported version for running the interpreter
+                            // query script.
+                            match selector {
+                                PythonVersionSelector::Major(major) if major < 3 => {
+                                    return Err(Error::UnsupportedPython(major.to_string()));
+                                }
+                                PythonVersionSelector::MajorMinor(major, minor)
+                                    if (major, minor) < (3, 7) =>
+                                {
+                                    return Err(Error::UnsupportedPython(format!(
+                                        "{major}.{minor}"
+                                    )));
+                                }
+                                PythonVersionSelector::MajorMinorPatch(major, minor, patch)
+                                    if (major, minor) < (3, 7) =>
+                                {
+                                    return Err(Error::UnsupportedPython(format!(
+                                        "{major}.{minor}.{patch}"
+                                    )));
+                                }
+                                _ => {}
+                            }
+
+                            debug!(
+                                "Found a Python installation that isn't supported by uv, skipping."
+                            );
+                            continue;
+                        }
+
                         Err(error) => return Err(error),
                     };
 
@@ -398,15 +456,6 @@ impl PythonVersionSelector {
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
             ],
-        }
-    }
-
-    fn major(self) -> Option<u8> {
-        match self {
-            Self::Default => None,
-            Self::Major(major) => Some(major),
-            Self::MajorMinor(major, _) => Some(major),
-            Self::MajorMinorPatch(major, _, _) => Some(major),
         }
     }
 }
