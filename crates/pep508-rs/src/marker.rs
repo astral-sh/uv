@@ -13,6 +13,7 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -361,8 +362,14 @@ impl Deref for StringVersion {
 /// Some are `(String, Version)` because we have to support version comparison
 #[allow(missing_docs, clippy::unsafe_derive_deserialize)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
+#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 pub struct MarkerEnvironment {
+    #[serde(flatten)]
+    inner: Arc<MarkerEnvironmentInner>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+struct MarkerEnvironmentInner {
     implementation_name: String,
     implementation_version: StringVersion,
     os_name: String,
@@ -420,7 +427,7 @@ impl MarkerEnvironment {
     /// Some example values are: `cpython`.
     #[inline]
     pub fn implementation_name(&self) -> &str {
-        &self.implementation_name
+        &self.inner.implementation_name
     }
 
     /// Returns the Python implementation version for this environment.
@@ -435,7 +442,7 @@ impl MarkerEnvironment {
     /// [PEP 508 environment markers]: https://peps.python.org/pep-0508/#environment-markers
     #[inline]
     pub fn implementation_version(&self) -> &StringVersion {
-        &self.implementation_version
+        &self.inner.implementation_version
     }
 
     /// Returns the name of the operating system for this environment.
@@ -445,7 +452,7 @@ impl MarkerEnvironment {
     /// Some example values are: `posix`, `java`.
     #[inline]
     pub fn os_name(&self) -> &str {
-        &self.os_name
+        &self.inner.os_name
     }
 
     /// Returns the name of the machine for this environment's platform.
@@ -455,7 +462,7 @@ impl MarkerEnvironment {
     /// Some example values are: `x86_64`.
     #[inline]
     pub fn platform_machine(&self) -> &str {
-        &self.platform_machine
+        &self.inner.platform_machine
     }
 
     /// Returns the name of the Python implementation for this environment's
@@ -466,7 +473,7 @@ impl MarkerEnvironment {
     /// Some example values are: `CPython`, `Jython`.
     #[inline]
     pub fn platform_python_implementation(&self) -> &str {
-        &self.platform_python_implementation
+        &self.inner.platform_python_implementation
     }
 
     /// Returns the release for this environment's platform.
@@ -476,7 +483,7 @@ impl MarkerEnvironment {
     /// Some example values are: `3.14.1-x86_64-linode39`, `14.5.0`, `1.8.0_51`.
     #[inline]
     pub fn platform_release(&self) -> &str {
-        &self.platform_release
+        &self.inner.platform_release
     }
 
     /// Returns the system for this environment's platform.
@@ -486,7 +493,7 @@ impl MarkerEnvironment {
     /// Some example values are: `Linux`, `Windows`, `Java`.
     #[inline]
     pub fn platform_system(&self) -> &str {
-        &self.platform_system
+        &self.inner.platform_system
     }
 
     /// Returns the version for this environment's platform.
@@ -499,7 +506,7 @@ impl MarkerEnvironment {
     /// root:xnu-2782.40.9~2/RELEASE_X86_64`.
     #[inline]
     pub fn platform_version(&self) -> &str {
-        &self.platform_version
+        &self.inner.platform_version
     }
 
     /// Returns the full version of Python for this environment.
@@ -509,7 +516,7 @@ impl MarkerEnvironment {
     /// Some example values are: `3.4.0`, `3.5.0b1`.
     #[inline]
     pub fn python_full_version(&self) -> &StringVersion {
-        &self.python_full_version
+        &self.inner.python_full_version
     }
 
     /// Returns the version of Python for this environment.
@@ -519,7 +526,7 @@ impl MarkerEnvironment {
     /// Some example values are: `3.4`, `2.7`.
     #[inline]
     pub fn python_version(&self) -> &StringVersion {
-        &self.python_version
+        &self.inner.python_version
     }
 
     /// Returns the name of the system platform for this environment.
@@ -530,7 +537,7 @@ impl MarkerEnvironment {
     /// (note that `linux` is from Python3 and `linux2` from Python2).
     #[inline]
     pub fn sys_platform(&self) -> &str {
-        &self.sys_platform
+        &self.inner.sys_platform
     }
 }
 
@@ -540,44 +547,39 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::implementation_name`].
     #[inline]
-    pub fn with_implementation_name(self, value: impl Into<String>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            implementation_name: value.into(),
-            ..self
-        }
+    pub fn with_implementation_name(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).implementation_name = value.into();
+        self
     }
 
     /// Set the Python implementation version for this environment.
     ///
     /// See also [`MarkerEnvironment::implementation_version`].
     #[inline]
-    pub fn with_implementation_version(self, value: impl Into<StringVersion>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            implementation_version: value.into(),
-            ..self
-        }
+    pub fn with_implementation_version(
+        mut self,
+        value: impl Into<StringVersion>,
+    ) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).implementation_version = value.into();
+        self
     }
 
     /// Set the name of the operating system for this environment.
     ///
     /// See also [`MarkerEnvironment::os_name`].
     #[inline]
-    pub fn with_os_name(self, value: impl Into<String>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            os_name: value.into(),
-            ..self
-        }
+    pub fn with_os_name(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).os_name = value.into();
+        self
     }
 
     /// Set the name of the machine for this environment's platform.
     ///
     /// See also [`MarkerEnvironment::platform_machine`].
     #[inline]
-    pub fn with_platform_machine(self, value: impl Into<String>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            platform_machine: value.into(),
-            ..self
-        }
+    pub fn with_platform_machine(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_machine = value.into();
+        self
     }
 
     /// Set the name of the Python implementation for this environment's
@@ -586,79 +588,68 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::platform_python_implementation`].
     #[inline]
     pub fn with_platform_python_implementation(
-        self,
+        mut self,
         value: impl Into<String>,
     ) -> MarkerEnvironment {
-        MarkerEnvironment {
-            platform_python_implementation: value.into(),
-            ..self
-        }
+        Arc::make_mut(&mut self.inner).platform_python_implementation = value.into();
+        self
     }
 
     /// Set the release for this environment's platform.
     ///
     /// See also [`MarkerEnvironment::platform_release`].
     #[inline]
-    pub fn with_platform_release(self, value: impl Into<String>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            platform_release: value.into(),
-            ..self
-        }
+    pub fn with_platform_release(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_release = value.into();
+        self
     }
 
     /// Set the system for this environment's platform.
     ///
     /// See also [`MarkerEnvironment::platform_system`].
     #[inline]
-    pub fn with_platform_system(self, value: impl Into<String>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            platform_system: value.into(),
-            ..self
-        }
+    pub fn with_platform_system(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_system = value.into();
+        self
     }
 
     /// Set the version for this environment's platform.
     ///
     /// See also [`MarkerEnvironment::platform_version`].
     #[inline]
-    pub fn with_platform_version(self, value: impl Into<String>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            platform_version: value.into(),
-            ..self
-        }
+    pub fn with_platform_version(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_version = value.into();
+        self
     }
 
     /// Set the full version of Python for this environment.
     ///
     /// See also [`MarkerEnvironment::python_full_version`].
     #[inline]
-    pub fn with_python_full_version(self, value: impl Into<StringVersion>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            python_full_version: value.into(),
-            ..self
-        }
+    pub fn with_python_full_version(
+        mut self,
+        value: impl Into<StringVersion>,
+    ) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).python_full_version = value.into();
+        self
     }
 
     /// Set the version of Python for this environment.
     ///
     /// See also [`MarkerEnvironment::python_full_version`].
     #[inline]
-    pub fn with_python_version(self, value: impl Into<StringVersion>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            python_version: value.into(),
-            ..self
-        }
+    pub fn with_python_version(mut self, value: impl Into<StringVersion>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).python_version = value.into();
+        self
     }
 
     /// Set the name of the system platform for this environment.
     ///
     /// See also [`MarkerEnvironment::sys_platform`].
     #[inline]
-    pub fn with_sys_platform(self, value: impl Into<String>) -> MarkerEnvironment {
-        MarkerEnvironment {
-            sys_platform: value.into(),
-            ..self
-        }
+    pub fn with_sys_platform(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).sys_platform = value.into();
+        self
     }
 }
 
@@ -711,17 +702,19 @@ impl MarkerEnvironment {
             ))
         })?;
         Ok(Self {
-            implementation_name: implementation_name.to_string(),
-            implementation_version,
-            os_name: os_name.to_string(),
-            platform_machine: platform_machine.to_string(),
-            platform_python_implementation: platform_python_implementation.to_string(),
-            platform_release: platform_release.to_string(),
-            platform_system: platform_system.to_string(),
-            platform_version: platform_version.to_string(),
-            python_full_version,
-            python_version,
-            sys_platform: sys_platform.to_string(),
+            inner: Arc::new(MarkerEnvironmentInner {
+                implementation_name: implementation_name.to_string(),
+                implementation_version,
+                os_name: os_name.to_string(),
+                platform_machine: platform_machine.to_string(),
+                platform_python_implementation: platform_python_implementation.to_string(),
+                platform_release: platform_release.to_string(),
+                platform_system: platform_system.to_string(),
+                platform_version: platform_version.to_string(),
+                python_full_version,
+                python_version,
+                sys_platform: sys_platform.to_string(),
+            }),
         })
     }
 
@@ -773,21 +766,90 @@ impl MarkerEnvironment {
             ))
         })?;
         Ok(Self {
-            implementation_name: name,
-            implementation_version,
-            os_name: os.getattr("name")?.extract()?,
-            platform_machine: platform.getattr("machine")?.call0()?.extract()?,
-            platform_python_implementation: platform
-                .getattr("python_implementation")?
-                .call0()?
-                .extract()?,
-            platform_release: platform.getattr("release")?.call0()?.extract()?,
-            platform_system: platform.getattr("system")?.call0()?.extract()?,
-            platform_version: platform.getattr("version")?.call0()?.extract()?,
-            python_full_version,
-            python_version,
-            sys_platform: sys.getattr("platform")?.extract()?,
+            inner: Arc::new(MarkerEnvironmentInner {
+                implementation_name: name,
+                implementation_version,
+                os_name: os.getattr("name")?.extract()?,
+                platform_machine: platform.getattr("machine")?.call0()?.extract()?,
+                platform_python_implementation: platform
+                    .getattr("python_implementation")?
+                    .call0()?
+                    .extract()?,
+                platform_release: platform.getattr("release")?.call0()?.extract()?,
+                platform_system: platform.getattr("system")?.call0()?.extract()?,
+                platform_version: platform.getattr("version")?.call0()?.extract()?,
+                python_full_version,
+                python_version,
+                sys_platform: sys.getattr("platform")?.extract()?,
+            }),
         })
+    }
+
+    /// Returns the name of the Python implementation for this environment.
+    #[getter]
+    pub fn py_implementation_name(&self) -> String {
+        self.implementation_name().to_string()
+    }
+
+    /// Returns the Python implementation version for this environment.
+    #[getter]
+    pub fn py_implementation_version(&self) -> StringVersion {
+        self.implementation_version().clone()
+    }
+
+    /// Returns the name of the operating system for this environment.
+    #[getter]
+    pub fn py_os_name(&self) -> String {
+        self.os_name().to_string()
+    }
+
+    /// Returns the name of the machine for this environment's platform.
+    #[getter]
+    pub fn py_platform_machine(&self) -> String {
+        self.platform_machine().to_string()
+    }
+
+    /// Returns the name of the Python implementation for this environment's
+    /// platform.
+    #[getter]
+    pub fn py_platform_python_implementation(&self) -> String {
+        self.platform_python_implementation().to_string()
+    }
+
+    /// Returns the release for this environment's platform.
+    #[getter]
+    pub fn py_platform_release(&self) -> String {
+        self.platform_release().to_string()
+    }
+
+    /// Returns the system for this environment's platform.
+    #[getter]
+    pub fn py_platform_system(&self) -> String {
+        self.platform_system().to_string()
+    }
+
+    /// Returns the version for this environment's platform.
+    #[getter]
+    pub fn py_platform_version(&self) -> String {
+        self.platform_version().to_string()
+    }
+
+    /// Returns the full version of Python for this environment.
+    #[getter]
+    pub fn py_python_full_version(&self) -> StringVersion {
+        self.python_full_version().clone()
+    }
+
+    /// Returns the version of Python for this environment.
+    #[getter]
+    pub fn py_python_version(&self) -> StringVersion {
+        self.python_version().clone()
+    }
+
+    /// Returns the name of the system platform for this environment.
+    #[getter]
+    pub fn py_sys_platform(&self) -> String {
+        self.sys_platform().to_string()
     }
 }
 
@@ -820,17 +882,19 @@ impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
 
     fn try_from(builder: MarkerEnvironmentBuilder<'a>) -> Result<Self, Self::Error> {
         Ok(MarkerEnvironment {
-            implementation_name: builder.implementation_name.to_string(),
-            implementation_version: builder.implementation_version.parse()?,
-            os_name: builder.os_name.to_string(),
-            platform_machine: builder.platform_machine.to_string(),
-            platform_python_implementation: builder.platform_python_implementation.to_string(),
-            platform_release: builder.platform_release.to_string(),
-            platform_system: builder.platform_system.to_string(),
-            platform_version: builder.platform_version.to_string(),
-            python_full_version: builder.python_full_version.parse()?,
-            python_version: builder.python_version.parse()?,
-            sys_platform: builder.sys_platform.to_string(),
+            inner: Arc::new(MarkerEnvironmentInner {
+                implementation_name: builder.implementation_name.to_string(),
+                implementation_version: builder.implementation_version.parse()?,
+                os_name: builder.os_name.to_string(),
+                platform_machine: builder.platform_machine.to_string(),
+                platform_python_implementation: builder.platform_python_implementation.to_string(),
+                platform_release: builder.platform_release.to_string(),
+                platform_system: builder.platform_system.to_string(),
+                platform_version: builder.platform_version.to_string(),
+                python_full_version: builder.python_full_version.parse()?,
+                python_version: builder.python_version.parse()?,
+                sys_platform: builder.sys_platform.to_string(),
+            }),
         })
     }
 }
