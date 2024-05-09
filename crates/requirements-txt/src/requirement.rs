@@ -21,7 +21,7 @@ pub enum RequirementsTxtRequirement {
 impl RequirementsTxtRequirement {
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_origin(self, origin: Option<RequirementOrigin>) -> Self {
+    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
         match self {
             Self::Named(requirement) => Self::Named(requirement.with_origin(origin)),
             Self::Unnamed(requirement) => Self::Unnamed(requirement.with_origin(origin)),
