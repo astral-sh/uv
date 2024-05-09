@@ -63,7 +63,7 @@ pub(crate) enum Error {
 }
 
 /// Find the requirements for the current workspace.
-pub(crate) fn find_workspace() -> Result<Option<Vec<RequirementsSource>>> {
+pub(crate) fn find_project() -> Result<Option<Vec<RequirementsSource>>> {
     // TODO(zanieb): Add/use workspace logic to load requirements for a workspace
     // We cannot use `Workspace::find` yet because it depends on a `[tool.uv]` section
     let pyproject_path = std::env::current_dir()?.join("pyproject.toml");

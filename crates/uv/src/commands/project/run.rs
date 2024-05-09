@@ -21,7 +21,7 @@ use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::{workspace, ExitStatus};
+use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 
 /// Run a command.
@@ -56,22 +56,22 @@ pub(crate) async fn run(
         "python".to_string()
     };
 
-    // Discover and sync the workspace.
-    let workspace_env = if isolated {
+    // Discover and sync the project.
+    let project_env = if isolated {
         None
     } else {
-        debug!("Syncing workspace environment.");
+        debug!("Syncing project environment.");
 
-        let Some(workspace_requirements) = workspace::find_workspace()? else {
+        let Some(project_requirements) = project::find_project()? else {
             return Err(anyhow::anyhow!(
-                "Unable to find `pyproject.toml` for project workspace."
+                "Unable to find `pyproject.toml` for project project."
             ));
         };
 
         let venv = PythonEnvironment::from_virtualenv(cache)?;
 
-        // Install the workspace requirements.
-        Some(update_environment(venv, &workspace_requirements, preview, cache, printer).await?)
+        // Install the project requirements.
+        Some(update_environment(venv, &project_requirements, preview, cache, printer).await?)
     };
 
     // If necessary, create an environment for the ephemeral requirements.
@@ -82,8 +82,8 @@ pub(crate) async fn run(
         debug!("Syncing ephemeral environment.");
 
         // Discover an interpreter.
-        let interpreter = if let Some(workspace_env) = &workspace_env {
-            workspace_env.interpreter().clone()
+        let interpreter = if let Some(project_env) = &project_env {
+            project_env.interpreter().clone()
         } else if let Some(python) = python.as_ref() {
             PythonEnvironment::from_requested_python(python, cache)?.into_interpreter()
         } else {
@@ -123,7 +123,7 @@ pub(crate) async fn run(
             .map(PythonEnvironment::scripts)
             .into_iter()
             .chain(
-                workspace_env
+                project_env
                     .as_ref()
                     .map(PythonEnvironment::scripts)
                     .into_iter(),
@@ -146,7 +146,7 @@ pub(crate) async fn run(
             .into_iter()
             .flatten()
             .chain(
-                workspace_env
+                project_env
                     .as_ref()
                     .map(PythonEnvironment::site_packages)
                     .into_iter()
@@ -286,7 +286,7 @@ async fn update_environment(
         .build();
 
     // Resolve the requirements.
-    let resolution = match workspace::resolve(
+    let resolution = match project::resolve(
         spec,
         &hasher,
         &interpreter,
@@ -309,7 +309,7 @@ async fn update_environment(
     let in_flight = InFlight::default();
 
     // Sync the environment.
-    workspace::install(
+    project::install(
         &resolution,
         SitePackages::from_executable(&venv)?,
         &no_binary,
