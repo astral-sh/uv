@@ -67,50 +67,27 @@ impl RequirementsSpecification {
                 let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
-                    project: None,
                     requirements: vec![UnresolvedRequirementSpecification::try_from(
                         RequirementEntry {
                             requirement,
                             hashes: vec![],
                         },
                     )?],
-                    constraints: vec![],
-                    overrides: vec![],
-                    editables: vec![],
-                    source_trees: vec![],
-                    extras: FxHashSet::default(),
-                    index_url: None,
-                    extra_index_urls: vec![],
-                    no_index: false,
-                    find_links: vec![],
-                    no_binary: NoBinary::default(),
-                    no_build: NoBuild::default(),
+                    ..Self::default()
                 }
             }
             RequirementsSource::Editable(name) => {
                 let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
-                    project: None,
-                    requirements: vec![],
-                    constraints: vec![],
-                    overrides: vec![],
                     editables: vec![requirement],
-                    source_trees: vec![],
-                    extras: FxHashSet::default(),
-                    index_url: None,
-                    extra_index_urls: vec![],
-                    no_index: false,
-                    find_links: vec![],
-                    no_binary: NoBinary::default(),
-                    no_build: NoBuild::default(),
+                    ..Self::default()
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
                 let requirements_txt =
                     RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
                 Self {
-                    project: None,
                     requirements: requirements_txt
                         .requirements
                         .into_iter()
@@ -121,10 +98,7 @@ impl RequirementsSpecification {
                         .into_iter()
                         .map(Requirement::from_pep508)
                         .collect::<Result<_, _>>()?,
-                    overrides: vec![],
                     editables: requirements_txt.editables,
-                    source_trees: vec![],
-                    extras: FxHashSet::default(),
                     index_url: requirements_txt.index_url.map(IndexUrl::from),
                     extra_index_urls: requirements_txt
                         .extra_index_urls
@@ -142,6 +116,7 @@ impl RequirementsSpecification {
                         .collect(),
                     no_binary: requirements_txt.no_binary,
                     no_build: requirements_txt.only_binary,
+                    ..Self::default()
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
@@ -150,19 +125,8 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to parse `{}`", path.user_display()))?
             }
             RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => Self {
-                project: None,
-                requirements: vec![],
-                constraints: vec![],
-                overrides: vec![],
-                editables: vec![],
                 source_trees: vec![path.clone()],
-                extras: FxHashSet::default(),
-                index_url: None,
-                extra_index_urls: vec![],
-                no_index: false,
-                find_links: vec![],
-                no_binary: NoBinary::default(),
-                no_build: NoBuild::default(),
+                ..Self::default()
             },
             RequirementsSource::SourceTree(path) => Self {
                 project: None,
@@ -175,17 +139,7 @@ impl RequirementsSpecification {
                     }),
                     hashes: vec![],
                 }],
-                constraints: vec![],
-                overrides: vec![],
-                editables: vec![],
-                source_trees: vec![],
-                extras: FxHashSet::default(),
-                index_url: None,
-                extra_index_urls: vec![],
-                no_index: false,
-                find_links: vec![],
-                no_binary: NoBinary::default(),
-                no_build: NoBuild::default(),
+                ..Self::default()
             },
         })
     }
