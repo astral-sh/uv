@@ -15,7 +15,7 @@ RequirementsTxt {
                             password: None,
                             host: None,
                             port: None,
-                            path: "[WORKSPACE_DIR]/scripts/packages/black_editable",
+                            path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
                             query: None,
                             fragment: None,
                         },
@@ -26,13 +26,13 @@ RequirementsTxt {
                     extras: [],
                     marker: None,
                     path: Some(
-                        "[WORKSPACE_DIR]/bare-url.txt",
+                        "<REQUIREMENTS_DIR>/bare-url.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "[WORKSPACE_DIR]/bare-url.txt",
+                "<REQUIREMENTS_DIR>/bare-url.txt",
             ),
         },
         RequirementEntry {
@@ -46,7 +46,7 @@ RequirementsTxt {
                             password: None,
                             host: None,
                             port: None,
-                            path: "[WORKSPACE_DIR]/scripts/packages/black_editable",
+                            path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
                             query: None,
                             fragment: None,
                         },
@@ -61,13 +61,13 @@ RequirementsTxt {
                     ],
                     marker: None,
                     path: Some(
-                        "[WORKSPACE_DIR]/bare-url.txt",
+                        "<REQUIREMENTS_DIR>/bare-url.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "[WORKSPACE_DIR]/bare-url.txt",
+                "<REQUIREMENTS_DIR>/bare-url.txt",
             ),
         },
         RequirementEntry {
@@ -92,13 +92,13 @@ RequirementsTxt {
                     extras: [],
                     marker: None,
                     path: Some(
-                        "[WORKSPACE_DIR]/bare-url.txt",
+                        "<REQUIREMENTS_DIR>/bare-url.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "[WORKSPACE_DIR]/bare-url.txt",
+                "<REQUIREMENTS_DIR>/bare-url.txt",
             ),
         },
     ],

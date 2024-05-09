@@ -1367,8 +1367,18 @@ mod test {
         Path::new("./test-data").simple_canonicalize().unwrap()
     }
 
-    fn safe_filter_path(path: &Path) -> String {
+    /// Filter a path for use in snapshots; in particular, match the Windows debug representation
+    /// of a path.
+    ///
+    /// We replace backslashes to match the debug representation for paths, and match _either_
+    /// backslashes or forward slashes as the latter appear when constructing a path from a URL.
+    fn path_filter(path: &Path) -> String {
         regex::escape(&path.simplified_display().to_string()).replace(r"\\", r"(\\\\|/)")
+    }
+
+    /// Return the insta filters for a given path.
+    fn path_filters(filter: &str) -> Vec<(&str, &str)> {
+        vec![(filter, "<REQUIREMENTS_DIR>"), (r"\\\\", "/")]
     }
 
     #[test_case(Path::new("basic.txt"))]
@@ -1395,11 +1405,9 @@ mod test {
         .unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
-        let filter_path = safe_filter_path(&working_dir);
-        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
 
         insta::with_settings!({
-            filters => filters,
+            filters => path_filters(&path_filter(&working_dir)),
         }, {
             insta::assert_debug_snapshot!(snapshot, actual);
         });
@@ -1447,11 +1455,9 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
-        let filter_path = safe_filter_path(temp_dir.path());
-        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
 
         insta::with_settings!({
-            filters => filters,
+            filters => path_filters(&path_filter(temp_dir.path())),
         }, {
             insta::assert_debug_snapshot!(snapshot, actual);
         });
@@ -1470,10 +1476,9 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
-        let pattern = regex::escape(&working_dir.simplified_display().to_string());
-        let filters = vec![(pattern.as_str(), "[WORKSPACE_DIR]")];
+
         insta::with_settings!({
-            filters => filters
+            filters => path_filters(&path_filter(&working_dir)),
         }, {
             insta::assert_debug_snapshot!(snapshot, actual);
         });
@@ -1492,10 +1497,9 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("parse-windows-{}", path.to_string_lossy());
-        let filter_path = safe_filter_path(&working_dir);
-        let filters = vec![(filter_path.as_str(), "[WORKSPACE_DIR]"), (r"\\\\", "/")];
+
         insta::with_settings!({
-            filters => filters
+            filters => path_filters(&path_filter(&working_dir)),
         }, {
             insta::assert_debug_snapshot!(snapshot, actual);
         });
@@ -1528,7 +1532,6 @@ mod test {
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (missing_txt.as_str(), "<MISSING_TXT>"),
-            (r"\\", "/"),
         ];
         insta::with_settings!({
             filters => filters,
@@ -1560,10 +1563,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1596,10 +1596,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1632,10 +1629,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1696,10 +1690,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1730,10 +1721,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1769,10 +1757,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1812,11 +1797,9 @@ mod test {
         )
         .await
         .unwrap();
-        let filter_path = safe_filter_path(temp_dir.path());
-        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
 
         insta::with_settings!({
-            filters => filters,
+            filters => path_filters(&path_filter(temp_dir.path())),
         }, {
             insta::assert_debug_snapshot!(requirements, @r###"
             RequirementsTxt {
@@ -1879,11 +1862,9 @@ mod test {
         )
         .await
         .unwrap();
-        let filter_path = safe_filter_path(temp_dir.path());
-        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
 
         insta::with_settings!({
-            filters => filters,
+            filters => path_filters(&path_filter(temp_dir.path())),
         }, {
             insta::assert_debug_snapshot!(requirements, @r###"
             RequirementsTxt {
@@ -1958,11 +1939,9 @@ mod test {
         .await
         .unwrap();
 
-        let filter_path = safe_filter_path(temp_dir.path());
-        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
         insta::with_settings!({
-                filters => filters,
-            }, {
+            filters => path_filters(&path_filter(temp_dir.path())),
+        }, {
             insta::assert_debug_snapshot!(requirements, @r###"
             RequirementsTxt {
                 requirements: [],
@@ -2035,10 +2014,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -2083,10 +2059,9 @@ mod test {
         )
         .await
         .unwrap();
-        let filter_path = safe_filter_path(temp_dir.path());
-        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
+
         insta::with_settings!({
-            filters => filters,
+            filters => path_filters(&path_filter(temp_dir.path())),
         }, {
             insta::assert_debug_snapshot!(requirements, @r###"
             RequirementsTxt {
@@ -2311,10 +2286,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
