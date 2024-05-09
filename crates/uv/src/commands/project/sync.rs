@@ -13,7 +13,7 @@ use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::{workspace, ExitStatus};
+use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 
 /// Sync the project environment.
@@ -79,7 +79,7 @@ pub(crate) async fn sync(
     };
 
     // Sync the environment.
-    workspace::install(
+    project::install(
         &resolution,
         SitePackages::from_executable(&venv)?,
         &no_binary,

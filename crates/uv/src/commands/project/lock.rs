@@ -13,8 +13,8 @@ use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::workspace::Error;
-use crate::commands::{workspace, ExitStatus};
+use crate::commands::project::Error;
+use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 
 /// Resolve the project requirements into a lockfile.
@@ -31,10 +31,10 @@ pub(crate) async fn lock(
     // TODO(charlie): If the environment doesn't exist, create it.
     let venv = PythonEnvironment::from_virtualenv(cache)?;
 
-    // Find the workspace requirements.
-    let Some(requirements) = workspace::find_workspace()? else {
+    // Find the project requirements.
+    let Some(requirements) = project::find_project()? else {
         return Err(anyhow::anyhow!(
-            "Unable to find `pyproject.toml` for project workspace."
+            "Unable to find `pyproject.toml` for project project."
         ));
     };
 
@@ -105,7 +105,7 @@ pub(crate) async fn lock(
         .build();
 
     // Resolve the requirements.
-    let resolution = workspace::resolve(
+    let resolution = project::resolve(
         spec,
         &hasher,
         &interpreter,
