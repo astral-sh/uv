@@ -48,6 +48,7 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{BuildKind, Concurrency, NoBinary, NoBuild, SetupPyStrategy};
+    use uv_distribution::DistributionDatabase;
     use uv_interpreter::{Interpreter, PythonEnvironment};
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph, Resolver,
@@ -108,7 +109,7 @@ mod resolver {
             &hashes,
             &build_context,
             &installed_packages,
-            DistributionDatabase::new(&client, &build_context, concurrency.downloads),
+            DistributionDatabase::new(client, &build_context, concurrency.downloads),
         )?;
 
         Ok(resolver.resolve().await?)
