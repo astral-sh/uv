@@ -74,6 +74,8 @@ pub enum Error {
         stdout: String,
         stderr: String,
     },
+    #[error("Requested Python version ({0}) is unsupported")]
+    UnsupportedPython(String),
     #[error("Failed to write to cache")]
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Broken virtualenv: Failed to parse pyvenv.cfg")]
