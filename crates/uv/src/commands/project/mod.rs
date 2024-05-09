@@ -3,7 +3,6 @@ use std::fmt::Write;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
 
 use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, Name, Resolution};
 use install_wheel_rs::linker::LinkMode;
@@ -14,12 +13,11 @@ use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{Constraints, NoBinary, Overrides, Reinstall};
 use uv_dispatch::BuildDispatch;
-use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{
-    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSpecification,
+    SourceTreeResolver,
 };
 use uv_resolver::{
     Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph,
@@ -31,6 +29,7 @@ use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverRepo
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
 
+mod discovery;
 pub(crate) mod lock;
 pub(crate) mod run;
 pub(crate) mod sync;
@@ -60,25 +59,6 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
-}
-
-/// Find the requirements for the current workspace.
-pub(crate) fn find_project() -> Result<Option<Vec<RequirementsSource>>> {
-    // TODO(zanieb): Add/use workspace logic to load requirements for a workspace
-    // We cannot use `Workspace::find` yet because it depends on a `[tool.uv]` section
-    let pyproject_path = std::env::current_dir()?.join("pyproject.toml");
-    if pyproject_path.exists() {
-        debug!(
-            "Loading requirements from {}",
-            pyproject_path.user_display()
-        );
-        return Ok(Some(vec![
-            RequirementsSource::from_requirements_file(pyproject_path),
-            RequirementsSource::from_package(".".to_string()),
-        ]));
-    }
-
-    Ok(None)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.

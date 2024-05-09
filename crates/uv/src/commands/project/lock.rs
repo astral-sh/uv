@@ -13,6 +13,7 @@ use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::project::discovery::Project;
 use crate::commands::project::Error;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
@@ -32,9 +33,9 @@ pub(crate) async fn lock(
     let venv = PythonEnvironment::from_virtualenv(cache)?;
 
     // Find the project requirements.
-    let Some(requirements) = project::find_project()? else {
+    let Some(project) = Project::find(std::env::current_dir()?) else {
         return Err(anyhow::anyhow!(
-            "Unable to find `pyproject.toml` for project project."
+            "Unable to find `pyproject.toml` for project."
         ));
     };
 
@@ -45,7 +46,7 @@ pub(crate) async fn lock(
     // TODO(zanieb): Consider allowing constraints and extras
     // TODO(zanieb): Allow specifying extras somehow
     let spec = RequirementsSpecification::from_sources(
-        &requirements,
+        &project.requirements(),
         &[],
         &[],
         &ExtrasSpecification::None,
