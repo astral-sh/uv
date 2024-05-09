@@ -3,11 +3,16 @@ use std::path::{Component, Path, PathBuf};
 
 use once_cell::sync::Lazy;
 
-pub static CWD: Lazy<PathBuf> = Lazy::new(|| {
+/// The current working directory.
+pub static CWD: Lazy<PathBuf> =
+    Lazy::new(|| std::env::current_dir().expect("The current directory must exist"));
+
+/// The current working directory, canonicalized.
+pub static CANONICAL_CWD: Lazy<PathBuf> = Lazy::new(|| {
     std::env::current_dir()
-        .unwrap()
-        .canonicalize()
         .expect("The current directory must exist")
+        .canonicalize()
+        .expect("The current directory must be canonicalized")
 });
 
 pub trait Simplified {
@@ -46,8 +51,14 @@ impl<T: AsRef<Path>> Simplified for T {
 
     fn user_display(&self) -> std::path::Display {
         let path = dunce::simplified(self.as_ref());
+
+        // Attempt to strip the current working directory, then the canonicalized current working
+        // directory, in case they differ.
         path.strip_prefix(CWD.simplified())
-            .unwrap_or(path)
+            .unwrap_or_else(|_| {
+                path.strip_prefix(CANONICAL_CWD.simplified())
+                    .unwrap_or(path)
+            })
             .display()
     }
 }
