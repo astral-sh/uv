@@ -36,6 +36,7 @@ use uv_normalize::PackageName;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
+use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
@@ -363,16 +364,13 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
         let mut prefetcher = BatchPrefetcher::default();
-
-        // Keep track of the packages for which we've requested metadata.
-        let mut pins = FilePins::default();
-        let mut priorities = PubGrubPriorities::default();
-
-        // Start the solve.
-        let mut state = State::init(root.clone(), MIN_VERSION.clone());
-        let mut added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>> =
-            FxHashMap::default();
-        let mut next = root;
+        let mut state = ResolverState {
+            pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
+            next: root,
+            pins: FilePins::default(),
+            priorities: PubGrubPriorities::default(),
+            added_dependencies: FxHashMap::default(),
+        };
 
         debug!(
             "Solving with target Python version {}",
@@ -381,49 +379,54 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
 
         loop {
             // Run unit propagation.
-            state.unit_propagation(next)?;
+            state.pubgrub.unit_propagation(state.next)?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
             // the dependency mode is direct, we only need to visit the root package.
             if self.dependency_mode.is_transitive() {
-                Self::pre_visit(state.partial_solution.prioritized_packages(), &request_sink)
-                    .await?;
+                Self::pre_visit(
+                    state.pubgrub.partial_solution.prioritized_packages(),
+                    &request_sink,
+                )
+                .await?;
             }
 
             // Choose a package version.
             let Some(highest_priority_pkg) = state
+                .pubgrub
                 .partial_solution
-                .pick_highest_priority_pkg(|package, _range| priorities.get(package))
+                .pick_highest_priority_pkg(|package, _range| state.priorities.get(package))
             else {
                 if enabled!(Level::DEBUG) {
                     prefetcher.log_tried_versions();
                 }
-                let selection = state.partial_solution.extract_solution();
+                let selection = state.pubgrub.partial_solution.extract_solution();
                 return ResolutionGraph::from_state(
                     &selection,
-                    &pins,
+                    &state.pins,
                     &self.index.packages,
                     &self.index.distributions,
-                    &state,
+                    &state.pubgrub,
                     &self.preferences,
                     self.editables.clone(),
                 );
             };
-            next = highest_priority_pkg;
+            state.next = highest_priority_pkg;
 
-            prefetcher.version_tried(next.clone());
+            prefetcher.version_tried(state.next.clone());
 
             let term_intersection = state
+                .pubgrub
                 .partial_solution
-                .term_intersection_for_package(&next)
+                .term_intersection_for_package(&state.next)
                 .ok_or_else(|| {
                     PubGrubError::Failure("a package was chosen but we don't have a term.".into())
                 })?;
             let decision = self
                 .choose_version(
-                    &next,
+                    &state.next,
                     term_intersection.unwrap_positive(),
-                    &mut pins,
+                    &mut state.pins,
                     &request_sink,
                 )
                 .await?;
@@ -431,29 +434,34 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
             // Pick the next compatible version.
             let version = match decision {
                 None => {
-                    debug!("No compatible version found for: {next}");
+                    debug!("No compatible version found for: {next}", next = state.next);
 
                     let term_intersection = state
+                        .pubgrub
                         .partial_solution
-                        .term_intersection_for_package(&next)
+                        .term_intersection_for_package(&state.next)
                         .expect("a package was chosen but we don't have a term.");
 
                     // Check if the decision was due to the package being unavailable
-                    if let PubGrubPackage::Package(ref package_name, _, _) = next {
+                    if let PubGrubPackage::Package(ref package_name, _, _) = state.next {
                         if let Some(entry) = self.unavailable_packages.borrow().get(package_name) {
-                            state.add_incompatibility(Incompatibility::custom_term(
-                                next.clone(),
-                                term_intersection.clone(),
-                                UnavailableReason::Package(entry.clone()),
-                            ));
+                            state
+                                .pubgrub
+                                .add_incompatibility(Incompatibility::custom_term(
+                                    state.next.clone(),
+                                    term_intersection.clone(),
+                                    UnavailableReason::Package(entry.clone()),
+                                ));
                             continue;
                         }
                     }
 
-                    state.add_incompatibility(Incompatibility::no_versions(
-                        next.clone(),
-                        term_intersection.clone(),
-                    ));
+                    state
+                        .pubgrub
+                        .add_incompatibility(Incompatibility::no_versions(
+                            state.next.clone(),
+                            term_intersection.clone(),
+                        ));
                     continue;
                 }
                 Some(version) => version,
@@ -478,29 +486,36 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                                 range.intersection(&specifier.into())
                             })?;
 
-                        let package = &next;
+                        let package = &state.next;
                         for kind in [PubGrubPython::Installed, PubGrubPython::Target] {
-                            state.add_incompatibility(Incompatibility::from_dependency(
-                                package.clone(),
-                                Range::singleton(version.clone()),
-                                (PubGrubPackage::Python(kind), python_version.clone()),
-                            ));
+                            state
+                                .pubgrub
+                                .add_incompatibility(Incompatibility::from_dependency(
+                                    package.clone(),
+                                    Range::singleton(version.clone()),
+                                    (PubGrubPackage::Python(kind), python_version.clone()),
+                                ));
                         }
-                        state.partial_solution.add_decision(next.clone(), version);
+                        state
+                            .pubgrub
+                            .partial_solution
+                            .add_decision(state.next.clone(), version);
                         continue;
                     };
-                    state.add_incompatibility(Incompatibility::custom_version(
-                        next.clone(),
-                        version.clone(),
-                        UnavailableReason::Version(reason),
-                    ));
+                    state
+                        .pubgrub
+                        .add_incompatibility(Incompatibility::custom_version(
+                            state.next.clone(),
+                            version.clone(),
+                            UnavailableReason::Version(reason),
+                        ));
                     continue;
                 }
             };
 
             prefetcher
                 .prefetch_batches(
-                    &next,
+                    &state.next,
                     &version,
                     term_intersection.unwrap_positive(),
                     &request_sink,
@@ -509,25 +524,28 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 )
                 .await?;
 
-            self.on_progress(&next, &version);
+            self.on_progress(&state.next, &version);
 
-            if added_dependencies
-                .entry(next.clone())
+            if state
+                .added_dependencies
+                .entry(state.next.clone())
                 .or_default()
                 .insert(version.clone())
             {
                 // Retrieve that package dependencies.
-                let package = &next;
+                let package = &state.next;
                 let dependencies = match self
-                    .get_dependencies(package, &version, &mut priorities, &request_sink)
+                    .get_dependencies(package, &version, &mut state.priorities, &request_sink)
                     .await?
                 {
                     Dependencies::Unavailable(reason) => {
-                        state.add_incompatibility(Incompatibility::custom_version(
-                            package.clone(),
-                            version.clone(),
-                            UnavailableReason::Version(reason),
-                        ));
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::custom_version(
+                                package.clone(),
+                                version.clone(),
+                                UnavailableReason::Version(reason),
+                            ));
                         continue;
                     }
                     Dependencies::Available(constraints)
@@ -548,22 +566,25 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 };
 
                 // Add that package and version if the dependencies are not problematic.
-                let dep_incompats = state.add_incompatibility_from_dependencies(
+                let dep_incompats = state.pubgrub.add_incompatibility_from_dependencies(
                     package.clone(),
                     version.clone(),
                     dependencies,
                 );
 
-                state.partial_solution.add_version(
+                state.pubgrub.partial_solution.add_version(
                     package.clone(),
                     version,
                     dep_incompats,
-                    &state.incompatibility_store,
+                    &state.pubgrub.incompatibility_store,
                 );
             } else {
                 // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
                 // terms and can add the decision directly.
-                state.partial_solution.add_decision(next.clone(), version);
+                state
+                    .pubgrub
+                    .partial_solution
+                    .add_decision(state.next.clone(), version);
             }
         }
     }
@@ -1340,6 +1361,40 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
             reporter.on_complete();
         }
     }
+}
+
+/// State that is used during unit propagation in the resolver.
+#[derive(Clone)]
+struct ResolverState {
+    /// The internal state used by the resolver.
+    ///
+    /// Note that not all parts of this state are strictly internal. For
+    /// example, the edges in the dependency graph generated as part of the
+    /// output of resolution are derived from the "incompatibilities" tracked
+    /// in this state. We also ultimately retrieve the final set of version
+    /// assignments (to packages) from this state's "partial solution."
+    pubgrub: State<UvDependencyProvider>,
+    /// The next package on which to run unit propgation.
+    next: PubGrubPackage,
+    /// The set of pinned versions we accrue throughout resolution.
+    ///
+    /// The key of this map is a package name, and each package name maps to
+    /// a set of versions for that package. Each version in turn is mapped
+    /// to a single `ResolvedDist`. That `ResolvedDist` represents, at time
+    /// of writing (2024/05/09), at most one wheel. The idea here is that
+    /// `FilePins` tracks precisely which wheel was selected during resolution.
+    /// After resolution is finished, this maps is consulted in order to select
+    /// the wheel chosen during resolution.
+    pins: FilePins,
+    /// When dependencies for a package are retrieved, this map of priorities
+    /// is updated based on how each dependency was specified. Certain types
+    /// of dependencies have more "priority" than others (like direct URL
+    /// dependencies). These priorities help determine which package to
+    /// consider next during resolution.
+    priorities: PubGrubPriorities,
+    /// This keeps track of the set of versions for each package that we've
+    /// already visited during resolution. This avoids doing redundant work.
+    added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
 }
 
 /// Fetch the metadata for an item
