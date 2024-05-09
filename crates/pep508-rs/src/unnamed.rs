@@ -55,8 +55,11 @@ impl UnnamedRequirement {
 
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_origin(self, origin: Option<RequirementOrigin>) -> Self {
-        Self { origin, ..self }
+    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
+        Self {
+            origin: Some(origin),
+            ..self
+        }
     }
 }
 

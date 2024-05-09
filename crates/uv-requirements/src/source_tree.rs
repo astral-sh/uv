@@ -154,7 +154,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             ExtrasSpecification::None => Ok(metadata
                 .requires_dist
                 .into_iter()
-                .map(|requirement| requirement.with_origin(Some(origin.clone())))
+                .map(|requirement| requirement.with_origin(origin.clone()))
                 .collect()),
             ExtrasSpecification::All => Ok(metadata
                 .requires_dist

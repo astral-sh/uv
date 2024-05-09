@@ -826,7 +826,11 @@ fn parse_requirement_and_hashes(
 
     let requirement = RequirementsTxtRequirement::parse(requirement, working_dir)
         .map(|requirement| {
-            requirement.with_origin(source.map(Path::to_path_buf).map(RequirementOrigin::File))
+            if let Some(source) = source {
+                requirement.with_origin(RequirementOrigin::File(source.to_path_buf()))
+            } else {
+                requirement
+            }
         })
         .map_err(|err| match err {
             RequirementsTxtRequirementError::ParsedUrl(err) => {
