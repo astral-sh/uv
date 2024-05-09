@@ -1,46 +1,42 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
 
 use url::Url;
 
-use pep508_rs::VerbatimUrl;
+use pep508_rs::{RequirementOrigin, VerbatimUrl};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
 /// Source of a dependency, e.g., a `-r requirements.txt` file.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SourceAnnotation {
-    /// A `pyproject.toml` file.
-    PyProject {
-        path: PathBuf,
-        project_name: Option<String>,
-    },
     /// A `-c constraints.txt` file.
-    Constraint(PathBuf),
+    Constraint(RequirementOrigin),
     /// An `--override overrides.txt` file.
-    Override(PathBuf),
+    Override(RequirementOrigin),
     /// A `-r requirements.txt` file.
-    Requirement(PathBuf),
+    Requirement(RequirementOrigin),
 }
 
 impl std::fmt::Display for SourceAnnotation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Requirement(path) => {
-                write!(f, "-r {}", path.user_display())
-            }
-            Self::Constraint(path) => {
-                write!(f, "-c {}", path.user_display())
-            }
-            Self::Override(path) => {
-                write!(f, "--override {}", path.user_display())
-            }
-            Self::PyProject { path, project_name } => {
-                if let Some(project_name) = project_name {
-                    write!(f, "{} ({})", project_name, path.user_display())
-                } else {
-                    write!(f, "{}", path.user_display())
+            Self::Requirement(origin) => match origin {
+                RequirementOrigin::File(path) => {
+                    write!(f, "-r {}", path.user_display())
                 }
+                RequirementOrigin::Project(path, project_name) => {
+                    if let Some(project_name) = project_name {
+                        write!(f, "{} ({})", project_name, path.user_display())
+                    } else {
+                        write!(f, "{}", path.user_display())
+                    }
+                }
+            },
+            Self::Constraint(origin) => {
+                write!(f, "-c {}", origin.path().user_display())
+            }
+            Self::Override(origin) => {
+                write!(f, "--override {}", origin.path().user_display())
             }
         }
     }

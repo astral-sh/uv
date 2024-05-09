@@ -71,7 +71,6 @@ impl RequirementsSpecification {
                         RequirementEntry {
                             requirement,
                             hashes: vec![],
-                            path: None,
                         },
                     )?],
                     constraints: vec![],
@@ -149,30 +148,21 @@ impl RequirementsSpecification {
                 Self::parse_direct_pyproject_toml(&contents, extras, path.as_ref(), preview)
                     .with_context(|| format!("Failed to parse `{}`", path.user_display()))?
             }
-            RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
-                let path = fs_err::canonicalize(path)?;
-                let source_tree = path.parent().ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "The file `{}` appears to be a `setup.py` or `setup.cfg` file, which must be in a directory",
-                        path.user_display()
-                    )
-                })?;
-                Self {
-                    project: None,
-                    requirements: vec![],
-                    constraints: vec![],
-                    overrides: vec![],
-                    editables: vec![],
-                    source_trees: vec![source_tree.to_path_buf()],
-                    extras: FxHashSet::default(),
-                    index_url: None,
-                    extra_index_urls: vec![],
-                    no_index: false,
-                    find_links: vec![],
-                    no_binary: NoBinary::default(),
-                    no_build: NoBuild::default(),
-                }
-            }
+            RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => Self {
+                project: None,
+                requirements: vec![],
+                constraints: vec![],
+                overrides: vec![],
+                editables: vec![],
+                source_trees: vec![path.clone()],
+                extras: FxHashSet::default(),
+                index_url: None,
+                extra_index_urls: vec![],
+                no_index: false,
+                find_links: vec![],
+                no_binary: NoBinary::default(),
+                no_build: NoBuild::default(),
+            },
         })
     }
 
@@ -224,13 +214,12 @@ impl RequirementsSpecification {
                                 url,
                                 path,
                                 extras: requirement.extras,
-                                source: Some(pyproject_path.to_path_buf()),
+                                origin: requirement.origin,
                             })
                         } else {
                             Either::Right(UnresolvedRequirementSpecification {
                                 requirement: UnresolvedRequirement::Named(requirement),
                                 hashes: vec![],
-                                path: Some(pyproject_path.to_string_lossy().to_string()),
                             })
                         }
                     });
@@ -248,17 +237,10 @@ impl RequirementsSpecification {
                     "Dynamic pyproject.toml at: `{}`",
                     pyproject_path.user_display()
                 );
-                let path = fs_err::canonicalize(pyproject_path)?;
-                let source_tree = path.parent().ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "The file `{}` appears to be a `pyproject.toml` file, which must be in a directory",
-                        path.user_display()
-                    )
-                })?;
                 Ok(Self {
                     project: None,
                     requirements: vec![],
-                    source_trees: vec![source_tree.to_path_buf()],
+                    source_trees: vec![pyproject_path.to_path_buf()],
                     ..Self::default()
                 })
             }

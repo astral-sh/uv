@@ -51,17 +51,16 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [
                 "sha256:2e1ccc9417d4da358b9de6f174e3ac094391ea1d4fbef2d667865d819dfd0afe",
             ],
-            path: Some(
-                "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -110,17 +109,16 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [
                 "sha256:8a388717b9476f934a21484e8c8e61875ab60644d29b9b39e11e4b9dc1c6b305",
             ],
-            path: Some(
-                "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -180,17 +178,16 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [
                 "sha256:e4d039def5768a47e4afec8e89e83ec3ae5a26bf00ad851f914d1240b444d2b1",
             ],
-            path: Some(
-                "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -239,8 +236,10 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
@@ -248,9 +247,6 @@ RequirementsTxt {
                 "sha256:2577c501a2fb8d05a304c09d090d6e47c306fef15809d102b327cf8364bddab5",
                 "sha256:75beac4a47881eeb94d5ea5d6ad31ef88856affe2332b9aafb52c6452ccf0d7a",
             ],
-            path: Some(
-                "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -299,8 +295,10 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
+                        ),
                     ),
                 },
             ),
@@ -310,9 +308,6 @@ RequirementsTxt {
                 "sha256:1a5c7d7d577e0eabfcf15eb87d1e19314c8c4f0e722a301f98e0e3a65e238b4e",
                 "sha256:1e5a38aa85bd660c53947bd28aeaafb6a97d70423606f1ccb044a03a1203fe4a",
             ],
-            path: Some(
-                "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
-            ),
         },
     ],
     constraints: [],

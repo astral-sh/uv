@@ -579,7 +579,7 @@ async fn build_editables(
             url,
             extras,
             path,
-            source: _,
+            origin: _,
         } = editable;
         LocalEditable {
             url: url.clone(),
@@ -678,7 +678,7 @@ async fn resolve(
                 extras: vec![],
                 marker: None,
                 source,
-                path: None,
+                origin: None,
             };
             Ok(Preference::from_requirement(requirement))
         })

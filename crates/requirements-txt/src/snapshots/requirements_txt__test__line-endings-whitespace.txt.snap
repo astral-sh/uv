@@ -13,15 +13,14 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/whitespace.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/whitespace.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [],
-            path: Some(
-                "<REQUIREMENTS_DIR>/whitespace.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -59,15 +58,14 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/whitespace.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/whitespace.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [],
-            path: Some(
-                "<REQUIREMENTS_DIR>/whitespace.txt",
-            ),
         },
     ],
     constraints: [],

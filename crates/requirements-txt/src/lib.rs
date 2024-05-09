@@ -48,8 +48,8 @@ use distribution_types::{
     ParsedUrlError, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Scheme,
-    VerbatimUrl,
+    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource,
+    RequirementOrigin, Scheme, VerbatimUrl,
 };
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
@@ -171,7 +171,7 @@ pub struct EditableRequirement {
     /// The local path to the editable.
     pub path: PathBuf,
     /// The source file containing the requirement.
-    pub source: Option<PathBuf>,
+    pub origin: Option<RequirementOrigin>,
 }
 
 impl EditableRequirement {
@@ -196,7 +196,7 @@ impl EditableRequirement {
     /// We disallow URLs with schemes other than `file://` (e.g., `https://...`).
     pub fn parse(
         given: &str,
-        source: Option<&Path>,
+        origin: Option<&Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtParserError> {
         // Identify the extras.
@@ -275,7 +275,7 @@ impl EditableRequirement {
             url,
             extras,
             path,
-            source: source.map(Path::to_path_buf),
+            origin: origin.map(Path::to_path_buf).map(RequirementOrigin::File),
         })
     }
 
@@ -316,8 +316,6 @@ pub struct RequirementEntry {
     pub requirement: RequirementsTxtRequirement,
     /// Hashes of the downloadable packages.
     pub hashes: Vec<String>,
-    /// Path of the original file (where existing)
-    pub path: Option<String>,
 }
 
 // We place the impl here instead of next to `UnresolvedRequirementSpecification` because
@@ -337,7 +335,6 @@ impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
                 }
             },
             hashes: value.hashes,
-            path: value.path,
         })
     }
 }
@@ -711,7 +708,6 @@ fn parse_entry(
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
             hashes,
-            path: requirements_txt.to_str().map(ToString::to_string),
         })
     } else if let Some(char) = s.peek() {
         let (line, column) = calculate_row_column(content, s.cursor());
@@ -829,7 +825,9 @@ fn parse_requirement_and_hashes(
     }
 
     let requirement = RequirementsTxtRequirement::parse(requirement, working_dir)
-        .map(|requirement| requirement.with_source(source.map(Path::to_path_buf)))
+        .map(|requirement| {
+            requirement.with_origin(source.map(Path::to_path_buf).map(RequirementOrigin::File))
+        })
         .map_err(|err| match err {
             RequirementsTxtRequirementError::ParsedUrl(err) => {
                 RequirementsTxtParserError::ParsedUrl {
@@ -1815,15 +1813,14 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                source: Some(
-                                    "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                    ),
                                 ),
                             },
                         ),
                         hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/subdir/sibling.txt",
-                        ),
                     },
                 ],
                 constraints: [],
@@ -1880,15 +1877,14 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                source: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
                         hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
                     },
                 ],
                 constraints: [],
@@ -1968,8 +1964,10 @@ mod test {
                         },
                         extras: [],
                         path: "/foo/bar",
-                        source: Some(
-                            "<REQUIREMENTS_DIR>/grandchild.txt",
+                        origin: Some(
+                            File(
+                                "<REQUIREMENTS_DIR>/grandchild.txt",
+                            ),
                         ),
                     },
                 ],
@@ -2077,15 +2075,14 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                source: Some(
-                                    "<REQUIREMENTS_DIR>/./sibling.txt",
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/./sibling.txt",
+                                    ),
                                 ),
                             },
                         ),
                         hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/./sibling.txt",
-                        ),
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2107,17 +2104,16 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                source: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
                         hashes: [
                             "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
                         ],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2139,17 +2135,16 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                source: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
                         hashes: [
                             "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
                         ],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2171,15 +2166,14 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                source: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
                         hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2201,15 +2195,14 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                source: Some(
-                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
                                 ),
                             },
                         ),
                         hashes: [],
-                        path: Some(
-                            "<REQUIREMENTS_DIR>/requirements.txt",
-                        ),
                     },
                 ],
                 constraints: [],

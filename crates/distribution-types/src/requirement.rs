@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -28,7 +28,7 @@ pub struct Requirement {
     pub extras: Vec<ExtraName>,
     pub marker: Option<MarkerTree>,
     pub source: RequirementSource,
-    pub path: Option<PathBuf>,
+    pub origin: Option<RequirementOrigin>,
 }
 
 impl Requirement {
@@ -63,7 +63,7 @@ impl Requirement {
             extras: requirement.extras,
             marker: requirement.marker,
             source,
-            path: requirement.source,
+            origin: requirement.origin,
         })
     }
 }

@@ -131,6 +131,25 @@ create_exception!(
     "A PEP 508 parser error with span information"
 );
 
+/// The origin of a dependency, e.g., a `-r requirements.txt` file.
+#[derive(Hash, Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+pub enum RequirementOrigin {
+    /// The requirement was provided via a standalone file (e.g., a `requirements.txt` file).
+    File(PathBuf),
+    /// The requirement was provided via a local project (e.g., a `pyproject.toml` file).
+    Project(PathBuf, Option<PackageName>),
+}
+
+impl RequirementOrigin {
+    /// Returns the path of the requirement origin.
+    pub fn path(&self) -> &Path {
+        match self {
+            RequirementOrigin::File(path) => path.as_path(),
+            RequirementOrigin::Project(path, _) => path.as_path(),
+        }
+    }
+}
+
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub struct Requirement<T: Pep508Url = VerbatimUrl> {
@@ -149,14 +168,14 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
     /// The source file containing the requirement.
-    pub source: Option<PathBuf>,
+    pub origin: Option<RequirementOrigin>,
 }
 
 impl Requirement {
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_source(self, source: Option<PathBuf>) -> Self {
-        Self { source, ..self }
+    pub fn with_origin(self, origin: Option<RequirementOrigin>) -> Self {
+        Self { origin, ..self }
     }
 }
 
@@ -492,7 +511,7 @@ impl<T: Pep508Url> Requirement<T> {
             extras,
             version_or_url,
             marker,
-            source,
+            origin,
         } = self;
         Requirement {
             name,
@@ -505,7 +524,7 @@ impl<T: Pep508Url> Requirement<T> {
                 Some(VersionOrUrl::Url(url)) => Some(VersionOrUrl::Url(U::from(url))),
             },
             marker,
-            source,
+            origin,
         }
     }
 }
@@ -1029,7 +1048,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
         extras,
         version_or_url: requirement_kind,
         marker,
-        source: None,
+        origin: None,
     })
 }
 
@@ -1171,7 +1190,7 @@ mod tests {
                 operator: MarkerOperator::LessThan,
                 r_value: MarkerValue::QuotedString("2.7".to_string()),
             })),
-            source: None,
+            origin: None,
         };
         assert_eq!(requests, expected);
     }
@@ -1397,7 +1416,7 @@ mod tests {
             extras: vec![],
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
-            source: None,
+            origin: None,
         };
         assert_eq!(pip_url, expected);
     }

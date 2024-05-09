@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -10,8 +10,8 @@ use uv_normalize::ExtraName;
 use crate::marker::parse_markers_cursor;
 use crate::{
     expand_env_vars, parse_extras_cursor, split_extras, split_scheme, strip_host, Cursor,
-    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Scheme, VerbatimUrl,
-    VerbatimUrlError,
+    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, RequirementOrigin, Scheme,
+    VerbatimUrl, VerbatimUrlError,
 };
 
 /// A PEP 508-like, direct URL dependency specifier without a package name.
@@ -31,7 +31,7 @@ pub struct UnnamedRequirement {
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
     /// The source file containing the requirement.
-    pub source: Option<PathBuf>,
+    pub origin: Option<RequirementOrigin>,
 }
 
 impl UnnamedRequirement {
@@ -46,8 +46,8 @@ impl UnnamedRequirement {
 
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_source(self, source: Option<PathBuf>) -> Self {
-        Self { source, ..self }
+    pub fn with_origin(self, origin: Option<RequirementOrigin>) -> Self {
+        Self { origin, ..self }
     }
 }
 
@@ -167,7 +167,7 @@ fn parse_unnamed_requirement(
         url,
         extras,
         marker,
-        source: None,
+        origin: None,
     })
 }
 

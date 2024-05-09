@@ -24,15 +24,14 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/for-poetry.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [],
-            path: Some(
-                "<REQUIREMENTS_DIR>/for-poetry.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -54,15 +53,14 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/for-poetry.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [],
-            path: Some(
-                "<REQUIREMENTS_DIR>/for-poetry.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -73,15 +71,14 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/for-poetry.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [],
-            path: Some(
-                "<REQUIREMENTS_DIR>/for-poetry.txt",
-            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -111,15 +108,14 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    source: Some(
-                        "<REQUIREMENTS_DIR>/for-poetry.txt",
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
                     ),
                 },
             ),
             hashes: [],
-            path: Some(
-                "<REQUIREMENTS_DIR>/for-poetry.txt",
-            ),
         },
     ],
     constraints: [],
