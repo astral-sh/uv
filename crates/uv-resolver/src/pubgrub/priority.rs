@@ -17,7 +17,7 @@ use crate::pubgrub::package::PubGrubPackage;
 /// version over packages that are constrained in some way over packages that are unconstrained.
 ///
 /// See: <https://github.com/pypa/pip/blob/ef78c129b1a966dbbbdb8ebfffc43723e89110d1/src/pip/_internal/resolution/resolvelib/provider.py#L120>
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities(FxHashMap<PackageName, PubGrubPriority>);
 
 impl PubGrubPriorities {
