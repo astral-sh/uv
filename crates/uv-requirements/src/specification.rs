@@ -11,6 +11,7 @@ use distribution_types::{
     FlatIndexLocation, IndexUrl, Requirement, RequirementSource, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
+use pep508_rs::{UnnamedRequirement, VerbatimUrl};
 use requirements_txt::{
     EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
 };
@@ -155,6 +156,29 @@ impl RequirementsSpecification {
                 overrides: vec![],
                 editables: vec![],
                 source_trees: vec![path.clone()],
+                extras: FxHashSet::default(),
+                index_url: None,
+                extra_index_urls: vec![],
+                no_index: false,
+                find_links: vec![],
+                no_binary: NoBinary::default(),
+                no_build: NoBuild::default(),
+            },
+            RequirementsSource::SourceTree(path) => Self {
+                project: None,
+                requirements: vec![UnresolvedRequirementSpecification {
+                    requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                        url: VerbatimUrl::from_path(path),
+                        extras: vec![],
+                        marker: None,
+                        origin: None,
+                    }),
+                    hashes: vec![],
+                }],
+                constraints: vec![],
+                overrides: vec![],
+                editables: vec![],
+                source_trees: vec![],
                 extras: FxHashSet::default(),
                 index_url: None,
                 extra_index_urls: vec![],

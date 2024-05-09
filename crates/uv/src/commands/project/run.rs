@@ -1,4 +1,3 @@
-use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -21,6 +20,7 @@ use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::project::discovery::Project;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 
@@ -62,16 +62,16 @@ pub(crate) async fn run(
     } else {
         debug!("Syncing project environment.");
 
-        let Some(project_requirements) = project::find_project()? else {
+        let Some(project) = Project::find(std::env::current_dir()?) else {
             return Err(anyhow::anyhow!(
-                "Unable to find `pyproject.toml` for project project."
+                "Unable to find `pyproject.toml` for project."
             ));
         };
 
         let venv = PythonEnvironment::from_virtualenv(cache)?;
 
         // Install the project requirements.
-        Some(update_environment(venv, &project_requirements, preview, cache, printer).await?)
+        Some(update_environment(venv, &project.requirements(), preview, cache, printer).await?)
     };
 
     // If necessary, create an environment for the ephemeral requirements.
@@ -97,7 +97,7 @@ pub(crate) async fn run(
 
         // Create a virtual environment
         // TODO(zanieb): Move this path derivation elsewhere
-        let uv_state_path = env::current_dir()?.join(".uv");
+        let uv_state_path = std::env::current_dir()?.join(".uv");
         fs_err::create_dir_all(&uv_state_path)?;
         tmpdir = tempdir_in(uv_state_path)?;
         let venv = uv_virtualenv::create_venv(
@@ -117,7 +117,7 @@ pub(crate) async fn run(
     process.args(&args);
 
     // Construct the `PATH` environment variable.
-    let new_path = env::join_paths(
+    let new_path = std::env::join_paths(
         ephemeral_env
             .as_ref()
             .map(PythonEnvironment::scripts)
@@ -130,16 +130,16 @@ pub(crate) async fn run(
             )
             .map(PathBuf::from)
             .chain(
-                env::var_os("PATH")
+                std::env::var_os("PATH")
                     .as_ref()
                     .iter()
-                    .flat_map(env::split_paths),
+                    .flat_map(std::env::split_paths),
             ),
     )?;
     process.env("PATH", new_path);
 
     // Construct the `PYTHONPATH` environment variable.
-    let new_python_path = env::join_paths(
+    let new_python_path = std::env::join_paths(
         ephemeral_env
             .as_ref()
             .map(PythonEnvironment::site_packages)
@@ -154,10 +154,10 @@ pub(crate) async fn run(
             )
             .map(PathBuf::from)
             .chain(
-                env::var_os("PYTHONPATH")
+                std::env::var_os("PYTHONPATH")
                     .as_ref()
                     .iter()
-                    .flat_map(env::split_paths),
+                    .flat_map(std::env::split_paths),
             ),
     )?;
     process.env("PYTHONPATH", new_python_path);
