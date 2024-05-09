@@ -33,7 +33,7 @@ pub(crate) async fn lock(
     let venv = PythonEnvironment::from_virtualenv(cache)?;
 
     // Find the project requirements.
-    let Some(project) = Project::find(std::env::current_dir()?) else {
+    let Some(project) = Project::find(std::env::current_dir()?)? else {
         return Err(anyhow::anyhow!(
             "Unable to find `pyproject.toml` for project."
         ));
