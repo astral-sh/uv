@@ -3269,6 +3269,46 @@ fn install_package_basic_auth_from_netrc() -> Result<()> {
     Ok(())
 }
 
+/// Install a package from an index that requires authentication
+/// Define the `--index-url` in the requirements file
+#[test]
+fn install_package_basic_auth_from_netrc_index_in_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(
+        r"
+anyio
+--index-url https://pypi-proxy.fly.dev/basic-auth/simple
+    ",
+    )?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .env("NETRC", netrc.to_str().unwrap())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
 /// Install a package from an index that provides relative links
 #[test]
 fn install_index_with_relative_links() {
