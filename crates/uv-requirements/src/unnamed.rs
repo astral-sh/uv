@@ -101,7 +101,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 extras: requirement.extras,
                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                 marker: requirement.marker,
-                path: requirement.path,
+                source: requirement.source,
             });
         }
 
@@ -120,7 +120,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 extras: requirement.extras,
                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                 marker: requirement.marker,
-                path: requirement.path,
+                source: requirement.source,
             });
         }
 
@@ -148,7 +148,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             extras: requirement.extras,
                             version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                             marker: requirement.marker,
-                            path: requirement.path,
+                            source: requirement.source,
                         });
                     }
 
@@ -170,7 +170,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                 extras: requirement.extras,
                                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                 marker: requirement.marker,
-                                path: Some(project_path.clone()),
+                                source: Some(project_path.clone()),
                             });
                         }
 
@@ -188,7 +188,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
-                                        path: Some(project_path.clone()),
+                                        source: Some(project_path.clone()),
                                     });
                                 }
                             }
@@ -217,7 +217,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
-                                        path: requirement.path,
+                                        source: requirement.source,
                                     });
                                 }
                             }
@@ -276,7 +276,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             extras: requirement.extras,
             version_or_url: Some(VersionOrUrl::Url(requirement.url)),
             marker: requirement.marker,
-            path: requirement.path,
+            source: requirement.source,
         })
     }
 }

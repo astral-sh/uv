@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
@@ -15,7 +15,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
     Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ParsedUrlError, Requirement,
-    ResolvedDist, SourceAnnotation, Verbatim, VersionId, VersionOrUrlRef,
+    ResolvedDist, SourceAnnotations, Verbatim, VersionId, VersionOrUrlRef,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -545,20 +545,20 @@ pub struct DisplayResolutionGraph<'a> {
     /// package.
     annotation_style: AnnotationStyle,
     /// External sources for each package: requirements, constraints, and overrides.
-    sources: BTreeMap<String, BTreeSet<SourceAnnotation>>,
+    sources: SourceAnnotations,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
         Self::new(
             resolution,
-            BTreeMap::default(),
             &[],
             false,
             false,
             true,
             false,
             AnnotationStyle::default(),
+            SourceAnnotations::default(),
         )
     }
 }
@@ -568,13 +568,13 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
-        sources: BTreeMap<String, BTreeSet<SourceAnnotation>>,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
+        sources: SourceAnnotations,
     ) -> DisplayResolutionGraph<'a> {
         Self {
             resolution: underlying,
@@ -726,14 +726,13 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 edges.sort_unstable_by_key(|package| package.name());
 
                 // Include all external sources (e.g., requirements files).
-                let source_name: String = match node {
-                    Node::Editable(_package_name, local_editable) => {
-                        local_editable.url.given().unwrap_or_default().to_string()
+                let default = BTreeSet::default();
+                let source = match node {
+                    Node::Editable(_, editable) => {
+                        self.sources.get_editable(&editable.url).unwrap_or(&default)
                     }
-                    Node::Distribution(name, _, _) => name.to_string(),
+                    Node::Distribution(name, _, _) => self.sources.get(name).unwrap_or(&default),
                 };
-
-                let source = self.sources.get(&source_name).cloned().unwrap_or_default();
 
                 match self.annotation_style {
                     AnnotationStyle::Line => {
@@ -742,7 +741,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let deps = edges
                                 .into_iter()
                                 .map(|dependency| format!("{}", dependency.name()))
-                                .chain(source.into_iter().map(|source| source.to_string()))
+                                .chain(source.iter().map(std::string::ToString::to_string))
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -766,8 +765,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         edges => {
                             let separator = "\n";
                             let deps = source
-                                .into_iter()
-                                .map(|source| source.to_string())
+                                .iter()
+                                .map(std::string::ToString::to_string)
                                 .chain(
                                     edges
                                         .iter()

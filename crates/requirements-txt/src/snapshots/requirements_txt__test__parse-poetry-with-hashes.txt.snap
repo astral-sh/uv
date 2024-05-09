@@ -51,7 +51,7 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
@@ -110,7 +110,7 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
@@ -180,7 +180,7 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
@@ -239,7 +239,7 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },
@@ -299,7 +299,7 @@ RequirementsTxt {
                             ],
                         ),
                     ),
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
                     ),
                 },

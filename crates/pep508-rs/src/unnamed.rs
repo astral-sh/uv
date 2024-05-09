@@ -31,7 +31,7 @@ pub struct UnnamedRequirement {
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
     /// The source file containing the requirement.
-    pub path: Option<PathBuf>,
+    pub source: Option<PathBuf>,
 }
 
 impl UnnamedRequirement {
@@ -46,8 +46,8 @@ impl UnnamedRequirement {
 
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_source(self, path: Option<PathBuf>) -> Self {
-        Self { path, ..self }
+    pub fn with_source(self, source: Option<PathBuf>) -> Self {
+        Self { source, ..self }
     }
 }
 
@@ -167,7 +167,7 @@ fn parse_unnamed_requirement(
         url,
         extras,
         marker,
-        path: None,
+        source: None,
     })
 }
 
