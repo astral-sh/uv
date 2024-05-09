@@ -41,7 +41,7 @@ pub(crate) async fn sync(
 
     // Read the lockfile.
     let resolution = {
-        let encoded = fs_err::tokio::read_to_string("uv.lock").await?;
+        let encoded = fs_err::tokio::read_to_string(project.root().join("uv.lock")).await?;
         let lock: Lock = toml::from_str(&encoded)?;
         lock.to_resolution(markers, tags, project.name())
     };

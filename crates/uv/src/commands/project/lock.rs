@@ -134,7 +134,7 @@ pub(crate) async fn lock(
     // Write the lockfile to disk.
     let lock = resolution.lock()?;
     let encoded = toml::to_string_pretty(&lock)?;
-    fs_err::tokio::write("uv.lock", encoded.as_bytes()).await?;
+    fs_err::tokio::write(project.root().join("uv.lock"), encoded.as_bytes()).await?;
 
     Ok(ExitStatus::Success)
 }
