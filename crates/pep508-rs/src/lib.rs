@@ -26,7 +26,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 #[cfg(feature = "pyo3")]
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 #[cfg(feature = "pyo3")]
@@ -49,6 +49,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "non-pep508-extensions")]
 pub use unnamed::UnnamedRequirement;
 // Parity with the crates.io version of pep508_rs
+pub use origin::RequirementOrigin;
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use verbatim_url::{
     expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,
@@ -56,6 +57,7 @@ pub use verbatim_url::{
 
 mod cursor;
 mod marker;
+mod origin;
 #[cfg(feature = "non-pep508-extensions")]
 mod unnamed;
 mod verbatim_url;
@@ -130,25 +132,6 @@ create_exception!(
     pyo3::exceptions::PyValueError,
     "A PEP 508 parser error with span information"
 );
-
-/// The origin of a dependency, e.g., a `-r requirements.txt` file.
-#[derive(Hash, Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
-pub enum RequirementOrigin {
-    /// The requirement was provided via a standalone file (e.g., a `requirements.txt` file).
-    File(PathBuf),
-    /// The requirement was provided via a local project (e.g., a `pyproject.toml` file).
-    Project(PathBuf, Option<PackageName>),
-}
-
-impl RequirementOrigin {
-    /// Returns the path of the requirement origin.
-    pub fn path(&self) -> &Path {
-        match self {
-            RequirementOrigin::File(path) => path.as_path(),
-            RequirementOrigin::Project(path, _) => path.as_path(),
-        }
-    }
-}
 
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]

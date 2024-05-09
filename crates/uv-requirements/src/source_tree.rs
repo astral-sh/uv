@@ -145,7 +145,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         };
 
         // Extract the origin.
-        let origin = RequirementOrigin::Project(path.to_path_buf(), Some(metadata.name.clone()));
+        let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
         // Determine the appropriate requirements to return based on the extras. This involves
         // evaluating the `extras` expression in any markers, but preserving the remaining marker

@@ -25,11 +25,7 @@ impl std::fmt::Display for SourceAnnotation {
                     write!(f, "-r {}", path.user_display())
                 }
                 RequirementOrigin::Project(path, project_name) => {
-                    if let Some(project_name) = project_name {
-                        write!(f, "{} ({})", project_name, path.user_display())
-                    } else {
-                        write!(f, "{}", path.user_display())
-                    }
+                    write!(f, "{project_name} ({})", path.user_display())
                 }
             },
             Self::Constraint(origin) => {

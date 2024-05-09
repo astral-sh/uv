@@ -334,10 +334,7 @@ pub(crate) fn lower_requirements(
         .iter()
         .map(|dependency| {
             let requirement = pep508_rs::Requirement::from_str(dependency)?.with_origin(Some(
-                RequirementOrigin::Project(
-                    pyproject_path.to_path_buf(),
-                    Some(project_name.clone()),
-                ),
+                RequirementOrigin::Project(pyproject_path.to_path_buf(), project_name.clone()),
             ));
             let name = requirement.name.clone();
             lower_requirement(
@@ -361,7 +358,7 @@ pub(crate) fn lower_requirements(
                     let requirement = pep508_rs::Requirement::from_str(dependency)?.with_origin(
                         Some(RequirementOrigin::Project(
                             pyproject_path.to_path_buf(),
-                            Some(project_name.clone()),
+                            project_name.clone(),
                         )),
                     );
                     let name = requirement.name.clone();
