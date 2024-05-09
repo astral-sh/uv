@@ -627,6 +627,14 @@ pub(crate) struct PipCompileArgs {
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipCompileCompatArgs,
+
+    /// The maximum number of in-flight concurrent downloads at any given time.
+    #[arg(env = "UV_CONCURRENT_DOWNLOADS")]
+    pub(crate) concurrent_downloads: Option<usize>,
+
+    /// The maximum number of source distributions to build concurrently at any given time.
+    #[arg(env = "UV_CONCURRENT_BUILDS")]
+    pub(crate) concurrent_builds: Option<usize>,
 }
 
 #[derive(Args)]
@@ -938,6 +946,14 @@ pub(crate) struct PipSyncArgs {
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipSyncCompatArgs,
+
+    /// The maximum number of in-flight concurrent downloads at any given time.
+    #[arg(env = "UV_CONCURRENT_DOWNLOADS")]
+    pub(crate) concurrent_downloads: Option<usize>,
+
+    /// The maximum number of source distributions to build concurrently at any given time.
+    #[arg(env = "UV_CONCURRENT_BUILDS")]
+    pub(crate) concurrent_builds: Option<usize>,
 }
 
 #[derive(Args)]
@@ -1342,6 +1358,14 @@ pub(crate) struct PipInstallArgs {
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipInstallCompatArgs,
+
+    /// The maximum number of in-flight concurrent downloads at any given time.
+    #[arg(env = "UV_CONCURRENT_DOWNLOADS")]
+    pub(crate) concurrent_downloads: Option<usize>,
+
+    /// The maximum number of source distributions to build concurrently at any given time.
+    #[arg(env = "UV_CONCURRENT_BUILDS")]
+    pub(crate) concurrent_builds: Option<usize>,
 }
 
 #[derive(Args)]

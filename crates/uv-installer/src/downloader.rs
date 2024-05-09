@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::path::Path;
 use std::sync::Arc;
 
-use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{stream::FuturesUnordered, FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
 use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
@@ -13,7 +13,6 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use uv_cache::Cache;
-use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_types::{BuildContext, HashStrategy, InFlight};
 
@@ -50,14 +49,13 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
         cache: &'a Cache,
         tags: &'a Tags,
         hashes: &'a HashStrategy,
-        client: &'a RegistryClient,
-        build_context: &'a Context,
+        database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             tags,
             cache,
             hashes,
-            database: DistributionDatabase::new(client, build_context),
+            database,
             reporter: None,
         }
     }
@@ -81,7 +79,8 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
         distributions: Vec<Dist>,
         in_flight: &'stream InFlight,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
-        futures::stream::iter(distributions)
+        distributions
+            .into_iter()
             .map(|dist| async {
                 let wheel = self.get_wheel(dist, in_flight).boxed_local().await?;
                 if let Some(reporter) = self.reporter.as_ref() {
@@ -89,9 +88,7 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
                 }
                 Ok::<CachedDist, Error>(wheel)
             })
-            // TODO(charlie): The number of concurrent fetches, such that we limit the number of
-            // concurrent builds to the number of cores, while allowing more concurrent downloads.
-            .buffer_unordered(50)
+            .collect::<FuturesUnordered<_>>()
     }
 
     /// Download, build, and unzip a set of downloaded wheels.
@@ -126,7 +123,8 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
     ) -> Result<Vec<BuiltEditable>, Error> {
         // Build editables in parallel
         let mut results = Vec::with_capacity(editables.len());
-        let mut fetches = futures::stream::iter(editables)
+        let mut fetches = editables
+            .into_iter()
             .map(|editable| async move {
                 let task_id = self
                     .reporter
@@ -145,7 +143,7 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
                 }
                 Ok::<_, Error>((editable, cached_dist, metadata))
             })
-            .buffer_unordered(50);
+            .collect::<FuturesUnordered<_>>();
 
         while let Some((editable, wheel, metadata)) = fetches.next().await.transpose()? {
             if let Some(reporter) = self.reporter.as_ref() {

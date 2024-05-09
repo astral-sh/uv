@@ -85,4 +85,6 @@ pub struct PipOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub require_hashes: Option<bool>,
+    pub concurrent_downloads: Option<usize>,
+    pub concurrent_builds: Option<usize>,
 }

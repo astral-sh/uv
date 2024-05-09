@@ -16,7 +16,9 @@ use distribution_types::{IndexLocations, Name, Requirement, Resolution, SourceDi
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
+use uv_configuration::Concurrency;
 use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
+use uv_distribution::DistributionDatabase;
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
@@ -41,6 +43,7 @@ pub struct BuildDispatch<'a> {
     source_build_context: SourceBuildContext,
     options: Options,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
+    concurrency: Concurrency,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -59,6 +62,7 @@ impl<'a> BuildDispatch<'a> {
         link_mode: install_wheel_rs::linker::LinkMode,
         no_build: &'a NoBuild,
         no_binary: &'a NoBinary,
+        concurrency: Concurrency,
     ) -> Self {
         Self {
             client,
@@ -74,6 +78,7 @@ impl<'a> BuildDispatch<'a> {
             link_mode,
             no_build,
             no_binary,
+            concurrency,
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
             build_extra_env_vars: FxHashMap::default(),
@@ -144,12 +149,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             &python_requirement,
             Some(markers),
             tags,
-            self.client,
             self.flat_index,
             self.index,
             &HashStrategy::None,
             self,
             &EmptyInstalledPackages,
+            DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
@@ -226,8 +231,13 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             vec![]
         } else {
             // TODO(konstin): Check that there is no endless recursion.
-            let downloader =
-                Downloader::new(self.cache, tags, &HashStrategy::None, self.client, self);
+            let downloader = Downloader::new(
+                self.cache,
+                tags,
+                &HashStrategy::None,
+                DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+            );
+
             debug!(
                 "Downloading and building requirement{} for build: {}",
                 if remote.len() == 1 { "" } else { "s" },
@@ -315,6 +325,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.build_isolation,
             build_kind,
             self.build_extra_env_vars.clone(),
+            self.concurrency.builds,
         )
         .boxed_local()
         .await?;

@@ -28,11 +28,12 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, PreviewMode,
-    SetupPyStrategy, Upgrade,
+    Concurrency, ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides,
+    PreviewMode, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
+use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
 use uv_interpreter::PythonVersion;
@@ -91,6 +92,7 @@ pub(crate) async fn pip_compile(
     link_mode: LinkMode,
     python: Option<String>,
     system: bool,
+    concurrency: Concurrency,
     uv_lock: bool,
     native_tls: bool,
     quiet: bool,
@@ -315,6 +317,7 @@ pub(crate) async fn pip_compile(
         link_mode,
         &no_build,
         &NoBinary::None,
+        concurrency,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
@@ -324,9 +327,8 @@ pub(crate) async fn pip_compile(
         let mut requirements = NamedRequirementsResolver::new(
             requirements,
             &hasher,
-            &build_dispatch,
-            &client,
             &top_level_index,
+            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
         .with_reporter(ResolverReporter::from(printer))
         .resolve()
@@ -339,9 +341,8 @@ pub(crate) async fn pip_compile(
                     source_trees,
                     &extras,
                     &hasher,
-                    &build_dispatch,
-                    &client,
                     &top_level_index,
+                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
                 .resolve()
@@ -356,9 +357,8 @@ pub(crate) async fn pip_compile(
     let overrides = NamedRequirementsResolver::new(
         overrides,
         &hasher,
-        &build_dispatch,
-        &client,
         &top_level_index,
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
@@ -432,8 +432,13 @@ pub(crate) async fn pip_compile(
             LocalEditable { url, path, extras }
         }));
 
-        let downloader = Downloader::new(&cache, &tags, &hasher, &client, &build_dispatch)
-            .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
+        let downloader = Downloader::new(
+            &cache,
+            &tags,
+            &hasher,
+            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
         // Build all editables.
         let editable_wheel_dir = tempdir_in(cache.root())?;
@@ -498,9 +503,8 @@ pub(crate) async fn pip_compile(
                 &overrides,
                 &editables,
                 &hasher,
-                &build_dispatch,
-                &client,
                 &top_level_index,
+                DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve(marker_filter)
@@ -537,12 +541,12 @@ pub(crate) async fn pip_compile(
         &python_requirement,
         marker_filter,
         &tags,
-        &client,
         &flat_index,
         &top_level_index,
         &hasher,
         &build_dispatch,
         &EmptyInstalledPackages,
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )?
     .with_reporter(ResolverReporter::from(printer));
 

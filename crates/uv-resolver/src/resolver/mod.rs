@@ -29,7 +29,6 @@ use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
-use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
@@ -232,16 +231,15 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         python_requirement: &'a PythonRequirement,
         markers: Option<&'a MarkerEnvironment>,
         tags: &'a Tags,
-        client: &'a RegistryClient,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,
         build_context: &'a Context,
         installed_packages: &'a InstalledPackages,
+        database: DistributionDatabase<'a, Context>,
     ) -> Result<Self, ResolveError> {
         let provider = DefaultResolverProvider::new(
-            client,
-            DistributionDatabase::new(client, build_context),
+            database,
             flat_index,
             tags,
             python_requirement.clone(),
@@ -251,6 +249,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.no_binary(),
             build_context.no_build(),
         );
+
         Self::new_custom_io(
             manifest,
             options,
@@ -1141,7 +1140,10 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
     ) -> Result<(), ResolveError> {
         let mut response_stream = ReceiverStream::new(request_stream)
             .map(|request| self.process_request(request).boxed_local())
-            .buffer_unordered(50);
+            // Allow as many futures as possible to start in the background.
+            // Backpressure is provided by at a more granular level by `DistributionDatabase`
+            // and `SourceDispatch`, as well as the bounded request channel.
+            .buffer_unordered(usize::MAX);
 
         while let Some(response) = response_stream.next().await {
             match response? {

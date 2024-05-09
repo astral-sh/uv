@@ -34,6 +34,7 @@ use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_types::{BuildContext, SourceBuildTrait};
 
+use crate::distribution_database::ManagedClient;
 use crate::error::Error;
 use crate::git::{fetch_git_archive, resolve_precise};
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
@@ -45,7 +46,6 @@ mod revision;
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub struct SourceDistributionBuilder<'a, T: BuildContext> {
-    client: &'a RegistryClient,
     build_context: &'a T,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -61,9 +61,8 @@ pub(crate) const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
-    pub fn new(client: &'a RegistryClient, build_context: &'a T) -> Self {
+    pub fn new(build_context: &'a T) -> Self {
         Self {
-            client,
             build_context,
             reporter: None,
         }
@@ -84,6 +83,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         tags: &Tags,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
@@ -129,6 +129,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     tags,
                     hashes,
+                    client,
                 )
                 .boxed_local()
                 .await?
@@ -152,6 +153,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     subdirectory.as_deref(),
                     tags,
                     hashes,
+                    client,
                 )
                 .boxed_local()
                 .await?
@@ -204,6 +206,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     subdirectory.as_deref(),
                     tags,
                     hashes,
+                    client,
                 )
                 .boxed_local()
                 .await?
@@ -240,6 +243,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
@@ -282,6 +286,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     None,
                     hashes,
+                    client,
                 )
                 .boxed_local()
                 .await?
@@ -304,6 +309,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     subdirectory.as_deref(),
                     hashes,
+                    client,
                 )
                 .boxed_local()
                 .await?
@@ -349,6 +355,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     subdirectory.as_deref(),
                     hashes,
+                    client,
                 )
                 .boxed_local()
                 .await?
@@ -389,10 +396,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         tags: &Tags,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Fetch the revision for the source distribution.
         let revision = self
-            .url_revision(source, filename, url, cache_shard, hashes)
+            .url_revision(source, filename, url, cache_shard, hashes, client)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -457,10 +465,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Fetch the revision for the source distribution.
         let revision = self
-            .url_revision(source, filename, url, cache_shard, hashes)
+            .url_revision(source, filename, url, cache_shard, hashes, client)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -546,9 +555,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &Url,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(HTTP_REVISION);
-        let cache_control = match self.client.connectivity() {
+        let cache_control = match client.unmanaged.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
                     .cache()
@@ -576,11 +586,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
         };
-        let req = self.request(url.clone())?;
-        let revision = self
-            .client
-            .cached_client()
-            .get_serde(req, &cache_entry, cache_control, download)
+        let req = Self::request(url.clone(), client.unmanaged)?;
+        let revision = client
+            .managed(|client| {
+                client
+                    .cached_client()
+                    .get_serde(req, &cache_entry, cache_control, download)
+            })
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -591,14 +603,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if revision.has_digests(hashes) {
             Ok(revision)
         } else {
-            self.client
-                .cached_client()
-                .skip_cache(self.request(url.clone())?, &cache_entry, download)
-                .await
-                .map_err(|err| match err {
-                    CachedClientError::Callback(err) => err,
-                    CachedClientError::Client(err) => Error::Client(err),
+            client
+                .managed(|client| async move {
+                    client
+                        .cached_client()
+                        .skip_cache(Self::request(url.clone(), client)?, &cache_entry, download)
+                        .await
+                        .map_err(|err| match err {
+                            CachedClientError::Callback(err) => err,
+                            CachedClientError::Client(err) => Error::Client(err),
+                        })
                 })
+                .await
         }
     }
 
@@ -1430,8 +1446,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
-        self.client
+    fn request(url: Url, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
+        client
             .uncached_client()
             .get(url)
             .header(

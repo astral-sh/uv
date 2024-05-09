@@ -23,6 +23,7 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
+uv-distribution = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 

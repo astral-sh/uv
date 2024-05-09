@@ -11,8 +11,9 @@ use platform_tags::Tags;
 use pypi_types::Yanked;
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{Constraints, NoBinary, Overrides, Reinstall};
+use uv_configuration::{Concurrency, Constraints, NoBinary, Overrides, Reinstall};
 use uv_dispatch::BuildDispatch;
+use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SitePackages};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
@@ -124,6 +125,7 @@ pub(crate) async fn resolve(
     build_dispatch: &BuildDispatch<'_>,
     options: Options,
     printer: Printer,
+    concurrency: Concurrency,
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
@@ -141,9 +143,8 @@ pub(crate) async fn resolve(
         let mut requirements = NamedRequirementsResolver::new(
             spec.requirements,
             hasher,
-            build_dispatch,
-            client,
             index,
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )
         .with_reporter(ResolverReporter::from(printer))
         .resolve()
@@ -156,9 +157,8 @@ pub(crate) async fn resolve(
                     spec.source_trees,
                     &ExtrasSpecification::None,
                     hasher,
-                    build_dispatch,
-                    client,
                     index,
+                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
                 .resolve()
@@ -176,9 +176,8 @@ pub(crate) async fn resolve(
         &overrides,
         &editables,
         hasher,
-        build_dispatch,
-        client,
         index,
+        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve(Some(markers))
@@ -203,12 +202,12 @@ pub(crate) async fn resolve(
         &python_requirement,
         Some(markers),
         tags,
-        client,
         flat_index,
         index,
         hasher,
         build_dispatch,
         &installed_packages,
+        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
     )?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver.resolve().await?;
@@ -255,6 +254,7 @@ pub(crate) async fn install(
     cache: &Cache,
     venv: &PythonEnvironment,
     printer: Printer,
+    concurrency: Concurrency,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
@@ -316,8 +316,13 @@ pub(crate) async fn install(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
-            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
+        let downloader = Downloader::new(
+            cache,
+            tags,
+            hasher,
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
             .download(remote.clone(), in_flight)
