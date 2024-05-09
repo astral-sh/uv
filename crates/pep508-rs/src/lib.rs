@@ -149,14 +149,14 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
     /// The source file containing the requirement.
-    pub path: Option<PathBuf>,
+    pub source: Option<PathBuf>,
 }
 
 impl Requirement {
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_source(self, path: Option<PathBuf>) -> Self {
-        Self { path, ..self }
+    pub fn with_source(self, source: Option<PathBuf>) -> Self {
+        Self { source, ..self }
     }
 }
 
@@ -492,7 +492,7 @@ impl<T: Pep508Url> Requirement<T> {
             extras,
             version_or_url,
             marker,
-            path,
+            source,
         } = self;
         Requirement {
             name,
@@ -505,7 +505,7 @@ impl<T: Pep508Url> Requirement<T> {
                 Some(VersionOrUrl::Url(url)) => Some(VersionOrUrl::Url(U::from(url))),
             },
             marker,
-            path,
+            source,
         }
     }
 }
@@ -1029,7 +1029,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
         extras,
         version_or_url: requirement_kind,
         marker,
-        path: None,
+        source: None,
     })
 }
 
@@ -1171,7 +1171,7 @@ mod tests {
                 operator: MarkerOperator::LessThan,
                 r_value: MarkerValue::QuotedString("2.7".to_string()),
             })),
-            path: None,
+            source: None,
         };
         assert_eq!(requests, expected);
     }
@@ -1397,7 +1397,7 @@ mod tests {
             extras: vec![],
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
-            path: None,
+            source: None,
         };
         assert_eq!(pip_url, expected);
     }

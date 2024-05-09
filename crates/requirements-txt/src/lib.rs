@@ -164,11 +164,13 @@ impl FindLink {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EditableRequirement {
+    /// The underlying [`VerbatimUrl`] from the `requirements.txt` file or similar.
     pub url: VerbatimUrl,
+    /// The extras that should be included when resolving the editable requirements.
     pub extras: Vec<ExtraName>,
+    /// The local path to the editable.
     pub path: PathBuf,
-
-    /// Path of the original file (where existing)
+    /// The source file containing the requirement.
     pub source: Option<PathBuf>,
 }
 
@@ -1813,7 +1815,7 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                path: Some(
+                                source: Some(
                                     "<REQUIREMENTS_DIR>/subdir/sibling.txt",
                                 ),
                             },
@@ -1878,7 +1880,7 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                path: Some(
+                                source: Some(
                                     "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
@@ -2075,7 +2077,7 @@ mod test {
                                 extras: [],
                                 version_or_url: None,
                                 marker: None,
-                                path: Some(
+                                source: Some(
                                     "<REQUIREMENTS_DIR>/./sibling.txt",
                                 ),
                             },
@@ -2105,7 +2107,7 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
+                                source: Some(
                                     "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
@@ -2137,7 +2139,7 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
+                                source: Some(
                                     "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
@@ -2169,7 +2171,7 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
+                                source: Some(
                                     "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },
@@ -2199,7 +2201,7 @@ mod test {
                                     ),
                                 ),
                                 marker: None,
-                                path: Some(
+                                source: Some(
                                     "<REQUIREMENTS_DIR>/requirements.txt",
                                 ),
                             },

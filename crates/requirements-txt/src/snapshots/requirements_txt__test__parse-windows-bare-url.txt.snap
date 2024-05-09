@@ -25,7 +25,7 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: None,
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/bare-url.txt",
                     ),
                 },
@@ -60,7 +60,7 @@ RequirementsTxt {
                         ),
                     ],
                     marker: None,
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/bare-url.txt",
                     ),
                 },
@@ -91,7 +91,7 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: None,
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/bare-url.txt",
                     ),
                 },

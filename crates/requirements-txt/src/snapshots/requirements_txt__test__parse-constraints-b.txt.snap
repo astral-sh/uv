@@ -24,7 +24,7 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/constraints-b.txt",
                     ),
                 },
@@ -54,7 +54,7 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/constraints-b.txt",
                     ),
                 },

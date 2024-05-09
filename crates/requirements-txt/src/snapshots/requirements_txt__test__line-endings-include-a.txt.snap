@@ -13,7 +13,7 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/include-b.txt",
                     ),
                 },
@@ -43,7 +43,7 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
-                    path: Some(
+                    source: Some(
                         "<REQUIREMENTS_DIR>/include-a.txt",
                     ),
                 },

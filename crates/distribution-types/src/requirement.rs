@@ -63,7 +63,7 @@ impl Requirement {
             extras: requirement.extras,
             marker: requirement.marker,
             source,
-            path: requirement.path,
+            path: requirement.source,
         })
     }
 }

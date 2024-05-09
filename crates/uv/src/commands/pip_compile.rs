@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write;
 use std::io::stdout;
@@ -17,7 +16,8 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, SourceAnnotation, Verbatim,
+    IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, SourceAnnotation,
+    SourceAnnotations, Verbatim,
 };
 use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
@@ -354,61 +354,58 @@ pub(crate) async fn pip_compile(
     .resolve()
     .await?;
 
-    let mut sources: BTreeMap<String, BTreeSet<SourceAnnotation>> = BTreeMap::new();
+    // Generate a map from requirement to originating source file.
+    let mut sources = SourceAnnotations::default();
 
     for requirement in &requirements {
         if let Some(path) = &requirement.path {
             if path.ends_with("pyproject.toml") {
-                sources
-                    .entry(requirement.name.to_string())
-                    .or_default()
-                    .insert(SourceAnnotation::PyProject {
+                sources.add(
+                    &requirement.name,
+                    SourceAnnotation::PyProject {
                         path: path.clone(),
                         project_name: project.as_ref().map(ToString::to_string),
-                    });
+                    },
+                );
             } else {
-                sources
-                    .entry(requirement.name.to_string())
-                    .or_default()
-                    .insert(SourceAnnotation::Requirement(path.clone()));
+                sources.add(
+                    &requirement.name,
+                    SourceAnnotation::Requirement(path.clone()),
+                );
             }
         }
     }
 
     for requirement in &constraints {
         if let Some(path) = &requirement.path {
-            sources
-                .entry(requirement.name.to_string())
-                .or_default()
-                .insert(SourceAnnotation::Constraint(path.clone()));
+            sources.add(
+                &requirement.name,
+                SourceAnnotation::Constraint(path.clone()),
+            );
         }
     }
 
     for requirement in &overrides {
         if let Some(path) = &requirement.path {
-            sources
-                .entry(requirement.name.to_string())
-                .or_default()
-                .insert(SourceAnnotation::Override(path.clone()));
+            sources.add(&requirement.name, SourceAnnotation::Override(path.clone()));
         }
     }
 
     for editable in &editables {
-        let package_name = editable.url.given().unwrap_or_default().to_string();
         if let Some(source) = &editable.source {
             if source.ends_with("pyproject.toml") {
-                sources
-                    .entry(package_name)
-                    .or_default()
-                    .insert(SourceAnnotation::PyProject {
+                sources.add_editable(
+                    editable.url(),
+                    SourceAnnotation::PyProject {
                         path: source.clone(),
                         project_name: project.as_ref().map(ToString::to_string),
-                    });
+                    },
+                );
             } else {
-                sources
-                    .entry(package_name)
-                    .or_default()
-                    .insert(SourceAnnotation::Requirement(source.clone()));
+                sources.add_editable(
+                    editable.url(),
+                    SourceAnnotation::Requirement(source.clone()),
+                );
             }
         }
     }
@@ -654,13 +651,13 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
-            sources,
             &no_emit_packages,
             generate_hashes,
             include_extras,
             include_annotations,
             include_index_annotation,
             annotation_style,
+            sources,
         )
     )?;
 
