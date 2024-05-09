@@ -44,6 +44,7 @@ use pep440_rs::Version;
 use pep508_rs::{Pep508Url, Scheme, VerbatimUrl};
 use uv_normalize::PackageName;
 
+pub use crate::annotation::*;
 pub use crate::any::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
@@ -62,6 +63,7 @@ pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
 pub use crate::traits::*;
 
+mod annotation;
 mod any;
 mod buildable;
 mod cached;

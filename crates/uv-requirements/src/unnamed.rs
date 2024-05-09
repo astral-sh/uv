@@ -101,6 +101,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 extras: requirement.extras,
                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                 marker: requirement.marker,
+                path: requirement.path,
             });
         }
 
@@ -119,6 +120,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 extras: requirement.extras,
                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                 marker: requirement.marker,
+                path: requirement.path,
             });
         }
 
@@ -146,11 +148,13 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             extras: requirement.extras,
                             version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                             marker: requirement.marker,
+                            path: requirement.path,
                         });
                     }
 
                     // Attempt to read a `pyproject.toml` file.
-                    if let Some(pyproject) = fs_err::read_to_string(path.join("pyproject.toml"))
+                    let project_path = path.join("pyproject.toml");
+                    if let Some(pyproject) = fs_err::read_to_string(&project_path)
                         .ok()
                         .and_then(|contents| toml::from_str::<PyProjectToml>(&contents).ok())
                     {
@@ -166,6 +170,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                 extras: requirement.extras,
                                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                 marker: requirement.marker,
+                                path: Some(project_path.clone()),
                             });
                         }
 
@@ -183,6 +188,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
+                                        path: Some(project_path.clone()),
                                     });
                                 }
                             }
@@ -211,6 +217,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
+                                        path: requirement.path,
                                     });
                                 }
                             }
@@ -269,6 +276,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             extras: requirement.extras,
             version_or_url: Some(VersionOrUrl::Url(requirement.url)),
             marker: requirement.marker,
+            path: requirement.path,
         })
     }
 }

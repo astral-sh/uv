@@ -139,6 +139,7 @@ impl From<&ResolvedDist> for Requirement {
             extras: vec![],
             marker: None,
             source,
+            path: None,
         }
     }
 }

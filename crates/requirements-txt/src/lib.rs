@@ -167,6 +167,9 @@ pub struct EditableRequirement {
     pub url: VerbatimUrl,
     pub extras: Vec<ExtraName>,
     pub path: PathBuf,
+
+    /// Path of the original file (where existing)
+    pub source: Option<PathBuf>,
 }
 
 impl EditableRequirement {
@@ -191,6 +194,7 @@ impl EditableRequirement {
     /// We disallow URLs with schemes other than `file://` (e.g., `https://...`).
     pub fn parse(
         given: &str,
+        source: Option<&Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtParserError> {
         // Identify the extras.
@@ -265,7 +269,12 @@ impl EditableRequirement {
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
         let url = url.with_given(requirement.to_string());
 
-        Ok(Self { url, extras, path })
+        Ok(Self {
+            url,
+            extras,
+            path,
+            source: source.map(Path::to_path_buf),
+        })
     }
 
     /// Identify the extras in an editable URL (e.g., `../editable[dev]`).
@@ -305,6 +314,8 @@ pub struct RequirementEntry {
     pub requirement: RequirementsTxtRequirement,
     /// Hashes of the downloadable packages.
     pub hashes: Vec<String>,
+    /// Path of the original file (where existing)
+    pub path: Option<String>,
 }
 
 // We place the impl here instead of next to `UnresolvedRequirementSpecification` because
@@ -324,6 +335,7 @@ impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
                 }
             },
             hashes: value.hashes,
+            path: value.path,
         })
     }
 }
@@ -402,12 +414,18 @@ impl RequirementsTxt {
             })?;
 
         let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
-        let data = Self::parse_inner(&content, working_dir, requirements_dir, client_builder)
-            .await
-            .map_err(|err| RequirementsTxtFileError {
-                file: requirements_txt.to_path_buf(),
-                error: err,
-            })?;
+        let data = Self::parse_inner(
+            &content,
+            working_dir,
+            requirements_dir,
+            client_builder,
+            requirements_txt,
+        )
+        .await
+        .map_err(|err| RequirementsTxtFileError {
+            file: requirements_txt.to_path_buf(),
+            error: err,
+        })?;
         if data == Self::default() {
             warn_user!(
                 "Requirements file {} does not contain any dependencies",
@@ -429,11 +447,12 @@ impl RequirementsTxt {
         working_dir: &Path,
         requirements_dir: &Path,
         client_builder: &BaseClientBuilder<'_>,
+        requirements_txt: &Path,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
         let mut data = Self::default();
-        while let Some(statement) = parse_entry(&mut s, content, working_dir)? {
+        while let Some(statement) = parse_entry(&mut s, content, working_dir, requirements_txt)? {
             match statement {
                 RequirementsTxtStatement::Requirements {
                     filename,
@@ -511,7 +530,9 @@ impl RequirementsTxt {
                             }
                         }
                     }
-                    data.constraints.extend(sub_constraints.constraints);
+                    for constraint in sub_constraints.constraints {
+                        data.constraints.push(constraint);
+                    }
                 }
                 RequirementsTxtStatement::RequirementEntry(requirement_entry) => {
                     data.requirements.push(requirement_entry);
@@ -585,6 +606,7 @@ fn parse_entry(
     s: &mut Scanner,
     content: &str,
     working_dir: &Path,
+    requirements_txt: &Path,
 ) -> Result<Option<RequirementsTxtStatement>, RequirementsTxtParserError> {
     // Eat all preceding whitespace, this may run us to the end of file
     eat_wrappable_whitespace(s);
@@ -613,8 +635,9 @@ fn parse_entry(
         }
     } else if s.eat_if("-e") || s.eat_if("--editable") {
         let path_or_url = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)
-            .map_err(|err| err.with_offset(start))?;
+        let editable_requirement =
+            EditableRequirement::parse(path_or_url, Some(requirements_txt), working_dir)
+                .map_err(|err| err.with_offset(start))?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
@@ -676,10 +699,17 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::OnlyBinary(NoBuild::from_arg(specifier))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
-        let (requirement, hashes) = parse_requirement_and_hashes(s, content, working_dir)?;
+        let source = if requirements_txt == Path::new("-") {
+            None
+        } else {
+            Some(requirements_txt)
+        };
+
+        let (requirement, hashes) = parse_requirement_and_hashes(s, content, source, working_dir)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
             hashes,
+            path: requirements_txt.to_str().map(ToString::to_string),
         })
     } else if let Some(char) = s.peek() {
         let (line, column) = calculate_row_column(content, s.cursor());
@@ -738,6 +768,7 @@ fn eat_trailing_line(content: &str, s: &mut Scanner) -> Result<(), RequirementsT
 fn parse_requirement_and_hashes(
     s: &mut Scanner,
     content: &str,
+    source: Option<&Path>,
     working_dir: &Path,
 ) -> Result<(RequirementsTxtRequirement, Vec<String>), RequirementsTxtParserError> {
     // PEP 508 requirement
@@ -795,8 +826,9 @@ fn parse_requirement_and_hashes(
         }
     }
 
-    let requirement =
-        RequirementsTxtRequirement::parse(requirement, working_dir).map_err(|err| match err {
+    let requirement = RequirementsTxtRequirement::parse(requirement, working_dir)
+        .map(|requirement| requirement.with_source(source.map(Path::to_path_buf)))
+        .map_err(|err| match err {
             RequirementsTxtRequirementError::ParsedUrl(err) => {
                 RequirementsTxtParserError::ParsedUrl {
                     source: err,
@@ -1332,7 +1364,11 @@ mod test {
     use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
-        PathBuf::from("./test-data").canonicalize().unwrap()
+        Path::new("./test-data").simple_canonicalize().unwrap()
+    }
+
+    fn safe_filter_path(path: &Path) -> String {
+        regex::escape(&path.simplified_display().to_string()).replace(r"\\", r"(\\\\|/)")
     }
 
     #[test_case(Path::new("basic.txt"))]
@@ -1350,13 +1386,23 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let actual = RequirementsTxt::parse(
+            requirements_txt.clone(),
+            &working_dir,
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
-        insta::assert_debug_snapshot!(snapshot, actual);
+        let filter_path = safe_filter_path(&working_dir);
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
+
+        insta::with_settings!({
+            filters => filters,
+        }, {
+            insta::assert_debug_snapshot!(snapshot, actual);
+        });
     }
 
     #[test_case(Path::new("basic.txt"))]
@@ -1401,7 +1447,14 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
-        insta::assert_debug_snapshot!(snapshot, actual);
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
+
+        insta::with_settings!({
+            filters => filters,
+        }, {
+            insta::assert_debug_snapshot!(snapshot, actual);
+        });
     }
 
     #[cfg(unix)]
@@ -1439,13 +1492,8 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("parse-windows-{}", path.to_string_lossy());
-        let pattern = regex::escape(
-            &working_dir
-                .simplified_display()
-                .to_string()
-                .replace('\\', "/"),
-        );
-        let filters = vec![(pattern.as_str(), "[WORKSPACE_DIR]")];
+        let filter_path = safe_filter_path(&working_dir);
+        let filters = vec![(filter_path.as_str(), "[WORKSPACE_DIR]"), (r"\\\\", "/")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1764,33 +1812,46 @@ mod test {
         )
         .await
         .unwrap();
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "flask",
-                            ),
-                            extras: [],
-                            version_or_url: None,
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-            ],
-            constraints: [],
-            editables: [],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: false,
-            no_binary: None,
-            only_binary: None,
-        }
-        "###);
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
+
+        insta::with_settings!({
+            filters => filters,
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "flask",
+                                ),
+                                extras: [],
+                                version_or_url: None,
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                        ),
+                    },
+                ],
+                constraints: [],
+                editables: [],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: None,
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
     }
@@ -1818,39 +1879,52 @@ mod test {
         )
         .await
         .unwrap();
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "flask",
-                            ),
-                            extras: [],
-                            version_or_url: None,
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-            ],
-            constraints: [],
-            editables: [],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: false,
-            no_binary: Packages(
-                [
-                    PackageName(
-                        "flask",
-                    ),
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
+
+        insta::with_settings!({
+            filters => filters,
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "flask",
+                                ),
+                                extras: [],
+                                version_or_url: None,
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
+                    },
                 ],
-            ),
-            only_binary: None,
-        }
-        "###);
+                constraints: [],
+                editables: [],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: Packages(
+                    [
+                        PackageName(
+                            "flask",
+                        ),
+                    ],
+                ),
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
     }
@@ -1884,40 +1958,49 @@ mod test {
         .await
         .unwrap();
 
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [],
-            constraints: [],
-            editables: [
-                EditableRequirement {
-                    url: VerbatimUrl {
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "/foo/bar",
-                            query: None,
-                            fragment: None,
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
+        insta::with_settings!({
+                filters => filters,
+            }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [],
+                constraints: [],
+                editables: [
+                    EditableRequirement {
+                        url: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/foo/bar",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "/foo/bar",
+                            ),
                         },
-                        given: Some(
-                            "/foo/bar",
+                        extras: [],
+                        path: "/foo/bar",
+                        source: Some(
+                            "<REQUIREMENTS_DIR>/grandchild.txt",
                         ),
                     },
-                    extras: [],
-                    path: "/foo/bar",
-                },
-            ],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: true,
-            no_binary: None,
-            only_binary: None,
-        }
-        "###);
+                ],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: true,
+                no_binary: None,
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
     }
@@ -2000,154 +2083,190 @@ mod test {
         )
         .await
         .unwrap();
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "httpx",
-                            ),
-                            extras: [],
-                            version_or_url: None,
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "flask",
-                            ),
-                            extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "3.0.0",
-                                            },
-                                        ],
-                                    ),
+        let filter_path = safe_filter_path(temp_dir.path());
+        let filters = vec![(filter_path.as_str(), "<REQUIREMENTS_DIR>"), (r"\\\\", "/")];
+        insta::with_settings!({
+            filters => filters,
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "httpx",
                                 ),
-                            ),
-                            marker: None,
-                        },
-                    ),
-                    hashes: [
-                        "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-                    ],
-                },
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "requests",
-                            ),
-                            extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "2.26.0",
-                                            },
-                                        ],
-                                    ),
+                                extras: [],
+                                version_or_url: None,
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/./sibling.txt",
                                 ),
-                            ),
-                            marker: None,
-                        },
-                    ),
-                    hashes: [
-                        "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
-                    ],
-                },
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "black",
-                            ),
-                            extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "21.12b0",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-                RequirementEntry {
-                    requirement: Named(
-                        Requirement {
-                            name: PackageName(
-                                "mypy",
-                            ),
-                            extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "0.910",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-            ],
-            constraints: [],
-            editables: [],
-            index_url: Some(
-                VerbatimUrl {
-                    url: Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "test.pypi.org",
-                            ),
+                            },
                         ),
-                        port: None,
-                        path: "/simple/",
-                        query: None,
-                        fragment: None,
+                        hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/./sibling.txt",
+                        ),
                     },
-                    given: Some(
-                        "https://test.pypi.org/simple/",
-                    ),
-                },
-            ),
-            extra_index_urls: [],
-            find_links: [],
-            no_index: false,
-            no_binary: All,
-            only_binary: None,
-        }
-        "###);
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "flask",
+                                ),
+                                extras: [],
+                                version_or_url: Some(
+                                    VersionSpecifier(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: Equal,
+                                                    version: "3.0.0",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
+                            },
+                        ),
+                        hashes: [
+                            "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                        ],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
+                    },
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "requests",
+                                ),
+                                extras: [],
+                                version_or_url: Some(
+                                    VersionSpecifier(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: Equal,
+                                                    version: "2.26.0",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
+                            },
+                        ),
+                        hashes: [
+                            "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+                        ],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
+                    },
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "black",
+                                ),
+                                extras: [],
+                                version_or_url: Some(
+                                    VersionSpecifier(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: Equal,
+                                                    version: "21.12b0",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
+                    },
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "mypy",
+                                ),
+                                extras: [],
+                                version_or_url: Some(
+                                    VersionSpecifier(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: Equal,
+                                                    version: "0.910",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                                marker: None,
+                                path: Some(
+                                    "<REQUIREMENTS_DIR>/requirements.txt",
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                        path: Some(
+                            "<REQUIREMENTS_DIR>/requirements.txt",
+                        ),
+                    },
+                ],
+                constraints: [],
+                editables: [],
+                index_url: Some(
+                    VerbatimUrl {
+                        url: Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "test.pypi.org",
+                                ),
+                            ),
+                            port: None,
+                            path: "/simple/",
+                            query: None,
+                            fragment: None,
+                        },
+                        given: Some(
+                            "https://test.pypi.org/simple/",
+                        ),
+                    },
+                ),
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: All,
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
     }

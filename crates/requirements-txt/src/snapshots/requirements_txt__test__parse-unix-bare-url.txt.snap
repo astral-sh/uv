@@ -25,9 +25,15 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]/bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "[WORKSPACE_DIR]/bare-url.txt",
+            ),
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -54,9 +60,15 @@ RequirementsTxt {
                         ),
                     ],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]/bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "[WORKSPACE_DIR]/bare-url.txt",
+            ),
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -79,9 +91,15 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: None,
+                    path: Some(
+                        "[WORKSPACE_DIR]/bare-url.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "[WORKSPACE_DIR]/bare-url.txt",
+            ),
         },
     ],
     constraints: [],

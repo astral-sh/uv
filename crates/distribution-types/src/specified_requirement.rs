@@ -14,6 +14,8 @@ pub struct UnresolvedRequirementSpecification {
     pub requirement: UnresolvedRequirement,
     /// Hashes of the downloadable packages.
     pub hashes: Vec<String>,
+    /// Path of the source of the requirement
+    pub path: Option<String>,
 }
 
 /// A requirement read from a `requirements.txt` or `pyproject.toml` file.

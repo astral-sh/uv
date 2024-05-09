@@ -575,7 +575,12 @@ async fn build_editables(
         .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
     let editables = LocalEditables::from_editables(editables.iter().map(|editable| {
-        let EditableRequirement { url, extras, path } = editable;
+        let EditableRequirement {
+            url,
+            extras,
+            path,
+            source: _,
+        } = editable;
         LocalEditable {
             url: url.clone(),
             extras: extras.clone(),
@@ -673,6 +678,7 @@ async fn resolve(
                 extras: vec![],
                 marker: None,
                 source,
+                path: None,
             };
             Ok(Preference::from_requirement(requirement))
         })

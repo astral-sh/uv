@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
@@ -14,7 +15,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
     Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ParsedUrlError, Requirement,
-    ResolvedDist, Verbatim, VersionId, VersionOrUrlRef,
+    ResolvedDist, SourceAnnotation, Verbatim, VersionId, VersionOrUrlRef,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -543,12 +544,15 @@ pub struct DisplayResolutionGraph<'a> {
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
+    /// External sources for each package: requirements, constraints, and overrides.
+    sources: BTreeMap<String, BTreeSet<SourceAnnotation>>,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
         Self::new(
             resolution,
+            BTreeMap::default(),
             &[],
             false,
             false,
@@ -561,9 +565,10 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
 
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
+        sources: BTreeMap<String, BTreeSet<SourceAnnotation>>,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -579,6 +584,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             include_annotations,
             include_index_annotation,
             annotation_style,
+            sources,
         }
     }
 }
@@ -719,13 +725,24 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
 
+                // Include all external sources (e.g., requirements files).
+                let source_name: String = match node {
+                    Node::Editable(_package_name, local_editable) => {
+                        local_editable.url.given().unwrap_or_default().to_string()
+                    }
+                    Node::Distribution(name, _, _) => name.to_string(),
+                };
+
+                let source = self.sources.get(&source_name).cloned().unwrap_or_default();
+
                 match self.annotation_style {
                     AnnotationStyle::Line => {
                         if !edges.is_empty() {
                             let separator = if has_hashes { "\n    " } else { "  " };
                             let deps = edges
                                 .into_iter()
-                                .map(|dependency| dependency.name().to_string())
+                                .map(|dependency| format!("{}", dependency.name()))
+                                .chain(source.into_iter().map(|source| source.to_string()))
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -733,17 +750,30 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         }
                     }
                     AnnotationStyle::Split => match edges.as_slice() {
-                        [] => {}
-                        [edge] => {
+                        [] if source.is_empty() => {}
+                        [] if source.len() == 1 => {
+                            let separator = "\n";
+                            let comment = format!("    # via {}", source.iter().next().unwrap())
+                                .green()
+                                .to_string();
+                            annotation = Some((separator, comment));
+                        }
+                        [edge] if source.is_empty() => {
                             let separator = "\n";
                             let comment = format!("    # via {}", edge.name()).green().to_string();
                             annotation = Some((separator, comment));
                         }
                         edges => {
                             let separator = "\n";
-                            let deps = edges
-                                .iter()
-                                .map(|dependency| format!("    #   {}", dependency.name()))
+                            let deps = source
+                                .into_iter()
+                                .map(|source| source.to_string())
+                                .chain(
+                                    edges
+                                        .iter()
+                                        .map(|dependency| format!("{}", dependency.name())),
+                                )
+                                .map(|name| format!("    #   {name}"))
                                 .collect::<Vec<_>>()
                                 .join("\n");
                             let comment = format!("    # via\n{deps}").green().to_string();

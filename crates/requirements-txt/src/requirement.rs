@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -16,6 +16,17 @@ pub enum RequirementsTxtRequirement {
     Named(pep508_rs::Requirement),
     /// A PEP 508-like, direct URL dependency specifier.
     Unnamed(UnnamedRequirement),
+}
+
+impl RequirementsTxtRequirement {
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_source(self, path: Option<PathBuf>) -> Self {
+        match self {
+            Self::Named(requirement) => Self::Named(requirement.with_source(path)),
+            Self::Unnamed(requirement) => Self::Unnamed(requirement.with_source(path)),
+        }
+    }
 }
 
 #[derive(Debug, Error)]

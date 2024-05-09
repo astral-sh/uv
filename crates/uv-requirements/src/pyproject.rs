@@ -238,6 +238,7 @@ impl Pep621Metadata {
     pub(crate) fn try_from(
         pyproject: PyProjectToml,
         extras: &ExtrasSpecification,
+        pyproject_path: &Path,
         project_dir: &Path,
         workspace_sources: &HashMap<PackageName, Source>,
         workspace_packages: &HashMap<PackageName, String>,
@@ -281,6 +282,7 @@ impl Pep621Metadata {
         let requirements = lower_requirements(
             &project.dependencies.unwrap_or_default(),
             &project.optional_dependencies.unwrap_or_default(),
+            pyproject_path,
             &project.name,
             project_dir,
             &project_sources.unwrap_or_default(),
@@ -320,6 +322,7 @@ impl Pep621Metadata {
 pub(crate) fn lower_requirements(
     dependencies: &[String],
     optional_dependencies: &IndexMap<ExtraName, Vec<String>>,
+    pyproject_path: &Path,
     project_name: &PackageName,
     project_dir: &Path,
     project_sources: &HashMap<PackageName, Source>,
@@ -330,7 +333,8 @@ pub(crate) fn lower_requirements(
     let dependencies = dependencies
         .iter()
         .map(|dependency| {
-            let requirement = pep508_rs::Requirement::from_str(dependency)?;
+            let requirement = pep508_rs::Requirement::from_str(dependency)?
+                .with_source(Some(pyproject_path.to_path_buf()));
             let name = requirement.name.clone();
             lower_requirement(
                 requirement,
@@ -350,7 +354,8 @@ pub(crate) fn lower_requirements(
             let dependencies: Vec<_> = dependencies
                 .iter()
                 .map(|dependency| {
-                    let requirement = pep508_rs::Requirement::from_str(dependency)?;
+                    let requirement = pep508_rs::Requirement::from_str(dependency)?
+                        .with_source(Some(pyproject_path.to_path_buf()));
                     let name = requirement.name.clone();
                     lower_requirement(
                         requirement,
@@ -532,6 +537,7 @@ pub(crate) fn lower_requirement(
         extras: requirement.extras,
         marker: requirement.marker,
         source,
+        path: Some(project_dir.join("pyproject.toml")),
     })
 }
 

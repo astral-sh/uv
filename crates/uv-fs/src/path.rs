@@ -3,11 +3,16 @@ use std::path::{Component, Path, PathBuf};
 
 use once_cell::sync::Lazy;
 
-pub static CWD: Lazy<PathBuf> = Lazy::new(|| {
+/// The current working directory.
+pub static CWD: Lazy<PathBuf> =
+    Lazy::new(|| std::env::current_dir().expect("The current directory must exist"));
+
+/// The current working directory, canonicalized.
+pub static CANONICAL_CWD: Lazy<PathBuf> = Lazy::new(|| {
     std::env::current_dir()
-        .unwrap()
-        .canonicalize()
         .expect("The current directory must exist")
+        .canonicalize()
+        .expect("The current directory must be canonicalized")
 });
 
 pub trait Simplified {
@@ -21,6 +26,9 @@ pub trait Simplified {
     /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's
     /// equivalent to [`std::path::Display`].
     fn simplified_display(&self) -> std::path::Display;
+
+    /// Canonicalize a path without a `\\?\` prefix on Windows.
+    fn simple_canonicalize(&self) -> std::io::Result<PathBuf>;
 
     /// Render a [`Path`] for user-facing display.
     ///
@@ -37,10 +45,20 @@ impl<T: AsRef<Path>> Simplified for T {
         dunce::simplified(self.as_ref()).display()
     }
 
+    fn simple_canonicalize(&self) -> std::io::Result<PathBuf> {
+        dunce::canonicalize(self.as_ref())
+    }
+
     fn user_display(&self) -> std::path::Display {
         let path = dunce::simplified(self.as_ref());
+
+        // Attempt to strip the current working directory, then the canonicalized current working
+        // directory, in case they differ.
         path.strip_prefix(CWD.simplified())
-            .unwrap_or(path)
+            .unwrap_or_else(|_| {
+                path.strip_prefix(CANONICAL_CWD.simplified())
+                    .unwrap_or(path)
+            })
             .display()
     }
 }
@@ -136,7 +154,7 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 pub fn absolutize_path(path: &Path) -> Result<Cow<Path>, std::io::Error> {
     use path_absolutize::Absolutize;
 
-    path.absolutize_from(&*CWD)
+    path.absolutize_from(CWD.simplified())
 }
 
 /// Like `fs_err::canonicalize`, but with permissive failures on Windows.

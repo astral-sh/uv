@@ -24,9 +24,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -48,9 +54,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -72,9 +84,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -96,9 +114,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -120,9 +144,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -144,9 +174,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
     ],
     constraints: [],

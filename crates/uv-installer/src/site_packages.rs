@@ -342,6 +342,7 @@ impl<'a> SitePackages<'a> {
                                     Requirement::from_pep508(dependency)?,
                                 ),
                                 hashes: vec![],
+                                path: None,
                             };
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);
@@ -406,6 +407,7 @@ impl<'a> SitePackages<'a> {
                                     Requirement::from_pep508(dependency)?,
                                 ),
                                 hashes: vec![],
+                                path: None,
                             };
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);

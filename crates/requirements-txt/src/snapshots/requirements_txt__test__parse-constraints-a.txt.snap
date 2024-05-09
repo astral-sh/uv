@@ -24,9 +24,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/constraints-a.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/constraints-a.txt",
+            ),
         },
     ],
     constraints: [
@@ -48,6 +54,9 @@ RequirementsTxt {
                 ),
             ),
             marker: None,
+            path: Some(
+                "<REQUIREMENTS_DIR>/constraints-b.txt",
+            ),
         },
         Requirement {
             name: PackageName(
@@ -67,6 +76,9 @@ RequirementsTxt {
                 ),
             ),
             marker: None,
+            path: Some(
+                "<REQUIREMENTS_DIR>/constraints-b.txt",
+            ),
         },
     ],
     editables: [],

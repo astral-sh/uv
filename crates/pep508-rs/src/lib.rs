@@ -26,7 +26,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 #[cfg(feature = "pyo3")]
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 #[cfg(feature = "pyo3")]
@@ -148,6 +148,16 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
+    /// The source file containing the requirement.
+    pub path: Option<PathBuf>,
+}
+
+impl Requirement {
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_source(self, path: Option<PathBuf>) -> Self {
+        Self { path, ..self }
+    }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
@@ -482,6 +492,7 @@ impl<T: Pep508Url> Requirement<T> {
             extras,
             version_or_url,
             marker,
+            path,
         } = self;
         Requirement {
             name,
@@ -494,6 +505,7 @@ impl<T: Pep508Url> Requirement<T> {
                 Some(VersionOrUrl::Url(url)) => Some(VersionOrUrl::Url(U::from(url))),
             },
             marker,
+            path,
         }
     }
 }
@@ -1017,6 +1029,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
         extras,
         version_or_url: requirement_kind,
         marker,
+        path: None,
     })
 }
 
@@ -1158,6 +1171,7 @@ mod tests {
                 operator: MarkerOperator::LessThan,
                 r_value: MarkerValue::QuotedString("2.7".to_string()),
             })),
+            path: None,
         };
         assert_eq!(requests, expected);
     }
@@ -1383,6 +1397,7 @@ mod tests {
             extras: vec![],
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
+            path: None,
         };
         assert_eq!(pip_url, expected);
     }

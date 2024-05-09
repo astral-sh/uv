@@ -684,7 +684,12 @@ async fn resolve_editables(
             .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
 
         let editables = LocalEditables::from_editables(uninstalled.iter().map(|editable| {
-            let EditableRequirement { url, path, extras } = editable;
+            let EditableRequirement {
+                url,
+                path,
+                extras,
+                source: _,
+            } = editable;
             LocalEditable {
                 url: url.clone(),
                 path: path.clone(),

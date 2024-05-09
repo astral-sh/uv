@@ -13,9 +13,15 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/include-b.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/include-b.txt",
+            ),
         },
         RequirementEntry {
             requirement: Named(
@@ -37,9 +43,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/include-a.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/include-a.txt",
+            ),
         },
     ],
     constraints: [],

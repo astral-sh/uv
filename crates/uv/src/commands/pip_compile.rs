@@ -1,5 +1,5 @@
-use indexmap::IndexMap;
 use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write;
 use std::io::stdout;
@@ -10,15 +10,17 @@ use std::str::FromStr;
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use fs_err as fs;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, Verbatim};
+use distribution_types::{
+    IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, SourceAnnotation, Verbatim,
+};
 use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
-
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 use requirements_txt::EditableRequirement;
@@ -352,6 +354,65 @@ pub(crate) async fn pip_compile(
     .resolve()
     .await?;
 
+    let mut sources: BTreeMap<String, BTreeSet<SourceAnnotation>> = BTreeMap::new();
+
+    for requirement in &requirements {
+        if let Some(path) = &requirement.path {
+            if path.ends_with("pyproject.toml") {
+                sources
+                    .entry(requirement.name.to_string())
+                    .or_default()
+                    .insert(SourceAnnotation::PyProject {
+                        path: path.clone(),
+                        project_name: project.as_ref().map(ToString::to_string),
+                    });
+            } else {
+                sources
+                    .entry(requirement.name.to_string())
+                    .or_default()
+                    .insert(SourceAnnotation::Requirement(path.clone()));
+            }
+        }
+    }
+
+    for requirement in &constraints {
+        if let Some(path) = &requirement.path {
+            sources
+                .entry(requirement.name.to_string())
+                .or_default()
+                .insert(SourceAnnotation::Constraint(path.clone()));
+        }
+    }
+
+    for requirement in &overrides {
+        if let Some(path) = &requirement.path {
+            sources
+                .entry(requirement.name.to_string())
+                .or_default()
+                .insert(SourceAnnotation::Override(path.clone()));
+        }
+    }
+
+    for editable in &editables {
+        let package_name = editable.url.given().unwrap_or_default().to_string();
+        if let Some(source) = &editable.source {
+            if source.ends_with("pyproject.toml") {
+                sources
+                    .entry(package_name)
+                    .or_default()
+                    .insert(SourceAnnotation::PyProject {
+                        path: source.clone(),
+                        project_name: project.as_ref().map(ToString::to_string),
+                    });
+            } else {
+                sources
+                    .entry(package_name)
+                    .or_default()
+                    .insert(SourceAnnotation::Requirement(source.clone()));
+            }
+        }
+    }
+
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
@@ -363,7 +424,12 @@ pub(crate) async fn pip_compile(
         let start = std::time::Instant::now();
 
         let editables = LocalEditables::from_editables(editables.into_iter().map(|editable| {
-            let EditableRequirement { url, extras, path } = editable;
+            let EditableRequirement {
+                url,
+                extras,
+                path,
+                source: _,
+            } = editable;
             LocalEditable { url, path, extras }
         }));
 
@@ -588,6 +654,7 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
+            sources,
             &no_emit_packages,
             generate_hashes,
             include_extras,
