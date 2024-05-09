@@ -62,7 +62,7 @@ pub(crate) async fn run(
     } else {
         debug!("Syncing project environment.");
 
-        let Some(project) = Project::find(std::env::current_dir()?) else {
+        let Some(project) = Project::find(std::env::current_dir()?)? else {
             return Err(anyhow::anyhow!(
                 "Unable to find `pyproject.toml` for project."
             ));
