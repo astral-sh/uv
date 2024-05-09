@@ -14,13 +14,13 @@ RequirementsTxt {
                     version_or_url: None,
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>include-b.txt",
+                        "<REQUIREMENTS_DIR>/include-b.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>include-b.txt",
+                "<REQUIREMENTS_DIR>/include-b.txt",
             ),
         },
     ],

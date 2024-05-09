@@ -14,13 +14,13 @@ RequirementsTxt {
                     version_or_url: None,
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>whitespace.txt",
+                        "<REQUIREMENTS_DIR>/whitespace.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>whitespace.txt",
+                "<REQUIREMENTS_DIR>/whitespace.txt",
             ),
         },
         RequirementEntry {
@@ -60,13 +60,13 @@ RequirementsTxt {
                     ),
                     marker: None,
                     path: Some(
-                        "<REQUIREMENTS_DIR>whitespace.txt",
+                        "<REQUIREMENTS_DIR>/whitespace.txt",
                     ),
                 },
             ),
             hashes: [],
             path: Some(
-                "<REQUIREMENTS_DIR>whitespace.txt",
+                "<REQUIREMENTS_DIR>/whitespace.txt",
             ),
         },
     ],
