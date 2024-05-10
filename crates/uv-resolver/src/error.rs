@@ -9,10 +9,7 @@ use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{
-    BuiltDist, IndexLocations, InstalledDist, ParsedUrlError, PathBuiltDist, PathSourceDist,
-    SourceDist,
-};
+use distribution_types::{BuiltDist, IndexLocations, InstalledDist, ParsedUrlError, SourceDist};
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::Requirement;
@@ -75,14 +72,14 @@ pub enum ResolveError {
     FetchAndBuild(Box<SourceDist>, #[source] uv_distribution::Error),
 
     #[error("Failed to read `{0}`")]
-    Read(Box<PathBuiltDist>, #[source] uv_distribution::Error),
+    Read(Box<BuiltDist>, #[source] uv_distribution::Error),
 
     // TODO(zanieb): Use `thiserror` in `InstalledDist` so we can avoid chaining `anyhow`
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] anyhow::Error),
 
     #[error("Failed to build `{0}`")]
-    Build(Box<PathSourceDist>, #[source] uv_distribution::Error),
+    Build(Box<SourceDist>, #[source] uv_distribution::Error),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),

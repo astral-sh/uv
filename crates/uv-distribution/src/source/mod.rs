@@ -16,8 +16,9 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, Dist, FileLocation, GitSourceUrl, HashPolicy, Hashed, LocalEditable,
-    ParsedArchiveUrl, PathSourceDist, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+    BuildableSource, DirectorySourceDist, DirectorySourceUrl, Dist, FileLocation, GitSourceUrl,
+    HashPolicy, Hashed, LocalEditable, ParsedArchiveUrl, PathSourceUrl, RemoteSource, SourceDist,
+    SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
@@ -163,26 +164,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .boxed_local()
                     .await?
             }
-            BuildableSource::Dist(SourceDist::Path(dist)) => {
-                if dist.path.is_dir() {
-                    self.source_tree(source, &PathSourceUrl::from(dist), tags, hashes)
-                        .boxed_local()
-                        .await?
-                } else {
-                    let cache_shard = self
-                        .build_context
-                        .cache()
-                        .shard(CacheBucket::BuiltWheels, WheelCache::Path(&dist.url).root());
-                    self.archive(
-                        source,
-                        &PathSourceUrl::from(dist),
-                        &cache_shard,
-                        tags,
-                        hashes,
-                    )
+            BuildableSource::Dist(SourceDist::Directory(dist)) => {
+                self.source_tree(source, &DirectorySourceUrl::from(dist), tags, hashes)
                     .boxed_local()
                     .await?
-                }
+            }
+            BuildableSource::Dist(SourceDist::Path(dist)) => {
+                let cache_shard = self
+                    .build_context
+                    .cache()
+                    .shard(CacheBucket::BuiltWheels, WheelCache::Path(&dist.url).root());
+                self.archive(
+                    source,
+                    &PathSourceUrl::from(dist),
+                    &cache_shard,
+                    tags,
+                    hashes,
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
                 let filename = resource
@@ -216,20 +216,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .boxed_local()
                     .await?
             }
+            BuildableSource::Url(SourceUrl::Directory(resource)) => {
+                self.source_tree(source, resource, tags, hashes)
+                    .boxed_local()
+                    .await?
+            }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
-                if resource.path.is_dir() {
-                    self.source_tree(source, resource, tags, hashes)
-                        .boxed_local()
-                        .await?
-                } else {
-                    let cache_shard = self.build_context.cache().shard(
-                        CacheBucket::BuiltWheels,
-                        WheelCache::Path(resource.url).root(),
-                    );
-                    self.archive(source, resource, &cache_shard, tags, hashes)
-                        .boxed_local()
-                        .await?
-                }
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::BuiltWheels,
+                    WheelCache::Path(resource.url).root(),
+                );
+                self.archive(source, resource, &cache_shard, tags, hashes)
+                    .boxed_local()
+                    .await?
             }
         };
 
@@ -319,20 +318,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .boxed_local()
                     .await?
             }
+            BuildableSource::Dist(SourceDist::Directory(dist)) => {
+                self.source_tree_metadata(source, &DirectorySourceUrl::from(dist), hashes)
+                    .boxed_local()
+                    .await?
+            }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
-                if dist.path.is_dir() {
-                    self.source_tree_metadata(source, &PathSourceUrl::from(dist), hashes)
-                        .boxed_local()
-                        .await?
-                } else {
-                    let cache_shard = self
-                        .build_context
-                        .cache()
-                        .shard(CacheBucket::BuiltWheels, WheelCache::Path(&dist.url).root());
-                    self.archive_metadata(source, &PathSourceUrl::from(dist), &cache_shard, hashes)
-                        .boxed_local()
-                        .await?
-                }
+                let cache_shard = self
+                    .build_context
+                    .cache()
+                    .shard(CacheBucket::BuiltWheels, WheelCache::Path(&dist.url).root());
+                self.archive_metadata(source, &PathSourceUrl::from(dist), &cache_shard, hashes)
+                    .boxed_local()
+                    .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
                 let filename = resource
@@ -365,20 +363,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .boxed_local()
                     .await?
             }
+            BuildableSource::Url(SourceUrl::Directory(resource)) => {
+                self.source_tree_metadata(source, resource, hashes)
+                    .boxed_local()
+                    .await?
+            }
+
             BuildableSource::Url(SourceUrl::Path(resource)) => {
-                if resource.path.is_dir() {
-                    self.source_tree_metadata(source, resource, hashes)
-                        .boxed_local()
-                        .await?
-                } else {
-                    let cache_shard = self.build_context.cache().shard(
-                        CacheBucket::BuiltWheels,
-                        WheelCache::Path(resource.url).root(),
-                    );
-                    self.archive_metadata(source, resource, &cache_shard, hashes)
-                        .boxed_local()
-                        .await?
-                }
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::BuiltWheels,
+                    WheelCache::Path(resource.url).root(),
+                );
+                self.archive_metadata(source, resource, &cache_shard, hashes)
+                    .boxed_local()
+                    .await?
             }
         };
 
@@ -826,7 +824,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn source_tree(
         &self,
         source: &BuildableSource<'_>,
-        resource: &PathSourceUrl<'_>,
+        resource: &DirectorySourceUrl<'_>,
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
@@ -891,7 +889,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn source_tree_metadata(
         &self,
         source: &BuildableSource<'_>,
-        resource: &PathSourceUrl<'_>,
+        resource: &DirectorySourceUrl<'_>,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
@@ -967,12 +965,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn source_tree_revision(
         &self,
         source: &BuildableSource<'_>,
-        resource: &PathSourceUrl<'_>,
+        resource: &DirectorySourceUrl<'_>,
         cache_shard: &CacheShard,
     ) -> Result<Revision, Error> {
         // Determine the last-modified time of the source distribution.
         let Some(modified) =
-            ArchiveTimestamp::from_path(&resource.path).map_err(Error::CacheRead)?
+            ArchiveTimestamp::from_source_tree(&resource.path).map_err(Error::CacheRead)?
         else {
             return Err(Error::DirWithoutEntrypoint);
         };
@@ -1432,8 +1430,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(|err| Error::BuildEditable(editable.to_string(), err))?;
         let filename = WheelFilename::from_str(&disk_filename)?;
+
         // We finally have the name of the package and can construct the dist.
-        let dist = Dist::Source(SourceDist::Path(PathSourceDist {
+        let dist = Dist::Source(SourceDist::Directory(DirectorySourceDist {
             name: filename.name.clone(),
             url: editable.url().clone(),
             path: editable.path.clone(),

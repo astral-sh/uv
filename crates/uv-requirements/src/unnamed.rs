@@ -10,8 +10,9 @@ use tracing::debug;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, Requirement,
-    SourceUrl, UnresolvedRequirement, UnresolvedRequirementSpecification, VersionId,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
+    RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
+    UnresolvedRequirementSpecification, VersionId,
 };
 use pep508_rs::{Scheme, UnnamedRequirement, VersionOrUrl};
 use pypi_types::Metadata10;
@@ -222,12 +223,17 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             }
                         }
                     }
-                }
 
-                SourceUrl::Path(PathSourceUrl {
-                    url: &requirement.url,
-                    path: Cow::Owned(path),
-                })
+                    SourceUrl::Directory(DirectorySourceUrl {
+                        url: &requirement.url,
+                        path: Cow::Owned(path),
+                    })
+                } else {
+                    SourceUrl::Path(PathSourceUrl {
+                        url: &requirement.url,
+                        path: Cow::Owned(path),
+                    })
+                }
             }
             Some(Scheme::Http | Scheme::Https) => SourceUrl::Direct(DirectSourceUrl {
                 url: &requirement.url,

@@ -1,5 +1,5 @@
 use distribution_types::{
-    git_reference, DirectUrlSourceDist, GitSourceDist, Hashed, PathSourceDist,
+    git_reference, DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
 };
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
@@ -68,8 +68,42 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         // Determine the last-modified time of the source distribution.
+        let modified = ArchiveTimestamp::from_file(&source_dist.path).map_err(Error::CacheRead)?;
+
+        // If the distribution is stale, omit it from the index.
+        if !pointer.is_up_to_date(modified) {
+            return Ok(None);
+        }
+
+        // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        let revision = pointer.into_revision();
+        if !revision.satisfies(self.hasher.get(source_dist)) {
+            return Ok(None);
+        }
+
+        Ok(self.find(&cache_shard.shard(revision.id())))
+    }
+
+    /// Return the most compatible [`CachedWheel`] for a given source distribution built from a
+    /// local directory (source tree).
+    pub fn directory(
+        &self,
+        source_dist: &DirectorySourceDist,
+    ) -> Result<Option<CachedWheel>, Error> {
+        let cache_shard = self.cache.shard(
+            CacheBucket::BuiltWheels,
+            WheelCache::Path(&source_dist.url).root(),
+        );
+
+        // Read the revision from the cache.
+        let Some(pointer) = LocalRevisionPointer::read_from(cache_shard.entry(LOCAL_REVISION))?
+        else {
+            return Ok(None);
+        };
+
+        // Determine the last-modified time of the source distribution.
         let Some(modified) =
-            ArchiveTimestamp::from_path(&source_dist.path).map_err(Error::CacheRead)?
+            ArchiveTimestamp::from_source_tree(&source_dist.path).map_err(Error::CacheRead)?
         else {
             return Err(Error::DirWithoutEntrypoint);
         };

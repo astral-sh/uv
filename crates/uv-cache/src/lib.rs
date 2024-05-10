@@ -770,41 +770,7 @@ impl ArchiveTimestamp {
         if metadata.is_file() {
             Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
         } else {
-            // Compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
-            // `setup.cfg` files, if they exist.
-            let pyproject_toml = path
-                .as_ref()
-                .join("pyproject.toml")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            let setup_py = path
-                .as_ref()
-                .join("setup.py")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            let setup_cfg = path
-                .as_ref()
-                .join("setup.cfg")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            // Take the most recent timestamp of the three files.
-            let Some(timestamp) = max(pyproject_toml, max(setup_py, setup_cfg)) else {
-                return Ok(None);
-            };
-
-            Ok(Some(Self::Approximate(timestamp)))
+            Self::from_source_tree(path)
         }
     }
 
@@ -812,6 +778,48 @@ impl ArchiveTimestamp {
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         Ok(Self::Exact(Timestamp::from_metadata(&metadata)))
+    }
+
+    /// Return the modification timestamp for a source tree, i.e., a directory.
+    ///
+    /// If the source tree doesn't contain an entrypoint (i.e., no `pyproject.toml`, `setup.py`, or
+    /// `setup.cfg`), returns `None`.
+    pub fn from_source_tree(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
+        // Compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
+        // `setup.cfg` files, if they exist.
+        let pyproject_toml = path
+            .as_ref()
+            .join("pyproject.toml")
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .as_ref()
+            .map(Timestamp::from_metadata);
+
+        let setup_py = path
+            .as_ref()
+            .join("setup.py")
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .as_ref()
+            .map(Timestamp::from_metadata);
+
+        let setup_cfg = path
+            .as_ref()
+            .join("setup.cfg")
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .as_ref()
+            .map(Timestamp::from_metadata);
+
+        // Take the most recent timestamp of the three files.
+        let Some(timestamp) = max(pyproject_toml, max(setup_py, setup_cfg)) else {
+            return Ok(None);
+        };
+
+        Ok(Some(Self::Approximate(timestamp)))
     }
 
     /// Return the modification timestamp for an archive.

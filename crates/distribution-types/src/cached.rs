@@ -89,6 +89,13 @@ impl CachedDist {
                 url: dist.url,
                 hashes,
                 path,
+                editable: false,
+            }),
+            Dist::Source(SourceDist::Directory(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: dist.url,
+                hashes,
+                path,
                 editable: dist.editable,
             }),
         }

@@ -126,6 +126,11 @@ impl From<&ResolvedDist> for Requirement {
                     url: sdist.url.clone(),
                     editable: None,
                 },
+                Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Path {
+                    path: sdist.path.clone(),
+                    url: sdist.url.clone(),
+                    editable: None,
+                },
             },
             ResolvedDist::Installed(dist) => RequirementSource::Registry {
                 specifier: pep440_rs::VersionSpecifiers::from(
