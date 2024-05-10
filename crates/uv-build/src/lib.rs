@@ -682,7 +682,7 @@ impl SourceBuild {
 
             prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
             if prepare_metadata_for_build_wheel:
-                dirname = prepare_metadata_for_build_wheel("{}", config_settings={})
+                dirname = prepare_metadata_for_build_wheel("{}", {})
             else:
                 dirname = None
 
@@ -808,22 +808,26 @@ impl SourceBuild {
             .join(format!("build_{}.txt", self.build_kind));
 
         debug!(
-            "Calling `{}.build_{}(metadata_directory={})`",
-            pep517_backend.backend, self.build_kind, metadata_directory
+            r#"Calling `{}.build_{}("{}", {}, {})`"#,
+            pep517_backend.backend,
+            self.build_kind,
+            wheel_dir.escape_for_python(),
+            self.config_settings.escape_for_python(),
+            metadata_directory,
         );
         let script = formatdoc! {
             r#"
             {}
 
-            wheel_filename = backend.build_{}("{}", metadata_directory={}, config_settings={})
+            wheel_filename = backend.build_{}("{}", {}, {})
             with open("{}", "w") as fp:
                 fp.write(wheel_filename)
             "#,
             pep517_backend.backend_import(),
             self.build_kind,
             wheel_dir.escape_for_python(),
-            metadata_directory,
             self.config_settings.escape_for_python(),
+            metadata_directory,
             outfile.escape_for_python()
         };
         let span = info_span!(
@@ -916,7 +920,7 @@ async fn create_pep517_build_environment(
 
             get_requires_for_build = getattr(backend, "get_requires_for_build_{}", None)
             if get_requires_for_build:
-                requires = get_requires_for_build(config_settings={})
+                requires = get_requires_for_build({})
             else:
                 requires = []
 
