@@ -1,0 +1,16 @@
+---
+source: crates/uv-resolver/src/lock.rs
+expression: result
+---
+Err(
+    Error {
+        inner: Error {
+            inner: TomlError {
+                message: "since the distribution `anyio 4.3.0 path+file:///foo/bar` comes from a path dependency, a hash was not expected but one was found for wheel",
+                raw: None,
+                keys: [],
+                span: None,
+            },
+        },
+    },
+)

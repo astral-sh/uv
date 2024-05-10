@@ -160,6 +160,23 @@ impl TryFrom<LockWire> for Lock {
                     ));
                 }
             }
+            // Also check that our sources are consistent with whether we have
+            // hashes or not.
+            let requires_hash = dist.id.source.kind.requires_hash();
+            if let Some(ref sdist) = dist.sourcedist {
+                if requires_hash != sdist.hash.is_some() {
+                    return Err(LockError::hash(
+                        dist.id.clone(),
+                        "source distribution",
+                        requires_hash,
+                    ));
+                }
+            }
+            for wheel in &dist.wheels {
+                if requires_hash != wheel.hash.is_some() {
+                    return Err(LockError::hash(dist.id.clone(), "wheel", requires_hash));
+                }
+            }
         }
         Ok(Lock {
             version: wire.version,
@@ -491,6 +508,22 @@ impl SourceKind {
             SourceKind::Path => "path",
         }
     }
+
+    /// Returns true when this source kind requires a hash.
+    ///
+    /// When this returns false, it also implies that a hash should
+    /// _not_ be present.
+    fn requires_hash(&self) -> bool {
+        match *self {
+            SourceKind::Registry | SourceKind::Direct => true,
+            // TODO: A `Path` dependency, if it points to a specific source
+            // distribution or wheel, should have a hash. But if it points to a
+            // directory, then it should not have a hash.
+            //
+            // See: https://github.com/astral-sh/uv/issues/3506
+            SourceKind::Git(_) | SourceKind::Path => false,
+        }
+    }
 }
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
@@ -547,7 +580,11 @@ pub(crate) struct SourceDist {
     /// and/or recording where the source dist file originally came from.
     url: Url,
     /// A hash of the source distribution.
-    hash: Hash,
+    ///
+    /// This is only present for source distributions that come from registries
+    /// and direct URLs. Source distributions from git or path dependencies do
+    /// not have hashes associated with them.
+    hash: Option<Hash>,
 }
 
 impl SourceDist {
@@ -595,7 +632,10 @@ impl SourceDist {
             .to_url()
             .map_err(LockError::invalid_file_url)?;
         let hash = Hash::from(reg_dist.file.hashes[0].clone());
-        Ok(SourceDist { url, hash })
+        Ok(SourceDist {
+            url,
+            hash: Some(hash),
+        })
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlSourceDist) -> SourceDist {
@@ -609,16 +649,14 @@ impl SourceDist {
     fn from_git_dist(git_dist: &GitSourceDist) -> SourceDist {
         SourceDist {
             url: git_dist.url.to_url(),
-            // TODO: We want a hash for the artifact at the URL.
-            hash: todo!(),
+            hash: None,
         }
     }
 
     fn from_path_dist(path_dist: &PathSourceDist) -> SourceDist {
         SourceDist {
             url: path_dist.url.to_url(),
-            // TODO: We want a hash for the artifact at the URL.
-            hash: todo!(),
+            hash: None,
         }
     }
 }
@@ -633,7 +671,11 @@ pub(crate) struct Wheel {
     /// recording where the wheel file originally came from.
     url: Url,
     /// A hash of the source distribution.
-    hash: Hash,
+    ///
+    /// This is only present for wheels that come from registries and direct
+    /// URLs. Wheels from git or path dependencies do not have hashes
+    /// associated with them.
+    hash: Option<Hash>,
     /// The filename of the wheel.
     ///
     /// This isn't part of the wire format since it's redundant with the
@@ -680,7 +722,7 @@ impl Wheel {
         let hash = Hash::from(reg_dist.file.hashes[0].clone());
         Ok(Wheel {
             url,
-            hash,
+            hash: Some(hash),
             filename,
         })
     }
@@ -697,8 +739,7 @@ impl Wheel {
     fn from_path_dist(path_dist: &PathBuiltDist) -> Wheel {
         Wheel {
             url: path_dist.url.to_url(),
-            // TODO: We want a hash for the artifact at the URL.
-            hash: todo!(),
+            hash: None,
             filename: path_dist.filename.clone(),
         }
     }
@@ -712,7 +753,11 @@ struct WheelWire {
     /// recording where the wheel file originally came from.
     url: Url,
     /// A hash of the source distribution.
-    hash: Hash,
+    ///
+    /// This is only present for wheels that come from registries and direct
+    /// URLs. Wheels from git or path dependencies do not have hashes
+    /// associated with them.
+    hash: Option<Hash>,
 }
 
 impl From<Wheel> for WheelWire {
@@ -854,6 +899,17 @@ impl LockError {
             kind: Box::new(kind),
         }
     }
+
+    fn hash(id: DistributionId, artifact_type: &'static str, expected: bool) -> LockError {
+        let kind = LockErrorKind::Hash {
+            id,
+            artifact_type,
+            expected,
+        };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
 }
 
 impl std::error::Error for LockError {
@@ -863,6 +919,7 @@ impl std::error::Error for LockError {
             LockErrorKind::DuplicateDependency { .. } => None,
             LockErrorKind::InvalidFileUrl { ref err } => Some(err),
             LockErrorKind::UnrecognizedDependency { ref err } => Some(err),
+            LockErrorKind::Hash { .. } => None,
         }
     }
 }
@@ -871,7 +928,7 @@ impl std::fmt::Display for LockError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self.kind {
             LockErrorKind::DuplicateDistribution { ref id } => {
-                write!(f, "found duplicate distribution {id}")
+                write!(f, "found duplicate distribution `{id}`")
             }
             LockErrorKind::DuplicateDependency {
                 ref id,
@@ -879,7 +936,7 @@ impl std::fmt::Display for LockError {
             } => {
                 write!(
                     f,
-                    "for distribution {id}, found duplicate dependency {dependency_id}"
+                    "for distribution `{id}`, found duplicate dependency `{dependency_id}`"
                 )
             }
             LockErrorKind::InvalidFileUrl { .. } => {
@@ -887,6 +944,30 @@ impl std::fmt::Display for LockError {
             }
             LockErrorKind::UnrecognizedDependency { .. } => {
                 write!(f, "found unrecognized dependency")
+            }
+            LockErrorKind::Hash {
+                ref id,
+                artifact_type,
+                expected: true,
+            } => {
+                write!(
+                    f,
+                    "since the distribution `{id}` comes from a {source} dependency, \
+                     a hash was expected but one was not found for {artifact_type}",
+                    source = id.source.kind.name(),
+                )
+            }
+            LockErrorKind::Hash {
+                ref id,
+                artifact_type,
+                expected: false,
+            } => {
+                write!(
+                    f,
+                    "since the distribution `{id}` comes from a {source} dependency, \
+                     a hash was not expected but one was found for {artifact_type}",
+                    source = id.source.kind.name(),
+                )
             }
         }
     }
@@ -922,6 +1003,17 @@ enum LockErrorKind {
     UnrecognizedDependency {
         /// The actual error.
         err: UnrecognizedDependencyError,
+    },
+    /// An error that occurs when a hash is expected (or not) for a particular
+    /// artifact, but one was not found (or was).
+    Hash {
+        /// The ID of the distribution that has a missing hash.
+        id: DistributionId,
+        /// The specific type of artifact, e.g., "source distribution"
+        /// or "wheel".
+        artifact_type: &'static str,
+        /// When true, a hash is expected to be present.
+        expected: bool,
     },
 }
 
@@ -996,7 +1088,7 @@ impl std::fmt::Display for SourceParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let given = &self.given;
         match self.kind {
-            SourceParseErrorKind::NoPlus => write!(f, "could not find '+' in source `{given}`"),
+            SourceParseErrorKind::NoPlus => write!(f, "could not find `+` in source `{given}`"),
             SourceParseErrorKind::UnrecognizedSourceName { ref name } => {
                 write!(f, "unrecognized name `{name}` in source `{given}`")
             }
@@ -1031,5 +1123,45 @@ impl std::error::Error for HashParseError {}
 impl std::fmt::Display for HashParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hash_required_present() {
+        let data = r#"
+version = 1
+
+[[distribution]]
+name = "anyio"
+version = "4.3.0"
+source = "registry+https://pypi.org/simple"
+
+[[distribution.wheel]]
+url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"
+"#;
+        let result: Result<Lock, _> = toml::from_str(data);
+        insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn hash_required_missing() {
+        let data = r#"
+version = 1
+
+[[distribution]]
+name = "anyio"
+version = "4.3.0"
+source = "path+file:///foo/bar"
+
+[[distribution.wheel]]
+url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl"
+hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+"#;
+        let result: Result<Lock, _> = toml::from_str(data);
+        insta::assert_debug_snapshot!(result);
     }
 }

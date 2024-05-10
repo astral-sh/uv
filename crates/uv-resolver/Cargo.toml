@@ -62,6 +62,7 @@ uv-interpreter = { workspace = true }
 
 once_cell = { version = "1.19.0" }
 insta = { version = "1.36.1" }
+toml = { workspace = true }
 
 [features]
 default = ["pypi"]

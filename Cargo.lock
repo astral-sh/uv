@@ -5079,6 +5079,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
+ "toml",
  "tracing",
  "url",
  "uv-cache",
