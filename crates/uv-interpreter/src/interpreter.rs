@@ -643,6 +643,10 @@ mod tests {
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "prefix": "/home/ferris/projects/uv/.venv",
                 "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
+                "sys_path": [
+                    "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
+                    "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+                ],
                 "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
                 "scheme": {
                     "data": "/home/ferris/.pyenv/versions/3.12.0",
