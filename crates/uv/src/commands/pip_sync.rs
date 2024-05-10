@@ -20,10 +20,12 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
+    Concurrency, ConfigSettings, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall,
+    SetupPyStrategy,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
+use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion, Target};
@@ -65,6 +67,7 @@ pub(crate) async fn pip_sync(
     system: bool,
     break_system_packages: bool,
     target: Option<Target>,
+    concurrency: Concurrency,
     native_tls: bool,
     preview: PreviewMode,
     cache: Cache,
@@ -261,16 +264,21 @@ pub(crate) async fn pip_sync(
         link_mode,
         &no_build,
         &no_binary,
+        concurrency,
     );
 
     // Convert from unnamed to named requirements.
     let requirements = {
         // Convert from unnamed to named requirements.
-        let mut requirements =
-            NamedRequirementsResolver::new(requirements, &hasher, &build_dispatch, &client, &index)
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?;
+        let mut requirements = NamedRequirementsResolver::new(
+            requirements,
+            &hasher,
+            &index,
+            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
@@ -279,9 +287,8 @@ pub(crate) async fn pip_sync(
                     source_trees,
                     &ExtrasSpecification::None,
                     &hasher,
-                    &build_dispatch,
-                    &client,
                     &index,
+                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
                 .resolve()
@@ -303,6 +310,7 @@ pub(crate) async fn pip_sync(
         &cache,
         &client,
         &build_dispatch,
+        concurrency,
         printer,
     )
     .await?;
@@ -373,13 +381,13 @@ pub(crate) async fn pip_sync(
             &python_requirement,
             Some(markers),
             tags,
-            &client,
             &flat_index,
             &index,
             &hasher,
             &build_dispatch,
             // TODO(zanieb): We should consider support for installed packages in pip sync
             &EmptyInstalledPackages,
+            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )?
         .with_reporter(reporter);
 
@@ -420,8 +428,13 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(&cache, &tags, &hasher, &client, &build_dispatch)
-            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
+        let downloader = Downloader::new(
+            &cache,
+            &tags,
+            &hasher,
+            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
             .download(remote.clone(), &in_flight)
@@ -622,6 +635,7 @@ async fn resolve_editables(
     cache: &Cache,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch<'_>,
+    concurrency: Concurrency,
     printer: Printer,
 ) -> Result<ResolvedEditables> {
     // Partition the editables into those that are already installed, and those that must be built.
@@ -683,8 +697,13 @@ async fn resolve_editables(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
-            .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
+        let downloader = Downloader::new(
+            cache,
+            tags,
+            hasher,
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
 
         let editables = LocalEditables::from_editables(uninstalled.iter().map(|editable| {
             let EditableRequirement {

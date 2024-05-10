@@ -22,7 +22,7 @@ use serde::{de, Deserialize, Deserializer};
 use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::{ParsedUrlError, Requirement, Resolution};
@@ -377,6 +377,8 @@ pub struct SourceBuild {
     modified_path: OsString,
     /// Environment variables to be passed in during metadata or wheel building
     environment_variables: FxHashMap<OsString, OsString>,
+    /// Runner for Python scripts.
+    runner: PythonRunner,
 }
 
 impl SourceBuild {
@@ -397,6 +399,7 @@ impl SourceBuild {
         build_isolation: BuildIsolation<'_>,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
+        concurrent_builds: usize,
     ) -> Result<Self, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
 
@@ -476,9 +479,11 @@ impl SourceBuild {
 
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
+        let runner = PythonRunner::new(concurrent_builds);
         if build_isolation.is_isolated() {
             if let Some(pep517_backend) = &pep517_backend {
                 create_pep517_build_environment(
+                    &runner,
                     &source_tree,
                     &venv,
                     pep517_backend,
@@ -506,6 +511,7 @@ impl SourceBuild {
             version_id,
             environment_variables,
             modified_path,
+            runner,
         })
     }
 
@@ -693,15 +699,17 @@ impl SourceBuild {
             script="prepare_metadata_for_build_wheel",
             python_version = %self.venv.interpreter().python_version()
         );
-        let output = run_python_script(
-            &self.venv,
-            &script,
-            &self.source_tree,
-            &self.environment_variables,
-            &self.modified_path,
-        )
-        .instrument(span)
-        .await?;
+        let output = self
+            .runner
+            .run_script(
+                &self.venv,
+                &script,
+                &self.source_tree,
+                &self.environment_variables,
+                &self.modified_path,
+            )
+            .instrument(span)
+            .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
@@ -744,19 +752,16 @@ impl SourceBuild {
                 return Err(Error::EditableSetupPy);
             }
             // We checked earlier that setup.py exists.
-            let python_interpreter = self.venv.python_executable();
             let span = info_span!(
                 "run_python_script",
                 script="setup.py bdist_wheel",
                 python_version = %self.venv.interpreter().python_version()
             );
-            let output = Command::new(python_interpreter)
-                .args(["setup.py", "bdist_wheel"])
-                .current_dir(self.source_tree.simplified())
-                .output()
+            let output = self
+                .runner
+                .run_setup_py(&self.venv, "bdist_wheel", &self.source_tree)
                 .instrument(span)
-                .await
-                .map_err(|err| Error::CommandFailed(python_interpreter.to_path_buf(), err))?;
+                .await?;
             if !output.status.success() {
                 return Err(Error::from_command_output(
                     "Failed building wheel through setup.py".to_string(),
@@ -826,15 +831,17 @@ impl SourceBuild {
             script=format!("build_{}", self.build_kind),
             python_version = %self.venv.interpreter().python_version()
         );
-        let output = run_python_script(
-            &self.venv,
-            &script,
-            &self.source_tree,
-            &self.environment_variables,
-            &self.modified_path,
-        )
-        .instrument(span)
-        .await?;
+        let output = self
+            .runner
+            .run_script(
+                &self.venv,
+                &script,
+                &self.source_tree,
+                &self.environment_variables,
+                &self.modified_path,
+            )
+            .instrument(span)
+            .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
@@ -880,6 +887,7 @@ fn escape_path_for_python(path: &Path) -> String {
 /// Not a method because we call it before the builder is completely initialized
 #[allow(clippy::too_many_arguments)]
 async fn create_pep517_build_environment(
+    runner: &PythonRunner,
     source_tree: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
@@ -925,15 +933,16 @@ async fn create_pep517_build_environment(
         script=format!("get_requires_for_build_{}", build_kind),
         python_version = %venv.interpreter().python_version()
     );
-    let output = run_python_script(
-        venv,
-        &script,
-        source_tree,
-        environment_variables,
-        modified_path,
-    )
-    .instrument(span)
-    .await?;
+    let output = runner
+        .run_script(
+            venv,
+            &script,
+            source_tree,
+            environment_variables,
+            modified_path,
+        )
+        .instrument(span)
+        .await?;
     if !output.status.success() {
         return Err(Error::from_command_output(
             format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
@@ -998,27 +1007,72 @@ async fn create_pep517_build_environment(
     Ok(())
 }
 
-/// It is the caller's responsibility to create an informative span.
-async fn run_python_script(
-    venv: &PythonEnvironment,
-    script: &str,
-    source_tree: &Path,
-    environment_variables: &FxHashMap<OsString, OsString>,
-    modified_path: &OsString,
-) -> Result<Output, Error> {
-    Command::new(venv.python_executable())
-        .args(["-c", script])
-        .current_dir(source_tree.simplified())
-        // Pass in remaining environment variables
-        .envs(environment_variables)
-        // Set the modified PATH
-        .env("PATH", modified_path)
-        // Activate the venv
-        .env("VIRTUAL_ENV", venv.root())
-        .env("CLICOLOR_FORCE", "1")
-        .output()
-        .await
-        .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
+/// A runner that manages the execution of external python processes with a
+/// concurrency limit.
+struct PythonRunner {
+    control: Semaphore,
+}
+
+impl PythonRunner {
+    /// Create a `PythonRunner` with the provided concurrency limit.
+    fn new(concurrency: usize) -> PythonRunner {
+        PythonRunner {
+            control: Semaphore::new(concurrency),
+        }
+    }
+
+    /// Spawn a process that runs a python script in the provided environment.
+    ///
+    /// If the concurrency limit has been reached this method will wait until a pending
+    /// script completes before spawning this one.
+    ///
+    /// Note: It is the caller's responsibility to create an informative span.
+    async fn run_script(
+        &self,
+        venv: &PythonEnvironment,
+        script: &str,
+        source_tree: &Path,
+        environment_variables: &FxHashMap<OsString, OsString>,
+        modified_path: &OsString,
+    ) -> Result<Output, Error> {
+        let _permit = self.control.acquire().await.unwrap();
+
+        Command::new(venv.python_executable())
+            .args(["-c", script])
+            .current_dir(source_tree.simplified())
+            // Pass in remaining environment variables
+            .envs(environment_variables)
+            // Set the modified PATH
+            .env("PATH", modified_path)
+            // Activate the venv
+            .env("VIRTUAL_ENV", venv.root())
+            .env("CLICOLOR_FORCE", "1")
+            .output()
+            .await
+            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
+    }
+
+    /// Spawn a process that runs a `setup.py` script.
+    ///
+    /// If the concurrency limit has been reached this method will wait until a pending
+    /// script completes before spawning this one.
+    ///
+    /// Note: It is the caller's responsibility to create an informative span.
+    async fn run_setup_py(
+        &self,
+        venv: &PythonEnvironment,
+        script: &str,
+        source_tree: &Path,
+    ) -> Result<Output, Error> {
+        let _permit = self.control.acquire().await.unwrap();
+
+        Command::new(venv.python_executable())
+            .args(["setup.py", script])
+            .current_dir(source_tree.simplified())
+            .output()
+            .await
+            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
+    }
 }
 
 #[cfg(test)]

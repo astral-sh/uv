@@ -39,6 +39,7 @@ uv-resolver = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
+uv-distribution = { workspace = true }
 uv-types = { workspace = true }
 uv-interpreter = { workspace = true }
 platform-tags = { workspace = true }

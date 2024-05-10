@@ -11,7 +11,6 @@ use distribution_types::{
 };
 use pep508_rs::MarkerEnvironment;
 use pypi_types::Metadata23;
-use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
@@ -71,9 +70,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         overrides: &'a Overrides,
         editables: &'a [(LocalEditable, Metadata23, Requirements)],
         hasher: &'a HashStrategy,
-        context: &'a Context,
-        client: &'a RegistryClient,
         index: &'a InMemoryIndex,
+        database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             requirements,
@@ -82,7 +80,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             editables,
             hasher,
             index,
-            database: DistributionDatabase::new(client, context),
+            database,
         }
     }
 

@@ -1,13 +1,17 @@
+use std::env::VarError;
 use std::ffi::OsString;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::process;
+use std::str::FromStr;
 
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy, TargetTriple, Upgrade,
+    Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild,
+    PreviewMode, Reinstall, SetupPyStrategy, TargetTriple, Upgrade,
 };
 use uv_interpreter::{PythonVersion, Target};
 use uv_normalize::PackageName;
@@ -299,6 +303,8 @@ impl PipCompileSettings {
                     emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
                     annotation_style,
                     link_mode,
+                    concurrent_builds: env(env::CONCURRENT_BUILDS),
+                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -405,6 +411,8 @@ impl PipSyncSettings {
                     link_mode,
                     compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
+                    concurrent_builds: env(env::CONCURRENT_BUILDS),
+                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -555,6 +563,8 @@ impl PipInstallSettings {
                     link_mode,
                     compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
+                    concurrent_builds: env(env::CONCURRENT_BUILDS),
+                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -893,6 +903,7 @@ pub(crate) struct PipSharedSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) require_hashes: bool,
+    pub(crate) concurrency: Concurrency,
 }
 
 impl PipSharedSettings {
@@ -940,6 +951,8 @@ impl PipSharedSettings {
             link_mode,
             compile_bytecode,
             require_hashes,
+            concurrent_builds,
+            concurrent_downloads,
         } = workspace
             .and_then(|workspace| workspace.options.pip)
             .unwrap_or_default();
@@ -1025,8 +1038,54 @@ impl PipSharedSettings {
                 .or(compile_bytecode)
                 .unwrap_or_default(),
             strict: args.strict.or(strict).unwrap_or_default(),
+            concurrency: Concurrency {
+                downloads: args
+                    .concurrent_downloads
+                    .or(concurrent_downloads)
+                    .map_or(Concurrency::DEFAULT_DOWNLOADS, NonZeroUsize::get),
+                builds: args
+                    .concurrent_builds
+                    .or(concurrent_builds)
+                    .map_or_else(Concurrency::default_builds, NonZeroUsize::get),
+            },
         }
     }
+}
+
+// Environment variables that are not exposed as CLI arguments.
+mod env {
+    pub(super) const CONCURRENT_DOWNLOADS: (&str, &str) =
+        ("UV_CONCURRENT_DOWNLOADS", "a non-zero integer");
+
+    pub(super) const CONCURRENT_BUILDS: (&str, &str) =
+        ("UV_CONCURRENT_BUILDS", "a non-zero integer");
+}
+
+/// Attempt to load and parse an environment variable with the given name.
+///
+/// Exits the program and prints an error message containing the expected type if
+/// parsing values.
+fn env<T>((name, expected): (&str, &str)) -> Option<T>
+where
+    T: FromStr,
+{
+    let val = match std::env::var(name) {
+        Ok(val) => val,
+        Err(VarError::NotPresent) => return None,
+        Err(VarError::NotUnicode(_)) => parse_failure(name, expected),
+    };
+
+    Some(
+        val.parse()
+            .unwrap_or_else(|_| parse_failure(name, expected)),
+    )
+}
+
+/// Prints a parse error and exits the process.
+#[allow(clippy::exit, clippy::print_stderr)]
+fn parse_failure(name: &str, expected: &str) -> ! {
+    eprintln!("error: invalid value for {name}, expected {expected}");
+    process::exit(1)
 }
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.

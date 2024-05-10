@@ -26,6 +26,7 @@ uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }

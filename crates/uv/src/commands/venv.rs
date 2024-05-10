@@ -15,7 +15,7 @@ use install_wheel_rs::linker::LinkMode;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::KeyringProviderType;
+use uv_configuration::{Concurrency, KeyringProviderType};
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -194,8 +194,9 @@ async fn venv_impl(
         // Track in-flight downloads, builds, etc., across resolutions.
         let in_flight = InFlight::default();
 
-        // For seed packages, assume the default settings are sufficient.
+        // For seed packages, assume the default settings and concurrency is sufficient.
         let config_settings = ConfigSettings::default();
+        let concurrency = Concurrency::default();
 
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
@@ -212,6 +213,7 @@ async fn venv_impl(
             link_mode,
             &NoBuild::All,
             &NoBinary::None,
+            concurrency,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 

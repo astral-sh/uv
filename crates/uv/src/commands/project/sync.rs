@@ -4,7 +4,9 @@ use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
@@ -64,6 +66,7 @@ pub(crate) async fn sync(
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
     let setup_py = SetupPyStrategy::default();
+    let concurrency = Concurrency::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -80,6 +83,7 @@ pub(crate) async fn sync(
         link_mode,
         &no_build,
         &no_binary,
+        concurrency,
     );
 
     // Sync the environment.
@@ -97,6 +101,7 @@ pub(crate) async fn sync(
         cache,
         &venv,
         printer,
+        concurrency,
     )
     .await?;
 

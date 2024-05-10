@@ -47,7 +47,8 @@ mod resolver {
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
+    use uv_configuration::{BuildKind, Concurrency, NoBinary, NoBuild, SetupPyStrategy};
+    use uv_distribution::DistributionDatabase;
     use uv_interpreter::{Interpreter, PythonEnvironment};
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph, Resolver,
@@ -95,6 +96,7 @@ mod resolver {
         let hashes = HashStrategy::None;
         let installed_packages = EmptyInstalledPackages;
         let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &MARKERS);
+        let concurrency = Concurrency::default();
 
         let resolver = Resolver::new(
             manifest,
@@ -102,12 +104,12 @@ mod resolver {
             &python_requirement,
             Some(&MARKERS),
             &TAGS,
-            client,
             &flat_index,
             &index,
             &hashes,
             &build_context,
             &installed_packages,
+            DistributionDatabase::new(client, &build_context, concurrency.downloads),
         )?;
 
         Ok(resolver.resolve().await?)

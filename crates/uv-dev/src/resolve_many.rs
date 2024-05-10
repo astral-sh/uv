@@ -15,7 +15,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::VersionOrUrl;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{OwnedArchive, RegistryClient, RegistryClientBuilder};
-use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{Concurrency, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
@@ -80,6 +80,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
 
     let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let in_flight = InFlight::default();
+    let concurrency = Concurrency::default();
     let client = RegistryClientBuilder::new(cache.clone()).build();
 
     let header_span = info_span!("resolve many");
@@ -118,6 +119,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     install_wheel_rs::linker::LinkMode::default(),
                     &no_build,
                     &NoBinary::None,
+                    concurrency,
                 );
 
                 let start = Instant::now();
