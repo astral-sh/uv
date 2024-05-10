@@ -17,6 +17,7 @@
 #![warn(missing_docs)]
 
 use cursor::Cursor;
+use marker::{ExtraOperator, Reporter};
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -220,7 +221,7 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
-type MarkerWarning = (MarkerWarningKind, String, String);
+type MarkerWarning = (MarkerWarningKind, String);
 
 #[cfg(feature = "pyo3")]
 #[pyclass(module = "pep508", name = "Requirement")]
@@ -437,16 +438,14 @@ impl<T: Pep508Url> Requirement<T> {
         let marker = match self.marker {
             Some(expression) => MarkerTree::And(vec![
                 expression,
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::Extra,
-                    operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString(extra.to_string()),
+                MarkerTree::Expression(MarkerExpression::Extra {
+                    operator: ExtraOperator::Equal,
+                    name: extra.clone(),
                 }),
             ]),
-            None => MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::Extra,
-                operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString(extra.to_string()),
+            None => MarkerTree::Expression(MarkerExpression::Extra {
+                operator: ExtraOperator::Equal,
+                name: extra.clone(),
             }),
         };
         Self {
@@ -473,19 +472,45 @@ impl Pep508Url for Url {
     }
 }
 
+/// A simple [`Reporter`] that logs to tracing.
+pub fn default_reporter(_kind: MarkerWarningKind, _message: String) {
+    #[cfg(feature = "tracing")]
+    {
+        tracing::warn!("{}", _message);
+    }
+}
+
 impl<T: Pep508Url> FromStr for Requirement<T> {
     type Err = Pep508Error<T>;
 
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse_pep508_requirement::<T>(&mut Cursor::new(input), None)
+        parse_pep508_requirement::<T>(&mut Cursor::new(input), None, &mut default_reporter)
     }
 }
 
 impl<T: Pep508Url> Requirement<T> {
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
     pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error<T>> {
-        parse_pep508_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
+        parse_pep508_requirement(
+            &mut Cursor::new(input),
+            Some(working_dir.as_ref()),
+            &mut default_reporter,
+        )
+    }
+
+    /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
+    /// with the given reporter for warnings.
+    pub fn parse_reporter(
+        input: &str,
+        working_dir: impl AsRef<Path>,
+        reporter: &mut impl Reporter,
+    ) -> Result<Self, Pep508Error<T>> {
+        parse_pep508_requirement(
+            &mut Cursor::new(input),
+            Some(working_dir.as_ref()),
+            reporter,
+        )
     }
 
     /// Convert a requirement with one URL type into one with another URL type.
@@ -925,6 +950,7 @@ fn parse_version_specifier_parentheses<T: Pep508Url>(
 fn parse_pep508_requirement<T: Pep508Url>(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
+    reporter: &mut impl Reporter,
 ) -> Result<Requirement<T>, Pep508Error<T>> {
     let start = cursor.pos();
 
@@ -997,7 +1023,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        Some(marker::parse_markers_cursor(cursor)?)
+        Some(marker::parse_markers_cursor(cursor, reporter)?)
     } else {
         None
     };
