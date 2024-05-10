@@ -52,3 +52,5 @@ tracing = ["dep:tracing", "pep440_rs/tracing"]
 # be supported.
 non-pep508-extensions = []
 default = []
+# Match the API of the published crate, for compatibility.
+serde = []
