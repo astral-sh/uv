@@ -58,7 +58,6 @@
       ]
     }
   },
-  "additionalProperties": false,
   "definitions": {
     "AnnotationStyle": {
       "description": "Indicate the style of annotation comments, used to indicate the dependencies that requested each package.",
@@ -916,8 +915,7 @@
             "$ref": "#/definitions/String"
           }
         }
-      },
-      "additionalProperties": false
+      }
     }
   }
 }
