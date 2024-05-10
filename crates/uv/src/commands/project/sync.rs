@@ -7,7 +7,6 @@ use uv_client::RegistryClientBuilder;
 use uv_configuration::{ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
-use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -27,17 +26,17 @@ pub(crate) async fn sync(
         warn_user!("`uv sync` is experimental and may change without warning.");
     }
 
-    // TODO(charlie): If the environment doesn't exist, create it.
-    let venv = PythonEnvironment::from_virtualenv(cache)?;
-    let markers = venv.interpreter().markers();
-    let tags = venv.interpreter().tags()?;
-
     // Find the project requirements.
     let Some(project) = Project::find(std::env::current_dir()?)? else {
         return Err(anyhow::anyhow!(
             "Unable to find `pyproject.toml` for project."
         ));
     };
+
+    // Discover or create the virtual environment.
+    let venv = project::init(&project, cache, printer)?;
+    let markers = venv.interpreter().markers();
+    let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
     let resolution = {
