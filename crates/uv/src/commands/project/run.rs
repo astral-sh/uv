@@ -68,7 +68,7 @@ pub(crate) async fn run(
             ));
         };
 
-        let venv = PythonEnvironment::from_virtualenv(cache)?;
+        let venv = project::init(&project, cache, printer)?;
 
         // Install the project requirements.
         Some(update_environment(venv, &project.requirements(), preview, cache, printer).await?)

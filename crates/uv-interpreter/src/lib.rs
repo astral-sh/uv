@@ -14,6 +14,8 @@ use std::process::ExitStatus;
 
 use thiserror::Error;
 
+use uv_fs::Simplified;
+
 pub use crate::environment::PythonEnvironment;
 pub use crate::find_python::{find_best_python, find_default_python, find_requested_python};
 pub use crate::interpreter::Interpreter;
@@ -35,13 +37,15 @@ mod virtualenv;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Expected `{0}` to be a virtualenv, but `pyvenv.cfg` is missing")]
+    #[error("Expected `{}` to be a virtualenv, but `pyvenv.cfg` is missing", _0.user_display())]
     MissingPyVenvCfg(PathBuf),
     #[error("No versions of Python could be found. Is Python installed?")]
     PythonNotFound,
     #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `uv venv` to create a virtualenv.")]
     VenvNotFound,
-    #[error("Failed to locate Python interpreter at `{0}`")]
+    #[error("Virtualenv does not exist at: `{}`", _0.user_display())]
+    VenvDoesNotExist(PathBuf),
+    #[error("Failed to locate Python interpreter at: `{0}`")]
     RequestedPythonNotFound(String),
     #[error(transparent)]
     Io(#[from] io::Error),

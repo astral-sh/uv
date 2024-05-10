@@ -13,8 +13,9 @@ use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{Constraints, NoBinary, Overrides, Reinstall};
 use uv_dispatch::BuildDispatch;
+use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSpecification,
     SourceTreeResolver,
@@ -25,6 +26,7 @@ use uv_resolver::{
 };
 use uv_types::{EmptyInstalledPackages, HashStrategy, InFlight};
 
+use crate::commands::project::discovery::Project;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
@@ -46,6 +48,12 @@ pub(crate) enum Error {
     Platform(#[from] platform_tags::PlatformError),
 
     #[error(transparent)]
+    Interpreter(#[from] uv_interpreter::Error),
+
+    #[error(transparent)]
+    Virtualenv(#[from] uv_virtualenv::Error),
+
+    #[error(transparent)]
     Hash(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
@@ -59,6 +67,47 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+/// Initialize a virtual environment for the current project.
+pub(crate) fn init(
+    project: &Project,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<PythonEnvironment, Error> {
+    let venv = project.root().join(".venv");
+
+    // Discover or create the virtual environment.
+    // TODO(charlie): If the environment isn't compatible with `--python`, recreate it.
+    match PythonEnvironment::from_root(&venv, cache) {
+        Ok(venv) => Ok(venv),
+        Err(uv_interpreter::Error::VenvDoesNotExist(_)) => {
+            // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
+            let interpreter = find_default_python(cache)?;
+
+            writeln!(
+                printer.stderr(),
+                "Using Python {} interpreter at: {}",
+                interpreter.python_version(),
+                interpreter.sys_executable().user_display().cyan()
+            )?;
+
+            writeln!(
+                printer.stderr(),
+                "Creating virtualenv at: {}",
+                venv.user_display().cyan()
+            )?;
+
+            Ok(uv_virtualenv::create_venv(
+                &venv,
+                interpreter,
+                uv_virtualenv::Prompt::None,
+                false,
+                false,
+            )?)
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.

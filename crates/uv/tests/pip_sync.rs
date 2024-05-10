@@ -108,8 +108,7 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to canonicalize path `[VENV]/`
-      Caused by: No such file or directory (os error 2)
+    error: Virtualenv does not exist at: `[VENV]/`
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));

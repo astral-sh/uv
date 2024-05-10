@@ -7,7 +7,6 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_interpreter::PythonEnvironment;
 use uv_requirements::{ExtrasSpecification, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -29,15 +28,15 @@ pub(crate) async fn lock(
         warn_user!("`uv lock` is experimental and may change without warning.");
     }
 
-    // TODO(charlie): If the environment doesn't exist, create it.
-    let venv = PythonEnvironment::from_virtualenv(cache)?;
-
     // Find the project requirements.
     let Some(project) = Project::find(std::env::current_dir()?)? else {
         return Err(anyhow::anyhow!(
             "Unable to find `pyproject.toml` for project."
         ));
     };
+
+    // Discover or create the virtual environment.
+    let venv = project::init(&project, cache, printer)?;
 
     // TODO(zanieb): Support client configuration
     let client_builder = BaseClientBuilder::default();
