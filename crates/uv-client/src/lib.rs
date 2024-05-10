@@ -1,4 +1,4 @@
-pub use base_client::{BaseClient, BaseClientBuilder};
+pub use base_client::{BaseClient, BaseClientBuilder, MiddlewareStack};
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::{BetterReqwestError, Error, ErrorKind};
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexError};
