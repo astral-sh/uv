@@ -29,5 +29,5 @@ unscanny = { workspace = true }
 indoc = { version = "2.0.4" }
 
 [features]
-# Match the public version of the crate for prefix
+# Match the API of the published crate, for compatibility.
 serde = []
