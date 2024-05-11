@@ -520,6 +520,7 @@ jobs:
           run: |
             apk add python3
             python3 -m venv .venv
+            .venv/bin/pip install --upgrade pip
             .venv/bin/pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
