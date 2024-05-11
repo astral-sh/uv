@@ -30,6 +30,8 @@ pub(crate) struct Project {
     path: PathBuf,
     /// The path to the project root.
     root: PathBuf,
+    /// aaa.
+    overrides: Vec<String>,
 }
 
 impl Project {
@@ -45,7 +47,23 @@ impl Project {
 
                 // Read the `pyproject.toml`.
                 let contents = fs_err::read_to_string(&pyproject_path)?;
-                let pyproject_toml: PyProjectToml = toml::from_str(&contents)?;
+                let pyproject_toml: PyProjectToml = toml::from_str(&contents)?;                
+                let mut overrides: Vec<String> =  Vec::<String>::new();
+
+                // `override`属性を抽出する
+                if let Some(tool) = &pyproject_toml.tool {
+                    if let Some(uv) = &tool.uv {
+                        if let Some(overrides_deps) = &uv.overrides {
+                            for value in overrides_deps {
+                                debug!("{}", value);
+                                overrides.push(value.clone());
+                            }
+                        } else {
+                            debug!("'override' attribute not found");
+                        }
+                        
+                    }
+                }
 
                 // Extract the package name.
                 let Some(project) = pyproject_toml.project else {
@@ -59,6 +77,7 @@ impl Project {
                     name,
                     path: pyproject_path,
                     root: ancestor.to_path_buf(),
+                    overrides: overrides
                 }));
             }
         }
@@ -83,6 +102,17 @@ impl Project {
             RequirementsSource::from_source_tree(self.root.clone()),
         ]
     }
+    /// Return the requirements for the project.
+    pub(crate) fn overrides(&self) -> Vec<RequirementsSource> {
+        let mut requirements: Vec<RequirementsSource> = Vec::<RequirementsSource>::new();
+
+        for override_req in &self.overrides {
+            println!("Reqs: {}", override_req);
+            requirements.push(RequirementsSource::from_package(override_req.clone()));
+        }
+
+        requirements
+    }
 }
 
 /// A pyproject.toml as specified in PEP 517.
@@ -90,10 +120,21 @@ impl Project {
 #[serde(rename_all = "kebab-case")]
 struct PyProjectToml {
     project: Option<PyProjectProject>,
+    tool: Option<Tool>,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct PyProjectProject {
     name: Option<PackageName>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Tool {
+    uv: Option<UV>,
+}
+
+#[derive(Deserialize, Debug)]
+struct UV {
+    overrides: Option<Vec<String>>,
 }
