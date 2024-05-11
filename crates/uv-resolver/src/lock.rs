@@ -163,9 +163,9 @@ impl TryFrom<LockWire> for Lock {
             }
             // Also check that our sources are consistent with whether we have
             // hashes or not.
-            let requires_hash = dist.id.source.kind.requires_hash();
             if let Some(ref sdist) = dist.sourcedist {
-                if requires_hash != sdist.hash.is_some() {
+                let requires_hash = dist.id.source.kind.requires_hash();
+                if dist.id.source.kind.requires_hash() != sdist.hash.is_some() {
                     return Err(LockError::hash(
                         dist.id.clone(),
                         "source distribution",
@@ -174,8 +174,8 @@ impl TryFrom<LockWire> for Lock {
                 }
             }
             for wheel in &dist.wheels {
-                if requires_hash != wheel.hash.is_some() {
-                    return Err(LockError::hash(dist.id.clone(), "wheel", requires_hash));
+                if wheel.hash.is_none() {
+                    return Err(LockError::hash(dist.id.clone(), "wheel", true));
                 }
             }
         }
@@ -1160,24 +1160,24 @@ source = "registry+https://pypi.org/simple"
 
 [[distribution.wheel]]
 url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"
+hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
     #[test]
-    fn hash_optional_missing() {
+    fn hash_required_absent() {
         let data = r#"
 version = 1
 
 [[distribution]]
 name = "anyio"
 version = "4.3.0"
-source = "path+file:///foo/bar"
+source = "registry+https://pypi.org/simple"
 
 [[distribution.wheel]]
-url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl"
-hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
