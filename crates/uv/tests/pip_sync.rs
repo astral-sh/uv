@@ -1273,7 +1273,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 126 files for tqdm ([SIZE])
+    Removed 127 files for tqdm ([SIZE])
     "###
     );
 
@@ -1370,7 +1370,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 3 files for werkzeug ([SIZE])
+    Removed 4 files for werkzeug ([SIZE])
     "###
     );
 
@@ -1471,7 +1471,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 616 files for future ([SIZE])
+    Removed 617 files for future ([SIZE])
     "###
     );
 
@@ -1576,7 +1576,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 102 files for wheel ([SIZE])
+    Removed 103 files for wheel ([SIZE])
     "###
     );
 

@@ -94,6 +94,12 @@ impl CacheShard {
     pub fn shard(&self, dir: impl AsRef<Path>) -> Self {
         Self(self.0.join(dir.as_ref()))
     }
+
+    /// Acquire a lock on the shard.
+    pub fn lock(&self) -> io::Result<uv_fs::LockedFile> {
+        fs_err::create_dir_all(&self.0)?;
+        uv_fs::LockedFile::acquire(self.0.join(".lock"), self.0.display())
+    }
 }
 
 impl AsRef<Path> for CacheShard {
