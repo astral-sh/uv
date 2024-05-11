@@ -509,18 +509,18 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          manylinux: musllinux_1_2
+          manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update
       - name: "Test wheel"
         if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: addnab/docker-run-action@v3
         with:
-          image: alpine:latest
+          image: alpine:3.12
           options: -v ${{ github.workspace }}:/io -w /io
           run: |
             apk add python3
-            python -m venv .venv
-            .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            python3 -m venv .venv
+            .venv/bin/pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
@@ -573,7 +573,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          manylinux: musllinux_1_2
+          manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update
           docker-options: ${{ matrix.platform.maturin_docker_options }}
       - uses: uraimo/run-on-arch-action@v2
