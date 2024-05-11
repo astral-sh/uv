@@ -1515,6 +1515,33 @@ fn only_binary_requirements_txt() {
     );
 }
 
+
+/// `--only-binary` does not apply to editable requirements
+#[test]
+fn only_binary_editable() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/setuptools_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###
+    );
+}
+
 /// Install a package into a virtual environment, and ensuring that the executable permissions
 /// are retained.
 ///
