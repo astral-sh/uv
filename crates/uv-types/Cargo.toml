@@ -18,7 +18,6 @@ once-map = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
-requirements-txt = { workspace = true }
 uv-cache = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }

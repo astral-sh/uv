@@ -36,7 +36,6 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
-dashmap = { workspace = true }
 derivative = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
