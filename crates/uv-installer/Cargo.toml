@@ -23,14 +23,12 @@ platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 requirements-txt = { workspace = true }
 uv-cache = { workspace = true }
-uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
-uv-requirements = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 

@@ -14,7 +14,6 @@ workspace = true
 
 [dependencies]
 distribution-types = { workspace = true }
-pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 uv-client = { workspace = true }
 uv-fs = { workspace = true }
@@ -26,7 +25,6 @@ fs-err = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }
-serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }

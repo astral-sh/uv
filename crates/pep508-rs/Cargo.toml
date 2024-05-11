@@ -19,11 +19,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 pep440_rs = { workspace = true }
 uv-fs = { workspace = true }
-uv-git = { workspace = true }
 uv-normalize = { workspace = true }
 
 derivative = { workspace = true }
-indexmap = { workspace = true }
 once_cell = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }

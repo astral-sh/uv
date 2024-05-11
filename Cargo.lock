@@ -2551,7 +2551,6 @@ name = "pep508_rs"
 version = "0.4.2"
 dependencies = [
  "derivative",
- "indexmap",
  "insta",
  "log",
  "once_cell",
@@ -2567,7 +2566,6 @@ dependencies = [
  "unicode-width",
  "url",
  "uv-fs",
- "uv-git",
  "uv-normalize",
 ]
 
@@ -3124,12 +3122,10 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.12.1",
- "pep440_rs",
  "pep508_rs",
  "regex",
  "reqwest",
  "reqwest-middleware",
- "serde",
  "tempfile",
  "test-case",
  "thiserror",
@@ -4736,7 +4732,6 @@ dependencies = [
  "serde_json",
  "tracing",
  "uv-auth",
- "uv-cache",
  "uv-normalize",
 ]
 
@@ -4942,14 +4937,12 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
- "uv-client",
  "uv-configuration",
  "uv-distribution",
  "uv-extract",
  "uv-fs",
  "uv-interpreter",
  "uv-normalize",
- "uv-requirements",
  "uv-types",
  "uv-warnings",
  "walkdir",
@@ -5054,7 +5047,6 @@ dependencies = [
  "cache-key",
  "chrono",
  "clap",
- "dashmap",
  "derivative",
  "distribution-filename",
  "distribution-types",
@@ -5105,7 +5097,6 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "pypi-types",
- "requirements-txt",
  "rustc-hash",
  "thiserror",
  "url",
