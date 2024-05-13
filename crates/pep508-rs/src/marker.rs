@@ -945,7 +945,9 @@ pub enum MarkerExpression {
 /// The operator for an extra expression, either '==' or '!='.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ExtraOperator {
+    /// `==`
     Equal,
+    /// `!=`
     NotEqual,
 }
 

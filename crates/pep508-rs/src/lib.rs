@@ -17,7 +17,6 @@
 #![warn(missing_docs)]
 
 use cursor::Cursor;
-use marker::ExtraOperator;
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -41,8 +40,9 @@ use unicode_width::UnicodeWidthChar;
 use url::Url;
 
 pub use marker::{
-    MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree,
-    MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
+    ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
+    MarkerTree, MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
+    StringVersion,
 };
 #[cfg(feature = "pyo3")]
 use pep440_rs::PyVersion;
