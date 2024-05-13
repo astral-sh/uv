@@ -60,16 +60,8 @@ jobs:
         run: pipx run ruff check .
 
   cargo-clippy:
-    strategy:
-      matrix:
-        include:
-          - os: "ubuntu"
-            runner: "ubuntu-latest"
-          - os: "windows"
-            runner: "windows-latest-large"
-      fail-fast: false
-    runs-on: ["${{ matrix.runner }}"]
-    name: "cargo clippy | ${{ matrix.os }}"
+    runs-on: ubuntu-latest
+    name: "cargo clippy | ubuntu"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
@@ -78,6 +70,49 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Clippy"
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  cargo-clippy-windows:
+    runs-on: windows-latest-large
+    name: "cargo clippy | windows"
+    steps:
+      - name: Create Dev Drive using ReFS
+        run: |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+                    Mount-VHD -Passthru |
+                    Initialize-Disk -Passthru |
+                    New-Partition -AssignDriveLetter -UseMaximumSize |
+                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
+          Write-Output $Volume
+          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
+      - uses: actions/checkout@v4
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        run: rustup component add clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.DEV_DRIVE }}/uv
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
+      - name: "Clippy"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-shear:
@@ -145,8 +180,28 @@ jobs:
       labels: ${{ matrix.runner }}
     name: "cargo test | ${{ matrix.os }}"
     steps:
+      - name: Create Dev Drive using ReFS
+        run: |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+                    Mount-VHD -Passthru |
+                    Initialize-Disk -Passthru |
+                    New-Partition -AssignDriveLetter -UseMaximumSize |
+                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
+          Write-Output $Volume
+          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v4
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+
       - name: "Install Rust toolchain"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: rustup show
 
       # We do not test with Python patch versions on Windows
@@ -162,18 +217,33 @@ jobs:
             3.12
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
 
       - name: "Cargo test"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: |
           cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
         env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
           # Avoid debug build stack overflows.
           UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: |
@@ -186,21 +256,53 @@ jobs:
     runs-on: windows-latest
     name: "check windows trampoline"
     steps:
+      - name: Create Dev Drive using ReFS
+        run: |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+                    Mount-VHD -Passthru |
+                    Initialize-Disk -Passthru |
+                    New-Partition -AssignDriveLetter -UseMaximumSize |
+                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
+          Write-Output $Volume
+          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v4
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+
       - name: "Install Rust toolchain"
-        working-directory: crates/uv-trampoline
+        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: |
           rustup target add x86_64-pc-windows-msvc
           rustup component add clippy rust-src --toolchain nightly-2024-03-19-x86_64-pc-windows-msvc
+
       - uses: rui314/setup-mold@v1
+
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "crates/uv-trampoline"
+          workspaces: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
       - name: "Clippy"
-        working-directory: crates/uv-trampoline
+        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
+
       - name: "Build"
-        working-directory: crates/uv-trampoline
+        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: cargo build --release --target x86_64-pc-windows-msvc
 
   build-binary-linux:
@@ -273,19 +375,44 @@ jobs:
       labels: windows-latest-large
     name: "build binary | windows"
     steps:
+      - name: Create Dev Drive using ReFS
+        run: |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+                    Mount-VHD -Passthru |
+                    Initialize-Disk -Passthru |
+                    New-Partition -AssignDriveLetter -UseMaximumSize |
+                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
+          Write-Output $Volume
+          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v4
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
 
       - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
       - name: "Build"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: cargo build
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-${{ github.sha }}
-          path: ./target/debug/uv.exe
+          path: ${{ env.DEV_DRIVE }}/uv/target/debug/uv.exe
           retention-days: 1
 
   ecosystem-test:
