@@ -68,7 +68,8 @@ pacman -S uv
 To create a virtual environment:
 
 ```shell
-uv venv  # Create a virtual environment at .venv.
+uv venv  # Create a virtual environment at `.venv`.
+uv venv foo  # Create a virtual environment at `foo`.
 ```
 
 To activate the virtual environment:
