@@ -1031,13 +1031,11 @@ impl MarkerExpression {
 
                 match MarkerExpression::version(key.clone(), operator.clone(), &value, reporter) {
                     Some(expr) => expr,
-                    None => {
-                        return MarkerExpression::arbitrary(
-                            MarkerValue::MarkerEnvVersion(key),
-                            operator,
-                            MarkerValue::QuotedString(value),
-                        )
-                    }
+                    None => MarkerExpression::arbitrary(
+                        MarkerValue::MarkerEnvVersion(key),
+                        operator,
+                        MarkerValue::QuotedString(value),
+                    ),
                 }
             }
             // The only sound choice for this is `<env key> <op> <string>`
@@ -1077,13 +1075,11 @@ impl MarkerExpression {
 
                 match MarkerExpression::extra(operator.clone(), &value, reporter) {
                     Some(expr) => expr,
-                    None => {
-                        return MarkerExpression::arbitrary(
-                            MarkerValue::Extra,
-                            operator,
-                            MarkerValue::QuotedString(value),
-                        )
-                    }
+                    None => MarkerExpression::arbitrary(
+                        MarkerValue::Extra,
+                        operator,
+                        MarkerValue::QuotedString(value),
+                    ),
                 }
             }
             // This is either MarkerEnvVersion, MarkerEnvString or Extra inverted
@@ -1098,13 +1094,11 @@ impl MarkerExpression {
                             reporter,
                         ) {
                             Some(expr) => expr,
-                            None => {
-                                return MarkerExpression::arbitrary(
-                                    MarkerValue::QuotedString(l_string),
-                                    operator,
-                                    MarkerValue::MarkerEnvVersion(key),
-                                )
-                            }
+                            None => MarkerExpression::arbitrary(
+                                MarkerValue::QuotedString(l_string),
+                                operator,
+                                MarkerValue::MarkerEnvVersion(key),
+                            ),
                         }
                     }
                     // '...' == <env key>
@@ -1117,13 +1111,11 @@ impl MarkerExpression {
                     MarkerValue::Extra => {
                         match MarkerExpression::extra(operator.clone(), &l_string, reporter) {
                             Some(expr) => expr,
-                            None => {
-                                return MarkerExpression::arbitrary(
-                                    MarkerValue::QuotedString(l_string),
-                                    operator,
-                                    MarkerValue::Extra,
-                                )
-                            }
+                            None => MarkerExpression::arbitrary(
+                                MarkerValue::QuotedString(l_string),
+                                operator,
+                                MarkerValue::Extra,
+                            ),
                         }
                     }
                     // `'...' == '...'`, doesn't make much sense
@@ -1264,7 +1256,7 @@ impl MarkerExpression {
         value: &str,
         reporter: &mut impl Reporter,
     ) -> Option<MarkerExpression> {
-        let name = match ExtraName::from_str(&value) {
+        let name = match ExtraName::from_str(value) {
             Ok(name) => name,
             Err(err) => {
                 reporter.report(
@@ -1344,11 +1336,11 @@ impl MarkerExpression {
             MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
                 name,
-            } => extras.contains(&name),
+            } => extras.contains(name),
             MarkerExpression::Extra {
                 operator: ExtraOperator::NotEqual,
                 name,
-            } => !extras.contains(&name),
+            } => !extras.contains(name),
             MarkerExpression::Arbitrary { .. } => true,
         }
     }
@@ -1417,11 +1409,11 @@ impl MarkerExpression {
             MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
                 name,
-            } => extras.contains(&name),
+            } => extras.contains(name),
             MarkerExpression::Extra {
                 operator: ExtraOperator::NotEqual,
                 name,
-            } => !extras.contains(&name),
+            } => !extras.contains(name),
             _ => true,
         }
     }
@@ -1606,11 +1598,11 @@ impl MarkerTree {
                 MarkerExpression::Extra {
                     operator: ExtraOperator::Equal,
                     name,
-                } => extras.contains(&name),
+                } => extras.contains(name),
                 MarkerExpression::Extra {
                     operator: ExtraOperator::NotEqual,
                     name,
-                } => !extras.contains(&name),
+                } => !extras.contains(name),
                 _ => false,
             }
         }
