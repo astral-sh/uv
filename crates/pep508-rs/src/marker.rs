@@ -214,7 +214,7 @@ impl Display for MarkerValue {
 }
 
 /// How to compare key and value, such as by `==`, `>` or `not in`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub enum MarkerOperator {
     /// `==`
     Equal,
