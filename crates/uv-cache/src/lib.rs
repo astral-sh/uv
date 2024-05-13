@@ -11,6 +11,7 @@ use rustc_hash::FxHashSet;
 use tempfile::{tempdir, TempDir};
 use tracing::debug;
 
+pub use archive::ArchiveId;
 use distribution_types::InstalledDist;
 use pypi_types::Metadata23;
 use uv_fs::{cachedir, directories};
@@ -23,7 +24,6 @@ use crate::removal::{rm_rf, Removal};
 pub use crate::timestamp::Timestamp;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
 
 mod archive;
 mod by_timestamp;
@@ -93,12 +93,6 @@ impl CacheShard {
     #[must_use]
     pub fn shard(&self, dir: impl AsRef<Path>) -> Self {
         Self(self.0.join(dir.as_ref()))
-    }
-
-    /// Acquire a lock on the shard.
-    pub fn lock(&self) -> io::Result<uv_fs::LockedFile> {
-        fs_err::create_dir_all(&self.0)?;
-        uv_fs::LockedFile::acquire(self.0.join(".lock"), self.0.display())
     }
 }
 
