@@ -553,6 +553,7 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - target: aarch64-unknown-linux-musl
@@ -560,6 +561,10 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+          - target: powerpc64le-unknown-linux-musl
+            arch: ppc64le
+          - target: s390x-unknown-linux-musl
+            arch: s390x
 
     steps:
       - uses: actions/checkout@v4
