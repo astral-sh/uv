@@ -2609,7 +2609,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Modify the editable package.
+    // Modify the package.
     pyproject_toml.write_str(
         r#"[project]
 name = "example"

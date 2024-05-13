@@ -1224,10 +1224,13 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     .boxed_local()
                     .await
                     .map_err(|err| match dist.clone() {
-                        Dist::Built(BuiltDist::Path(built_dist)) => {
+                        Dist::Built(built_dist @ BuiltDist::Path(_)) => {
                             ResolveError::Read(Box::new(built_dist), err)
                         }
-                        Dist::Source(SourceDist::Path(source_dist)) => {
+                        Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                            ResolveError::Build(Box::new(source_dist), err)
+                        }
+                        Dist::Source(source_dist @ SourceDist::Directory(_)) => {
                             ResolveError::Build(Box::new(source_dist), err)
                         }
                         Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
@@ -1311,10 +1314,13 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                                 .boxed_local()
                                 .await
                                 .map_err(|err| match dist.clone() {
-                                    Dist::Built(BuiltDist::Path(built_dist)) => {
+                                    Dist::Built(built_dist @ BuiltDist::Path(_)) => {
                                         ResolveError::Read(Box::new(built_dist), err)
                                     }
-                                    Dist::Source(SourceDist::Path(source_dist)) => {
+                                    Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                                        ResolveError::Build(Box::new(source_dist), err)
+                                    }
+                                    Dist::Source(source_dist @ SourceDist::Directory(_)) => {
                                         ResolveError::Build(Box::new(source_dist), err)
                                     }
                                     Dist::Built(built_dist) => {
