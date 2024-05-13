@@ -18,7 +18,7 @@ use distribution_types::{
     ResolvedDist, SourceAnnotations, Verbatim, VersionId, VersionOrUrlRef,
 };
 use once_map::OnceMap;
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::MarkerEnvironment;
 use pypi_types::HashDigest;
 use uv_distribution::to_precise;
@@ -384,8 +384,7 @@ impl ResolutionGraph {
         marker_env: &MarkerEnvironment,
     ) -> Result<pep508_rs::MarkerTree, Box<ParsedUrlError>> {
         use pep508_rs::{
-            MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
-            MarkerValueVersion,
+            MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
         };
 
         /// A subset of the possible marker values.
@@ -401,35 +400,32 @@ impl ResolutionGraph {
 
         /// Add all marker parameters from the given tree to the given set.
         fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut FxHashSet<MarkerParam>) {
-            match *marker_tree {
-                MarkerTree::Expression(ref expr) => {
-                    add_marker_value(&expr.l_value, set);
-                    add_marker_value(&expr.r_value, set);
+            match marker_tree {
+                MarkerTree::Expression(
+                    MarkerExpression::Version { key, .. }
+                    | MarkerExpression::VersionInverted { key, .. },
+                ) => {
+                    set.insert(MarkerParam::Version(key.clone()));
+                }
+                MarkerTree::Expression(
+                    MarkerExpression::String { key, .. }
+                    | MarkerExpression::StringInverted { key, .. },
+                ) => {
+                    set.insert(MarkerParam::String(key.clone()));
                 }
                 MarkerTree::And(ref exprs) | MarkerTree::Or(ref exprs) => {
                     for expr in exprs {
                         add_marker_params_from_tree(expr, set);
                     }
                 }
-            }
-        }
-
-        /// Add the marker value, if it's a marker parameter, to the set
-        /// given.
-        fn add_marker_value(value: &MarkerValue, set: &mut FxHashSet<MarkerParam>) {
-            match *value {
-                MarkerValue::MarkerEnvVersion(ref value_version) => {
-                    set.insert(MarkerParam::Version(value_version.clone()));
-                }
-                MarkerValue::MarkerEnvString(ref value_string) => {
-                    set.insert(MarkerParam::String(value_string.clone()));
-                }
                 // We specifically don't care about these for the
                 // purposes of generating a marker string for a lock
                 // file. Quoted strings are marker values given by the
                 // user. We don't track those here, since we're only
                 // interested in which markers are used.
-                MarkerValue::Extra | MarkerValue::QuotedString(_) => {}
+                MarkerTree::Expression(
+                    MarkerExpression::Extra { .. } | MarkerExpression::Arbitrary { .. },
+                ) => {}
             }
         }
 
@@ -488,18 +484,17 @@ impl ResolutionGraph {
             let expr = match marker_param {
                 MarkerParam::Version(value_version) => {
                     let from_env = marker_env.get_version(&value_version);
-                    MarkerExpression {
-                        l_value: MarkerValue::MarkerEnvVersion(value_version),
-                        operator: MarkerOperator::Equal,
-                        r_value: MarkerValue::QuotedString(from_env.to_string()),
+                    MarkerExpression::Version {
+                        key: value_version,
+                        specifier: VersionSpecifier::equals_version(from_env.clone()),
                     }
                 }
                 MarkerParam::String(value_string) => {
                     let from_env = marker_env.get_string(&value_string);
-                    MarkerExpression {
-                        l_value: MarkerValue::MarkerEnvString(value_string),
+                    MarkerExpression::String {
+                        key: value_string,
                         operator: MarkerOperator::Equal,
-                        r_value: MarkerValue::QuotedString(from_env.to_string()),
+                        value: from_env.to_string(),
                     }
                 }
             };
