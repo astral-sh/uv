@@ -221,7 +221,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
     /// reader of the resolution that knows to exclude distributions that can't
     /// be used in the current environment.
     ///
-    /// When a marker environment is provided, the reslver is in
+    /// When a marker environment is provided, the resolver is in
     /// "non-universal" mode, which corresponds to standard `pip` behavior that
     /// works only for a specific marker environment.
     #[allow(clippy::too_many_arguments)]
@@ -1376,7 +1376,7 @@ struct ResolverState {
     /// in this state. We also ultimately retrieve the final set of version
     /// assignments (to packages) from this state's "partial solution."
     pubgrub: State<UvDependencyProvider>,
-    /// The next package on which to run unit propgation.
+    /// The next package on which to run unit propagation.
     next: PubGrubPackage,
     /// The set of pinned versions we accrue throughout resolution.
     ///

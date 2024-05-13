@@ -2098,7 +2098,7 @@ impl std::fmt::Display for VersionParseError {
                 write!(
                     f,
                     "found a `{precursor}` indicating the start of a local \
-                     component in a version, but did not find any alpha-numeric \
+                     component in a version, but did not find any alphanumeric \
                      ASCII segment following the `{precursor}`",
                 )
             }
@@ -2138,7 +2138,7 @@ pub(crate) enum ErrorKind {
     /// Occurs when an epoch version does not have a number after the `!`.
     NoLeadingReleaseNumber,
     /// Occurs when a `+` (or a `.` after the first local segment) is seen
-    /// (indicating a local component of a version), but no alpha-numeric ASCII
+    /// (indicating a local component of a version), but no alphanumeric ASCII
     /// string is found following it.
     LocalEmpty {
         /// Either a `+` or a `[-_.]` indicating what was found that demands a
