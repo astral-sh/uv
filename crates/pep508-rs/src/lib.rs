@@ -17,7 +17,7 @@
 #![warn(missing_docs)]
 
 use cursor::Cursor;
-use marker::{ExtraOperator, Reporter};
+use marker::ExtraOperator;
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -469,6 +469,21 @@ impl Pep508Url for Url {
 
     fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
         Url::parse(url)
+    }
+}
+
+/// A reporter for warnings that occur during marker parsing or evaluation.
+pub trait Reporter {
+    /// Report a warning.
+    fn report(&mut self, kind: MarkerWarningKind, warning: String);
+}
+
+impl<F> Reporter for F
+where
+    F: FnMut(MarkerWarningKind, String),
+{
+    fn report(&mut self, kind: MarkerWarningKind, warning: String) {
+        (self)(kind, warning)
     }
 }
 

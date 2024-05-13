@@ -7,11 +7,11 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use uv_fs::normalize_url_path;
 use uv_normalize::ExtraName;
 
-use crate::marker::{parse_markers_cursor, Reporter};
+use crate::marker::parse_markers_cursor;
 use crate::{
-    default_reporter, expand_env_vars, parse_extras_cursor, split_extras, split_scheme, strip_host,
-    Cursor, MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, RequirementOrigin,
-    Scheme, VerbatimUrl, VerbatimUrlError,
+    expand_env_vars, parse_extras_cursor, split_extras, split_scheme, strip_host, Cursor,
+    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Reporter, RequirementOrigin,
+    Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError,
 };
 
 /// A PEP 508-like, direct URL dependency specifier without a package name.
@@ -110,7 +110,7 @@ impl FromStr for UnnamedRequirement {
 
     /// Parse a PEP 508-like direct URL requirement without a package name.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse_unnamed_requirement(&mut Cursor::new(input), None, &mut default_reporter)
+        parse_unnamed_requirement(&mut Cursor::new(input), None, &mut TracingReporter)
     }
 }
 

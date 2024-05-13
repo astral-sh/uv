@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use distribution_types::ParsedUrlError;
 use pep508_rs::{
-    default_reporter, Pep508Error, Pep508ErrorSource, RequirementOrigin, UnnamedRequirement,
+    Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
 };
 
 /// A requirement specifier in a `requirements.txt` file.
@@ -54,7 +54,7 @@ impl RequirementsTxtRequirement {
                     Ok(Self::Unnamed(UnnamedRequirement::parse(
                         input,
                         &working_dir,
-                        &mut default_reporter,
+                        &mut TracingReporter,
                     )?))
                 }
                 _ => Err(RequirementsTxtRequirementError::Pep508(err)),

@@ -26,7 +26,7 @@ use pep440_rs::{Version, VersionParseError, VersionPattern, VersionSpecifier};
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
-use crate::{Pep508Error, Pep508ErrorSource, Pep508Url, TracingReporter};
+use crate::{Pep508Error, Pep508ErrorSource, Pep508Url, Reporter, TracingReporter};
 
 /// Ways in which marker evaluation can fail
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
@@ -968,21 +968,6 @@ impl Display for ExtraOperator {
     }
 }
 
-/// A reporter for warnings that occur during marker parsing or evaluation.
-pub trait Reporter {
-    /// Report a warning.
-    fn report(&mut self, kind: MarkerWarningKind, warning: String);
-}
-
-impl<F> Reporter for F
-where
-    F: FnMut(MarkerWarningKind, String),
-{
-    fn report(&mut self, kind: MarkerWarningKind, warning: String) {
-        (self)(kind, warning)
-    }
-}
-
 impl MarkerExpression {
     /// Parse a [`MarkerExpression`] from a string with the given reporter.
     pub fn parse_reporter(s: &str, reporter: &mut impl Reporter) -> Result<Self, Pep508Error> {
@@ -1155,7 +1140,7 @@ impl MarkerExpression {
     /// Creates an instance of `MarkerExpression::Version` with the given values.
     ///
     /// Reports a warning on failure, and returns `None`.
-    fn version(
+    pub fn version(
         key: MarkerValueVersion,
         marker_operator: MarkerOperator,
         value: &str,
