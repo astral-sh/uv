@@ -30,22 +30,21 @@ harness = false
 [dependencies]
 distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
-criterion = { version = "0.5.1", default-features = false, features = ["async_tokio"] }
-tokio = { workspace = true }
-codspeed-criterion-compat = { version = "2.6.0", default-features = false, optional = true }
-tempfile = { workspace = true }
-fs-err = { workspace = true }
-uv-resolver = { workspace = true }
+pep508_rs = { workspace = true }
+platform-tags = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
-uv-types = { workspace = true }
 uv-interpreter = { workspace = true }
-platform-tags = { workspace = true }
-pep508_rs = { workspace = true }
+uv-resolver = { workspace = true }
+uv-types = { workspace = true }
+
 anyhow = { workspace = true }
+codspeed-criterion-compat = { version = "2.6.0", default-features = false, optional = true }
+criterion = { version = "0.5.1", default-features = false, features = ["async_tokio"] }
 once_cell = { workspace = true }
+tokio = { workspace = true }
 
 [features]
 codspeed = ["codspeed-criterion-compat"]
