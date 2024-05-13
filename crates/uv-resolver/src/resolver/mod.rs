@@ -43,7 +43,7 @@ use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubPython,
-    PubGrubSpecifier,
+    PubGrubRequirement, PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
@@ -930,6 +930,19 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                             ),
                             Range::singleton(metadata.version.clone()),
                         );
+                    }
+
+                    // Add any constraints.
+                    for constraint in self.constraints.get(&metadata.name).into_iter().flatten() {
+                        if constraint.evaluate_markers(self.markers, &[]) {
+                            let PubGrubRequirement { package, version } =
+                                PubGrubRequirement::from_constraint(
+                                    constraint,
+                                    &self.urls,
+                                    &self.locals,
+                                )?;
+                            dependencies.push(package, version);
+                        }
                     }
                 }
 

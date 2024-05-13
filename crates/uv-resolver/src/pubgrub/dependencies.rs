@@ -183,9 +183,9 @@ impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
 
 /// A PubGrub-compatible package and version range.
 #[derive(Debug, Clone)]
-struct PubGrubRequirement {
-    package: PubGrubPackage,
-    version: Range<Version>,
+pub(crate) struct PubGrubRequirement {
+    pub(crate) package: PubGrubPackage,
+    pub(crate) version: Range<Version>,
 }
 
 impl PubGrubRequirement {

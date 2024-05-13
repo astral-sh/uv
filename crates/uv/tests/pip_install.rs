@@ -957,6 +957,89 @@ fn install_editable_no_binary() {
     );
 }
 
+#[test]
+fn install_editable_compatible_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("black==0.1.0")?;
+
+    // Install the editable package with a compatible constraint.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_editable_incompatible_constraint_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("black>0.1.0")?;
+
+    // Install the editable package with an incompatible constraint.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require black==0.1.0 and black>0.1.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_editable_incompatible_constraint_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")?;
+
+    // Install the editable package with an incompatible constraint.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    error: Requirements contain conflicting URLs for package `black`:
+    - [WORKSPACE]/scripts/packages/black_editable
+    - https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a source distribution that uses the `flit` build system, along with `flit`
 /// at the top-level, along with `--reinstall` to force a re-download after resolution, to ensure
 /// that the `flit` install and the source distribution build don't conflict.
