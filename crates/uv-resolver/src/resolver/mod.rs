@@ -878,7 +878,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
         match package {
             PubGrubPackage::Root(_) => {
                 // Add the root requirements.
-                let constraints = PubGrubDependencies::from_requirements(
+                let dependencies = PubGrubDependencies::from_requirements(
                     &self.requirements,
                     &self.constraints,
                     &self.overrides,
@@ -889,8 +889,8 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.markers,
                 );
 
-                let mut constraints = match constraints {
-                    Ok(constraints) => constraints,
+                let mut dependencies = match dependencies {
+                    Ok(dependencies) => dependencies,
                     Err(err) => {
                         return Ok(Dependencies::Unavailable(
                             UnavailableVersion::ResolverError(uncapitalize(err.to_string())),
@@ -898,7 +898,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     }
                 };
 
-                for (package, version) in constraints.iter() {
+                for (package, version) in dependencies.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Update the package priorities.
@@ -918,11 +918,11 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     priorities.insert(&package, &version);
 
                     // Add the editable as a direct dependency.
-                    constraints.push(package, version);
+                    dependencies.push(package, version);
 
                     // Add a dependency on each extra.
                     for extra in &editable.extras {
-                        constraints.push(
+                        dependencies.push(
                             PubGrubPackage::from_package(
                                 metadata.name.clone(),
                                 Some(extra.clone()),
@@ -933,7 +933,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     }
                 }
 
-                Ok(Dependencies::Available(constraints.into()))
+                Ok(Dependencies::Available(dependencies.into()))
             }
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
@@ -971,7 +971,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         .cloned()
                         .map(Requirement::from_pep508)
                         .collect::<Result<_, _>>()?;
-                    let constraints = PubGrubDependencies::from_requirements(
+                    let dependencies = PubGrubDependencies::from_requirements(
                         &requirements,
                         &self.constraints,
                         &self.overrides,
@@ -982,7 +982,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         self.markers,
                     )?;
 
-                    for (dep_package, dep_version) in constraints.iter() {
+                    for (dep_package, dep_version) in dependencies.iter() {
                         debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
                         // Update the package priorities.
@@ -992,7 +992,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         self.visit_package(dep_package, request_sink).await?;
                     }
 
-                    return Ok(Dependencies::Available(constraints.into()));
+                    return Ok(Dependencies::Available(dependencies.into()));
                 }
 
                 // Determine the distribution to lookup.
@@ -1095,7 +1095,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     .cloned()
                     .map(Requirement::from_pep508)
                     .collect::<Result<_, _>>()?;
-                let constraints = PubGrubDependencies::from_requirements(
+                let dependencies = PubGrubDependencies::from_requirements(
                     &requirements,
                     &self.constraints,
                     &self.overrides,
@@ -1106,7 +1106,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.markers,
                 )?;
 
-                for (dep_package, dep_version) in constraints.iter() {
+                for (dep_package, dep_version) in dependencies.iter() {
                     debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
                     // Update the package priorities.
@@ -1116,7 +1116,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.visit_package(dep_package, request_sink).await?;
                 }
 
-                Ok(Dependencies::Available(constraints.into()))
+                Ok(Dependencies::Available(dependencies.into()))
             }
 
             // Add a dependency on both the extra and base package.
