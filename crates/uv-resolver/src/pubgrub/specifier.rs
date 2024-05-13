@@ -1,14 +1,15 @@
-use pubgrub::range::Range;
+use pubgrub::version_set::VersionSet;
 
 use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier};
 
+use crate::pubgrub::PubGrubRange;
 use crate::ResolveError;
 
 /// A range of versions that can be used to satisfy a requirement.
 #[derive(Debug)]
-pub(crate) struct PubGrubSpecifier(Range<Version>);
+pub(crate) struct PubGrubSpecifier(PubGrubRange);
 
-impl From<PubGrubSpecifier> for Range<Version> {
+impl From<PubGrubSpecifier> for PubGrubRange {
     /// Convert a PubGrub specifier to a range of versions.
     fn from(specifier: PubGrubSpecifier) -> Self {
         specifier.0
@@ -23,15 +24,15 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
         let ranges = match specifier.operator() {
             Operator::Equal => {
                 let version = specifier.version().clone();
-                Range::singleton(version)
+                PubGrubRange::singleton(version)
             }
             Operator::ExactEqual => {
                 let version = specifier.version().clone();
-                Range::singleton(version)
+                PubGrubRange::singleton(version)
             }
             Operator::NotEqual => {
                 let version = specifier.version().clone();
-                Range::singleton(version).complement()
+                PubGrubRange::singleton(version).complement()
             }
             Operator::TildeEqual => {
                 let [rest @ .., last, _] = specifier.version().release() else {
@@ -41,38 +42,38 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                     .with_epoch(specifier.version().epoch())
                     .with_dev(Some(0));
                 let version = specifier.version().clone();
-                Range::from_range_bounds(version..upper)
+                PubGrubRange::from_range_bounds(version..upper)
             }
             Operator::LessThan => {
                 let version = specifier.version().clone();
                 if version.any_prerelease() {
-                    Range::strictly_lower_than(version)
+                    PubGrubRange::strictly_lower_than(version)
                 } else {
                     // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
                     // pre-release of the specified version unless the specified version is itself a
                     // pre-release.
-                    Range::strictly_lower_than(version.with_min(Some(0)))
+                    PubGrubRange::strictly_lower_than(version.with_min(Some(0)))
                 }
             }
             Operator::LessThanEqual => {
                 let version = specifier.version().clone();
-                Range::lower_than(version)
+                PubGrubRange::lower_than(version)
             }
             Operator::GreaterThan => {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
                 // the given version unless V itself is a post release."
                 let version = specifier.version().clone();
                 if let Some(dev) = version.dev() {
-                    Range::higher_than(version.with_dev(Some(dev + 1)))
+                    PubGrubRange::higher_than(version.with_dev(Some(dev + 1)))
                 } else if let Some(post) = version.post() {
-                    Range::higher_than(version.with_post(Some(post + 1)))
+                    PubGrubRange::higher_than(version.with_post(Some(post + 1)))
                 } else {
-                    Range::strictly_higher_than(version.with_max(Some(0)))
+                    PubGrubRange::strictly_higher_than(version.with_max(Some(0)))
                 }
             }
             Operator::GreaterThanEqual => {
                 let version = specifier.version().clone();
-                Range::higher_than(version)
+                PubGrubRange::higher_than(version)
             }
             Operator::EqualStar => {
                 let low = specifier.version().clone().with_dev(Some(0));
@@ -89,7 +90,7 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                     *release.last_mut().unwrap() += 1;
                     high = high.with_release(release);
                 }
-                Range::from_range_bounds(low..high)
+                PubGrubRange::from_range_bounds(low..high)
             }
             Operator::NotEqualStar => {
                 let low = specifier.version().clone().with_dev(Some(0));
@@ -106,7 +107,7 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                     *release.last_mut().unwrap() += 1;
                     high = high.with_release(release);
                 }
-                Range::from_range_bounds(low..high).complement()
+                PubGrubRange::from_range_bounds(low..high).complement()
             }
         };
 

@@ -1,10 +1,9 @@
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::version_set::VersionSet;
 use rustc_hash::FxHashSet;
 use tracing::warn;
 
 use distribution_types::Verbatim;
-use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
@@ -12,12 +11,13 @@ use uv_git::GitResolver;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::specifier::PubGrubSpecifier;
+use crate::pubgrub::PubGrubRange;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::{Locals, Urls};
 use crate::ResolveError;
 
 #[derive(Debug)]
-pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
+pub struct PubGrubDependencies(Vec<(PubGrubPackage, PubGrubRange)>);
 
 impl PubGrubDependencies {
     /// Generate a set of PubGrub dependencies from a set of requirements.
@@ -54,12 +54,12 @@ impl PubGrubDependencies {
     }
 
     /// Add a [`PubGrubPackage`] and [`PubGrubVersion`] range into the dependencies.
-    pub(crate) fn push(&mut self, package: PubGrubPackage, version: Range<Version>) {
+    pub(crate) fn push(&mut self, package: PubGrubPackage, version: PubGrubRange) {
         self.0.push((package, version));
     }
 
     /// Iterate over the dependencies.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, Range<Version>)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, PubGrubRange)> {
         self.0.iter()
     }
 }
@@ -76,7 +76,7 @@ fn add_requirements(
     locals: &Locals,
     git: &GitResolver,
     env: Option<&MarkerEnvironment>,
-    dependencies: &mut Vec<(PubGrubPackage, Range<Version>)>,
+    dependencies: &mut Vec<(PubGrubPackage, PubGrubRange)>,
     seen: &mut FxHashSet<ExtraName>,
 ) -> Result<(), ResolveError> {
     // Iterate over all declared requirements.
@@ -182,7 +182,7 @@ fn add_requirements(
 }
 
 /// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
-impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
+impl From<PubGrubDependencies> for Vec<(PubGrubPackage, PubGrubRange)> {
     fn from(dependencies: PubGrubDependencies) -> Self {
         dependencies.0
     }
@@ -192,7 +192,7 @@ impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
 #[derive(Debug, Clone)]
 pub(crate) struct PubGrubRequirement {
     pub(crate) package: PubGrubPackage,
-    pub(crate) version: Range<Version>,
+    pub(crate) version: PubGrubRange,
 }
 
 impl PubGrubRequirement {
@@ -218,14 +218,14 @@ impl PubGrubRequirement {
                                 .map_err(ResolveError::InvalidVersion)
                                 .and_then(|specifier| PubGrubSpecifier::try_from(&specifier))
                         })
-                        .fold_ok(Range::full(), |range, specifier| {
+                        .fold_ok(PubGrubRange::full(), |range, specifier| {
                             range.intersection(&specifier.into())
                         })?
                 } else {
                     specifier
                         .iter()
                         .map(PubGrubSpecifier::try_from)
-                        .fold_ok(Range::full(), |range, specifier| {
+                        .fold_ok(PubGrubRange::full(), |range, specifier| {
                             range.intersection(&specifier.into())
                         })?
                 };
@@ -263,7 +263,7 @@ impl PubGrubRequirement {
                         marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
-                    version: Range::full(),
+                    version: PubGrubRange::full(),
                 })
             }
             RequirementSource::Git { url, .. } => {
@@ -289,7 +289,7 @@ impl PubGrubRequirement {
                         marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
-                    version: Range::full(),
+                    version: PubGrubRange::full(),
                 })
             }
             RequirementSource::Path { url, .. } => {
@@ -315,7 +315,7 @@ impl PubGrubRequirement {
                         marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
-                    version: Range::full(),
+                    version: PubGrubRange::full(),
                 })
             }
         }

@@ -3,13 +3,13 @@
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
 
-use pep440_rs::{Operator, Version, VersionSpecifier};
+use pep440_rs::{Operator, VersionSpecifier};
 use pep508_rs::{
     ExtraName, ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
     MarkerValueVersion,
 };
 
-use crate::pubgrub::PubGrubSpecifier;
+use crate::pubgrub::{PubGrubRange, PubGrubSpecifier};
 
 /// Returns `true` if there is no environment in which both marker trees can both apply, i.e.
 /// the expression `first and second` is always false.
@@ -164,9 +164,7 @@ fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> boo
 }
 
 /// Returns the key and version range for a version expression.
-fn keyed_range(
-    expr: &MarkerExpression,
-) -> Result<Option<(&MarkerValueVersion, pubgrub::range::Range<Version>)>, ()> {
+fn keyed_range(expr: &MarkerExpression) -> Result<Option<(&MarkerValueVersion, PubGrubRange)>, ()> {
     let (key, specifier) = match expr {
         MarkerExpression::Version { key, specifier } => (key, specifier.clone()),
         MarkerExpression::VersionInverted {

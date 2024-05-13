@@ -3,8 +3,8 @@ use std::fmt::Formatter;
 use std::ops::Deref;
 use std::sync::Arc;
 
+use crate::pubgrub::PubGrubRange;
 use indexmap::IndexMap;
-use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -112,7 +112,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
 /// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
 /// wrap an [`PubGrubPackageInner::Extra`] package.
 fn collapse_extra_proxies(
-    derivation_tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    derivation_tree: &mut DerivationTree<PubGrubPackage, PubGrubRange, UnavailableReason>,
 ) {
     match derivation_tree {
         DerivationTree::External(_) => {}
@@ -181,7 +181,7 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
 /// A wrapper around [`pubgrub::error::PubGrubError::NoSolution`] that displays a resolution failure report.
 #[derive(Debug)]
 pub struct NoSolutionError {
-    derivation_tree: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    derivation_tree: DerivationTree<PubGrubPackage, PubGrubRange, UnavailableReason>,
     available_versions: IndexMap<PubGrubPackage, BTreeSet<Version>>,
     selector: Option<CandidateSelector>,
     python_requirement: Option<PythonRequirement>,

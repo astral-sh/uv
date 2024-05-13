@@ -1,7 +1,8 @@
 use std::cmp::min;
 
+use crate::pubgrub::PubGrubRange;
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::version_set::VersionSet;
 use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
@@ -18,7 +19,7 @@ enum BatchPrefetchStrategy {
     /// Go through the next versions assuming the existing selection and its constraints
     /// remain.
     Compatible {
-        compatible: Range<Version>,
+        compatible: PubGrubRange,
         previous: Version,
     },
     /// We encounter cases (botocore) where the above doesn't work: Say we previously selected
@@ -48,7 +49,7 @@ impl BatchPrefetcher {
         &mut self,
         next: &PubGrubPackage,
         version: &Version,
-        current_range: &Range<Version>,
+        current_range: &PubGrubRange,
         request_sink: &Sender<Request>,
         index: &InMemoryIndex,
         selector: &CandidateSelector,
@@ -94,7 +95,7 @@ impl BatchPrefetcher {
                         selector.select_no_preference(name, &compatible, version_map)
                     {
                         let compatible = compatible.intersection(
-                            &Range::singleton(candidate.version().clone()).complement(),
+                            &PubGrubRange::singleton(candidate.version().clone()).complement(),
                         );
                         phase = BatchPrefetchStrategy::Compatible {
                             compatible,
@@ -110,9 +111,9 @@ impl BatchPrefetcher {
                 }
                 BatchPrefetchStrategy::InOrder { previous } => {
                     let range = if selector.use_highest_version(name) {
-                        Range::strictly_lower_than(previous)
+                        PubGrubRange::strictly_lower_than(previous)
                     } else {
-                        Range::strictly_higher_than(previous)
+                        PubGrubRange::strictly_higher_than(previous)
                     };
                     if let Some(candidate) =
                         selector.select_no_preference(name, &range, version_map)
