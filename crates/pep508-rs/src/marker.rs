@@ -26,7 +26,7 @@ use pep440_rs::{Version, VersionParseError, VersionPattern, VersionSpecifier};
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
-use crate::{default_reporter, Pep508Error, Pep508ErrorSource, Pep508Url};
+use crate::{Pep508Error, Pep508ErrorSource, Pep508Url, TracingReporter};
 
 /// Ways in which marker evaluation can fail
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
@@ -1212,7 +1212,7 @@ impl MarkerExpression {
         Some(MarkerExpression::Version { key, specifier })
     }
 
-    /// Creates an instance of `MarkerExpression::Version` with the given values.
+    /// Creates an instance of `MarkerExpression::VersionInverted` with the given values.
     ///
     /// Reports a warning on failure, and returns `None`.
     fn version_inverted(
@@ -1482,7 +1482,7 @@ impl FromStr for MarkerExpression {
     type Err = Pep508Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        MarkerExpression::parse_reporter(s, &mut default_reporter)
+        MarkerExpression::parse_reporter(s, &mut TracingReporter)
     }
 }
 
@@ -1490,14 +1490,19 @@ impl Display for MarkerExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MarkerExpression::Version { key, specifier } => {
-                write!(f, "{key} {} {}", specifier.operator(), specifier.version())
+                write!(
+                    f,
+                    "{key} {} '{}'",
+                    specifier.operator(),
+                    specifier.version()
+                )
             }
             MarkerExpression::VersionInverted {
                 version,
                 operator,
                 key,
             } => {
-                write!(f, "{version} {operator} {key}")
+                write!(f, "'{version}' {operator} {key}")
             }
             MarkerExpression::String {
                 key,
@@ -1544,7 +1549,7 @@ impl FromStr for MarkerTree {
     type Err = Pep508Error;
 
     fn from_str(markers: &str) -> Result<Self, Self::Err> {
-        parse_markers(markers, &mut default_reporter)
+        parse_markers(markers, &mut TracingReporter)
     }
 }
 
@@ -1574,15 +1579,15 @@ impl MarkerTree {
         env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
     ) -> bool {
-        self.report_deprecated_options(&mut default_reporter);
+        self.report_deprecated_options(&mut TracingReporter);
         match self {
-            Self::Expression(expression) => expression.evaluate(env, extras, &mut default_reporter),
+            Self::Expression(expression) => expression.evaluate(env, extras, &mut TracingReporter),
             Self::And(expressions) => expressions
                 .iter()
-                .all(|x| x.evaluate_reporter_impl(env, extras, &mut default_reporter)),
+                .all(|x| x.evaluate_reporter_impl(env, extras, &mut TracingReporter)),
             Self::Or(expressions) => expressions
                 .iter()
-                .any(|x| x.evaluate_reporter_impl(env, extras, &mut default_reporter)),
+                .any(|x| x.evaluate_reporter_impl(env, extras, &mut TracingReporter)),
         }
     }
 
@@ -2071,12 +2076,12 @@ mod test {
 
     use insta::assert_snapshot;
 
+    use pep440_rs::VersionSpecifier;
     use uv_normalize::ExtraName;
 
-    use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
+    use crate::marker::{ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder};
     use crate::{
-        MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
-        MarkerValueVersion,
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
     };
 
     fn parse_err(input: &str) -> String {
@@ -2234,6 +2239,38 @@ mod test {
     }
 
     #[test]
+    fn test_marker_version_inverted() {
+        let env37 = env37();
+        let (result, warnings) = MarkerTree::from_str("python_version > '3.6'")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(result);
+
+        let (result, warnings) = MarkerTree::from_str("'3.6' > python_version")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_marker_string_inverted() {
+        let env37 = env37();
+        let (result, warnings) = MarkerTree::from_str("'nux' in sys_platform")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(result);
+
+        let (result, warnings) = MarkerTree::from_str("sys_platform in 'nux'")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(!result);
+    }
+
+    #[test]
     fn test_marker_version_star() {
         let env37 = env37();
         let (result, warnings) = MarkerTree::from_str("python_version == '3.7.*'")
@@ -2280,11 +2317,41 @@ mod test {
     fn test_marker_expression() {
         assert_eq!(
             MarkerExpression::from_str(r#"os_name == "nt""#).unwrap(),
-            MarkerExpression {
-                l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+            MarkerExpression::String {
+                key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("nt".to_string()),
+                value: "nt".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn test_marker_expression_inverted() {
+        assert_eq!(
+            MarkerTree::from_str(
+                r#""nt" in os_name and '3.7' >= python_version and python_full_version >= '3.7'"#
+            )
+            .unwrap(),
+            MarkerTree::And(vec![
+                MarkerTree::Expression(MarkerExpression::StringInverted {
+                    value: "nt".to_string(),
+                    operator: MarkerOperator::In,
+                    key: MarkerValueString::OsName,
+                }),
+                MarkerTree::Expression(MarkerExpression::VersionInverted {
+                    key: MarkerValueVersion::PythonVersion,
+                    operator: pep440_rs::Operator::GreaterThanEqual,
+                    version: "3.7".parse().unwrap(),
+                }),
+                MarkerTree::Expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::from_pattern(
+                        pep440_rs::Operator::GreaterThanEqual,
+                        "3.7".parse().unwrap()
+                    )
+                    .unwrap()
+                }),
+            ])
         );
     }
 
@@ -2329,10 +2396,10 @@ mod test {
         let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(
             simplified,
-            Some(MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+            Some(MarkerTree::Expression(MarkerExpression::String {
+                key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("nt".to_string()),
+                value: "nt".to_string(),
             }))
         );
 
@@ -2351,10 +2418,9 @@ mod test {
         let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(
             simplified,
-            Some(MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::Extra,
-                operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("test".to_string()),
+            Some(MarkerTree::Expression(MarkerExpression::Extra {
+                operator: ExtraOperator::Equal,
+                name: ExtraName::from_str("test").unwrap(),
             }))
         );
 
@@ -2364,15 +2430,14 @@ mod test {
         assert_eq!(
             simplified,
             Some(MarkerTree::And(vec![
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                MarkerTree::Expression(MarkerExpression::String {
+                    key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("nt".to_string()),
+                    value: "nt".to_string(),
                 }),
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::Extra,
-                    operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("test".to_string()),
+                MarkerTree::Expression(MarkerExpression::Extra {
+                    operator: ExtraOperator::Equal,
+                    name: ExtraName::from_str("test").unwrap(),
                 }),
             ]))
         );
@@ -2386,10 +2451,10 @@ mod test {
         let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(
             simplified,
-            Some(MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+            Some(MarkerTree::Expression(MarkerExpression::String {
+                key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("nt".to_string()),
+                value: "nt".to_string(),
             }))
         );
 
@@ -2403,15 +2468,18 @@ mod test {
         assert_eq!(
             simplified,
             Some(MarkerTree::Or(vec![
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                MarkerTree::Expression(MarkerExpression::String {
+                    key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("nt".to_string()),
+                    value: "nt".to_string(),
                 }),
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
-                    operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("3.7".to_string()),
+                MarkerTree::Expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonVersion,
+                    specifier: VersionSpecifier::from_pattern(
+                        pep440_rs::Operator::Equal,
+                        "3.7".parse().unwrap()
+                    )
+                    .unwrap(),
                 }),
             ]))
         );

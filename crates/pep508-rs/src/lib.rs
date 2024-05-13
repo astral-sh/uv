@@ -472,11 +472,15 @@ impl Pep508Url for Url {
     }
 }
 
-/// A simple [`Reporter`] that logs to tracing.
-pub fn default_reporter(_kind: MarkerWarningKind, _message: String) {
-    #[cfg(feature = "tracing")]
-    {
-        tracing::warn!("{}", _message);
+/// A simple [`Reporter`] that logs to tracing when the `tracing` feature is enabled.
+pub struct TracingReporter;
+
+impl Reporter for TracingReporter {
+    fn report(&mut self, _kind: MarkerWarningKind, _message: String) {
+        #[cfg(feature = "tracing")]
+        {
+            tracing::warn!("{}", _message);
+        }
     }
 }
 
@@ -485,7 +489,7 @@ impl<T: Pep508Url> FromStr for Requirement<T> {
 
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse_pep508_requirement::<T>(&mut Cursor::new(input), None, &mut default_reporter)
+        parse_pep508_requirement::<T>(&mut Cursor::new(input), None, &mut TracingReporter)
     }
 }
 
@@ -495,7 +499,7 @@ impl<T: Pep508Url> Requirement<T> {
         parse_pep508_requirement(
             &mut Cursor::new(input),
             Some(working_dir.as_ref()),
-            &mut default_reporter,
+            &mut TracingReporter,
         )
     }
 
@@ -1104,10 +1108,10 @@ mod tests {
 
     use crate::cursor::Cursor;
     use crate::marker::{
-        parse_markers_cursor, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
-        MarkerValueString, MarkerValueVersion,
+        parse_markers_cursor, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+        MarkerValueVersion,
     };
-    use crate::{Requirement, VerbatimUrl, VersionOrUrl};
+    use crate::{Requirement, TracingReporter, VerbatimUrl, VersionOrUrl};
 
     fn parse_pep508_err(input: &str) -> String {
         Requirement::<VerbatimUrl>::from_str(input)
@@ -1197,10 +1201,13 @@ mod tests {
                 .into_iter()
                 .collect(),
             )),
-            marker: Some(MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
-                operator: MarkerOperator::LessThan,
-                r_value: MarkerValue::QuotedString("2.7".to_string()),
+            marker: Some(MarkerTree::Expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion,
+                specifier: VersionSpecifier::from_pattern(
+                    pep440_rs::Operator::LessThan,
+                    "2.7".parse().unwrap(),
+                )
+                .unwrap(),
             })),
             origin: None,
         };
@@ -1436,31 +1443,33 @@ mod tests {
     #[test]
     fn test_marker_parsing() {
         let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
-        let actual = parse_markers_cursor::<Url>(&mut Cursor::new(marker)).unwrap();
+        let actual =
+            parse_markers_cursor::<Url>(&mut Cursor::new(marker), &mut TracingReporter).unwrap();
         let expected = MarkerTree::And(vec![
-            MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
-                operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("2.7".to_string()),
+            MarkerTree::Expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion,
+                specifier: VersionSpecifier::from_pattern(
+                    pep440_rs::Operator::Equal,
+                    "2.7".parse().unwrap(),
+                )
+                .unwrap(),
             }),
             MarkerTree::Or(vec![
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::MarkerEnvString(MarkerValueString::SysPlatform),
+                MarkerTree::Expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("win32".to_string()),
+                    value: "win32".to_string(),
                 }),
                 MarkerTree::And(vec![
-                    MarkerTree::Expression(MarkerExpression {
-                        l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                    MarkerTree::Expression(MarkerExpression::String {
+                        key: MarkerValueString::OsName,
                         operator: MarkerOperator::Equal,
-                        r_value: MarkerValue::QuotedString("linux".to_string()),
+                        value: "linux".to_string(),
                     }),
-                    MarkerTree::Expression(MarkerExpression {
-                        l_value: MarkerValue::MarkerEnvString(
-                            MarkerValueString::ImplementationName,
-                        ),
+                    MarkerTree::Expression(MarkerExpression::String {
+                        key: MarkerValueString::ImplementationName,
                         operator: MarkerOperator::Equal,
-                        r_value: MarkerValue::QuotedString("cpython".to_string()),
+                        value: "cpython".to_string(),
                     }),
                 ]),
             ]),
