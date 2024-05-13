@@ -91,14 +91,16 @@ fn add_requirements(
         }
 
         // Add the package, plus any extra variants.
-        for result in std::iter::once(to_pubgrub(requirement, None, urls, locals)).chain(
-            requirement
-                .extras
-                .clone()
-                .into_iter()
-                .map(|extra| to_pubgrub(requirement, Some(extra), urls, locals)),
-        ) {
-            let (package, version) = result?;
+        for result in std::iter::once(PubGrubRequirement::from_requirement(
+            requirement,
+            None,
+            urls,
+            locals,
+        ))
+        .chain(requirement.extras.clone().into_iter().map(|extra| {
+            PubGrubRequirement::from_requirement(requirement, Some(extra), urls, locals)
+        })) {
+            let PubGrubRequirement { package, version } = result?;
 
             match &package {
                 PubGrubPackage::Package(name, ..) => {
@@ -152,7 +154,8 @@ fn add_requirements(
                 }
 
                 // Add the package.
-                let (package, version) = to_pubgrub(constraint, None, urls, locals)?;
+                let PubGrubRequirement { package, version } =
+                    PubGrubRequirement::from_constraint(constraint, urls, locals)?;
 
                 // Ignore self-dependencies.
                 if let PubGrubPackage::Package(name, ..) = &package {
@@ -178,106 +181,136 @@ impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
     }
 }
 
-/// Convert a [`Requirement`] to a PubGrub-compatible package and range.
-fn to_pubgrub(
-    requirement: &Requirement,
-    extra: Option<ExtraName>,
-    urls: &Urls,
-    locals: &Locals,
-) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
-    match &requirement.source {
-        RequirementSource::Registry { specifier, .. } => {
-            // TODO(konsti): We're currently losing the index information here, but we need
-            // either pass it to `PubGrubPackage` or the `ResolverProvider` beforehand.
-            // If the specifier is an exact version, and the user requested a local version that's
-            // more precise than the specifier, use the local version instead.
-            let version = if let Some(expected) = locals.get(&requirement.name) {
-                specifier
-                    .iter()
-                    .map(|specifier| {
-                        Locals::map(expected, specifier)
-                            .map_err(ResolveError::InvalidVersion)
-                            .and_then(|specifier| PubGrubSpecifier::try_from(&specifier))
-                    })
-                    .fold_ok(Range::full(), |range, specifier| {
-                        range.intersection(&specifier.into())
-                    })?
-            } else {
-                specifier
-                    .iter()
-                    .map(PubGrubSpecifier::try_from)
-                    .fold_ok(Range::full(), |range, specifier| {
-                        range.intersection(&specifier.into())
-                    })?
-            };
+/// A PubGrub-compatible package and version range.
+#[derive(Debug, Clone)]
+struct PubGrubRequirement {
+    package: PubGrubPackage,
+    version: Range<Version>,
+}
 
-            Ok((
-                PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
-                version,
-            ))
-        }
-        RequirementSource::Url { url, .. } => {
-            let Some(expected) = urls.get(&requirement.name) else {
-                return Err(ResolveError::DisallowedUrl(
-                    requirement.name.clone(),
-                    url.to_string(),
-                ));
-            };
+impl PubGrubRequirement {
+    /// Convert a [`Requirement`] to a PubGrub-compatible package and range.
+    pub(crate) fn from_requirement(
+        requirement: &Requirement,
+        extra: Option<ExtraName>,
+        urls: &Urls,
+        locals: &Locals,
+    ) -> Result<Self, ResolveError> {
+        match &requirement.source {
+            RequirementSource::Registry { specifier, .. } => {
+                // TODO(konsti): We're currently losing the index information here, but we need
+                // either pass it to `PubGrubPackage` or the `ResolverProvider` beforehand.
+                // If the specifier is an exact version, and the user requested a local version that's
+                // more precise than the specifier, use the local version instead.
+                let version = if let Some(expected) = locals.get(&requirement.name) {
+                    specifier
+                        .iter()
+                        .map(|specifier| {
+                            Locals::map(expected, specifier)
+                                .map_err(ResolveError::InvalidVersion)
+                                .and_then(|specifier| PubGrubSpecifier::try_from(&specifier))
+                        })
+                        .fold_ok(Range::full(), |range, specifier| {
+                            range.intersection(&specifier.into())
+                        })?
+                } else {
+                    specifier
+                        .iter()
+                        .map(PubGrubSpecifier::try_from)
+                        .fold_ok(Range::full(), |range, specifier| {
+                            range.intersection(&specifier.into())
+                        })?
+                };
 
-            if !Urls::is_allowed(expected, url) {
-                return Err(ResolveError::ConflictingUrlsTransitive(
-                    requirement.name.clone(),
-                    expected.verbatim().to_string(),
-                    url.verbatim().to_string(),
-                ));
+                Ok(Self {
+                    package: PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
+                    version,
+                })
             }
+            RequirementSource::Url { url, .. } => {
+                let Some(expected) = urls.get(&requirement.name) else {
+                    return Err(ResolveError::DisallowedUrl(
+                        requirement.name.clone(),
+                        url.to_string(),
+                    ));
+                };
 
-            Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
-                Range::full(),
-            ))
-        }
-        RequirementSource::Git { url, .. } => {
-            let Some(expected) = urls.get(&requirement.name) else {
-                return Err(ResolveError::DisallowedUrl(
-                    requirement.name.clone(),
-                    url.to_string(),
-                ));
-            };
+                if !Urls::is_allowed(expected, url) {
+                    return Err(ResolveError::ConflictingUrlsTransitive(
+                        requirement.name.clone(),
+                        expected.verbatim().to_string(),
+                        url.verbatim().to_string(),
+                    ));
+                }
 
-            if !Urls::is_allowed(expected, url) {
-                return Err(ResolveError::ConflictingUrlsTransitive(
-                    requirement.name.clone(),
-                    expected.verbatim().to_string(),
-                    url.verbatim().to_string(),
-                ));
+                Ok(Self {
+                    package: PubGrubPackage::Package(
+                        requirement.name.clone(),
+                        extra,
+                        Some(expected.clone()),
+                    ),
+                    version: Range::full(),
+                })
             }
+            RequirementSource::Git { url, .. } => {
+                let Some(expected) = urls.get(&requirement.name) else {
+                    return Err(ResolveError::DisallowedUrl(
+                        requirement.name.clone(),
+                        url.to_string(),
+                    ));
+                };
 
-            Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
-                Range::full(),
-            ))
-        }
-        RequirementSource::Path { url, .. } => {
-            let Some(expected) = urls.get(&requirement.name) else {
-                return Err(ResolveError::DisallowedUrl(
-                    requirement.name.clone(),
-                    url.to_string(),
-                ));
-            };
+                if !Urls::is_allowed(expected, url) {
+                    return Err(ResolveError::ConflictingUrlsTransitive(
+                        requirement.name.clone(),
+                        expected.verbatim().to_string(),
+                        url.verbatim().to_string(),
+                    ));
+                }
 
-            if !Urls::is_allowed(expected, url) {
-                return Err(ResolveError::ConflictingUrlsTransitive(
-                    requirement.name.clone(),
-                    expected.verbatim().to_string(),
-                    url.verbatim().to_string(),
-                ));
+                Ok(Self {
+                    package: PubGrubPackage::Package(
+                        requirement.name.clone(),
+                        extra,
+                        Some(expected.clone()),
+                    ),
+                    version: Range::full(),
+                })
             }
+            RequirementSource::Path { url, .. } => {
+                let Some(expected) = urls.get(&requirement.name) else {
+                    return Err(ResolveError::DisallowedUrl(
+                        requirement.name.clone(),
+                        url.to_string(),
+                    ));
+                };
 
-            Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
-                Range::full(),
-            ))
+                if !Urls::is_allowed(expected, url) {
+                    return Err(ResolveError::ConflictingUrlsTransitive(
+                        requirement.name.clone(),
+                        expected.verbatim().to_string(),
+                        url.verbatim().to_string(),
+                    ));
+                }
+
+                Ok(Self {
+                    package: PubGrubPackage::Package(
+                        requirement.name.clone(),
+                        extra,
+                        Some(expected.clone()),
+                    ),
+                    version: Range::full(),
+                })
+            }
         }
+    }
+
+    /// Convert a constraint to a PubGrub-compatible package and range.
+    pub(crate) fn from_constraint(
+        constraint: &Requirement,
+        urls: &Urls,
+        locals: &Locals,
+    ) -> Result<Self, ResolveError> {
+        Self::from_requirement(constraint, None, urls, locals)
     }
 }
