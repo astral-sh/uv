@@ -35,11 +35,6 @@ pub(crate) struct Cli {
     /// The path to a `uv.toml` file to use for configuration.
     #[arg(long, env = "UV_CONFIG_FILE", hide = true)]
     pub(crate) config_file: Option<PathBuf>,
-
-    /// Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-    /// parent directories.
-    #[arg(long, hide = true)]
-    pub(crate) isolated: bool,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -92,6 +87,11 @@ pub(crate) struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("preview"), hide = true)]
     pub(crate) no_preview: bool,
+
+    /// Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+    /// parent directories.
+    #[arg(global = true, long, hide = true)]
+    pub(crate) isolated: bool,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]

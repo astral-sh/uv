@@ -34,6 +34,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
     pub(crate) native_tls: bool,
+    pub(crate) isolated: bool,
     pub(crate) preview: PreviewMode,
 }
 
@@ -51,6 +52,7 @@ impl GlobalSettings {
             native_tls: flag(args.native_tls, args.no_native_tls)
                 .or(workspace.and_then(|workspace| workspace.options.native_tls))
                 .unwrap_or(false),
+            isolated: args.isolated,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
                     .or(workspace.and_then(|workspace| workspace.options.preview))
