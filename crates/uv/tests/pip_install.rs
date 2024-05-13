@@ -1520,13 +1520,20 @@ fn only_binary_requirements_txt() {
 #[test]
 fn only_binary_editable() {
     let context = TestContext::new("3.12");
-
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(format! (r"
+        --editable {}
+        --editable {}
+        ", context.workspace_root.join("scripts/packages/black_editable").display(),
+        context.workspace_root.join("scripts/packages/root_editable").display(),
+        ).as_str())
+        .unwrap();
     // Install the editable package.
     uv_snapshot!(context.filters(), context.install()
-        .arg("--only-binary")
-        .arg(":all:")
-        .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/setuptools_editable")), @r###"
+        .arg("--no-build")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
