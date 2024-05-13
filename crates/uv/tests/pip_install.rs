@@ -1581,6 +1581,62 @@ fn only_binary_requirements_txt() {
     );
 }
 
+/// `--only-binary` does not apply to editable requirements
+#[test]
+fn only_binary_editable() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/anyio_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+    "###
+    );
+}
+
+/// `--only-binary` does not apply to editable requirements, with a `setup.py` config
+#[test]
+fn only_binary_editable_setup_py() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/setup_py_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 8 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + h11==0.14.0
+     + httpcore==1.0.4
+     + httpx==0.27.0
+     + idna==3.6
+     + setup-py-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/setup_py_editable)
+     + sniffio==1.3.1
+    "###
+    );
+}
+
 /// Install a package into a virtual environment, and ensuring that the executable permissions
 /// are retained.
 ///
