@@ -901,26 +901,40 @@ impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
 
 /// Represents one clause such as `python_version > "3.8"`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[allow(missing_docs)]
 pub enum MarkerExpression {
-    // <version key> <version op> <quoted PEP 440 version>
+    /// <version key> <version op> <quoted PEP 440 version>
     Version {
         key: MarkerValueVersion,
         specifier: VersionSpecifier,
     },
-    // An string marker comparison, e.g. `sys_platform == '...'`.
+    /// <quoted PEP 440 version> <version op> <version key>
+    VersionInverted {
+        /// No star allowed here, `'3.*' == python_version` is not a valid PEP 440 comparison.
+        version: Version,
+        operator: pep440_rs::Operator,
+        key: MarkerValueVersion,
+    },
+    /// An string marker comparison, e.g. `sys_platform == '...'`.
     String {
         key: MarkerValueString,
         operator: MarkerOperator,
         value: String,
     },
-    // `extra <extra op> '...'`
+    /// An string marker comparison, e.g. `'...' == sys_platform`.
+    StringInverted {
+        value: String,
+        operator: MarkerOperator,
+        key: MarkerValueString,
+    },
+    /// `extra <extra op> '...'` or `'...' <extra op> extra`
     Extra {
         operator: ExtraOperator,
         name: ExtraName,
     },
-    // An invalid or meaningless expression, such as '...' == '...'.
-    //
-    // Invalid expressions always evaluate to true, and are warned for during parsing.
+    /// An invalid or meaningless expression, such as '...' == '...'.
+    ///
+    /// Invalid expressions always evaluate to true, and are warned for during parsing.
     Arbitrary {
         l_value: MarkerValue,
         operator: MarkerOperator,
@@ -1077,9 +1091,12 @@ impl MarkerExpression {
                 match r_value {
                     // The only sound choice for this is `<quoted PEP 440 version> <version op>` <version key>
                     MarkerValue::MarkerEnvVersion(key) => {
-                        // TOOD: represent the inverted order
-                        match MarkerExpression::version(key.clone(), operator.clone(), &l_string, reporter)
-                        {
+                        match MarkerExpression::version_inverted(
+                            &l_string,
+                            operator.clone(),
+                            key.clone(),
+                            reporter,
+                        ) {
                             Some(expr) => expr,
                             None => {
                                 return MarkerExpression::arbitrary(
@@ -1091,8 +1108,7 @@ impl MarkerExpression {
                         }
                     }
                     // '...' == <env key>
-                    // TOOD: represent the inverted order
-                    MarkerValue::MarkerEnvString(key) => MarkerExpression::String {
+                    MarkerValue::MarkerEnvString(key) => MarkerExpression::StringInverted {
                         key,
                         operator,
                         value: l_string,
@@ -1149,7 +1165,7 @@ impl MarkerExpression {
     /// Reports a warning on failure, and returns `None`.
     fn version(
         key: MarkerValueVersion,
-        operator: MarkerOperator,
+        marker_operator: MarkerOperator,
         value: &str,
         reporter: &mut impl Reporter,
     ) -> Option<MarkerExpression> {
@@ -1168,33 +1184,77 @@ impl MarkerExpression {
             }
         };
 
-        let Some(version_operator) = operator.to_pep440_operator() else {
+        let Some(operator) = marker_operator.to_pep440_operator() else {
             reporter.report(
                     MarkerWarningKind::Pep440Error,
                     format!(
                         "Expected PEP 440 version operator to compare {} with '{}', found '{}', will evaluate to false",
                         key,
                         pattern.version(),
-                        operator
+                        marker_operator
                     ),
                 );
 
             return None;
         };
 
-        let specifier = match VersionSpecifier::from_pattern(version_operator, pattern) {
+        let specifier = match VersionSpecifier::from_pattern(operator, pattern) {
             Ok(specifier) => specifier,
             Err(err) => {
                 reporter.report(
                     MarkerWarningKind::Pep440Error,
                     format!("Invalid operator/version combination: {err}"),
                 );
-
                 return None;
             }
         };
 
         Some(MarkerExpression::Version { key, specifier })
+    }
+
+    /// Creates an instance of `MarkerExpression::Version` with the given values.
+    ///
+    /// Reports a warning on failure, and returns `None`.
+    fn version_inverted(
+        value: &str,
+        marker_operator: MarkerOperator,
+        key: MarkerValueVersion,
+        reporter: &mut impl Reporter,
+    ) -> Option<MarkerExpression> {
+        let version = match value.parse::<Version>() {
+            Ok(version) => version,
+            Err(err) => {
+                reporter.report(
+                    MarkerWarningKind::Pep440Error,
+                    format!(
+                        "Expected PEP 440 version to compare with {}, found {}, will evaluate to false: {}",
+                        key, value, err
+                    ),
+                );
+
+                return None;
+            }
+        };
+
+        let Some(operator) = marker_operator.to_pep440_operator() else {
+            reporter.report(
+                    MarkerWarningKind::Pep440Error,
+                    format!(
+                        "Expected PEP 440 version operator to compare {} with '{}', found '{}', will evaluate to false",
+                        key,
+                        version,
+                        marker_operator
+                    ),
+                );
+
+            return None;
+        };
+
+        Some(MarkerExpression::VersionInverted {
+            version,
+            operator,
+            key,
+        })
     }
 
     /// Creates an instance of `MarkerExpression::Extra` with the given values, falling back to
@@ -1239,14 +1299,46 @@ impl MarkerExpression {
             MarkerExpression::Version { key, specifier } => env
                 .map(|env| specifier.contains(env.get_version(key)))
                 .unwrap_or(true),
+            MarkerExpression::VersionInverted {
+                key,
+                operator,
+                version,
+            } => env
+                .map(|env| {
+                    let r_version = VersionPattern::verbatim(env.get_version(key).clone());
+                    let specifier = match VersionSpecifier::from_pattern(*operator, r_version) {
+                        Ok(specifier) => specifier,
+                        Err(err) => {
+                            reporter.report(
+                                MarkerWarningKind::Pep440Error,
+                                format!("Invalid operator/version combination: {err}"),
+                            );
+
+                            return false;
+                        }
+                    };
+
+                    specifier.contains(version)
+                })
+                .unwrap_or(true),
             MarkerExpression::String {
                 key,
                 operator,
                 value,
             } => env
                 .map(|env| {
-                    let env_value = env.get_string(key);
-                    self.compare_strings(env_value, operator, value, reporter)
+                    let l_string = env.get_string(key);
+                    self.compare_strings(l_string, operator, value, reporter)
+                })
+                .unwrap_or(true),
+            MarkerExpression::StringInverted {
+                key,
+                operator,
+                value,
+            } => env
+                .map(|env| {
+                    let r_string = env.get_string(key);
+                    self.compare_strings(value, operator, r_string, reporter)
                 })
                 .unwrap_or(true),
             MarkerExpression::Extra {
@@ -1304,6 +1396,24 @@ impl MarkerExpression {
             } => python_versions
                 .iter()
                 .any(|l_version| specifier.contains(l_version)),
+            MarkerExpression::VersionInverted {
+                key: MarkerValueVersion::PythonVersion,
+                operator,
+                version,
+            } => {
+                python_versions.iter().any(|r_version| {
+                    // operator and right hand side make the specifier and in this case the
+                    // right hand is `python_version` so changes every iteration
+                    let Ok(specifier) = VersionSpecifier::from_pattern(
+                        *operator,
+                        VersionPattern::verbatim(r_version.clone()),
+                    ) else {
+                        return true;
+                    };
+
+                    specifier.contains(version)
+                })
+            }
             MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
                 name,
@@ -1382,12 +1492,26 @@ impl Display for MarkerExpression {
             MarkerExpression::Version { key, specifier } => {
                 write!(f, "{key} {} {}", specifier.operator(), specifier.version())
             }
+            MarkerExpression::VersionInverted {
+                version,
+                operator,
+                key,
+            } => {
+                write!(f, "{version} {operator} {key}")
+            }
             MarkerExpression::String {
                 key,
                 operator,
                 value,
             } => {
                 write!(f, "{key} {operator} {value}")
+            }
+            MarkerExpression::StringInverted {
+                value,
+                operator,
+                key,
+            } => {
+                write!(f, "{value} {operator} {key}")
             }
             MarkerExpression::Extra { operator, name } => {
                 write!(f, "extra {operator} {name}")
