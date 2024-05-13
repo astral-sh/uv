@@ -1688,6 +1688,34 @@ fn only_binary_editable() {
     );
 }
 
+/// `--only-binary` does not apply to editable requirements that depend on each other
+#[test]
+fn only_binary_dependent_editables() {
+    let context = TestContext::new("3.12");
+    let root_path = context
+        .workspace_root
+        .join("scripts/packages/dependent_editables");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("-e")
+        .arg(root_path.join("first_editable"))
+        .arg("-e")
+        .arg(root_path.join("second_editable")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 2 editables in [TIME]
+    error: Failed to build `first-editable @ file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable`
+      Caused by: Building source distributions is disabled
+    "###
+    );
+}
+
 /// `--only-binary` does not apply to editable requirements, with a `setup.py` config
 #[test]
 fn only_binary_editable_setup_py() {
