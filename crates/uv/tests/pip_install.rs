@@ -1704,14 +1704,16 @@ fn only_binary_dependent_editables() {
         .arg(root_path.join("first_editable"))
         .arg("-e")
         .arg(root_path.join("second_editable")), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Built 2 editables in [TIME]
-    error: Failed to build `first-editable @ file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable`
-      Caused by: Building source distributions is disabled
+    Resolved 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
+     + second-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/second_editable)
     "###
     );
 }

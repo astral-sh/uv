@@ -616,6 +616,11 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
+                // If the package is an editable, we don't need to fetch metadata.
+                if self.editables.contains(name) {
+                    return Ok(());
+                }
+
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.version_id()) {
@@ -956,7 +961,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for reporting diagnostics.
-                    if extra.is_some() && self.editables.get(package_name).is_none() {
+                    if extra.is_some() && !self.editables.contains(package_name) {
                         // Determine the distribution to lookup.
                         let dist = match url {
                             Some(url) => PubGrubDistribution::from_url(package_name, url),
