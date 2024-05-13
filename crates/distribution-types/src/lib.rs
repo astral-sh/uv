@@ -329,7 +329,7 @@ impl Dist {
             Some(Scheme::GitGit | Scheme::GitHttp) => Err(Error::UnsupportedScheme(
                 url.scheme().to_owned(),
                 url.verbatim().to_string(),
-                "insecure Git protocol".to_string(),
+                "insecure Git protocol; use `git+https` or `git+ssh` instead".to_string(),
             )),
             Some(Scheme::GitFile) => Err(Error::UnsupportedScheme(
                 url.scheme().to_owned(),
