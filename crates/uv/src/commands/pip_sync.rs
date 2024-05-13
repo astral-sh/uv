@@ -46,7 +46,8 @@ use crate::printer::Printer;
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_sync(
-    sources: &[RequirementsSource],
+    requirements: &[RequirementsSource],
+    constraints: &[RequirementsSource],
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -84,7 +85,7 @@ pub(crate) async fn pip_sync(
     let RequirementsSpecification {
         project: _,
         requirements,
-        constraints: _,
+        constraints,
         overrides: _,
         editables,
         source_trees,
@@ -95,7 +96,15 @@ pub(crate) async fn pip_sync(
         find_links,
         no_binary: specified_no_binary,
         no_build: specified_no_build,
-    } = RequirementsSpecification::from_simple_sources(sources, &client_builder, preview).await?;
+    } = RequirementsSpecification::from_sources(
+        requirements,
+        constraints,
+        &[],
+        &ExtrasSpecification::None,
+        &client_builder,
+        preview,
+    )
+    .await?;
 
     // Validate that the requirements are non-empty.
     let num_requirements = requirements.len() + source_trees.len() + editables.len();

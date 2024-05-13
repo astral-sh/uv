@@ -636,6 +636,16 @@ pub(crate) struct PipSyncArgs {
     #[arg(required(true))]
     pub(crate) src_file: Vec<PathBuf>,
 
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    pub(crate) constraint: Vec<Maybe<PathBuf>>,
+
     /// Reinstall all packages, regardless of whether they're already installed.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub(crate) reinstall: bool,

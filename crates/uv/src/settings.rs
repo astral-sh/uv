@@ -319,6 +319,7 @@ impl PipCompileSettings {
 pub(crate) struct PipSyncSettings {
     // CLI-only settings.
     pub(crate) src_file: Vec<PathBuf>,
+    pub(crate) constraint: Vec<PathBuf>,
     pub(crate) reinstall: Reinstall,
     pub(crate) refresh: Refresh,
 
@@ -331,6 +332,7 @@ impl PipSyncSettings {
     pub(crate) fn resolve(args: PipSyncArgs, workspace: Option<Workspace>) -> Self {
         let PipSyncArgs {
             src_file,
+            constraint,
             reinstall,
             no_reinstall,
             reinstall_package,
@@ -375,6 +377,10 @@ impl PipSyncSettings {
         Self {
             // CLI-only settings.
             src_file,
+            constraint: constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
 
