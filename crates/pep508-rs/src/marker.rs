@@ -1488,17 +1488,17 @@ impl Display for MarkerExpression {
                 operator,
                 value,
             } => {
-                write!(f, "{key} {operator} {value}")
+                write!(f, "{key} {operator} '{value}'")
             }
             MarkerExpression::StringInverted {
                 value,
                 operator,
                 key,
             } => {
-                write!(f, "{value} {operator} {key}")
+                write!(f, "'{value}' {operator} {key}")
             }
             MarkerExpression::Extra { operator, name } => {
-                write!(f, "extra {operator} {name}")
+                write!(f, "extra {operator} '{name}'")
             }
             MarkerExpression::Arbitrary {
                 l_value,
