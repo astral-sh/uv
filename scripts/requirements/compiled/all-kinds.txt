@@ -42,7 +42,6 @@ pydantic==2.5.3
     # via pydantic-extra-types
 pydantic-core==2.14.6
     # via pydantic
-pydantic-extra-types @ git+https://github.com/pydantic/pydantic-extra-types.git@5ebc5bba58605c656a821eed773973725e35cf83
 pyjwt==2.8.0
     # via django-allauth
 python-dateutil==2.8.2
