@@ -5,6 +5,7 @@ use std::path::Path;
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
 use fs_err as fs;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
@@ -15,7 +16,6 @@ use distribution_types::{
     LocalEditable, LocalEditables, Name, ParsedUrl, ParsedUrlError, RequirementSource, Resolution,
 };
 use distribution_types::{Requirement, Requirements};
-use indexmap::IndexMap;
 use install_wheel_rs::linker::LinkMode;
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -53,10 +53,9 @@ use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
+use crate::commands::DryRunEvent;
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
-
-use super::DryRunEvent;
 
 /// Install packages into the current environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
