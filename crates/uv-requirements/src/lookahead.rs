@@ -13,6 +13,7 @@ use pep508_rs::MarkerEnvironment;
 use pypi_types::Metadata23;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
+use uv_git::GitUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
@@ -162,16 +163,28 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // buildable distribution.
         let dist = match requirement.source {
             RequirementSource::Registry { .. } => return Ok(None),
-            RequirementSource::Url { url, .. } => Dist::from_http_url(requirement.name, url)?,
-            RequirementSource::Git { url, .. } => Dist::Source(SourceDist::Git(GitSourceDist {
+            RequirementSource::Url {
+                subdirectory,
+                location,
+                url,
+            } => Dist::from_http_url(requirement.name, location, subdirectory, url)?,
+            RequirementSource::Git {
+                repository,
+                reference,
+                subdirectory,
+                url,
+            } => Dist::Source(SourceDist::Git(GitSourceDist {
                 name: requirement.name,
+                git: Box::new(GitUrl::new(repository, reference)),
+                subdirectory,
                 url,
             })),
             RequirementSource::Path {
-                path: _,
+                path,
                 url,
+                // TODO(konsti): Figure out why we lose the editable here (does it matter?)
                 editable: _,
-            } => Dist::from_file_url(requirement.name, url, false)?,
+            } => Dist::from_file_url(requirement.name, &path, false, url)?,
         };
 
         // Fetch the metadata for the distribution.
