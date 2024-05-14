@@ -4,7 +4,6 @@ use anyhow::Result;
 
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-use uv_client::RegistryClient;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
@@ -75,8 +74,6 @@ pub trait ResolverProvider {
 pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
-    /// The [`RegistryClient`] used to query the index.
-    client: RegistryClient,
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: FlatIndex,
     tags: Tags,
@@ -92,7 +89,6 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
         tags: &'a Tags,
@@ -105,7 +101,6 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     ) -> Self {
         Self {
             fetcher,
-            client: client.clone(),
             flat_index: flat_index.clone(),
             tags: tags.clone(),
             python_requirement,
@@ -124,7 +119,13 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
         &'io self,
         package_name: &'io PackageName,
     ) -> PackageVersionsResult {
-        match self.client.simple(package_name).await {
+        let result = self
+            .fetcher
+            .client()
+            .managed(|client| client.simple(package_name))
+            .await;
+
+        match result {
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()

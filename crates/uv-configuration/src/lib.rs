@@ -1,5 +1,6 @@
 pub use authentication::*;
 pub use build_options::*;
+pub use concurrency::*;
 pub use config_settings::*;
 pub use constraints::*;
 pub use name_specifiers::*;
@@ -10,6 +11,7 @@ pub use target_triple::*;
 
 mod authentication;
 mod build_options;
+mod concurrency;
 mod config_settings;
 mod constraints;
 mod name_specifiers;

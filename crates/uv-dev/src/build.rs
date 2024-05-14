@@ -10,7 +10,9 @@ use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{
+    BuildKind, Concurrency, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex};
@@ -61,6 +63,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let setup_py = SetupPyStrategy::default();
     let in_flight = InFlight::default();
     let config_settings = ConfigSettings::default();
+    let concurrency = Concurrency::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -76,6 +79,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         install_wheel_rs::linker::LinkMode::default(),
         &NoBuild::None,
         &NoBinary::None,
+        concurrency,
     );
 
     let builder = SourceBuild::setup(
@@ -90,6 +94,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         BuildIsolation::Isolated,
         build_kind,
         FxHashMap::default(),
+        concurrency.builds,
     )
     .await?;
     Ok(wheel_dir.join(builder.build_wheel(&wheel_dir).await?))

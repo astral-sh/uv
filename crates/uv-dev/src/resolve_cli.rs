@@ -11,8 +11,9 @@ use petgraph::dot::{Config as DotConfig, Dot};
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Requirement, Resolution};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{Concurrency, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
+use uv_distribution::DistributionDatabase;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{
@@ -79,6 +80,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         )
     };
     let config_settings = ConfigSettings::default();
+    let concurrency = Concurrency::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -94,6 +96,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         install_wheel_rs::linker::LinkMode::default(),
         &no_build,
         &NoBinary::None,
+        concurrency,
     );
 
     let site_packages = SitePackages::from_executable(&venv)?;
@@ -115,12 +118,12 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &python_requirement,
         Some(venv.interpreter().markers()),
         tags,
-        &client,
         &flat_index,
         &index,
         &HashStrategy::None,
         &build_dispatch,
         &site_packages,
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )?;
     let resolution_graph = resolver.resolve().await.with_context(|| {
         format!(

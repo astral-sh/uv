@@ -37,7 +37,6 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
-dashmap = { workspace = true }
 derivative = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
@@ -63,6 +62,7 @@ uv-interpreter = { workspace = true }
 
 once_cell = { version = "1.19.0" }
 insta = { version = "1.36.1" }
+toml = { workspace = true }
 
 [features]
 default = ["pypi"]

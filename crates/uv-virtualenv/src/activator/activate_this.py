@@ -22,7 +22,8 @@
 """
 Activate virtualenv for current interpreter:
 
-Use exec(open(this_file).read(), {'__file__': this_file}).
+import runpy
+runpy.run_path(this_file)
 
 This can be used when you must use an existing Python interpreter, not the virtualenv bin/python.
 """  # noqa: D415
@@ -36,7 +37,7 @@ import sys
 try:
     abs_file = os.path.abspath(__file__)
 except NameError as exc:
-    msg = "You must use exec(open(this_file).read(), {'__file__': this_file})"
+    msg = "You must use import runpy; runpy.run_path(this_file)"
     raise AssertionError(msg) from exc
 
 bin_dir = os.path.dirname(abs_file)

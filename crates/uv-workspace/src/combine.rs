@@ -91,6 +91,8 @@ impl Combine for PipOptions {
             link_mode: self.link_mode.or(other.link_mode),
             compile_bytecode: self.compile_bytecode.or(other.compile_bytecode),
             require_hashes: self.require_hashes.or(other.require_hashes),
+            concurrent_downloads: self.concurrent_downloads.or(other.concurrent_downloads),
+            concurrent_builds: self.concurrent_builds.or(other.concurrent_builds),
         }
     }
 }

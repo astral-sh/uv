@@ -11,7 +11,9 @@ use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::PythonEnvironment;
@@ -68,7 +70,7 @@ pub(crate) async fn run(
             ));
         };
 
-        let venv = PythonEnvironment::from_virtualenv(cache)?;
+        let venv = project::init(&project, cache, printer)?;
 
         // Install the project requirements.
         Some(update_environment(venv, &project.requirements(), preview, cache, printer).await?)
@@ -259,6 +261,7 @@ async fn update_environment(
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
     let setup_py = SetupPyStrategy::default();
+    let concurrency = Concurrency::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -275,6 +278,7 @@ async fn update_environment(
         link_mode,
         &no_build,
         &no_binary,
+        concurrency,
     );
 
     let options = OptionsBuilder::new()
@@ -298,6 +302,7 @@ async fn update_environment(
         &build_dispatch,
         options,
         printer,
+        concurrency,
     )
     .await
     {
@@ -323,6 +328,7 @@ async fn update_environment(
         cache,
         &venv,
         printer,
+        concurrency,
     )
     .await?;
 

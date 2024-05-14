@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{num::NonZeroUsize, path::PathBuf};
 
 use serde::Deserialize;
 
@@ -85,4 +85,6 @@ pub struct PipOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub require_hashes: Option<bool>,
+    pub concurrent_downloads: Option<NonZeroUsize>,
+    pub concurrent_builds: Option<NonZeroUsize>,
 }

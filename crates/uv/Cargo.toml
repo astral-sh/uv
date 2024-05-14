@@ -85,6 +85,9 @@ predicates = { version = "3.0.4" }
 regex = { version = "1.10.3" }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 
+[package.metadata.cargo-shear]
+ignored = ["flate2"]
+
 [features]
 default = ["flate2/zlib-ng", "python", "pypi", "git", "maturin", "python-patch"]
 # Introduces a dependency on a local Python installation.

@@ -2,15 +2,14 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use futures::{StreamExt, TryStreamExt};
+use futures::stream::FuturesOrdered;
+use futures::TryStreamExt;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, HashPolicy, PathSourceUrl, Requirement, SourceUrl, VersionId,
+    BuildableSource, DirectorySourceUrl, HashPolicy, Requirement, SourceUrl, VersionId,
 };
 use pep508_rs::RequirementOrigin;
-
-use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_fs::Simplified;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
@@ -41,16 +40,15 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         source_trees: Vec<PathBuf>,
         extras: &'a ExtrasSpecification,
         hasher: &'a HashStrategy,
-        context: &'a Context,
-        client: &'a RegistryClient,
         index: &'a InMemoryIndex,
+        database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             source_trees,
             extras,
             hasher,
             index,
-            database: DistributionDatabase::new(client, context),
+            database,
         }
     }
 
@@ -65,9 +63,11 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
     /// Resolve the requirements from the provided source trees.
     pub async fn resolve(self) -> Result<Vec<Requirement>> {
-        let requirements: Vec<_> = futures::stream::iter(self.source_trees.iter())
+        let requirements: Vec<_> = self
+            .source_trees
+            .iter()
             .map(|source_tree| async { self.resolve_source_tree(source_tree).await })
-            .buffered(50)
+            .collect::<FuturesOrdered<_>>()
             .try_collect()
             .await?;
         Ok(requirements
@@ -96,7 +96,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         let Ok(url) = Url::from_directory_path(source_tree) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
-        let source = SourceUrl::Path(PathSourceUrl {
+        let source = SourceUrl::Directory(DirectorySourceUrl {
             url: &url,
             path: Cow::Borrowed(source_tree),
         });

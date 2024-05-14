@@ -58,7 +58,6 @@
       ]
     }
   },
-  "additionalProperties": false,
   "definitions": {
     "AnnotationStyle": {
       "description": "Indicate the style of annotation comments, used to indicate the dependencies that requested each package.",
@@ -247,6 +246,22 @@
             "boolean",
             "null"
           ]
+        },
+        "concurrent-builds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
+        },
+        "concurrent-downloads": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
         },
         "config-settings": {
           "anyOf": [
@@ -900,8 +915,7 @@
             "$ref": "#/definitions/String"
           }
         }
-      },
-      "additionalProperties": false
+      }
     }
   }
 }

@@ -31,6 +31,7 @@ pub struct Interpreter {
     base_prefix: PathBuf,
     base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
     tags: OnceCell<Tags>,
     target: Option<Target>,
@@ -59,6 +60,7 @@ impl Interpreter {
             base_prefix: info.base_prefix,
             base_executable: info.base_executable,
             sys_executable: info.sys_executable,
+            sys_path: info.sys_path,
             stdlib: info.stdlib,
             tags: OnceCell::new(),
             target: None,
@@ -89,6 +91,7 @@ impl Interpreter {
             base_prefix: PathBuf::from("/dev/null"),
             base_executable: None,
             sys_executable: PathBuf::from("/dev/null"),
+            sys_path: vec![],
             stdlib: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
             target: None,
@@ -283,6 +286,11 @@ impl Interpreter {
         &self.sys_executable
     }
 
+    /// Return the `sys.path` for this Python interpreter.
+    pub fn sys_path(&self) -> &Vec<PathBuf> {
+        &self.sys_path
+    }
+
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn stdlib(&self) -> &Path {
         &self.stdlib
@@ -419,6 +427,7 @@ struct InterpreterInfo {
     base_prefix: PathBuf,
     base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
     gil_disabled: bool,
 }
@@ -634,6 +643,10 @@ mod tests {
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "prefix": "/home/ferris/projects/uv/.venv",
                 "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
+                "sys_path": [
+                    "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
+                    "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+                ],
                 "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
                 "scheme": {
                     "data": "/home/ferris/.pyenv/versions/3.12.0",
