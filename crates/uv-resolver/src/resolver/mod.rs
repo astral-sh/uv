@@ -612,7 +612,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
             }
             PubGrubPackage::Package(name, _extra, Some(url)) => {
                 // Verify that the package is allowed under the hash-checking policy.
-                if !self.hasher.allows_url(url) {
+                if !self.hasher.allows_url(&url.verbatim) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
@@ -685,7 +685,10 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
 
             PubGrubPackage::Extra(package_name, _, Some(url))
             | PubGrubPackage::Package(package_name, _, Some(url)) => {
-                debug!("Searching for a compatible version of {package} @ {url} ({range})");
+                debug!(
+                    "Searching for a compatible version of {package} @ {} ({range})",
+                    url.verbatim
+                );
 
                 // If the dist is an editable, return the version from the editable metadata.
                 if let Some((_local, metadata, _)) = self.editables.get(package_name) {
@@ -1373,7 +1376,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 PubGrubPackage::Python(_) => {}
                 PubGrubPackage::Extra(_, _, _) => {}
                 PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                    reporter.on_progress(package_name, &VersionOrUrlRef::Url(url));
+                    reporter.on_progress(package_name, &VersionOrUrlRef::Url(&url.verbatim));
                 }
                 PubGrubPackage::Package(package_name, _extra, None) => {
                     reporter.on_progress(package_name, &VersionOrUrlRef::Version(version));

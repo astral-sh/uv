@@ -5036,6 +5036,7 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-distribution",
+ "uv-git",
  "uv-interpreter",
  "uv-normalize",
  "uv-types",

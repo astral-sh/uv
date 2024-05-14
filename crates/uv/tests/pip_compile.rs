@@ -3592,6 +3592,7 @@ fn compile_html() -> Result<()> {
             .arg("https://download.pytorch.org/whl")
             .env("VIRTUAL_ENV", context.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
             .current_dir(context.temp_dir.path()), @r###"
     success: true
     exit_code: 0

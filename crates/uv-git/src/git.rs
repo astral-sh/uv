@@ -54,7 +54,7 @@ enum RefspecStrategy {
 impl GitReference {
     /// Creates a [`GitReference`] from an arbitrary revision string, which could represent a
     /// branch, tag, commit, or named ref.
-    pub(crate) fn from_rev(rev: &str) -> Self {
+    pub fn from_rev(rev: &str) -> Self {
         if rev.starts_with("refs/") {
             Self::NamedRef(rev.to_owned())
         } else if looks_like_commit_hash(rev) {

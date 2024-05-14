@@ -2,7 +2,7 @@ pub use archive::Archive;
 pub use distribution_database::{DistributionDatabase, HttpArchivePointer, LocalArchivePointer};
 pub use download::LocalWheel;
 pub use error::Error;
-pub use git::{is_same_reference, to_precise};
+pub use git::{git_url_to_precise, is_same_reference};
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 use pypi_types::{HashDigest, Metadata23};
 pub use reporter::Reporter;
