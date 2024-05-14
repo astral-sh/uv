@@ -56,7 +56,7 @@ impl ResolvedEditables {
     ) -> Result<Self> {
         // Partition the editables into those that are already installed, and those that must be built.
         let mut installed = Vec::with_capacity(editables.len());
-        let mut uninstalled = Vec::with_capacity(editables.len());
+        let mut builds = Vec::with_capacity(editables.len());
         for editable in editables {
             match reinstall {
                 Reinstall::None => {
@@ -64,33 +64,33 @@ impl ResolvedEditables {
                         if let Some(editable) = up_to_date(&editable, dist)? {
                             installed.push(editable);
                         } else {
-                            uninstalled.push(editable);
+                            builds.push(editable);
                         }
                     } else {
-                        uninstalled.push(editable);
+                        builds.push(editable);
                     }
                 }
                 Reinstall::All => {
-                    uninstalled.push(editable);
+                    builds.push(editable);
                 }
                 Reinstall::Packages(packages) => {
                     if let [dist] = site_packages.get_editables(editable.raw()).as_slice() {
                         if packages.contains(dist.name()) {
-                            uninstalled.push(editable);
+                            builds.push(editable);
                         } else if let Some(editable) = up_to_date(&editable, dist)? {
                             installed.push(editable);
                         } else {
-                            uninstalled.push(editable);
+                            builds.push(editable);
                         }
                     } else {
-                        uninstalled.push(editable);
+                        builds.push(editable);
                     }
                 }
             }
         }
 
         // Build any editables.
-        let (built_editables, temp_dir) = if uninstalled.is_empty() {
+        let (built_editables, temp_dir) = if builds.is_empty() {
             (Vec::new(), None)
         } else {
             let start = std::time::Instant::now();
@@ -101,9 +101,9 @@ impl ResolvedEditables {
                 hasher,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
-            .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
+            .with_reporter(DownloadReporter::from(printer).with_length(builds.len() as u64));
 
-            let editables = LocalEditables::from_editables(uninstalled.iter().map(|editable| {
+            let editables = LocalEditables::from_editables(builds.iter().map(|editable| {
                 let EditableRequirement {
                     url,
                     path,
