@@ -10,8 +10,8 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
-    GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistrySourceDist,
-    Resolution, ResolvedDist, ToUrlError,
+    GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -248,13 +248,12 @@ impl Distribution {
                         yanked: None,
                     });
                     let index = IndexUrl::Pypi(VerbatimUrl::from_url(self.id.source.url.clone()));
-                    let reg_dist = RegistryBuiltDist {
+                    let reg_dist = RegistryBuiltWheel {
                         filename,
                         file,
                         index,
                     };
-                    let built_dist = BuiltDist::Registry(reg_dist);
-                    Dist::Built(built_dist)
+                    Dist::from(reg_dist)
                 }
                 SourceKind::Path => {
                     let filename: WheelFilename = wheel.filename.clone();
@@ -375,7 +374,7 @@ impl Source {
 
     fn from_built_dist(built_dist: &BuiltDist) -> Source {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist(reg_dist),
+            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist2(reg_dist),
             BuiltDist::DirectUrl(ref direct_dist) => Source::from_direct_built_dist(direct_dist),
             BuiltDist::Path(ref path_dist) => Source::from_path_built_dist(path_dist),
         }
@@ -399,8 +398,12 @@ impl Source {
         }
     }
 
-    fn from_registry_built_dist(reg_dist: &RegistryBuiltDist) -> Source {
+    fn from_registry_built_dist(reg_dist: &RegistryBuiltWheel) -> Source {
         Source::from_index_url(&reg_dist.index)
+    }
+
+    fn from_registry_built_dist2(reg_dist: &RegistryBuiltDist) -> Source {
+        Source::from_index_url(&reg_dist.best_wheel().index)
     }
 
     fn from_registry_source_dist(reg_dist: &RegistrySourceDist) -> Source {
@@ -771,16 +774,19 @@ impl Wheel {
     }
 
     fn from_registry_dist(reg_dist: &RegistryBuiltDist) -> Result<Wheel, LockError> {
-        let filename = reg_dist.filename.clone();
-        let url = reg_dist
+        // FIXME: Is it guaranteed that there is at least one hash?
+        // If not, we probably need to make this fallible.
+        let wheel = reg_dist.best_wheel();
+        let filename = wheel.filename.clone();
+        let url = wheel
             .file
             .url
             .to_url()
             .map_err(LockError::invalid_file_url)?;
-        let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
+        let hash = Hash::from(wheel.file.hashes[0].clone());
         Ok(Wheel {
             url,
-            hash,
+            hash: Some(hash),
             filename,
         })
     }

@@ -839,7 +839,10 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 };
 
                 let filename = match dist.for_installation() {
-                    ResolvedDistRef::Installable(dist) => {
+                    ResolvedDistRef::InstallableRegistrySourceDist(dist) => {
+                        dist.filename().unwrap_or(Cow::Borrowed("unknown filename"))
+                    }
+                    ResolvedDistRef::InstallableRegistryBuiltDist(dist) => {
                         dist.filename().unwrap_or(Cow::Borrowed("unknown filename"))
                     }
                     ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
@@ -862,7 +865,12 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 if matches!(package, PubGrubPackage::Package(_, _, _)) {
                     if self.index.distributions.register(candidate.version_id()) {
                         let request = match dist.for_resolution() {
-                            ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
+                            ResolvedDistRef::InstallableRegistrySourceDist(dist) => {
+                                Request::Dist(Dist::from((*dist).clone()))
+                            }
+                            ResolvedDistRef::InstallableRegistryBuiltDist(dist) => {
+                                Request::Dist(Dist::from((*dist).clone()))
+                            }
                             ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
                         };
                         request_sink.send(request).await?;

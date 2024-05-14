@@ -406,9 +406,9 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
             // We always return the source distribution (if one exists) instead of the wheel
             // but in the future we may want to return both so the resolver can explain
             // why neither distribution kind can be used.
-            let dist = if let Some((_, incompatibility)) = value.incompatible_source() {
+            let dist = if let Some(incompatibility) = value.incompatible_source() {
                 IncompatibleDist::Source(incompatibility.clone())
-            } else if let Some((_, incompatibility)) = value.incompatible_wheel() {
+            } else if let Some(incompatibility) = value.incompatible_wheel() {
                 IncompatibleDist::Wheel(incompatibility.clone())
             } else {
                 IncompatibleDist::Unavailable

@@ -10,7 +10,7 @@ use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
     DirectUrlSourceDist, Dist, DistributionId, GitSourceDist, InstalledDirectUrlDist,
     InstalledDist, InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistrySourceDist, ResourceId, SourceDist, VersionId,
+    PathSourceDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId,
     VersionOrUrlRef,
 };
 
@@ -203,7 +203,7 @@ impl std::fmt::Display for PathSourceDist {
     }
 }
 
-impl std::fmt::Display for RegistryBuiltDist {
+impl std::fmt::Display for RegistryBuiltWheel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }

@@ -173,7 +173,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
 
         match dist {
-            BuiltDist::Registry(wheel) => {
+            BuiltDist::Registry(wheels) => {
+                let wheel = wheels.best_wheel();
                 let url = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => {
                         pypi_types::base_url_join_relative(base, url)?

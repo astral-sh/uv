@@ -4,7 +4,7 @@ use pep508_rs::PackageName;
 
 use crate::{
     Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist, Name,
-    ResourceId, VersionOrUrlRef,
+    RegistryBuiltWheel, RegistrySourceDist, ResourceId, VersionOrUrlRef,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -20,7 +20,8 @@ pub enum ResolvedDist {
 #[derive(Debug, Clone)]
 pub enum ResolvedDistRef<'a> {
     Installed(&'a InstalledDist),
-    Installable(&'a Dist),
+    InstallableRegistrySourceDist(&'a RegistrySourceDist),
+    InstallableRegistryBuiltDist(&'a RegistryBuiltWheel),
 }
 
 impl ResolvedDist {
@@ -44,7 +45,12 @@ impl ResolvedDist {
 impl ResolvedDistRef<'_> {
     pub fn to_owned(&self) -> ResolvedDist {
         match self {
-            Self::Installable(dist) => ResolvedDist::Installable((*dist).clone()),
+            Self::InstallableRegistrySourceDist(dist) => {
+                ResolvedDist::Installable(Dist::from((*dist).clone()))
+            }
+            Self::InstallableRegistryBuiltDist(dist) => {
+                ResolvedDist::Installable(Dist::from((*dist).clone()))
+            }
             Self::Installed(dist) => ResolvedDist::Installed((*dist).clone()),
         }
     }
@@ -53,7 +59,8 @@ impl ResolvedDistRef<'_> {
 impl Display for ResolvedDistRef<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Installable(dist) => Display::fmt(dist, f),
+            Self::InstallableRegistrySourceDist(dist) => Display::fmt(dist, f),
+            Self::InstallableRegistryBuiltDist(dist) => Display::fmt(dist, f),
             Self::Installed(dist) => Display::fmt(dist, f),
         }
     }
@@ -62,7 +69,8 @@ impl Display for ResolvedDistRef<'_> {
 impl Name for ResolvedDistRef<'_> {
     fn name(&self) -> &PackageName {
         match self {
-            Self::Installable(dist) => dist.name(),
+            Self::InstallableRegistrySourceDist(dist) => dist.name(),
+            Self::InstallableRegistryBuiltDist(dist) => dist.name(),
             Self::Installed(dist) => dist.name(),
         }
     }
@@ -72,7 +80,8 @@ impl DistributionMetadata for ResolvedDistRef<'_> {
     fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
             Self::Installed(installed) => VersionOrUrlRef::Version(installed.version()),
-            Self::Installable(dist) => dist.version_or_url(),
+            Self::InstallableRegistrySourceDist(dist) => dist.version_or_url(),
+            Self::InstallableRegistryBuiltDist(dist) => dist.version_or_url(),
         }
     }
 }
@@ -81,14 +90,16 @@ impl Identifier for ResolvedDistRef<'_> {
     fn distribution_id(&self) -> DistributionId {
         match self {
             Self::Installed(dist) => dist.distribution_id(),
-            Self::Installable(dist) => dist.distribution_id(),
+            Self::InstallableRegistrySourceDist(dist) => dist.distribution_id(),
+            Self::InstallableRegistryBuiltDist(dist) => dist.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
             Self::Installed(dist) => dist.resource_id(),
-            Self::Installable(dist) => dist.resource_id(),
+            Self::InstallableRegistrySourceDist(dist) => dist.resource_id(),
+            Self::InstallableRegistryBuiltDist(dist) => dist.resource_id(),
         }
     }
 }
