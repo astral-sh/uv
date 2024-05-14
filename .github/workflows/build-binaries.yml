@@ -553,7 +553,6 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         platform:
           - target: aarch64-unknown-linux-musl
@@ -563,8 +562,7 @@ jobs:
             arch: armv7
           - target: powerpc64le-unknown-linux-musl
             arch: ppc64le
-          - target: s390x-unknown-linux-musl
-            arch: s390x
+            toolchain: nightly
 
     steps:
       - uses: actions/checkout@v4
@@ -582,6 +580,7 @@ jobs:
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update
           docker-options: ${{ matrix.platform.maturin_docker_options }}
+          rust-toolchain: ${{ matrix.platform.toolchain || 'stable' }}
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
