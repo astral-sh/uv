@@ -560,7 +560,7 @@ def main() -> None:
         "gil_disabled": bool(sysconfig.get_config_var("Py_GIL_DISABLED")),
         # Determine if the interpreter is 32-bit or 64-bit.
         # https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L136
-        "pointer_size": "64" if sys.maxsize > 2 ** 32 else "32",
+        "pointer_size": "64" if sys.maxsize > 2**32 else "32",
     }
     print(json.dumps(interpreter_info))
 

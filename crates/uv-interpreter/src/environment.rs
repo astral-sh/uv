@@ -123,11 +123,6 @@ impl PythonEnvironment {
         } else {
             let purelib = self.interpreter.purelib();
             let platlib = self.interpreter.platlib();
-
-            println!("purelib: {:?}", purelib);
-            println!("platlib: {:?}", platlib);
-            println!("is_same_file(purelib, platlib): {:?}", is_same_file(purelib, platlib));
-
             Either::Right(std::iter::once(purelib).chain(
                 if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
                     None

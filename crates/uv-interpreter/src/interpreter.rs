@@ -672,6 +672,7 @@ mod tests {
                     "purelib": "lib/python3.12/site-packages",
                     "scripts": "bin"
                 },
+                "pointer_size": "64",
                 "gil_disabled": true
             }
         "##};
