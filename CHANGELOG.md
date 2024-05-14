@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.1.43
+
+### Enhancements
+
+- Annotate sources of requirements in `pip compile` output ([#3269](https://github.com/astral-sh/uv/pull/3269))
+- Track origin for `setup.py` files and friends ([#3481](https://github.com/astral-sh/uv/pull/3481))
+
+### Configuration
+
+- Consolidate concurrency limits and expose as environment variables ([#3493](https://github.com/astral-sh/uv/pull/3493))
+
+### Release
+
+- Use manylinux: auto to enable musllinux_1_2 aarch64 builds ([#3444](https://github.com/astral-sh/uv/pull/3444))
+- Enable musllinux_1_1 wheels ([#3523](https://github.com/astral-sh/uv/pull/3523))
+
+### Bug fixes
+
+- Avoid keyword arguments for PEP 517 build hooks ([#3517](https://github.com/astral-sh/uv/pull/3517))
+- Apply advisory locks when building source distributions ([#3525](https://github.com/astral-sh/uv/pull/3525))
+- Avoid attempting to build editables when fetching metadata ([#3563](https://github.com/astral-sh/uv/pull/3563))
+- Clone individual files on windows ReFS ([#3551](https://github.com/astral-sh/uv/pull/3551))
+- Filter irrelevant requirements from source annotations ([#3479](https://github.com/astral-sh/uv/pull/3479))
+- Make cache clearing robust to directories without read permissions ([#3524](https://github.com/astral-sh/uv/pull/3524))
+- Respect constraints on editable dependencies ([#3554](https://github.com/astral-sh/uv/pull/3554))
+- Skip Python 2 versions when locating Python ([#3476](https://github.com/astral-sh/uv/pull/3476))
+- Make `--isolated` a global argument ([#3558](https://github.com/astral-sh/uv/pull/3558))
+- Allow unknown `pyproject.toml` fields ([#3511](https://github.com/astral-sh/uv/pull/3511))
+- Change error value detection for glibc ([#3487](https://github.com/astral-sh/uv/pull/3487))
+
 ## 0.1.42
 
 This release includes stabilized support for persistent configuration in uv.
