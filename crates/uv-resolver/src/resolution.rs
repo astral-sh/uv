@@ -54,6 +54,7 @@ pub enum AnnotationStyle {
 #[derive(Debug)]
 pub struct AnnotatedDist {
     pub dist: ResolvedDist,
+    pub extras: Vec<ExtraName>,
     pub hashes: Vec<HashDigest>,
     pub metadata: Metadata23,
 }
@@ -82,8 +83,6 @@ impl Display for AnnotatedDist {
 pub struct ResolutionGraph {
     /// The underlying graph.
     petgraph: petgraph::graph::Graph<AnnotatedDist, Range<Version>, petgraph::Directed>,
-    /// The enabled extras for every distribution in this resolution.
-    extras: FxHashMap<PackageName, Vec<ExtraName>>,
     /// The set of editable requirements in this resolution.
     editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
@@ -257,9 +256,13 @@ impl ResolutionGraph {
                         archive.metadata.clone()
                     };
 
+                    // Extract the extras.
+                    let extras = extras.get(package_name).cloned().unwrap_or_default();
+
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(AnnotatedDist {
                         dist,
+                        extras,
                         hashes,
                         metadata,
                     });
@@ -273,6 +276,7 @@ impl ResolutionGraph {
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
                             dist: dist.into(),
+                            extras: editable.extras.clone(),
                             hashes: vec![],
                             metadata: metadata.clone(),
                         });
@@ -324,9 +328,13 @@ impl ResolutionGraph {
                             archive.metadata.clone()
                         };
 
+                        // Extract the extras.
+                        let extras = extras.get(package_name).cloned().unwrap_or_default();
+
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
                             dist: dist.into(),
+                            extras,
                             hashes,
                             metadata,
                         });
@@ -383,7 +391,6 @@ impl ResolutionGraph {
 
         Ok(Self {
             petgraph,
-            extras,
             editables,
             diagnostics,
         })
@@ -659,7 +666,7 @@ enum Node<'a> {
     /// A node linked to an editable distribution.
     Editable(&'a LocalEditable),
     /// A node linked to a non-editable distribution.
-    Distribution(&'a PackageName, &'a AnnotatedDist, &'a [ExtraName]),
+    Distribution(&'a AnnotatedDist),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -675,7 +682,7 @@ impl<'a> Node<'a> {
     fn key(&self) -> NodeKey<'a> {
         match self {
             Node::Editable(editable) => NodeKey::Editable(editable.verbatim()),
-            Node::Distribution(name, _, _) => NodeKey::Distribution(name),
+            Node::Distribution(annotated) => NodeKey::Distribution(annotated.name()),
         }
     }
 
@@ -683,27 +690,15 @@ impl<'a> Node<'a> {
     fn index(&self) -> Option<&IndexUrl> {
         match self {
             Node::Editable(_) => None,
-            Node::Distribution(_, package, _) => package.dist.index(),
+            Node::Distribution(annotated) => annotated.dist.index(),
         }
     }
-}
 
-impl Verbatim for Node<'_> {
-    fn verbatim(&self) -> Cow<'_, str> {
+    /// Return the hashes of the distribution.
+    fn hashes(&self) -> &[HashDigest] {
         match self {
-            Node::Editable(editable) => Cow::Owned(format!("-e {}", editable.verbatim())),
-            Node::Distribution(_, dist, &[]) => dist.verbatim(),
-            Node::Distribution(_, dist, extras) => {
-                let mut extras = extras.to_vec();
-                extras.sort_unstable();
-                extras.dedup();
-                Cow::Owned(format!(
-                    "{}[{}]{}",
-                    dist.name(),
-                    extras.into_iter().join(", "),
-                    dist.version_or_url().verbatim()
-                ))
-            }
+            Node::Editable(_) => &[],
+            Node::Distribution(annotated) => &annotated.hashes,
         }
     }
 }
@@ -725,17 +720,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
 
                 let node = if let Some((editable, _, _)) = self.resolution.editables.get(name) {
                     Node::Editable(editable)
-                } else if self.include_extras {
-                    Node::Distribution(
-                        name,
-                        dist,
-                        self.resolution
-                            .extras
-                            .get(name)
-                            .map_or(&[], |extras| extras.as_slice()),
-                    )
                 } else {
-                    Node::Distribution(name, dist, &[])
+                    Node::Distribution(dist)
                 };
                 Some((index, node))
             })
@@ -747,18 +733,33 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // Print out the dependency graph.
         for (index, node) in nodes {
             // Display the node itself.
-            let mut line = node.verbatim().to_string();
+            let mut line = match node {
+                Node::Editable(editable) => format!("-e {}", editable.verbatim()),
+                Node::Distribution(dist) => {
+                    if self.include_extras && !dist.extras.is_empty() {
+                        let mut extras = dist.extras.clone();
+                        extras.sort_unstable();
+                        extras.dedup();
+                        format!(
+                            "{}[{}]{}",
+                            dist.name(),
+                            extras.into_iter().join(", "),
+                            dist.version_or_url().verbatim()
+                        )
+                    } else {
+                        dist.verbatim().to_string()
+                    }
+                }
+            };
 
             // Display the distribution hashes, if any.
             let mut has_hashes = false;
             if self.show_hashes {
-                if let Node::Distribution(_, package, _) = node {
-                    for hash in &package.hashes {
-                        has_hashes = true;
-                        line.push_str(" \\\n");
-                        line.push_str("    --hash=");
-                        line.push_str(&hash.to_string());
-                    }
+                for hash in node.hashes() {
+                    has_hashes = true;
+                    line.push_str(" \\\n");
+                    line.push_str("    --hash=");
+                    line.push_str(&hash.to_string());
                 }
             }
 
@@ -783,7 +784,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     Node::Editable(editable) => {
                         self.sources.get_editable(&editable.url).unwrap_or(&default)
                     }
-                    Node::Distribution(name, _, _) => self.sources.get(name).unwrap_or(&default),
+                    Node::Distribution(dist) => self.sources.get(dist.name()).unwrap_or(&default),
                 };
 
                 match self.annotation_style {
