@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::fmt::Display;
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
@@ -20,7 +21,7 @@ use distribution_types::{
 use once_map::OnceMap;
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::MarkerEnvironment;
-use pypi_types::HashDigest;
+use pypi_types::{HashDigest, Metadata23};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::dependency_provider::UvDependencyProvider;
@@ -47,14 +48,40 @@ pub enum AnnotationStyle {
     Split,
 }
 
+/// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a
+/// specific distribution (e.g., a specific wheel), while the [`Metadata23`] refers to the metadata
+/// for the package-version pair.
+#[derive(Debug)]
+pub struct AnnotatedDist {
+    pub dist: ResolvedDist,
+    pub hashes: Vec<HashDigest>,
+    pub metadata: Metadata23,
+}
+
+impl Name for AnnotatedDist {
+    fn name(&self) -> &PackageName {
+        self.dist.name()
+    }
+}
+
+impl DistributionMetadata for AnnotatedDist {
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        self.dist.version_or_url()
+    }
+}
+
+impl Display for AnnotatedDist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.dist, f)
+    }
+}
+
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    petgraph: petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed>,
-    /// The metadata for every distribution in this resolution.
-    hashes: FxHashMap<PackageName, Vec<HashDigest>>,
+    petgraph: petgraph::graph::Graph<AnnotatedDist, Range<Version>, petgraph::Directed>,
     /// The enabled extras for every distribution in this resolution.
     extras: FxHashMap<PackageName, Vec<ExtraName>>,
     /// The set of editable requirements in this resolution.
@@ -186,21 +213,18 @@ impl ResolutionGraph {
             };
         }
 
+        // Add every package to the graph.
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
         let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
-        let mut hashes =
-            FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
-
-        // Add every package to the graph.
         let mut inverse =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
+
         for (package, version) in selection {
             match package {
                 PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
-                    let pinned_package = if let Some((editable, _, _)) = editables.get(package_name)
-                    {
+                    let dist = if let Some((editable, _, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?.into()
                     } else {
                         pins.get(package_name, version)
@@ -208,57 +232,117 @@ impl ResolutionGraph {
                             .clone()
                     };
 
-                    // Add its hashes to the index, preserving those that were already present in
-                    // the lockfile if necessary.
-                    if let Some(digests) = preferences
+                    // Extract the hashes, preserving those that were already present in the
+                    // lockfile if necessary.
+                    let hashes = if let Some(digests) = preferences
                         .match_hashes(package_name, version)
                         .filter(|digests| !digests.is_empty())
                     {
-                        hashes.insert(package_name.clone(), digests.to_vec());
+                        digests.to_vec()
                     } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                            for version_map in version_maps {
-                                if let Some(mut digests) = version_map.hashes(version) {
+                            version_maps
+                                .iter()
+                                .find_map(|version_map| version_map.hashes(version))
+                                .map(|mut digests| {
                                     digests.sort_unstable();
-                                    hashes.insert(package_name.clone(), digests);
-                                    break;
-                                }
-                            }
+                                    digests
+                                })
+                                .unwrap_or_default()
+                        } else {
+                            vec![]
                         }
-                    }
+                    } else {
+                        vec![]
+                    };
+
+                    // Extract the metadata.
+                    let metadata = if let Some((_, metadata, _)) = editables.get(package_name) {
+                        metadata.clone()
+                    } else {
+                        let dist = PubGrubDistribution::from_registry(package_name, version);
+
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        });
+
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        };
+
+                        archive.metadata.clone()
+                    };
 
                     // Add the distribution to the graph.
-                    let index = petgraph.add_node(pinned_package);
+                    let index = petgraph.add_node(AnnotatedDist {
+                        dist,
+                        hashes,
+                        metadata,
+                    });
                     inverse.insert(package_name, index);
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
                     // Create the distribution.
-                    let pinned_package = if let Some((editable, _, _)) = editables.get(package_name)
-                    {
+                    let dist = if let Some((editable, _, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?
                     } else {
                         Dist::from_url(package_name.clone(), url_to_precise(url.clone()))?
                     };
 
-                    // Add its hashes to the index, preserving those that were already present in
-                    // the lockfile if necessary.
-                    if let Some(digests) = preferences
+                    // Extract the hashes, preserving those that were already present in the
+                    // lockfile if necessary.
+                    let hashes = if let Some(digests) = preferences
                         .match_hashes(package_name, version)
                         .filter(|digests| !digests.is_empty())
                     {
-                        hashes.insert(package_name.clone(), digests.to_vec());
-                    } else if let Some(metadata_response) =
-                        distributions.get(&pinned_package.version_id())
-                    {
+                        digests.to_vec()
+                    } else if let Some(metadata_response) = distributions.get(&dist.version_id()) {
                         if let MetadataResponse::Found(ref archive) = *metadata_response {
                             let mut digests = archive.hashes.clone();
                             digests.sort_unstable();
-                            hashes.insert(package_name.clone(), digests);
+                            digests
+                        } else {
+                            vec![]
                         }
-                    }
+                    } else {
+                        vec![]
+                    };
+
+                    // Extract the metadata.
+                    let metadata = if let Some((_, metadata, _)) = editables.get(package_name) {
+                        metadata.clone()
+                    } else {
+                        let dist = PubGrubDistribution::from_url(package_name, url);
+
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        });
+
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        };
+
+                        archive.metadata.clone()
+                    };
 
                     // Add the distribution to the graph.
-                    let index = petgraph.add_node(pinned_package.into());
+                    let index = petgraph.add_node(AnnotatedDist {
+                        dist: dist.into(),
+                        hashes,
+                        metadata,
+                    });
                     inverse.insert(package_name, index);
                 }
                 _ => {}
@@ -311,7 +395,6 @@ impl ResolutionGraph {
 
         Ok(Self {
             petgraph,
-            hashes,
             extras,
             editables,
             diagnostics,
@@ -341,7 +424,7 @@ impl ResolutionGraph {
             .into_nodes_edges()
             .0
             .into_iter()
-            .map(|node| node.weight)
+            .map(|node| node.weight.dist)
     }
 
     /// Return the [`Diagnostic`]s that were encountered while building the graph.
@@ -352,7 +435,7 @@ impl ResolutionGraph {
     /// Return the underlying graph.
     pub fn petgraph(
         &self,
-    ) -> &petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed> {
+    ) -> &petgraph::graph::Graph<AnnotatedDist, Range<Version>, petgraph::Directed> {
         &self.petgraph
     }
 
@@ -506,7 +589,7 @@ impl ResolutionGraph {
         let mut locked_dists = vec![];
         for node_index in self.petgraph.node_indices() {
             let dist = &self.petgraph[node_index];
-            let mut locked_dist = lock::Distribution::from_resolved_dist(dist)?;
+            let mut locked_dist = lock::Distribution::from_annotated_dist(dist)?;
             for edge in self.petgraph.neighbors(node_index) {
                 let dependency_dist = &self.petgraph[edge];
                 locked_dist.add_dependency(dependency_dist);
@@ -586,9 +669,9 @@ impl<'a> DisplayResolutionGraph<'a> {
 #[derive(Debug)]
 enum Node<'a> {
     /// A node linked to an editable distribution.
-    Editable(&'a PackageName, &'a LocalEditable),
+    Editable(&'a LocalEditable),
     /// A node linked to a non-editable distribution.
-    Distribution(&'a PackageName, &'a ResolvedDist, &'a [ExtraName]),
+    Distribution(&'a PackageName, &'a AnnotatedDist, &'a [ExtraName]),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -600,18 +683,10 @@ enum NodeKey<'a> {
 }
 
 impl<'a> Node<'a> {
-    /// Return the name of the package.
-    fn name(&self) -> &'a PackageName {
-        match self {
-            Node::Editable(name, _) => name,
-            Node::Distribution(name, _, _) => name,
-        }
-    }
-
     /// Return a comparable key for the node.
     fn key(&self) -> NodeKey<'a> {
         match self {
-            Node::Editable(_, editable) => NodeKey::Editable(editable.verbatim()),
+            Node::Editable(editable) => NodeKey::Editable(editable.verbatim()),
             Node::Distribution(name, _, _) => NodeKey::Distribution(name),
         }
     }
@@ -619,8 +694,8 @@ impl<'a> Node<'a> {
     /// Return the [`IndexUrl`] of the distribution, if any.
     fn index(&self) -> Option<&IndexUrl> {
         match self {
-            Node::Editable(_, _) => None,
-            Node::Distribution(_, dist, _) => dist.index(),
+            Node::Editable(_) => None,
+            Node::Distribution(_, package, _) => package.dist.index(),
         }
     }
 }
@@ -628,7 +703,7 @@ impl<'a> Node<'a> {
 impl Verbatim for Node<'_> {
     fn verbatim(&self) -> Cow<'_, str> {
         match self {
-            Node::Editable(_, editable) => Cow::Owned(format!("-e {}", editable.verbatim())),
+            Node::Editable(editable) => Cow::Owned(format!("-e {}", editable.verbatim())),
             Node::Distribution(_, dist, &[]) => dist.verbatim(),
             Node::Distribution(_, dist, extras) => {
                 let mut extras = extras.to_vec();
@@ -661,7 +736,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 }
 
                 let node = if let Some((editable, _, _)) = self.resolution.editables.get(name) {
-                    Node::Editable(name, editable)
+                    Node::Editable(editable)
                 } else if self.include_extras {
                     Node::Distribution(
                         name,
@@ -689,13 +764,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // Display the distribution hashes, if any.
             let mut has_hashes = false;
             if self.show_hashes {
-                if let Some(hashes) = self
-                    .resolution
-                    .hashes
-                    .get(node.name())
-                    .filter(|hashes| !hashes.is_empty())
-                {
-                    for hash in hashes {
+                if let Node::Distribution(_, package, _) = node {
+                    for hash in &package.hashes {
                         has_hashes = true;
                         line.push_str(" \\\n");
                         line.push_str("    --hash=");
@@ -722,7 +792,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 // Include all external sources (e.g., requirements files).
                 let default = BTreeSet::default();
                 let source = match node {
-                    Node::Editable(_, editable) => {
+                    Node::Editable(editable) => {
                         self.sources.get_editable(&editable.url).unwrap_or(&default)
                     }
                     Node::Distribution(name, _, _) => self.sources.get(name).unwrap_or(&default),
@@ -810,7 +880,7 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
                 .map(|node| {
                     (
                         graph.petgraph[node].name().clone(),
-                        graph.petgraph[node].clone(),
+                        graph.petgraph[node].dist.clone(),
                     )
                 })
                 .collect(),

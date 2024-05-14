@@ -963,8 +963,8 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
-                    // still required for reporting diagnostics.
-                    if extra.is_some() && !self.editables.contains(package_name) {
+                    // still required for generating the lock file.
+                    if !self.editables.contains(package_name) {
                         // Determine the distribution to lookup.
                         let dist = match url {
                             Some(url) => PubGrubDistribution::from_url(package_name, url),
