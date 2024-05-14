@@ -279,7 +279,6 @@ pub(crate) async fn install(
         cached,
         remote,
         reinstalls,
-        installed: _,
         extraneous: _,
     } = plan;
 
