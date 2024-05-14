@@ -7,7 +7,7 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
-    Dist, Hash, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    Dist, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
     SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifiers};
@@ -474,17 +474,17 @@ impl VersionMapLazy {
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
         let hash = if self.required_hashes.is_empty() {
-            Hash::Matched
+            HashComparison::Matched
         } else {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if hashes
                 .iter()
                 .any(|hash| self.required_hashes.contains(hash))
             {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         };
 
@@ -538,17 +538,17 @@ impl VersionMapLazy {
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
         let hash = if self.required_hashes.is_empty() {
-            Hash::Matched
+            HashComparison::Matched
         } else {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if hashes
                 .iter()
                 .any(|hash| self.required_hashes.contains(hash))
             {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         };
 

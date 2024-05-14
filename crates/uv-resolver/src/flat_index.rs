@@ -6,9 +6,9 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuiltDist, Dist, File, Hash, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
-    PrioritizedDist, RegistryBuiltDist, RegistrySourceDist, SourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    BuiltDist, Dist, File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel,
+    IndexUrl, PrioritizedDist, RegistryBuiltDist, RegistrySourceDist, SourceDist,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::Version;
 use platform_tags::{TagCompatibility, Tags};
@@ -134,14 +134,14 @@ impl FlatIndex {
         // Check if hashes line up
         let hash = if let HashPolicy::Validate(required) = hasher.get_package(&filename.name) {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if required.iter().any(|hash| hashes.contains(hash)) {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         } else {
-            Hash::Matched
+            HashComparison::Matched
         };
 
         SourceDistCompatibility::Compatible(hash)
@@ -176,14 +176,14 @@ impl FlatIndex {
         // Check if hashes line up
         let hash = if let HashPolicy::Validate(required) = hasher.get_package(&filename.name) {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if required.iter().any(|hash| hashes.contains(hash)) {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         } else {
-            Hash::Matched
+            HashComparison::Matched
         };
 
         WheelCompatibility::Compatible(hash, priority)

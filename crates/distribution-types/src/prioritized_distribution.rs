@@ -113,7 +113,7 @@ impl Display for IncompatibleDist {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
-    Compatible(Hash, TagPriority),
+    Compatible(HashComparison, TagPriority),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -128,7 +128,7 @@ pub enum IncompatibleWheel {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceDistCompatibility {
     Incompatible(IncompatibleSource),
-    Compatible(Hash),
+    Compatible(HashComparison),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -140,7 +140,7 @@ pub enum IncompatibleSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Hash {
+pub enum HashComparison {
     /// The hash is present, but does not match the expected value.
     Mismatched,
     /// The hash is missing.
@@ -217,7 +217,9 @@ impl PrioritizedDist {
     /// Return the highest-priority distribution for the package version, if any.
     pub fn get(&self) -> Option<CompatibleDist> {
         match (&self.0.wheel, &self.0.source) {
-            // If both are compatible, break ties based on the hash.
+            // If both are compatible, break ties based on the hash outcome. For example, prefer a
+            // source distribution with a matching hash over a wheel with a mismatched hash. When
+            // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
             (
                 Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority))),
                 Some((source_dist, SourceDistCompatibility::Compatible(source_hash))),
