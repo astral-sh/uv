@@ -112,7 +112,7 @@ async fn run() -> Result<ExitStatus> {
     // 3. The user configuration file.
     let workspace = if let Some(config_file) = cli.config_file.as_ref() {
         Some(uv_workspace::Workspace::from_file(config_file)?)
-    } else if cli.isolated {
+    } else if cli.global_args.isolated {
         None
     } else {
         let project = uv_workspace::Workspace::find(env::current_dir()?)?;
@@ -229,6 +229,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.link_mode,
                 args.shared.python,
                 args.shared.system,
+                args.shared.concurrency,
                 args.uv_lock,
                 globals.native_tls,
                 globals.quiet,
@@ -275,6 +276,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.system,
                 args.shared.break_system_packages,
                 args.shared.target,
+                args.shared.concurrency,
                 globals.native_tls,
                 globals.preview,
                 cache,
@@ -342,6 +344,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.system,
                 args.shared.break_system_packages,
                 args.shared.target,
+                args.shared.concurrency,
                 args.uv_lock,
                 globals.native_tls,
                 globals.preview,
@@ -521,7 +524,7 @@ async fn run() -> Result<ExitStatus> {
                 args.args,
                 requirements,
                 args.python,
-                cli.isolated,
+                globals.isolated,
                 globals.preview,
                 &cache,
                 printer,

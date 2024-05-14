@@ -147,6 +147,9 @@ which = { version = "6.0.0" }
 winapi = { version = "0.3.9", features = ["fileapi", "handleapi", "ioapiset", "winbase", "winioctl", "winnt"] }
 zip = { version = "1.1.0", default-features = false, features = ["deflate"] }
 
+[workspace.metadata.cargo-shear]
+ignored = ["flate2"]
+
 [patch.crates-io]
 # For pyproject-toml
 pep440_rs = { path = "crates/pep440-rs" }
@@ -163,6 +166,7 @@ char_lit_as_u8 = "allow"
 collapsible_else_if = "allow"
 collapsible_if = "allow"
 implicit_hasher = "allow"
+map_unwrap_or = "allow"
 match_same_arms = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"

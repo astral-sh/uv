@@ -1,4 +1,4 @@
-pub(crate) use crate::pubgrub::dependencies::PubGrubDependencies;
+pub(crate) use crate::pubgrub::dependencies::{PubGrubDependencies, PubGrubRequirement};
 pub(crate) use crate::pubgrub::distribution::PubGrubDistribution;
 pub(crate) use crate::pubgrub::package::{PubGrubPackage, PubGrubPython};
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority};

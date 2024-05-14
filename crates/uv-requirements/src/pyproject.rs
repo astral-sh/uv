@@ -109,7 +109,6 @@ pub struct Tool {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
 pub struct ToolUv {
     pub sources: Option<HashMap<PackageName, Source>>,
     pub workspace: Option<ToolUvWorkspace>,
@@ -117,7 +116,6 @@ pub struct ToolUv {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
 pub struct ToolUvWorkspace {
     pub members: Option<Vec<SerdePattern>>,
     pub exclude: Option<Vec<SerdePattern>>,

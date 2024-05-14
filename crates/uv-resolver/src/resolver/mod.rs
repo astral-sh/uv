@@ -29,7 +29,6 @@ use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
-use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
@@ -44,7 +43,7 @@ use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubPython,
-    PubGrubSpecifier,
+    PubGrubRequirement, PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
@@ -222,7 +221,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
     /// reader of the resolution that knows to exclude distributions that can't
     /// be used in the current environment.
     ///
-    /// When a marker environment is provided, the reslver is in
+    /// When a marker environment is provided, the resolver is in
     /// "non-universal" mode, which corresponds to standard `pip` behavior that
     /// works only for a specific marker environment.
     #[allow(clippy::too_many_arguments)]
@@ -232,16 +231,15 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         python_requirement: &'a PythonRequirement,
         markers: Option<&'a MarkerEnvironment>,
         tags: &'a Tags,
-        client: &'a RegistryClient,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,
         build_context: &'a Context,
         installed_packages: &'a InstalledPackages,
+        database: DistributionDatabase<'a, Context>,
     ) -> Result<Self, ResolveError> {
         let provider = DefaultResolverProvider::new(
-            client,
-            DistributionDatabase::new(client, build_context),
+            database,
             flat_index,
             tags,
             python_requirement.clone(),
@@ -251,6 +249,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.no_binary(),
             build_context.no_build(),
         );
+
         Self::new_custom_io(
             manifest,
             options,
@@ -617,6 +616,11 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
+                // If the package is an editable, we don't need to fetch metadata.
+                if self.editables.contains(name) {
+                    return Ok(());
+                }
+
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.version_id()) {
@@ -882,7 +886,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
         match package {
             PubGrubPackage::Root(_) => {
                 // Add the root requirements.
-                let constraints = PubGrubDependencies::from_requirements(
+                let dependencies = PubGrubDependencies::from_requirements(
                     &self.requirements,
                     &self.constraints,
                     &self.overrides,
@@ -893,8 +897,8 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.markers,
                 );
 
-                let mut constraints = match constraints {
-                    Ok(constraints) => constraints,
+                let mut dependencies = match dependencies {
+                    Ok(dependencies) => dependencies,
                     Err(err) => {
                         return Ok(Dependencies::Unavailable(
                             UnavailableVersion::ResolverError(uncapitalize(err.to_string())),
@@ -902,7 +906,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     }
                 };
 
-                for (package, version) in constraints.iter() {
+                for (package, version) in dependencies.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Update the package priorities.
@@ -922,11 +926,11 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     priorities.insert(&package, &version);
 
                     // Add the editable as a direct dependency.
-                    constraints.push(package, version);
+                    dependencies.push(package, version);
 
                     // Add a dependency on each extra.
                     for extra in &editable.extras {
-                        constraints.push(
+                        dependencies.push(
                             PubGrubPackage::from_package(
                                 metadata.name.clone(),
                                 Some(extra.clone()),
@@ -935,9 +939,22 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                             Range::singleton(metadata.version.clone()),
                         );
                     }
+
+                    // Add any constraints.
+                    for constraint in self.constraints.get(&metadata.name).into_iter().flatten() {
+                        if constraint.evaluate_markers(self.markers, &[]) {
+                            let PubGrubRequirement { package, version } =
+                                PubGrubRequirement::from_constraint(
+                                    constraint,
+                                    &self.urls,
+                                    &self.locals,
+                                )?;
+                            dependencies.push(package, version);
+                        }
+                    }
                 }
 
-                Ok(Dependencies::Available(constraints.into()))
+                Ok(Dependencies::Available(dependencies.into()))
             }
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
@@ -947,7 +964,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for reporting diagnostics.
-                    if extra.is_some() && self.editables.get(package_name).is_none() {
+                    if extra.is_some() && !self.editables.contains(package_name) {
                         // Determine the distribution to lookup.
                         let dist = match url {
                             Some(url) => PubGrubDistribution::from_url(package_name, url),
@@ -975,7 +992,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         .cloned()
                         .map(Requirement::from_pep508)
                         .collect::<Result<_, _>>()?;
-                    let constraints = PubGrubDependencies::from_requirements(
+                    let dependencies = PubGrubDependencies::from_requirements(
                         &requirements,
                         &self.constraints,
                         &self.overrides,
@@ -986,7 +1003,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         self.markers,
                     )?;
 
-                    for (dep_package, dep_version) in constraints.iter() {
+                    for (dep_package, dep_version) in dependencies.iter() {
                         debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
                         // Update the package priorities.
@@ -996,7 +1013,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         self.visit_package(dep_package, request_sink).await?;
                     }
 
-                    return Ok(Dependencies::Available(constraints.into()));
+                    return Ok(Dependencies::Available(dependencies.into()));
                 }
 
                 // Determine the distribution to lookup.
@@ -1099,7 +1116,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     .cloned()
                     .map(Requirement::from_pep508)
                     .collect::<Result<_, _>>()?;
-                let constraints = PubGrubDependencies::from_requirements(
+                let dependencies = PubGrubDependencies::from_requirements(
                     &requirements,
                     &self.constraints,
                     &self.overrides,
@@ -1110,7 +1127,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.markers,
                 )?;
 
-                for (dep_package, dep_version) in constraints.iter() {
+                for (dep_package, dep_version) in dependencies.iter() {
                     debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
                     // Update the package priorities.
@@ -1120,7 +1137,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.visit_package(dep_package, request_sink).await?;
                 }
 
-                Ok(Dependencies::Available(constraints.into()))
+                Ok(Dependencies::Available(dependencies.into()))
             }
 
             // Add a dependency on both the extra and base package.
@@ -1144,7 +1161,10 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
     ) -> Result<(), ResolveError> {
         let mut response_stream = ReceiverStream::new(request_stream)
             .map(|request| self.process_request(request).boxed_local())
-            .buffer_unordered(50);
+            // Allow as many futures as possible to start in the background.
+            // Backpressure is provided by at a more granular level by `DistributionDatabase`
+            // and `SourceDispatch`, as well as the bounded request channel.
+            .buffer_unordered(usize::MAX);
 
         while let Some(response) = response_stream.next().await {
             match response? {
@@ -1225,10 +1245,13 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     .boxed_local()
                     .await
                     .map_err(|err| match dist.clone() {
-                        Dist::Built(BuiltDist::Path(built_dist)) => {
+                        Dist::Built(built_dist @ BuiltDist::Path(_)) => {
                             ResolveError::Read(Box::new(built_dist), err)
                         }
-                        Dist::Source(SourceDist::Path(source_dist)) => {
+                        Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                            ResolveError::Build(Box::new(source_dist), err)
+                        }
+                        Dist::Source(source_dist @ SourceDist::Directory(_)) => {
                             ResolveError::Build(Box::new(source_dist), err)
                         }
                         Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
@@ -1312,10 +1335,13 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                                 .boxed_local()
                                 .await
                                 .map_err(|err| match dist.clone() {
-                                    Dist::Built(BuiltDist::Path(built_dist)) => {
+                                    Dist::Built(built_dist @ BuiltDist::Path(_)) => {
                                         ResolveError::Read(Box::new(built_dist), err)
                                     }
-                                    Dist::Source(SourceDist::Path(source_dist)) => {
+                                    Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                                        ResolveError::Build(Box::new(source_dist), err)
+                                    }
+                                    Dist::Source(source_dist @ SourceDist::Directory(_)) => {
                                         ResolveError::Build(Box::new(source_dist), err)
                                     }
                                     Dist::Built(built_dist) => {
@@ -1377,7 +1403,7 @@ struct ResolverState {
     /// in this state. We also ultimately retrieve the final set of version
     /// assignments (to packages) from this state's "partial solution."
     pubgrub: State<UvDependencyProvider>,
-    /// The next package on which to run unit propgation.
+    /// The next package on which to run unit propagation.
     next: PubGrubPackage,
     /// The set of pinned versions we accrue throughout resolution.
     ///

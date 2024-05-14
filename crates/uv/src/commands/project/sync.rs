@@ -4,10 +4,11 @@ use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
-use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -27,11 +28,6 @@ pub(crate) async fn sync(
         warn_user!("`uv sync` is experimental and may change without warning.");
     }
 
-    // TODO(charlie): If the environment doesn't exist, create it.
-    let venv = PythonEnvironment::from_virtualenv(cache)?;
-    let markers = venv.interpreter().markers();
-    let tags = venv.interpreter().tags()?;
-
     // Find the project requirements.
     let Some(project) = Project::find(std::env::current_dir()?)? else {
         return Err(anyhow::anyhow!(
@@ -39,9 +35,14 @@ pub(crate) async fn sync(
         ));
     };
 
+    // Discover or create the virtual environment.
+    let venv = project::init(&project, cache, printer)?;
+    let markers = venv.interpreter().markers();
+    let tags = venv.interpreter().tags()?;
+
     // Read the lockfile.
     let resolution = {
-        let encoded = fs_err::tokio::read_to_string("uv.lock").await?;
+        let encoded = fs_err::tokio::read_to_string(project.root().join("uv.lock")).await?;
         let lock: Lock = toml::from_str(&encoded)?;
         lock.to_resolution(markers, tags, project.name())
     };
@@ -65,6 +66,7 @@ pub(crate) async fn sync(
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
     let setup_py = SetupPyStrategy::default();
+    let concurrency = Concurrency::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -81,6 +83,7 @@ pub(crate) async fn sync(
         link_mode,
         &no_build,
         &no_binary,
+        concurrency,
     );
 
     // Sync the environment.
@@ -98,6 +101,7 @@ pub(crate) async fn sync(
         cache,
         &venv,
         printer,
+        concurrency,
     )
     .await?;
 

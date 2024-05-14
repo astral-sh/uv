@@ -327,6 +327,15 @@ fn clone_recursive(
 
     debug!("Cloning {} to {}", from.display(), to.display());
 
+    if cfg!(windows) && from.is_dir() {
+        // On Windows, reflinking directories is not supported, so we copy each file instead.
+        fs::create_dir_all(&to)?;
+        for entry in fs::read_dir(from)? {
+            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+        }
+        return Ok(());
+    }
+
     match attempt {
         Attempt::Initial => {
             if let Err(err) = reflink::reflink(&from, &to) {

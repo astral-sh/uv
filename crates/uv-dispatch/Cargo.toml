@@ -16,13 +16,13 @@ workspace = true
 [dependencies]
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true }
-pep508_rs = { workspace = true }
 uv-build = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
+uv-distribution = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 

@@ -330,7 +330,7 @@ impl AuthMiddleware {
 
         // Netrc support based on: <https://github.com/gribouille/netrc>.
         let credentials = if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
-            trace!("Checking netrc for credentials for {url}");
+            debug!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
                 url,
@@ -352,7 +352,7 @@ impl AuthMiddleware {
                     keyring.fetch(url, username).await
                 }
                 None => {
-                    trace!("Skipping keyring lookup for {url} with no username");
+                    debug!("Skipping keyring lookup for {url} with no username");
                     None
                 }
             },

@@ -947,7 +947,7 @@ pub(crate) fn with_fetch_options(
 
 /// Attempts to fetch the given git `reference` for a Git repository.
 ///
-/// This is the main entry for git clone/fetch. It does the followings:
+/// This is the main entry for git clone/fetch. It does the following:
 ///
 /// * Turns [`GitReference`] into refspecs accordingly.
 /// * Dispatches `git fetch` using libgit2 or git CLI.

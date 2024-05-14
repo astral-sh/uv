@@ -4,18 +4,18 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use configparser::ini::Ini;
-use futures::{StreamExt, TryStreamExt};
+use futures::{stream::FuturesOrdered, TryStreamExt};
 use serde::Deserialize;
 use tracing::debug;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, Requirement,
-    SourceUrl, UnresolvedRequirement, UnresolvedRequirementSpecification, VersionId,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
+    RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
+    UnresolvedRequirementSpecification, VersionId,
 };
 use pep508_rs::{Scheme, UnnamedRequirement, VersionOrUrl};
 use pypi_types::Metadata10;
-use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
@@ -38,15 +38,14 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
     pub fn new(
         requirements: Vec<UnresolvedRequirementSpecification>,
         hasher: &'a HashStrategy,
-        context: &'a Context,
-        client: &'a RegistryClient,
         index: &'a InMemoryIndex,
+        database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             requirements,
             hasher,
             index,
-            database: DistributionDatabase::new(client, context),
+            database,
         }
     }
 
@@ -67,7 +66,8 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             index,
             database,
         } = self;
-        futures::stream::iter(requirements)
+        requirements
+            .into_iter()
             .map(|entry| async {
                 match entry.requirement {
                     UnresolvedRequirement::Named(requirement) => Ok(requirement),
@@ -76,7 +76,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     )?),
                 }
             })
-            .buffered(50)
+            .collect::<FuturesOrdered<_>>()
             .try_collect()
             .await
     }
@@ -223,12 +223,17 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             }
                         }
                     }
-                }
 
-                SourceUrl::Path(PathSourceUrl {
-                    url: &requirement.url,
-                    path: Cow::Owned(path),
-                })
+                    SourceUrl::Directory(DirectorySourceUrl {
+                        url: &requirement.url,
+                        path: Cow::Owned(path),
+                    })
+                } else {
+                    SourceUrl::Path(PathSourceUrl {
+                        url: &requirement.url,
+                        path: Cow::Owned(path),
+                    })
+                }
             }
             Some(Scheme::Http | Scheme::Https) => SourceUrl::Direct(DirectSourceUrl {
                 url: &requirement.url,

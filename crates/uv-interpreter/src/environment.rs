@@ -18,12 +18,24 @@ pub struct PythonEnvironment {
 }
 
 impl PythonEnvironment {
-    /// Create a [`PythonEnvironment`] for an existing virtual environment.
+    /// Create a [`PythonEnvironment`] for an existing virtual environment, detected from the
+    /// environment variables and filesystem.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
         let Some(venv) = detect_virtualenv()? else {
             return Err(Error::VenvNotFound);
         };
-        let venv = fs_err::canonicalize(venv)?;
+        Self::from_root(&venv, cache)
+    }
+
+    /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
+    pub fn from_root(root: &Path, cache: &Cache) -> Result<Self, Error> {
+        let venv = match fs_err::canonicalize(root) {
+            Ok(venv) => venv,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::VenvDoesNotExist(root.to_path_buf()));
+            }
+            Err(err) => return Err(err.into()),
+        };
         let executable = virtualenv_python_executable(&venv);
         let interpreter = Interpreter::query(&executable, cache)?;
 

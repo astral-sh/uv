@@ -28,11 +28,12 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
 use uv_configuration::{
-    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, PreviewMode,
-    Reinstall, SetupPyStrategy, Upgrade,
+    Concurrency, ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides,
+    PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
+use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{
     BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SatisfiesResult, SitePackages,
@@ -89,6 +90,7 @@ pub(crate) async fn pip_install(
     system: bool,
     break_system_packages: bool,
     target: Option<Target>,
+    concurrency: Concurrency,
     uv_lock: Option<String>,
     native_tls: bool,
     preview: PreviewMode,
@@ -334,6 +336,7 @@ pub(crate) async fn pip_install(
         link_mode,
         &no_build,
         &no_binary,
+        concurrency,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
@@ -352,6 +355,7 @@ pub(crate) async fn pip_install(
             &cache,
             &interpreter,
             &tags,
+            concurrency,
             &client,
             &resolve_dispatch,
             printer,
@@ -372,9 +376,8 @@ pub(crate) async fn pip_install(
             let mut requirements = NamedRequirementsResolver::new(
                 requirements,
                 &hasher,
-                &resolve_dispatch,
-                &client,
                 &index,
+                DistributionDatabase::new(&client, &resolve_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve()
@@ -387,9 +390,12 @@ pub(crate) async fn pip_install(
                         source_trees,
                         extras,
                         &hasher,
-                        &resolve_dispatch,
-                        &client,
                         &index,
+                        DistributionDatabase::new(
+                            &client,
+                            &resolve_dispatch,
+                            concurrency.downloads,
+                        ),
                     )
                     .with_reporter(ResolverReporter::from(printer))
                     .resolve()
@@ -401,11 +407,15 @@ pub(crate) async fn pip_install(
         };
 
         // Resolve the overrides from the provided sources.
-        let overrides =
-            NamedRequirementsResolver::new(overrides, &hasher, &resolve_dispatch, &client, &index)
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?;
+        let overrides = NamedRequirementsResolver::new(
+            overrides,
+            &hasher,
+            &index,
+            DistributionDatabase::new(&client, &resolve_dispatch, concurrency.downloads),
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
 
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
@@ -432,6 +442,7 @@ pub(crate) async fn pip_install(
             &flat_index,
             &index,
             &resolve_dispatch,
+            concurrency,
             options,
             printer,
         )
@@ -470,6 +481,7 @@ pub(crate) async fn pip_install(
             link_mode,
             &no_build,
             &no_binary,
+            concurrency,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
@@ -488,6 +500,7 @@ pub(crate) async fn pip_install(
         &tags,
         &client,
         &in_flight,
+        concurrency,
         &install_dispatch,
         &cache,
         &venv,
@@ -566,14 +579,20 @@ async fn build_editables(
     cache: &Cache,
     interpreter: &Interpreter,
     tags: &Tags,
+    concurrency: Concurrency,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch<'_>,
     printer: Printer,
 ) -> Result<Vec<BuiltEditable>, Error> {
     let start = std::time::Instant::now();
 
-    let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
-        .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
+    let downloader = Downloader::new(
+        cache,
+        tags,
+        hasher,
+        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+    )
+    .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
     let editables = LocalEditables::from_editables(editables.iter().map(|editable| {
         let EditableRequirement {
@@ -645,6 +664,7 @@ async fn resolve(
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
     build_dispatch: &BuildDispatch<'_>,
+    concurrency: Concurrency,
     options: Options,
     printer: Printer,
 ) -> Result<ResolutionGraph, Error> {
@@ -723,9 +743,8 @@ async fn resolve(
                 &overrides,
                 &editables,
                 hasher,
-                build_dispatch,
-                client,
                 index,
+                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve(Some(markers))
@@ -753,12 +772,12 @@ async fn resolve(
         &python_requirement,
         Some(markers),
         tags,
-        client,
         flat_index,
         index,
         hasher,
         build_dispatch,
         site_packages,
+        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
     )?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver.resolve().await?;
@@ -804,6 +823,7 @@ async fn install(
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
+    concurrency: Concurrency,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
@@ -881,8 +901,13 @@ async fn install(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
-            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
+        let downloader = Downloader::new(
+            cache,
+            tags,
+            hasher,
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
             .download(remote.clone(), in_flight)

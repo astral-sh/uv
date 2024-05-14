@@ -24,7 +24,6 @@ fs2 = { workspace = true }
 once_cell = { workspace = true }
 path-absolutize = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
 
@@ -33,4 +32,4 @@ junction = { workspace = true }
 
 [features]
 default = []
-tokio = ["dep:tokio", "fs-err/tokio", "backoff/tokio"]
+tokio = ["fs-err/tokio", "backoff/tokio"]

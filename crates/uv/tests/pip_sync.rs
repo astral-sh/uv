@@ -108,8 +108,7 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to canonicalize path `[VENV]/`
-      Caused by: No such file or directory (os error 2)
+    error: Virtualenv does not exist at: `[VENV]/`
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));
@@ -1275,7 +1274,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 126 files for tqdm ([SIZE])
+    Removed 127 files for tqdm ([SIZE])
     "###
     );
 
@@ -1372,7 +1371,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 3 files for werkzeug ([SIZE])
+    Removed 4 files for werkzeug ([SIZE])
     "###
     );
 
@@ -1473,7 +1472,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 616 files for future ([SIZE])
+    Removed 617 files for future ([SIZE])
     "###
     );
 
@@ -1578,7 +1577,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 102 files for wheel ([SIZE])
+    Removed 103 files for wheel ([SIZE])
     "###
     );
 
@@ -3026,7 +3025,10 @@ fn compile() -> Result<()> {
 
 /// Test that the `PYC_INVALIDATION_MODE` option is recognized and that the error handling works.
 #[test]
-#[cfg_attr(macos, ignore = "The bytecode trace is spuriously different on macOS")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "The bytecode trace is spuriously different on macOS"
+)]
 fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     let context = TestContext::new("3.12");
 

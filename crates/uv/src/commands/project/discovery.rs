@@ -28,6 +28,8 @@ pub(crate) struct Project {
     name: PackageName,
     /// The path to the `pyproject.toml` file.
     path: PathBuf,
+    /// The path to the project root.
+    root: PathBuf,
 }
 
 impl Project {
@@ -56,6 +58,7 @@ impl Project {
                 return Ok(Some(Self {
                     name,
                     path: pyproject_path,
+                    root: ancestor.to_path_buf(),
                 }));
             }
         }
@@ -63,17 +66,22 @@ impl Project {
         Ok(None)
     }
 
+    /// Return the [`PackageName`] for the project.
+    pub(crate) fn name(&self) -> &PackageName {
+        &self.name
+    }
+
+    /// Return the root path for the project.
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// Return the requirements for the project.
     pub(crate) fn requirements(&self) -> Vec<RequirementsSource> {
         vec![
             RequirementsSource::from_requirements_file(self.path.clone()),
-            RequirementsSource::from_source_tree(self.path.parent().unwrap().to_path_buf()),
+            RequirementsSource::from_source_tree(self.root.clone()),
         ]
-    }
-
-    /// Return the [`PackageName`] for the project.
-    pub(crate) fn name(&self) -> &PackageName {
-        &self.name
     }
 }
 

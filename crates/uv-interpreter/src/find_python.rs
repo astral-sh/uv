@@ -736,7 +736,7 @@ mod windows {
                     ));
             assert_snapshot!(
                 format_err(result),
-                @"Failed to locate Python interpreter at `C:\\does\\not\\exists\\python3.12`"
+                @"Failed to locate Python interpreter at: `C:\\does\\not\\exists\\python3.12`"
             );
         }
     }
@@ -793,6 +793,6 @@ mod tests {
                 "/does/not/exists/python3.12".to_string(),
             ));
         assert_snapshot!(
-            format_err(result), @"Failed to locate Python interpreter at `/does/not/exists/python3.12`");
+            format_err(result), @"Failed to locate Python interpreter at: `/does/not/exists/python3.12`");
     }
 }

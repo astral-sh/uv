@@ -15,7 +15,10 @@ use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use platform_tags::{Arch, Os, Platform, Tags};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{BuildKind, Constraints, NoBinary, NoBuild, Overrides, SetupPyStrategy};
+use uv_configuration::{
+    BuildKind, Concurrency, Constraints, NoBinary, NoBuild, Overrides, SetupPyStrategy,
+};
+use uv_distribution::DistributionDatabase;
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
@@ -131,18 +134,19 @@ async fn resolve(
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
     let hashes = HashStrategy::None;
     let installed_packages = EmptyInstalledPackages;
+    let concurrency = Concurrency::default();
     let resolver = Resolver::new(
         manifest,
         options,
         &python_requirement,
         Some(markers),
         tags,
-        &client,
         &flat_index,
         &index,
         &hashes,
         &build_context,
         &installed_packages,
+        DistributionDatabase::new(&client, &build_context, concurrency.downloads),
     )?;
     Ok(resolver.resolve().await?)
 }

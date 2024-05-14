@@ -5,9 +5,10 @@ use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
-use uv_interpreter::PythonEnvironment;
 use uv_requirements::{ExtrasSpecification, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -29,15 +30,15 @@ pub(crate) async fn lock(
         warn_user!("`uv lock` is experimental and may change without warning.");
     }
 
-    // TODO(charlie): If the environment doesn't exist, create it.
-    let venv = PythonEnvironment::from_virtualenv(cache)?;
-
     // Find the project requirements.
     let Some(project) = Project::find(std::env::current_dir()?)? else {
         return Err(anyhow::anyhow!(
             "Unable to find `pyproject.toml` for project."
         ));
     };
+
+    // Discover or create the virtual environment.
+    let venv = project::init(&project, cache, printer)?;
 
     // TODO(zanieb): Support client configuration
     let client_builder = BaseClientBuilder::default();
@@ -79,6 +80,7 @@ pub(crate) async fn lock(
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
     let setup_py = SetupPyStrategy::default();
+    let concurrency = Concurrency::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -95,6 +97,7 @@ pub(crate) async fn lock(
         link_mode,
         &no_build,
         &no_binary,
+        concurrency,
     );
 
     let options = OptionsBuilder::new()
@@ -118,6 +121,7 @@ pub(crate) async fn lock(
         &build_dispatch,
         options,
         printer,
+        concurrency,
     )
     .await;
 
@@ -134,7 +138,7 @@ pub(crate) async fn lock(
     // Write the lockfile to disk.
     let lock = resolution.lock()?;
     let encoded = toml::to_string_pretty(&lock)?;
-    fs_err::tokio::write("uv.lock", encoded.as_bytes()).await?;
+    fs_err::tokio::write(project.root().join("uv.lock"), encoded.as_bytes()).await?;
 
     Ok(ExitStatus::Success)
 }

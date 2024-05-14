@@ -9,9 +9,10 @@ use tracing::{debug, warn};
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, Error, GitSourceDist,
-    Hashed, IndexLocations, InstalledDist, InstalledMetadata, InstalledVersion, Name,
-    PathBuiltDist, PathSourceDist, RemoteSource, Requirement, RequirementSource, Verbatim,
+    CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, InstalledMetadata,
+    InstalledVersion, Name, PathBuiltDist, PathSourceDist, RemoteSource, Requirement,
+    RequirementSource, Verbatim,
 };
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
@@ -344,7 +345,23 @@ impl<'a> Planner<'a> {
                     };
 
                     // Check if we have a wheel or a source distribution.
-                    if path
+                    if path.is_dir() {
+                        let sdist = DirectorySourceDist {
+                            name: requirement.name.clone(),
+                            url: url.clone(),
+                            path,
+                            editable: false,
+                        };
+
+                        // Find the most-compatible wheel from the cache, since we don't know
+                        // the filename in advance.
+                        if let Some(wheel) = built_index.directory(&sdist)? {
+                            let cached_dist = wheel.into_url_dist(url.clone());
+                            debug!("Path source requirement already cached: {cached_dist}");
+                            cached.push(CachedDist::Url(cached_dist));
+                            continue;
+                        }
+                    } else if path
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
                     {
@@ -411,8 +428,8 @@ impl<'a> Planner<'a> {
                             name: requirement.name.clone(),
                             url: url.clone(),
                             path,
-                            editable: false,
                         };
+
                         // Find the most-compatible wheel from the cache, since we don't know
                         // the filename in advance.
                         if let Some(wheel) = built_index.path(&sdist)? {
