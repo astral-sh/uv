@@ -1,3 +1,5 @@
+#![allow(clippy::enum_glob_use)]
+
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
 
@@ -10,10 +12,10 @@ use pep508_rs::{
 use crate::pubgrub::PubGrubSpecifier;
 
 /// Returns `true` if there is no environment in which both marker trees can both apply, i.e.
-/// the expression `this and other` is always false.
+/// the expression `first and second` is always false.
 #[allow(dead_code)]
-pub(crate) fn is_disjoint(this: &MarkerTree, other: &MarkerTree) -> bool {
-    let (expr1, expr2) = match (this, other) {
+pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
+    let (expr1, expr2) = match (first, second) {
         (MarkerTree::Expression(expr1), MarkerTree::Expression(expr2)) => (expr1, expr2),
         // `And` expressions are disjoint if any clause is disjoint.
         (other, MarkerTree::And(exprs)) | (MarkerTree::And(exprs), other) => {
@@ -33,12 +35,14 @@ pub(crate) fn is_disjoint(this: &MarkerTree, other: &MarkerTree) -> bool {
             string_is_disjoint(expr1, expr2)
         }
         MarkerExpression::Extra { operator, name } => extra_is_disjoint(operator, name, expr2),
-        MarkerExpression::Arbitrary { .. } => return false,
+        MarkerExpression::Arbitrary { .. } => false,
     }
 }
 
 /// Returns `true` if this string expression does not intersect with the given expression.
 fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool {
+    use MarkerOperator::*;
+
     let (key, operator, value) = extract_string_expression(this).unwrap();
     let Some((key2, operator2, value2)) = extract_string_expression(other) else {
         return false;
@@ -49,7 +53,6 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
         return false;
     }
 
-    use MarkerOperator::*;
     match (operator, operator2) {
         // the only disjoint expressions involving strict inequality are `key != value` and `key == value`
         (NotEqual, Equal) | (Equal, NotEqual) => return value == value2,
@@ -60,8 +63,8 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
         _ => {}
     }
 
-    let bounds = string_bounds(value, &operator);
-    let bounds2 = string_bounds(value2, &operator2);
+    let bounds = string_bounds(value, operator);
+    let bounds2 = string_bounds(value2, operator2);
 
     // make sure the ranges do not intersection
     if range_exists::<&str>(&bounds2.start_bound(), &bounds.end_bound())
@@ -89,7 +92,7 @@ fn extract_string_expression(
             key,
         } => {
             // if the expression was inverted, we have to reverse the operator
-            Some((key, reverse_marker_operator(operator), value))
+            Some((key, reverse_marker_operator(*operator), value))
         }
         _ => None,
     }
@@ -109,10 +112,7 @@ fn range_exists<T: PartialOrd>(lower: &Bound<T>, upper: &Bound<T>) -> bool {
 /// Returns the lower and upper bounds of a string inequality.
 ///
 /// Panics if called on the `!=`, `in`, or `not in` operators.
-fn string_bounds<'a>(
-    value: &'a str,
-    operator: &MarkerOperator,
-) -> (Bound<&'a str>, Bound<&'a str>) {
+fn string_bounds(value: &str, operator: MarkerOperator) -> (Bound<&str>, Bound<&str>) {
     use MarkerOperator::*;
     match operator {
         Equal => (Included(value), Included(value)),
@@ -173,7 +173,7 @@ fn keyed_range(
         } => {
             // if the expression was inverted, we have to reverse the operator before constructing
             // a version specifier
-            let operator = reverse_operator(operator);
+            let operator = reverse_operator(*operator);
             let Ok(specifier) = VersionSpecifier::from_version(operator, version.clone()) else {
                 return Ok(None);
             };
@@ -191,26 +191,26 @@ fn keyed_range(
 }
 
 /// Reverses a binary operator.
-fn reverse_operator(operator: &Operator) -> Operator {
+fn reverse_operator(operator: Operator) -> Operator {
     use Operator::*;
     match operator {
         LessThan => GreaterThan,
         LessThanEqual => GreaterThanEqual,
         GreaterThan => LessThan,
         GreaterThanEqual => LessThanEqual,
-        _ => *operator,
+        _ => operator,
     }
 }
 
 /// Reverses a marker operator.
-fn reverse_marker_operator(operator: &MarkerOperator) -> MarkerOperator {
+fn reverse_marker_operator(operator: MarkerOperator) -> MarkerOperator {
     use MarkerOperator::*;
     match operator {
         LessThan => GreaterThan,
         LessEqual => GreaterEqual,
         GreaterThan => LessThan,
         GreaterEqual => LessEqual,
-        _ => *operator,
+        _ => operator,
     }
 }
 
@@ -240,6 +240,14 @@ mod tests {
     }
 
     #[test]
+    fn invalid() {
+        assert!(!is_disjoint(
+            "python_version == 'Linux'",
+            "python_version == '3.7.1'"
+        ));
+    }
+
+    #[test]
     fn version() {
         assert!(!is_disjoint(
             "os_name == 'Linux'",
@@ -247,6 +255,11 @@ mod tests {
         ));
 
         test_version_bounds("python_version");
+
+        assert!(!is_disjoint(
+            "python_version == '3.7.*'",
+            "python_version == '3.7.1'"
+        ));
     }
 
     #[test]
