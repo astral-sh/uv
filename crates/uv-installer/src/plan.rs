@@ -114,7 +114,7 @@ impl<'a> Planner<'a> {
                     debug!("Treating editable requirement as immutable: {installed}");
 
                     // Remove from the site-packages index, to avoid marking as extraneous.
-                    let Some(editable) = installed.as_editable() else {
+                    let Some(editable) = installed.wheel.as_editable() else {
                         warn!("Editable requirement is not editable: {installed}");
                         continue;
                     };
@@ -127,7 +127,7 @@ impl<'a> Planner<'a> {
                 ResolvedEditable::Built(built) => {
                     debug!("Treating editable requirement as mutable: {built}");
 
-                    // Remove any editable installs.
+                    // Remove any editables.
                     let existing = site_packages.remove_editables(built.editable.raw());
                     reinstalls.extend(existing);
 

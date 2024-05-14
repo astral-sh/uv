@@ -8,6 +8,14 @@ use requirements_txt::EditableRequirement;
 
 use uv_normalize::PackageName;
 
+/// An editable distribution that has been installed.
+#[derive(Debug, Clone)]
+pub struct InstalledEditable {
+    pub editable: LocalEditable,
+    pub wheel: InstalledDist,
+    pub metadata: Metadata23,
+}
+
 /// An editable distribution that has been built.
 #[derive(Debug, Clone)]
 pub struct BuiltEditable {
@@ -21,9 +29,33 @@ pub struct BuiltEditable {
 #[allow(clippy::large_enum_variant)]
 pub enum ResolvedEditable {
     /// The editable is already installed in the environment.
-    Installed(InstalledDist),
+    Installed(InstalledEditable),
     /// The editable has been built and is ready to be installed.
     Built(BuiltEditable),
+}
+
+impl ResolvedEditable {
+    /// Return the [`LocalEditable`] for the distribution.
+    pub fn local(&self) -> &LocalEditable {
+        match self {
+            Self::Installed(dist) => &dist.editable,
+            Self::Built(dist) => &dist.editable,
+        }
+    }
+
+    /// Return the [`Metadata23`] for the distribution.
+    pub fn metadata(&self) -> &Metadata23 {
+        match self {
+            Self::Installed(dist) => &dist.metadata,
+            Self::Built(dist) => &dist.metadata,
+        }
+    }
+}
+
+impl Name for InstalledEditable {
+    fn name(&self) -> &PackageName {
+        &self.metadata.name
+    }
 }
 
 impl Name for BuiltEditable {
@@ -41,6 +73,12 @@ impl Name for ResolvedEditable {
     }
 }
 
+impl InstalledMetadata for InstalledEditable {
+    fn installed_version(&self) -> InstalledVersion {
+        self.wheel.installed_version()
+    }
+}
+
 impl InstalledMetadata for BuiltEditable {
     fn installed_version(&self) -> InstalledVersion {
         self.wheel.installed_version()
@@ -53,6 +91,12 @@ impl InstalledMetadata for ResolvedEditable {
             Self::Installed(dist) => dist.installed_version(),
             Self::Built(dist) => dist.installed_version(),
         }
+    }
+}
+
+impl std::fmt::Display for InstalledEditable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
