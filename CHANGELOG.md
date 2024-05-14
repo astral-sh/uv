@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.44
+
+### Release
+
+Reverts "Use manylinux: auto to enable `musllinux_1_2` aarch64 builds ([#3444](https://github.com/astral-sh/uv/pull/3444))"
+
+The manylinux change appeared to introduce SSL errors when building aarch64 Docker images, e.g.,
+
+> invalid peer certificate: BadSignature
+
+The v0.1.42 behavior for aarch64 manylinux builds is restored in this release.
+
+See [#3576](https://github.com/astral-sh/uv/pull/3576)
+
 ## 0.1.43
 
 ### Enhancements
@@ -13,7 +27,7 @@
 
 ### Release
 
-- Use manylinux: auto to enable musllinux_1_2 aarch64 builds ([#3444](https://github.com/astral-sh/uv/pull/3444))
+- Use manylinux: auto to enable `musllinux_1_2` aarch64 builds ([#3444](https://github.com/astral-sh/uv/pull/3444))
 - Enable musllinux_1_1 wheels ([#3523](https://github.com/astral-sh/uv/pull/3523))
 
 ### Bug fixes
