@@ -195,7 +195,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let Plan {
             cached,
             remote,
-            installed: _,
             reinstalls,
             extraneous: _,
         } = Planner::with_requirements(&resolution.requirements()).build(

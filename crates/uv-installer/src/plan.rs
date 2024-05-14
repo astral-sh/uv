@@ -84,7 +84,6 @@ impl<'a> Planner<'a> {
         let mut cached = vec![];
         let mut remote = vec![];
         let mut reinstalls = vec![];
-        let mut installed = vec![];
         let mut extraneous = vec![];
         let mut seen = FxHashMap::with_capacity_and_hasher(
             self.requirements.len(),
@@ -191,7 +190,6 @@ impl<'a> Planner<'a> {
                             RequirementSatisfaction::Mismatch => {}
                             RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {distribution}");
-                                installed.push(distribution.clone());
                                 continue;
                             }
                             RequirementSatisfaction::OutOfDate => {
@@ -474,7 +472,6 @@ impl<'a> Planner<'a> {
 
         Ok(Plan {
             cached,
-            installed,
             remote,
             reinstalls,
             extraneous,
@@ -495,10 +492,6 @@ pub struct Plan {
     /// The distributions that are not already installed in the current environment, but are
     /// available in the local cache.
     pub cached: Vec<CachedDist>,
-
-    /// Any distributions that are already installed in the current environment, and can be used
-    /// to satisfy the requirements.
-    pub installed: Vec<InstalledDist>,
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.

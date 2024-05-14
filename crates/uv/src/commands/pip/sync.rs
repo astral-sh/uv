@@ -321,7 +321,6 @@ pub(crate) async fn pip_sync(
         cached,
         remote,
         reinstalls,
-        installed: _,
         extraneous,
     } = Planner::with_requirements(&requirements)
         .with_editable_requirements(&resolved_editables.editables)
