@@ -48,7 +48,7 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl) -> VerbatimParsedUrl {
         return url;
     };
 
-    // TODO(konsti): Remove once we carry more context on the `Dist`s.
+    // TODO(konsti): Remove once we carry more context on the `Dist` (e.g., `BranchOrTag` vs. `Tag`).
     let lowered_git_ref = git_url
         .reference()
         .as_str()

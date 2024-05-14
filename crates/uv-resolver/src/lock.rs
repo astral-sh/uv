@@ -428,14 +428,14 @@ impl Source {
     }
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
-        // FIXME: Fill in the git revision details here. They aren't in
-        // `GitSourceDist`, so this will likely need some refactoring.
+        // TODO(konsti): Fill in the Git revision details. GitSource and GitSourceDist are
+        // slightly mismatched.
         Source {
             kind: SourceKind::Git(GitSource {
-                precise: None,
+                precise: git_dist.git.precise().map(|git_sha| git_sha.to_string()),
                 kind: GitSourceKind::DefaultBranch,
             }),
-            url: git_dist.url.to_url(),
+            url: git_dist.git.repository().clone(),
         }
     }
 }
