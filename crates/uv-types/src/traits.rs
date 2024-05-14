@@ -46,7 +46,7 @@ use crate::BuildIsolation;
 /// ```
 ///
 /// Put in a different way, the types here allow `uv-resolver` to depend on `uv-build` and
-/// `uv-build` to depend on `uv-resolver` which having actual crate dependencies between
+/// `uv-build` to depend on `uv-resolver` without having actual crate dependencies between
 /// them.
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
