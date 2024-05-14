@@ -903,12 +903,12 @@ impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[allow(missing_docs)]
 pub enum MarkerExpression {
-    /// <version key> <version op> <quoted PEP 440 version>
+    /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
     Version {
         key: MarkerValueVersion,
         specifier: VersionSpecifier,
     },
-    /// <quoted PEP 440 version> <version op> <version key>
+    /// An inverted version expression, e.g `<quoted PEP 440 version> <version op> <version key>`.
     VersionInverted {
         /// No star allowed here, `'3.*' == python_version` is not a valid PEP 440 comparison.
         version: Version,
@@ -921,7 +921,7 @@ pub enum MarkerExpression {
         operator: MarkerOperator,
         value: String,
     },
-    /// An string marker comparison, e.g. `'...' == sys_platform`.
+    /// An inverted string marker comparison, e.g. `'...' == sys_platform`.
     StringInverted {
         value: String,
         operator: MarkerOperator,
@@ -1004,7 +1004,8 @@ impl MarkerExpression {
                     reporter.report(
                         MarkerWarningKind::Pep440Error,
                         format!(
-                            "Expected double quoted PEP 440 version to compare with {}, found {}, will evaluate to false",
+                            "Expected double quoted PEP 440 version to compare with {}, found {},
+                            will evaluate to false",
                             key, r_value
                         ),
                     );
@@ -1031,7 +1032,12 @@ impl MarkerExpression {
                     MarkerValue::Extra
                     | MarkerValue::MarkerEnvVersion(_)
                     | MarkerValue::MarkerEnvString(_) => {
-                        reporter.report(MarkerWarningKind::MarkerMarkerComparison, "Comparing two markers with each other doesn't make any sense, will evaluate to false".to_string());
+                        reporter.report(
+                            MarkerWarningKind::MarkerMarkerComparison,
+                            "Comparing two markers with each other doesn't make any sense,
+                            will evaluate to false"
+                                .to_string(),
+                        );
 
                         return MarkerExpression::arbitrary(
                             MarkerValue::MarkerEnvString(key),
@@ -1054,7 +1060,12 @@ impl MarkerExpression {
                     MarkerValue::MarkerEnvVersion(_)
                     | MarkerValue::MarkerEnvString(_)
                     | MarkerValue::Extra => {
-                        reporter.report(MarkerWarningKind::ExtraInvalidComparison, "Comparing extra with something other than a quoted string is wrong, will evaluate to false".to_string());
+                        reporter.report(
+                            MarkerWarningKind::ExtraInvalidComparison,
+                            "Comparing extra with something other than a quoted string is wrong,
+                            will evaluate to false"
+                                .to_string(),
+                        );
                         return MarkerExpression::arbitrary(l_value, operator, r_value);
                     }
                     MarkerValue::QuotedString(value) => value,
@@ -1116,7 +1127,8 @@ impl MarkerExpression {
                         );
 
                         reporter.report(MarkerWarningKind::StringStringComparison, format!(
-                            "Comparing two quoted strings with each other doesn't make sense: {expr}, will evaluate to false"
+                            "Comparing two quoted strings with each other doesn't make sense: {expr},
+                            will evaluate to false"
                         ));
 
                         expr
@@ -1165,14 +1177,15 @@ impl MarkerExpression {
 
         let Some(operator) = marker_operator.to_pep440_operator() else {
             reporter.report(
-                    MarkerWarningKind::Pep440Error,
-                    format!(
-                        "Expected PEP 440 version operator to compare {} with '{}', found '{}', will evaluate to false",
-                        key,
-                        pattern.version(),
-                        marker_operator
-                    ),
-                );
+                MarkerWarningKind::Pep440Error,
+                format!(
+                    "Expected PEP 440 version operator to compare {} with '{}',
+                    found '{}', will evaluate to false",
+                    key,
+                    pattern.version(),
+                    marker_operator
+                ),
+            );
 
             return None;
         };
@@ -1217,14 +1230,13 @@ impl MarkerExpression {
 
         let Some(operator) = marker_operator.to_pep440_operator() else {
             reporter.report(
-                    MarkerWarningKind::Pep440Error,
-                    format!(
-                        "Expected PEP 440 version operator to compare {} with '{}', found '{}', will evaluate to false",
-                        key,
-                        version,
-                        marker_operator
-                    ),
-                );
+                MarkerWarningKind::Pep440Error,
+                format!(
+                    "Expected PEP 440 version operator to compare {} with '{}',
+                    found '{}', will evaluate to false",
+                    key, version, marker_operator
+                ),
+            );
 
             return None;
         };
@@ -1258,7 +1270,12 @@ impl MarkerExpression {
         match ExtraOperator::from_marker_operator(operator.clone()) {
             Some(operator) => Some(MarkerExpression::Extra { operator, name }),
             None => {
-                reporter.report(MarkerWarningKind::ExtraInvalidComparison, "Comparing extra with something other than a quoted string is wrong, will evaluate to false".to_string());
+                reporter.report(
+                    MarkerWarningKind::ExtraInvalidComparison,
+                    "Comparing extra with something other than a quoted string is wrong,
+                    will evaluate to false"
+                        .to_string(),
+                );
                 None
             }
         }
