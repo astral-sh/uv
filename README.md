@@ -60,9 +60,6 @@ pipx install uv
 
 # With Homebrew.
 brew install uv
-
-# With Pacman.
-pacman -S uv
 ```
 
 To create a virtual environment:
