@@ -2,9 +2,7 @@ use rustc_hash::FxHashMap;
 
 use uv_normalize::PackageName;
 
-use crate::{
-    BuiltDist, Dist, Name, ParsedGitUrl, Requirement, RequirementSource, ResolvedDist, SourceDist,
-};
+use crate::{BuiltDist, Dist, Name, Requirement, RequirementSource, ResolvedDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
@@ -88,7 +86,7 @@ impl From<&ResolvedDist> for Requirement {
                     RequirementSource::Url {
                         url: wheel.url.clone(),
                         location,
-                        subdirectory: None,
+                        subdirectory: wheel.subdirectory.clone(),
                     }
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
@@ -108,19 +106,16 @@ impl From<&ResolvedDist> for Requirement {
                     RequirementSource::Url {
                         url: sdist.url.clone(),
                         location,
-                        subdirectory: None,
+                        subdirectory: sdist.subdirectory.clone(),
                     }
                 }
-                Dist::Source(SourceDist::Git(sdist)) => {
-                    let git_url = ParsedGitUrl::try_from(sdist.url.to_url())
-                        .expect("urls must be valid at this point");
-                    RequirementSource::Git {
-                        url: sdist.url.clone(),
-                        repository: git_url.url.repository().clone(),
-                        reference: git_url.url.reference().clone(),
-                        subdirectory: git_url.subdirectory,
-                    }
-                }
+                Dist::Source(SourceDist::Git(sdist)) => RequirementSource::Git {
+                    url: sdist.url.clone(),
+                    repository: sdist.git.repository().clone(),
+                    reference: sdist.git.reference().clone(),
+                    precise: sdist.git.precise(),
+                    subdirectory: sdist.subdirectory.clone(),
+                },
                 Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
                     path: sdist.path.clone(),
                     url: sdist.url.clone(),
@@ -129,7 +124,7 @@ impl From<&ResolvedDist> for Requirement {
                 Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Path {
                     path: sdist.path.clone(),
                     url: sdist.url.clone(),
-                    editable: None,
+                    editable: Some(sdist.editable),
                 },
             },
             ResolvedDist::Installed(dist) => RequirementSource::Registry {

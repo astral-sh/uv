@@ -171,14 +171,21 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             RequirementSource::Git {
                 repository,
                 reference,
+                precise,
                 subdirectory,
                 url,
-            } => Dist::Source(SourceDist::Git(GitSourceDist {
-                name: requirement.name,
-                git: Box::new(GitUrl::new(repository, reference)),
-                subdirectory,
-                url,
-            })),
+            } => {
+                let mut git_url = GitUrl::new(repository, reference);
+                if let Some(precise) = precise {
+                    git_url = git_url.with_precise(precise);
+                }
+                Dist::Source(SourceDist::Git(GitSourceDist {
+                    name: requirement.name,
+                    git: Box::new(git_url),
+                    subdirectory,
+                    url,
+                }))
+            }
             RequirementSource::Path {
                 path,
                 url,

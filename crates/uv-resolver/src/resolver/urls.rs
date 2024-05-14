@@ -104,12 +104,17 @@ impl Urls {
                 RequirementSource::Git {
                     repository,
                     reference,
+                    precise,
                     subdirectory,
                     url,
                 } => {
+                    let mut git_url = GitUrl::new(repository.clone(), reference.clone());
+                    if let Some(precise) = precise {
+                        git_url = git_url.with_precise(*precise);
+                    }
                     let url = VerbatimParsedUrl {
                         parsed_url: ParsedUrl::Git(ParsedGitUrl {
-                            url: GitUrl::new(repository.clone(), reference.clone()),
+                            url: git_url,
                             subdirectory: subdirectory.clone(),
                         }),
                         verbatim: url.clone(),
