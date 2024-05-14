@@ -61,11 +61,11 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
     }
 
     let bounds = string_bounds(value, &operator);
-    let bounds2 = string_bounds(value2, &operator);
+    let bounds2 = string_bounds(value2, &operator2);
 
     // make sure the ranges do not intersection
     if range_exists::<&str>(&bounds2.start_bound(), &bounds.end_bound())
-        || range_exists::<&str>(&bounds.start_bound(), &bounds2.end_bound())
+        && range_exists::<&str>(&bounds.start_bound(), &bounds2.end_bound())
     {
         return false;
     }
@@ -146,7 +146,7 @@ fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> boo
         return false;
     };
 
-    // if this is not a version expression it may interesect
+    // if this is not a version expression it may intersect
     let Ok(Some((key2, range2))) = keyed_range(other) else {
         return false;
     };
@@ -194,10 +194,10 @@ fn keyed_range(
 fn reverse_operator(operator: &Operator) -> Operator {
     use Operator::*;
     match operator {
-        LessThan => GreaterThanEqual,
-        LessThanEqual => GreaterThan,
-        GreaterThan => LessThanEqual,
-        GreaterThanEqual => LessThan,
+        LessThan => GreaterThan,
+        LessThanEqual => GreaterThanEqual,
+        GreaterThan => LessThan,
+        GreaterThanEqual => LessThanEqual,
         _ => *operator,
     }
 }
@@ -206,10 +206,154 @@ fn reverse_operator(operator: &Operator) -> Operator {
 fn reverse_marker_operator(operator: &MarkerOperator) -> MarkerOperator {
     use MarkerOperator::*;
     match operator {
-        LessThan => GreaterEqual,
-        LessEqual => GreaterThan,
-        GreaterThan => LessEqual,
-        GreaterEqual => LessThan,
+        LessThan => GreaterThan,
+        LessEqual => GreaterEqual,
+        GreaterThan => LessThan,
+        GreaterEqual => LessEqual,
         _ => *operator,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pep508_rs::TracingReporter;
+
+    use super::*;
+
+    fn is_disjoint(one: impl AsRef<str>, two: impl AsRef<str>) -> bool {
+        let one = MarkerTree::parse_reporter(one.as_ref(), &mut TracingReporter).unwrap();
+        let two = MarkerTree::parse_reporter(two.as_ref(), &mut TracingReporter).unwrap();
+        super::is_disjoint(&one, &two) && super::is_disjoint(&two, &one)
+    }
+
+    #[test]
+    fn extra() {
+        assert!(!is_disjoint("extra == 'a'", "python_version == '1'"));
+
+        assert!(!is_disjoint("extra == 'a'", "extra == 'a'"));
+        assert!(!is_disjoint("extra == 'a'", "extra == 'b'"));
+        assert!(!is_disjoint("extra == 'b'", "extra == 'a'"));
+        assert!(!is_disjoint("extra == 'b'", "extra != 'a'"));
+        assert!(!is_disjoint("extra != 'b'", "extra == 'a'"));
+        assert!(is_disjoint("extra != 'b'", "extra == 'b'"));
+        assert!(is_disjoint("extra == 'b'", "extra != 'b'"));
+    }
+
+    #[test]
+    fn version() {
+        assert!(!is_disjoint(
+            "os_name == 'Linux'",
+            "python_version == '3.7.1'"
+        ));
+
+        test_version_bounds("python_version");
+    }
+
+    #[test]
+    fn string() {
+        assert!(!is_disjoint(
+            "os_name == 'Linux'",
+            "platform_version == '3.7.1'"
+        ));
+        assert!(!is_disjoint(
+            "implementation_version == '3.7.0'",
+            "python_version == '3.7.1'"
+        ));
+
+        // basic version bounds checking should still work with lexicographical comparisons
+        test_version_bounds("platform_version");
+
+        assert!(is_disjoint("os_name == 'Linux'", "os_name == 'OSX'"));
+        assert!(is_disjoint("os_name <= 'Linux'", "os_name == 'OSX'"));
+
+        assert!(!is_disjoint(
+            "os_name in 'OSXLinuxWindows'",
+            "os_name == 'OSX'"
+        ));
+        assert!(!is_disjoint("'OSX' in os_name", "'Linux' in os_name"));
+
+        // complicated `in` intersections are not supported
+        assert!(!is_disjoint("os_name in 'OSX'", "os_name in 'Linux'"));
+        assert!(!is_disjoint(
+            "os_name in 'OSXLinux'",
+            "os_name == 'Windows'"
+        ));
+
+        assert!(is_disjoint(
+            "os_name in 'Windows'",
+            "os_name not in 'Windows'"
+        ));
+        assert!(is_disjoint("'Linux' in os_name", "os_name not in 'Linux'"));
+    }
+
+    #[test]
+    fn combined() {
+        assert!(!is_disjoint(
+            "os_name == 'a' and platform_version == '1'",
+            "os_name == 'a'"
+        ));
+        assert!(!is_disjoint(
+            "os_name == 'a' or platform_version == '1'",
+            "os_name == 'a'"
+        ));
+
+        assert!(is_disjoint(
+            "os_name == 'a' and platform_version == '1'",
+            "os_name == 'a' and platform_version == '2'"
+        ));
+        assert!(is_disjoint(
+            "os_name == 'a' and platform_version == '1'",
+            "'2' == platform_version and os_name == 'a'"
+        ));
+        assert!(!is_disjoint(
+            "os_name == 'a' or platform_version == '1'",
+            "os_name == 'a' or platform_version == '2'"
+        ));
+    }
+
+    fn test_version_bounds(version: &str) {
+        assert!(!is_disjoint(
+            format!("{version} > '2.7.0'"),
+            format!("{version} == '3.6.0'")
+        ));
+        assert!(!is_disjoint(
+            format!("{version} >= '3.7.0'"),
+            format!("{version} == '3.7.1'")
+        ));
+        assert!(!is_disjoint(
+            format!("{version} >= '3.7.0'"),
+            format!("'3.7.1' == {version}")
+        ));
+
+        assert!(is_disjoint(
+            format!("{version} >= '3.7.1'"),
+            format!("{version} == '3.7.0'")
+        ));
+        assert!(is_disjoint(
+            format!("'3.7.1' <= {version}"),
+            format!("{version} == '3.7.0'")
+        ));
+
+        assert!(is_disjoint(
+            format!("{version} < '3.7.0'"),
+            format!("{version} == '3.7.0'")
+        ));
+        assert!(is_disjoint(
+            format!("'3.7.0' > {version}"),
+            format!("{version} == '3.7.0'")
+        ));
+        assert!(is_disjoint(
+            format!("{version} < '3.7.0'"),
+            format!("{version} == '3.7.1'")
+        ));
+
+        assert!(is_disjoint(
+            format!("{version} == '3.7.0'"),
+            format!("{version} == '3.7.1'")
+        ));
+        assert!(is_disjoint(
+            format!("{version} == '3.7.0'"),
+            format!("{version} != '3.7.0'")
+        ));
     }
 }
