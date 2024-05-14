@@ -154,8 +154,7 @@ fn find_python(
                         // If the Python version is < 3.4, the `-I` flag is not supported, so
                         // we can't run the script at all, and need to sniff it from the output.
                         Err(Error::PythonSubcommandOutput { stderr, .. })
-                            if stderr.contains("Unknown option: -I")
-                                && stderr.contains("usage: python [option]") =>
+                            if stderr.contains("Unknown option: -I") =>
                         {
                             // If the user _requested_ a version prior to 3.4, raise an error, as
                             // 3.4 is the minimum supported version for invoking the interpreter
