@@ -1449,13 +1449,13 @@ fn install_registry_source_dist_cached() -> Result<()> {
 
     let filters: Vec<(&str, &str)> = if cfg!(windows) {
         // On Windows, the number of files removed is different.
-        [("Removed 615 files", "Removed 616 files")]
+        [("Removed 616 files", "Removed 617 files")]
             .into_iter()
             .chain(context.filters())
             .collect()
     } else {
         // For some Linux distributions, like Gentoo, the number of files removed is different.
-        [("Removed 614 files", "Removed 616 files")]
+        [("Removed 615 files", "Removed 617 files")]
             .into_iter()
             .chain(context.filters())
             .collect()
