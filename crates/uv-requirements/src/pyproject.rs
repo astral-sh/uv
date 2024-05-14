@@ -468,6 +468,7 @@ pub(crate) fn lower_requirement(
                 url,
                 repository,
                 reference,
+                precise: None,
                 subdirectory: subdirectory.map(PathBuf::from),
             }
         }

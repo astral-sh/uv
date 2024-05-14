@@ -54,6 +54,7 @@ impl VenvTestContext {
             .arg(EXCLUDE_NEWER)
             .env("UV_TEST_PYTHON_PATH", self.python_path.clone())
             .env("UV_NO_WRAP", "1")
+            .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
             .current_dir(self.temp_dir.path());
         command
     }

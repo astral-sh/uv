@@ -54,7 +54,7 @@ enum RefspecStrategy {
 impl GitReference {
     /// Creates a [`GitReference`] from an arbitrary revision string, which could represent a
     /// branch, tag, commit, or named ref.
-    pub(crate) fn from_rev(rev: &str) -> Self {
+    pub fn from_rev(rev: &str) -> Self {
         if rev.starts_with("refs/") {
             Self::NamedRef(rev.to_owned())
         } else if looks_like_commit_hash(rev) {
@@ -947,7 +947,7 @@ pub(crate) fn with_fetch_options(
 
 /// Attempts to fetch the given git `reference` for a Git repository.
 ///
-/// This is the main entry for git clone/fetch. It does the followings:
+/// This is the main entry for git clone/fetch. It does the following:
 ///
 /// * Turns [`GitReference`] into refspecs accordingly.
 /// * Dispatches `git fetch` using libgit2 or git CLI.

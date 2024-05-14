@@ -14,7 +14,7 @@ use uv_interpreter::PythonEnvironment;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
-/// Check for incompatibilties in installed packages.
+/// Check for incompatibilities in installed packages.
 pub(crate) fn pip_check(
     python: Option<&str>,
     system: bool,

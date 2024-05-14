@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
 use anstream::println;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::Parser;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, DirectUrlBuiltDist};
+use distribution_types::{BuiltDist, DirectUrlBuiltDist, ParsedUrl};
 use pep508_rs::VerbatimUrl;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
@@ -30,9 +30,15 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
             .1,
     )?;
 
+    let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
+        bail!("Only HTTPS is supported");
+    };
+
     let metadata = client
         .wheel_metadata(&BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
+            location: archive.url,
+            subdirectory: archive.subdirectory,
             url: args.url,
         }))
         .await?;

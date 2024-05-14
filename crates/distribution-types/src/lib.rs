@@ -41,7 +41,8 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
-use pep508_rs::{Pep508Url, Scheme, VerbatimUrl};
+use pep508_rs::{Pep508Url, VerbatimUrl};
+use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
 pub use crate::annotation::*;
@@ -126,9 +127,9 @@ impl std::fmt::Display for InstalledVersion<'_> {
     }
 }
 
-/// Either a built distribution, a wheel, or a source distribution that exists at some location
+/// Either a built distribution, a wheel, or a source distribution that exists at some location.
 ///
-/// The location can be index, url or path (wheel) or index, url, path or git (source distribution)
+/// The location can be an index, URL or path (wheel), or index, URL, path or Git repository (source distribution).
 #[derive(Debug, Clone)]
 pub enum Dist {
     Built(BuiltDist),
@@ -152,6 +153,7 @@ pub enum SourceDist {
     DirectUrl(DirectUrlSourceDist),
     Git(GitSourceDist),
     Path(PathSourceDist),
+    Directory(DirectorySourceDist),
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
@@ -168,6 +170,10 @@ pub struct DirectUrlBuiltDist {
     /// We require that wheel urls end in the full wheel filename, e.g.
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
+    /// The URL without the subdirectory fragment.
+    pub location: Url,
+    pub subdirectory: Option<PathBuf>,
+    /// The URL with the subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -193,6 +199,10 @@ pub struct DirectUrlSourceDist {
     /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
+    /// The URL without the subdirectory fragment.
+    pub location: Url,
+    pub subdirectory: Option<PathBuf>,
+    /// The URL with the subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -200,12 +210,24 @@ pub struct DirectUrlSourceDist {
 #[derive(Debug, Clone)]
 pub struct GitSourceDist {
     pub name: PackageName,
+    /// The URL without the revision and subdirectory fragment.
+    pub git: Box<GitUrl>,
+    pub subdirectory: Option<PathBuf>,
+    /// The URL with the revision and subdirectory fragment.
     pub url: VerbatimUrl,
+}
+
+/// A source distribution that exists in a local archive (e.g., a `.tar.gz` file).
+#[derive(Debug, Clone)]
+pub struct PathSourceDist {
+    pub name: PackageName,
+    pub url: VerbatimUrl,
+    pub path: PathBuf,
 }
 
 /// A source distribution that exists in a local directory.
 #[derive(Debug, Clone)]
-pub struct PathSourceDist {
+pub struct DirectorySourceDist {
     pub name: PackageName,
     pub url: VerbatimUrl,
     pub path: PathBuf,
@@ -235,7 +257,12 @@ impl Dist {
 
     /// A remote built distribution (`.whl`) or source distribution from a `http://` or `https://`
     /// URL.
-    pub fn from_http_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
+    pub fn from_http_url(
+        name: PackageName,
+        location: Url,
+        subdirectory: Option<PathBuf>,
+        url: VerbatimUrl,
+    ) -> Result<Dist, Error> {
         if Path::new(url.path())
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
@@ -252,11 +279,15 @@ impl Dist {
 
             Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                 filename,
+                location,
+                subdirectory,
                 url,
             })))
         } else {
             Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                 name,
+                location,
+                subdirectory,
                 url,
             })))
         }
@@ -265,15 +296,12 @@ impl Dist {
     /// A local built or source distribution from a `file://` URL.
     pub fn from_file_url(
         name: PackageName,
-        url: VerbatimUrl,
+        path: &Path,
         editable: bool,
+        url: VerbatimUrl,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
-        let path = match url
-            .to_file_path()
-            .map_err(|()| Error::UrlFilename(url.to_url()))?
-            .canonicalize()
-        {
+        let path = match path.canonicalize() {
             Ok(path) => path,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::NotFound(url.to_url()));
@@ -281,7 +309,15 @@ impl Dist {
             Err(err) => return Err(err.into()),
         };
 
-        if path
+        // Determine whether the path represents an archive or a directory.
+        if path.is_dir() {
+            Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                url,
+                path,
+                editable,
+            })))
+        } else if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
@@ -305,84 +341,50 @@ impl Dist {
                 path,
             })))
         } else {
+            if editable {
+                return Err(Error::EditableFile(url));
+            }
+
             Ok(Self::Source(SourceDist::Path(PathSourceDist {
                 name,
                 url,
                 path,
-                editable,
             })))
         }
     }
 
     /// A remote source distribution from a `git+https://` or `git+ssh://` url.
-    pub fn from_git_url(name: PackageName, url: VerbatimUrl) -> Result<Dist, Error> {
-        Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
+    pub fn from_git_url(
+        name: PackageName,
+        url: VerbatimUrl,
+        git: GitUrl,
+        subdirectory: Option<PathBuf>,
+    ) -> Result<Dist, Error> {
+        Ok(Self::Source(SourceDist::Git(GitSourceDist {
+            name,
+            git: Box::new(git),
+            subdirectory,
+            url,
+        })))
     }
 
-    // TODO(konsti): We should carry the parsed URL through the codebase.
     /// Create a [`Dist`] for a URL-based distribution.
-    pub fn from_url(name: PackageName, url: VerbatimUrl) -> Result<Self, Error> {
-        match Scheme::parse(url.scheme()) {
-            Some(Scheme::Http | Scheme::Https) => Self::from_http_url(name, url),
-            Some(Scheme::File) => Self::from_file_url(name, url, false),
-            Some(Scheme::GitSsh | Scheme::GitHttps) => Self::from_git_url(name, url),
-            Some(Scheme::GitGit | Scheme::GitHttp) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
-                "insecure Git protocol".to_string(),
-            )),
-            Some(Scheme::GitFile) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
-                "local Git protocol".to_string(),
-            )),
-            Some(
-                Scheme::BzrHttp
-                | Scheme::BzrHttps
-                | Scheme::BzrSsh
-                | Scheme::BzrSftp
-                | Scheme::BzrFtp
-                | Scheme::BzrLp
-                | Scheme::BzrFile,
-            ) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
-                "Bazaar is not supported".to_string(),
-            )),
-            Some(
-                Scheme::HgFile
-                | Scheme::HgHttp
-                | Scheme::HgHttps
-                | Scheme::HgSsh
-                | Scheme::HgStaticHttp,
-            ) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
-                "Mercurial is not supported".to_string(),
-            )),
-            Some(
-                Scheme::SvnSsh
-                | Scheme::SvnHttp
-                | Scheme::SvnHttps
-                | Scheme::SvnSvn
-                | Scheme::SvnFile,
-            ) => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
-                "Subversion is not supported".to_string(),
-            )),
-            None => Err(Error::UnsupportedScheme(
-                url.scheme().to_owned(),
-                url.verbatim().to_string(),
-                "unknown scheme".to_string(),
-            )),
+    pub fn from_url(name: PackageName, url: VerbatimParsedUrl) -> Result<Self, Error> {
+        match url.parsed_url {
+            ParsedUrl::Archive(archive) => {
+                Self::from_http_url(name, archive.url, archive.subdirectory, url.verbatim)
+            }
+            ParsedUrl::Path(file) => Self::from_file_url(name, &file.path, false, url.verbatim),
+            ParsedUrl::Git(git) => {
+                Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)
+            }
         }
     }
 
     /// Create a [`Dist`] for a local editable distribution.
     pub fn from_editable(name: PackageName, editable: LocalEditable) -> Result<Self, Error> {
         let LocalEditable { url, path, .. } = editable;
-        Ok(Self::Source(SourceDist::Path(PathSourceDist {
+        Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
             name,
             url,
             path,
@@ -454,7 +456,7 @@ impl SourceDist {
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Registry(registry) => Some(&registry.index),
-            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) => None,
+            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) | Self::Directory(_) => None,
         }
     }
 
@@ -462,32 +464,21 @@ impl SourceDist {
     pub fn file(&self) -> Option<&File> {
         match self {
             Self::Registry(registry) => Some(&registry.file),
-            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) => None,
+            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) | Self::Directory(_) => None,
         }
     }
 
     pub fn version(&self) -> Option<&Version> {
         match self {
             Self::Registry(source_dist) => Some(&source_dist.filename.version),
-            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) => None,
-        }
-    }
-
-    #[must_use]
-    pub fn with_url(self, url: Url) -> Self {
-        match self {
-            Self::Git(dist) => Self::Git(GitSourceDist {
-                url: VerbatimUrl::unknown(url),
-                ..dist
-            }),
-            dist => dist,
+            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) | Self::Directory(_) => None,
         }
     }
 
     /// Return true if the distribution is editable.
     pub fn is_editable(&self) -> bool {
         match self {
-            Self::Path(PathSourceDist { editable, .. }) => *editable,
+            Self::Directory(DirectorySourceDist { editable, .. }) => *editable,
             _ => false,
         }
     }
@@ -496,6 +487,7 @@ impl SourceDist {
     pub fn as_path(&self) -> Option<&Path> {
         match self {
             Self::Path(dist) => Some(&dist.path),
+            Self::Directory(dist) => Some(&dist.path),
             _ => None,
         }
     }
@@ -543,6 +535,12 @@ impl Name for PathSourceDist {
     }
 }
 
+impl Name for DirectorySourceDist {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+}
+
 impl Name for SourceDist {
     fn name(&self) -> &PackageName {
         match self {
@@ -550,6 +548,7 @@ impl Name for SourceDist {
             Self::DirectUrl(dist) => dist.name(),
             Self::Git(dist) => dist.name(),
             Self::Path(dist) => dist.name(),
+            Self::Directory(dist) => dist.name(),
         }
     }
 }
@@ -615,6 +614,12 @@ impl DistributionMetadata for PathSourceDist {
     }
 }
 
+impl DistributionMetadata for DirectorySourceDist {
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Url(&self.url)
+    }
+}
+
 impl DistributionMetadata for SourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
@@ -622,6 +627,7 @@ impl DistributionMetadata for SourceDist {
             Self::DirectUrl(dist) => dist.version_or_url(),
             Self::Git(dist) => dist.version_or_url(),
             Self::Path(dist) => dist.version_or_url(),
+            Self::Directory(dist) => dist.version_or_url(),
         }
     }
 }
@@ -760,6 +766,16 @@ impl RemoteSource for PathSourceDist {
     }
 }
 
+impl RemoteSource for DirectorySourceDist {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        self.url.filename()
+    }
+
+    fn size(&self) -> Option<u64> {
+        self.url.size()
+    }
+}
+
 impl RemoteSource for SourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         match self {
@@ -767,6 +783,7 @@ impl RemoteSource for SourceDist {
             Self::DirectUrl(dist) => dist.filename(),
             Self::Git(dist) => dist.filename(),
             Self::Path(dist) => dist.filename(),
+            Self::Directory(dist) => dist.filename(),
         }
     }
 
@@ -776,6 +793,7 @@ impl RemoteSource for SourceDist {
             Self::DirectUrl(dist) => dist.size(),
             Self::Git(dist) => dist.size(),
             Self::Path(dist) => dist.size(),
+            Self::Directory(dist) => dist.size(),
         }
     }
 }
@@ -934,6 +952,16 @@ impl Identifier for PathSourceDist {
     }
 }
 
+impl Identifier for DirectorySourceDist {
+    fn distribution_id(&self) -> DistributionId {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.url.resource_id()
+    }
+}
+
 impl Identifier for GitSourceDist {
     fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
@@ -951,6 +979,7 @@ impl Identifier for SourceDist {
             Self::DirectUrl(dist) => dist.distribution_id(),
             Self::Git(dist) => dist.distribution_id(),
             Self::Path(dist) => dist.distribution_id(),
+            Self::Directory(dist) => dist.distribution_id(),
         }
     }
 
@@ -960,6 +989,7 @@ impl Identifier for SourceDist {
             Self::DirectUrl(dist) => dist.resource_id(),
             Self::Git(dist) => dist.resource_id(),
             Self::Path(dist) => dist.resource_id(),
+            Self::Directory(dist) => dist.resource_id(),
         }
     }
 }
@@ -1038,12 +1068,23 @@ impl Identifier for PathSourceUrl<'_> {
     }
 }
 
+impl Identifier for DirectorySourceUrl<'_> {
+    fn distribution_id(&self) -> DistributionId {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.url.resource_id()
+    }
+}
+
 impl Identifier for SourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
         match self {
             Self::Direct(url) => url.distribution_id(),
             Self::Git(url) => url.distribution_id(),
             Self::Path(url) => url.distribution_id(),
+            Self::Directory(url) => url.distribution_id(),
         }
     }
 
@@ -1052,6 +1093,7 @@ impl Identifier for SourceUrl<'_> {
             Self::Direct(url) => url.resource_id(),
             Self::Git(url) => url.resource_id(),
             Self::Path(url) => url.resource_id(),
+            Self::Directory(url) => url.resource_id(),
         }
     }
 }
@@ -1079,20 +1121,18 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
-        // At time of writing, Unix is at 240, Windows is at 248.
         assert!(
-            std::mem::size_of::<Dist>() <= 248,
+            std::mem::size_of::<Dist>() <= 336,
             "{}",
             std::mem::size_of::<Dist>()
         );
         assert!(
-            std::mem::size_of::<BuiltDist>() <= 248,
+            std::mem::size_of::<BuiltDist>() <= 336,
             "{}",
             std::mem::size_of::<BuiltDist>()
         );
-        // At time of writing, unix is at 168, windows is at 176.
         assert!(
-            std::mem::size_of::<SourceDist>() <= 176,
+            std::mem::size_of::<SourceDist>() <= 256,
             "{}",
             std::mem::size_of::<SourceDist>()
         );

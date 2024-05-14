@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::Result;
+use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, DirectUrlBuiltDist};
@@ -20,6 +21,8 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
         let filename = WheelFilename::from_str(url.rsplit_once('/').unwrap().1)?;
         let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
+            location: Url::parse(url).unwrap(),
+            subdirectory: None,
             url: VerbatimUrl::from_str(url).unwrap(),
         });
         let metadata = client.wheel_metadata(&dist).await.unwrap();

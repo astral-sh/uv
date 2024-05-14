@@ -1,6 +1,6 @@
 use derivative::Derivative;
 
-use pep508_rs::VerbatimUrl;
+use distribution_types::VerbatimParsedUrl;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolver::Urls;
@@ -59,7 +59,7 @@ pub enum PubGrubPackage {
         /// we're going to have a dependency that's provided as a URL, we _need_ to visit the URL
         /// version before the registry version. So we could just error if we visit a URL variant
         /// _after_ a registry variant.
-        Option<VerbatimUrl>,
+        Option<VerbatimParsedUrl>,
     ),
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
     ///
@@ -74,7 +74,7 @@ pub enum PubGrubPackage {
     /// the exact same version of the base variant. Without the proxy package, then when provided
     /// requirements like `black==23.0.1` and `black[colorama]`, PubGrub may attempt to retrieve
     /// metadata for `black[colorama]` versions other than `23.0.1`.
-    Extra(PackageName, ExtraName, Option<VerbatimUrl>),
+    Extra(PackageName, ExtraName, Option<VerbatimParsedUrl>),
 }
 
 impl PubGrubPackage {

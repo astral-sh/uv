@@ -315,6 +315,7 @@ fn link() -> Result<()> {
         .arg(context1.cache_dir.path())
         .env("VIRTUAL_ENV", context2.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
+        .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
         .current_dir(&context2.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {
@@ -1273,7 +1274,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 126 files for tqdm ([SIZE])
+    Removed 127 files for tqdm ([SIZE])
     "###
     );
 
@@ -1370,7 +1371,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 3 files for werkzeug ([SIZE])
+    Removed 4 files for werkzeug ([SIZE])
     "###
     );
 
@@ -1471,7 +1472,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 616 files for future ([SIZE])
+    Removed 617 files for future ([SIZE])
     "###
     );
 
@@ -1576,7 +1577,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 102 files for wheel ([SIZE])
+    Removed 103 files for wheel ([SIZE])
     "###
     );
 
@@ -3024,7 +3025,10 @@ fn compile() -> Result<()> {
 
 /// Test that the `PYC_INVALIDATION_MODE` option is recognized and that the error handling works.
 #[test]
-#[cfg_attr(macos, ignore = "The bytecode trace is spuriously different on macOS")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "The bytecode trace is spuriously different on macOS"
+)]
 fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     let context = TestContext::new("3.12");
 

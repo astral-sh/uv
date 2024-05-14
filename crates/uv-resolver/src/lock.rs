@@ -6,9 +6,10 @@ use std::collections::VecDeque;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, Dist, DistributionMetadata, FileLocation,
-    GitSourceDist, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistrySourceDist, Resolution, ResolvedDist, ToUrlError, VersionOrUrlRef,
+    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
+    DistributionMetadata, FileLocation, GitSourceDist, IndexUrl, Name, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
+    VersionOrUrlRef,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -360,6 +361,9 @@ impl Source {
             distribution_types::SourceDist::Path(ref path_dist) => {
                 Source::from_path_source_dist(path_dist)
             }
+            distribution_types::SourceDist::Directory(ref directory) => {
+                Source::from_directory_source_dist(directory)
+            }
         }
     }
 
@@ -399,6 +403,13 @@ impl Source {
         }
     }
 
+    fn from_directory_source_dist(directory_dist: &DirectorySourceDist) -> Source {
+        Source {
+            kind: SourceKind::Directory,
+            url: directory_dist.url.to_url(),
+        }
+    }
+
     fn from_index_url(index_url: &IndexUrl) -> Source {
         match *index_url {
             IndexUrl::Pypi(ref verbatim_url) => Source {
@@ -417,14 +428,14 @@ impl Source {
     }
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
-        // FIXME: Fill in the git revision details here. They aren't in
-        // `GitSourceDist`, so this will likely need some refactoring.
+        // TODO(konsti): Fill in the Git revision details. GitSource and GitSourceDist are
+        // slightly mismatched.
         Source {
             kind: SourceKind::Git(GitSource {
-                precise: None,
+                precise: git_dist.git.precise().map(|git_sha| git_sha.to_string()),
                 kind: GitSourceKind::DefaultBranch,
             }),
-            url: git_dist.url.to_url(),
+            url: git_dist.git.repository().clone(),
         }
     }
 }
@@ -497,6 +508,7 @@ pub(crate) enum SourceKind {
     Git(GitSource),
     Direct,
     Path,
+    Directory,
 }
 
 impl SourceKind {
@@ -506,6 +518,7 @@ impl SourceKind {
             SourceKind::Git(_) => "git",
             SourceKind::Direct => "direct",
             SourceKind::Path => "path",
+            SourceKind::Directory => "directory",
         }
     }
 
@@ -515,13 +528,8 @@ impl SourceKind {
     /// _not_ be present.
     fn requires_hash(&self) -> bool {
         match *self {
-            SourceKind::Registry | SourceKind::Direct => true,
-            // TODO: A `Path` dependency, if it points to a specific source
-            // distribution or wheel, should have a hash. But if it points to a
-            // directory, then it should not have a hash.
-            //
-            // See: https://github.com/astral-sh/uv/issues/3506
-            SourceKind::Git(_) | SourceKind::Path => false,
+            SourceKind::Registry | SourceKind::Direct | SourceKind::Path => true,
+            SourceKind::Git(_) | SourceKind::Directory => false,
         }
     }
 }
@@ -620,6 +628,9 @@ impl SourceDist {
             distribution_types::SourceDist::Path(ref path_dist) => {
                 Ok(SourceDist::from_path_dist(path_dist))
             }
+            distribution_types::SourceDist::Directory(ref directory_dist) => {
+                Ok(SourceDist::from_directory_dist(directory_dist))
+            }
         }
     }
 
@@ -656,6 +667,13 @@ impl SourceDist {
     fn from_path_dist(path_dist: &PathSourceDist) -> SourceDist {
         SourceDist {
             url: path_dist.url.to_url(),
+            hash: None,
+        }
+    }
+
+    fn from_directory_dist(directory_dist: &DirectorySourceDist) -> SourceDist {
+        SourceDist {
+            url: directory_dist.url.to_url(),
             hash: None,
         }
     }
@@ -1148,7 +1166,7 @@ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24b
     }
 
     #[test]
-    fn hash_required_missing() {
+    fn hash_optional_missing() {
         let data = r#"
 version = 1
 

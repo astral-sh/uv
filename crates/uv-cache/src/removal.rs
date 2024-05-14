@@ -35,36 +35,53 @@ impl Removal {
             Err(err) => return Err(err),
         };
 
-        let mut rm_file = |path: &Path, meta: Result<std::fs::Metadata, walkdir::Error>| {
-            if let Ok(meta) = meta {
-                self.total_bytes += meta.len();
-            }
-            remove_file(path)?;
-
-            Ok(())
-        };
-
         if !metadata.is_dir() {
             self.num_files += 1;
-            return rm_file(path, Ok(metadata));
+
+            // Remove the file.
+            self.total_bytes += metadata.len();
+            remove_file(path)?;
+
+            return Ok(());
         }
 
         for entry in walkdir::WalkDir::new(path).contents_first(true) {
+            // If we hit a directory that lacks read permissions, try to make it readable.
+            if let Err(ref err) = entry {
+                if err
+                    .io_error()
+                    .is_some_and(|err| err.kind() == io::ErrorKind::PermissionDenied)
+                {
+                    if let Some(dir) = err.path() {
+                        if set_readable(dir).unwrap_or(false) {
+                            // Retry the operation; if we _just_ `self.rm_rf(dir)` and continue,
+                            // `walkdir` may give us duplicate entries for the directory.
+                            return self.rm_rf(path);
+                        }
+                    }
+                }
+            }
+
             let entry = entry?;
             if cfg!(windows) && entry.file_type().is_symlink() {
                 // In this branch, we try to handle junction removal.
                 self.num_files += 1;
-                fs_err::remove_dir(entry.path())?;
+                remove_dir(entry.path())?;
             } else if entry.file_type().is_dir() {
                 self.num_dirs += 1;
 
                 // The contents should have been removed by now, but sometimes a race condition is
                 // hit where other files have been added by the OS. Fall back to `remove_dir_all`,
                 // which will remove the directory robustly across platforms.
-                fs_err::remove_dir_all(entry.path())?;
+                remove_dir_all(entry.path())?;
             } else {
                 self.num_files += 1;
-                rm_file(entry.path(), entry.metadata())?;
+
+                // Remove the file.
+                if let Ok(meta) = entry.metadata() {
+                    self.total_bytes += meta.len();
+                }
+                remove_file(entry.path())?;
             }
         }
 
@@ -80,25 +97,41 @@ impl std::ops::AddAssign for Removal {
     }
 }
 
+/// If the directory isn't readable by the current user, change the permissions to make it readable.
+#[cfg_attr(windows, allow(unused_variables, clippy::unnecessary_wraps))]
+fn set_readable(path: &Path) -> io::Result<bool> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = path.metadata()?.permissions();
+        if perms.mode() & 0o500 == 0 {
+            perms.set_mode(perms.mode() | 0o500);
+            fs_err::set_permissions(path, perms)?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// If the file is readonly, change the permissions to make it _not_ readonly.
+fn set_not_readonly(path: &Path) -> io::Result<bool> {
+    let mut perms = path.metadata()?.permissions();
+    if !perms.readonly() {
+        return Ok(false);
+    }
+
+    // We're about to delete the file, so it's fine to set the permissions to world-writable.
+    #[allow(clippy::permissions_set_readonly_false)]
+    perms.set_readonly(false);
+
+    fs_err::set_permissions(path, perms)?;
+
+    Ok(true)
+}
+
 /// Like [`fs_err::remove_file`], but attempts to change the permissions to force the file to be
 /// deleted (if it is readonly).
 fn remove_file(path: &Path) -> io::Result<()> {
-    /// If the file is readonly, change the permissions to make it _not_ readonly.
-    fn set_not_readonly(path: &Path) -> io::Result<bool> {
-        let mut perms = path.metadata()?.permissions();
-        if !perms.readonly() {
-            return Ok(false);
-        }
-
-        // We're about to delete the file, so it's fine to set the permissions to world-writable.
-        #[allow(clippy::permissions_set_readonly_false)]
-        perms.set_readonly(false);
-
-        fs_err::set_permissions(path, perms)?;
-
-        Ok(true)
-    }
-
     match fs_err::remove_file(path) {
         Ok(()) => Ok(()),
         Err(err)
@@ -106,6 +139,36 @@ fn remove_file(path: &Path) -> io::Result<()> {
                 && set_not_readonly(path).unwrap_or(false) =>
         {
             fs_err::remove_file(path)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// Like [`fs_err::remove_dir`], but attempts to change the permissions to force the directory to
+/// be deleted (if it is readonly).
+fn remove_dir(path: &Path) -> io::Result<()> {
+    match fs_err::remove_dir(path) {
+        Ok(()) => Ok(()),
+        Err(err)
+            if err.kind() == io::ErrorKind::PermissionDenied
+                && set_readable(path).unwrap_or(false) =>
+        {
+            fs_err::remove_dir(path)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// Like [`fs_err::remove_dir_all`], but attempts to change the permissions to force the directory
+/// to be deleted (if it is readonly).
+fn remove_dir_all(path: &Path) -> io::Result<()> {
+    match fs_err::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(err)
+            if err.kind() == io::ErrorKind::PermissionDenied
+                && set_readable(path).unwrap_or(false) =>
+        {
+            fs_err::remove_dir_all(path)
         }
         Err(err) => Err(err),
     }

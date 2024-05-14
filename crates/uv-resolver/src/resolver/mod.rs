@@ -43,7 +43,7 @@ use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubPython,
-    PubGrubSpecifier,
+    PubGrubRequirement, PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
@@ -221,7 +221,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
     /// reader of the resolution that knows to exclude distributions that can't
     /// be used in the current environment.
     ///
-    /// When a marker environment is provided, the reslver is in
+    /// When a marker environment is provided, the resolver is in
     /// "non-universal" mode, which corresponds to standard `pip` behavior that
     /// works only for a specific marker environment.
     #[allow(clippy::too_many_arguments)]
@@ -612,8 +612,13 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
             }
             PubGrubPackage::Package(name, _extra, Some(url)) => {
                 // Verify that the package is allowed under the hash-checking policy.
-                if !self.hasher.allows_url(url) {
+                if !self.hasher.allows_url(&url.verbatim) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
+                }
+
+                // If the package is an editable, we don't need to fetch metadata.
+                if self.editables.contains(name) {
+                    return Ok(());
                 }
 
                 // Emit a request to fetch the metadata for this distribution.
@@ -680,7 +685,10 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
 
             PubGrubPackage::Extra(package_name, _, Some(url))
             | PubGrubPackage::Package(package_name, _, Some(url)) => {
-                debug!("Searching for a compatible version of {package} @ {url} ({range})");
+                debug!(
+                    "Searching for a compatible version of {package} @ {} ({range})",
+                    url.verbatim
+                );
 
                 // If the dist is an editable, return the version from the editable metadata.
                 if let Some((_local, metadata, _)) = self.editables.get(package_name) {
@@ -878,7 +886,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
         match package {
             PubGrubPackage::Root(_) => {
                 // Add the root requirements.
-                let constraints = PubGrubDependencies::from_requirements(
+                let dependencies = PubGrubDependencies::from_requirements(
                     &self.requirements,
                     &self.constraints,
                     &self.overrides,
@@ -889,8 +897,8 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.markers,
                 );
 
-                let mut constraints = match constraints {
-                    Ok(constraints) => constraints,
+                let mut dependencies = match dependencies {
+                    Ok(dependencies) => dependencies,
                     Err(err) => {
                         return Ok(Dependencies::Unavailable(
                             UnavailableVersion::ResolverError(uncapitalize(err.to_string())),
@@ -898,7 +906,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     }
                 };
 
-                for (package, version) in constraints.iter() {
+                for (package, version) in dependencies.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Update the package priorities.
@@ -918,11 +926,11 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     priorities.insert(&package, &version);
 
                     // Add the editable as a direct dependency.
-                    constraints.push(package, version);
+                    dependencies.push(package, version);
 
                     // Add a dependency on each extra.
                     for extra in &editable.extras {
-                        constraints.push(
+                        dependencies.push(
                             PubGrubPackage::from_package(
                                 metadata.name.clone(),
                                 Some(extra.clone()),
@@ -931,9 +939,22 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                             Range::singleton(metadata.version.clone()),
                         );
                     }
+
+                    // Add any constraints.
+                    for constraint in self.constraints.get(&metadata.name).into_iter().flatten() {
+                        if constraint.evaluate_markers(self.markers, &[]) {
+                            let PubGrubRequirement { package, version } =
+                                PubGrubRequirement::from_constraint(
+                                    constraint,
+                                    &self.urls,
+                                    &self.locals,
+                                )?;
+                            dependencies.push(package, version);
+                        }
+                    }
                 }
 
-                Ok(Dependencies::Available(constraints.into()))
+                Ok(Dependencies::Available(dependencies.into()))
             }
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
@@ -943,7 +964,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for reporting diagnostics.
-                    if extra.is_some() && self.editables.get(package_name).is_none() {
+                    if extra.is_some() && !self.editables.contains(package_name) {
                         // Determine the distribution to lookup.
                         let dist = match url {
                             Some(url) => PubGrubDistribution::from_url(package_name, url),
@@ -971,7 +992,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         .cloned()
                         .map(Requirement::from_pep508)
                         .collect::<Result<_, _>>()?;
-                    let constraints = PubGrubDependencies::from_requirements(
+                    let dependencies = PubGrubDependencies::from_requirements(
                         &requirements,
                         &self.constraints,
                         &self.overrides,
@@ -982,7 +1003,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         self.markers,
                     )?;
 
-                    for (dep_package, dep_version) in constraints.iter() {
+                    for (dep_package, dep_version) in dependencies.iter() {
                         debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
                         // Update the package priorities.
@@ -992,7 +1013,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         self.visit_package(dep_package, request_sink).await?;
                     }
 
-                    return Ok(Dependencies::Available(constraints.into()));
+                    return Ok(Dependencies::Available(dependencies.into()));
                 }
 
                 // Determine the distribution to lookup.
@@ -1095,7 +1116,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     .cloned()
                     .map(Requirement::from_pep508)
                     .collect::<Result<_, _>>()?;
-                let constraints = PubGrubDependencies::from_requirements(
+                let dependencies = PubGrubDependencies::from_requirements(
                     &requirements,
                     &self.constraints,
                     &self.overrides,
@@ -1106,7 +1127,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.markers,
                 )?;
 
-                for (dep_package, dep_version) in constraints.iter() {
+                for (dep_package, dep_version) in dependencies.iter() {
                     debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
                     // Update the package priorities.
@@ -1116,7 +1137,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     self.visit_package(dep_package, request_sink).await?;
                 }
 
-                Ok(Dependencies::Available(constraints.into()))
+                Ok(Dependencies::Available(dependencies.into()))
             }
 
             // Add a dependency on both the extra and base package.
@@ -1224,10 +1245,13 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     .boxed_local()
                     .await
                     .map_err(|err| match dist.clone() {
-                        Dist::Built(BuiltDist::Path(built_dist)) => {
+                        Dist::Built(built_dist @ BuiltDist::Path(_)) => {
                             ResolveError::Read(Box::new(built_dist), err)
                         }
-                        Dist::Source(SourceDist::Path(source_dist)) => {
+                        Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                            ResolveError::Build(Box::new(source_dist), err)
+                        }
+                        Dist::Source(source_dist @ SourceDist::Directory(_)) => {
                             ResolveError::Build(Box::new(source_dist), err)
                         }
                         Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
@@ -1311,10 +1335,13 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                                 .boxed_local()
                                 .await
                                 .map_err(|err| match dist.clone() {
-                                    Dist::Built(BuiltDist::Path(built_dist)) => {
+                                    Dist::Built(built_dist @ BuiltDist::Path(_)) => {
                                         ResolveError::Read(Box::new(built_dist), err)
                                     }
-                                    Dist::Source(SourceDist::Path(source_dist)) => {
+                                    Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                                        ResolveError::Build(Box::new(source_dist), err)
+                                    }
+                                    Dist::Source(source_dist @ SourceDist::Directory(_)) => {
                                         ResolveError::Build(Box::new(source_dist), err)
                                     }
                                     Dist::Built(built_dist) => {
@@ -1349,7 +1376,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 PubGrubPackage::Python(_) => {}
                 PubGrubPackage::Extra(_, _, _) => {}
                 PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                    reporter.on_progress(package_name, &VersionOrUrlRef::Url(url));
+                    reporter.on_progress(package_name, &VersionOrUrlRef::Url(&url.verbatim));
                 }
                 PubGrubPackage::Package(package_name, _extra, None) => {
                     reporter.on_progress(package_name, &VersionOrUrlRef::Version(version));
@@ -1376,7 +1403,7 @@ struct ResolverState {
     /// in this state. We also ultimately retrieve the final set of version
     /// assignments (to packages) from this state's "partial solution."
     pubgrub: State<UvDependencyProvider>,
-    /// The next package on which to run unit propgation.
+    /// The next package on which to run unit propagation.
     next: PubGrubPackage,
     /// The set of pinned versions we accrue throughout resolution.
     ///

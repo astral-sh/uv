@@ -9,9 +9,10 @@ use tracing::{debug, warn};
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, Error, GitSourceDist,
-    Hashed, IndexLocations, InstalledDist, InstalledMetadata, InstalledVersion, Name,
-    PathBuiltDist, PathSourceDist, RemoteSource, Requirement, RequirementSource, Verbatim,
+    CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, InstalledMetadata,
+    InstalledVersion, Name, PathBuiltDist, PathSourceDist, RemoteSource, Requirement,
+    RequirementSource, Verbatim,
 };
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
@@ -20,6 +21,7 @@ use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
 use uv_fs::Simplified;
+use uv_git::GitUrl;
 use uv_interpreter::PythonEnvironment;
 use uv_types::HashStrategy;
 
@@ -82,7 +84,6 @@ impl<'a> Planner<'a> {
         let mut cached = vec![];
         let mut remote = vec![];
         let mut reinstalls = vec![];
-        let mut installed = vec![];
         let mut extraneous = vec![];
         let mut seen = FxHashMap::with_capacity_and_hasher(
             self.requirements.len(),
@@ -113,7 +114,7 @@ impl<'a> Planner<'a> {
                     debug!("Treating editable requirement as immutable: {installed}");
 
                     // Remove from the site-packages index, to avoid marking as extraneous.
-                    let Some(editable) = installed.as_editable() else {
+                    let Some(editable) = installed.wheel.as_editable() else {
                         warn!("Editable requirement is not editable: {installed}");
                         continue;
                     };
@@ -126,7 +127,7 @@ impl<'a> Planner<'a> {
                 ResolvedEditable::Built(built) => {
                     debug!("Treating editable requirement as mutable: {built}");
 
-                    // Remove any editable installs.
+                    // Remove any editables.
                     let existing = site_packages.remove_editables(built.editable.raw());
                     reinstalls.extend(existing);
 
@@ -189,7 +190,6 @@ impl<'a> Planner<'a> {
                             RequirementSatisfaction::Mismatch => {}
                             RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {distribution}");
-                                installed.push(distribution.clone());
                                 continue;
                             }
                             RequirementSatisfaction::OutOfDate => {
@@ -223,7 +223,11 @@ impl<'a> Planner<'a> {
                         continue;
                     }
                 }
-                RequirementSource::Url { url, .. } => {
+                RequirementSource::Url {
+                    subdirectory,
+                    location,
+                    url,
+                } => {
                     // Check if we have a wheel or a source distribution.
                     if Path::new(url.path())
                         .extension()
@@ -242,6 +246,8 @@ impl<'a> Planner<'a> {
 
                         let wheel = DirectUrlBuiltDist {
                             filename,
+                            location: location.clone(),
+                            subdirectory: subdirectory.clone(),
                             url: url.clone(),
                         };
 
@@ -287,6 +293,8 @@ impl<'a> Planner<'a> {
                     } else {
                         let sdist = DirectUrlSourceDist {
                             name: requirement.name.clone(),
+                            location: location.clone(),
+                            subdirectory: subdirectory.clone(),
                             url: url.clone(),
                         };
                         // Find the most-compatible wheel from the cache, since we don't know
@@ -299,9 +307,21 @@ impl<'a> Planner<'a> {
                         }
                     }
                 }
-                RequirementSource::Git { url, .. } => {
+                RequirementSource::Git {
+                    repository,
+                    reference,
+                    precise,
+                    subdirectory,
+                    url,
+                } => {
+                    let mut git = GitUrl::new(repository.clone(), reference.clone());
+                    if let Some(precise) = precise {
+                        git = git.with_precise(*precise);
+                    }
                     let sdist = GitSourceDist {
                         name: requirement.name.clone(),
+                        git: Box::new(git),
+                        subdirectory: subdirectory.clone(),
                         url: url.clone(),
                     };
                     // Find the most-compatible wheel from the cache, since we don't know
@@ -328,7 +348,23 @@ impl<'a> Planner<'a> {
                     };
 
                     // Check if we have a wheel or a source distribution.
-                    if path
+                    if path.is_dir() {
+                        let sdist = DirectorySourceDist {
+                            name: requirement.name.clone(),
+                            url: url.clone(),
+                            path,
+                            editable: false,
+                        };
+
+                        // Find the most-compatible wheel from the cache, since we don't know
+                        // the filename in advance.
+                        if let Some(wheel) = built_index.directory(&sdist)? {
+                            let cached_dist = wheel.into_url_dist(url.clone());
+                            debug!("Path source requirement already cached: {cached_dist}");
+                            cached.push(CachedDist::Url(cached_dist));
+                            continue;
+                        }
+                    } else if path
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
                     {
@@ -395,8 +431,8 @@ impl<'a> Planner<'a> {
                             name: requirement.name.clone(),
                             url: url.clone(),
                             path,
-                            editable: false,
                         };
+
                         // Find the most-compatible wheel from the cache, since we don't know
                         // the filename in advance.
                         if let Some(wheel) = built_index.path(&sdist)? {
@@ -436,7 +472,6 @@ impl<'a> Planner<'a> {
 
         Ok(Plan {
             cached,
-            installed,
             remote,
             reinstalls,
             extraneous,
@@ -457,10 +492,6 @@ pub struct Plan {
     /// The distributions that are not already installed in the current environment, but are
     /// available in the local cache.
     pub cached: Vec<CachedDist>,
-
-    /// Any distributions that are already installed in the current environment, and can be used
-    /// to satisfy the requirements.
-    pub installed: Vec<InstalledDist>,
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.

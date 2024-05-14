@@ -16,9 +16,8 @@ use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
+use crate::commands::ListFormat;
 use crate::printer::Printer;
-
-use super::ListFormat;
 
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]

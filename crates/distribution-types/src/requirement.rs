@@ -6,7 +6,7 @@ use url::Url;
 
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
-use uv_git::GitReference;
+use uv_git::{GitReference, GitSha};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::{ParsedUrl, ParsedUrlError};
@@ -102,6 +102,7 @@ impl Display for Requirement {
                 url: _,
                 repository,
                 reference,
+                precise: _,
                 subdirectory,
             } => {
                 write!(f, " @ git+{repository}")?;
@@ -158,6 +159,8 @@ pub enum RequirementSource {
         repository: Url,
         /// Optionally, the revision, tag, or branch to use.
         reference: GitReference,
+        /// The precise commit to use, if known.
+        precise: Option<GitSha>,
         /// The path to the source distribution if it is not in the repository root.
         subdirectory: Option<PathBuf>,
         /// The PEP 508 style url in the format
@@ -183,7 +186,7 @@ impl RequirementSource {
     /// the PEP 508 string (after the `@`) as [`VerbatimUrl`].
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
-            ParsedUrl::LocalFile(local_file) => RequirementSource::Path {
+            ParsedUrl::Path(local_file) => RequirementSource::Path {
                 path: local_file.path,
                 url,
                 editable: None,
@@ -192,6 +195,7 @@ impl RequirementSource {
                 url,
                 repository: git.url.repository().clone(),
                 reference: git.url.reference().clone(),
+                precise: git.url.precise(),
                 subdirectory: git.subdirectory,
             },
             ParsedUrl::Archive(archive) => RequirementSource::Url {

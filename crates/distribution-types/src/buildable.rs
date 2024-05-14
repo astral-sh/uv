@@ -6,7 +6,7 @@ use url::Url;
 
 use uv_normalize::PackageName;
 
-use crate::{GitSourceDist, Name, PathSourceDist, SourceDist};
+use crate::{DirectorySourceDist, GitSourceDist, Name, PathSourceDist, SourceDist};
 
 /// A reference to a source that can be built into a built distribution.
 ///
@@ -62,6 +62,7 @@ pub enum SourceUrl<'a> {
     Direct(DirectSourceUrl<'a>),
     Git(GitSourceUrl<'a>),
     Path(PathSourceUrl<'a>),
+    Directory(DirectorySourceUrl<'a>),
 }
 
 impl<'a> SourceUrl<'a> {
@@ -71,6 +72,7 @@ impl<'a> SourceUrl<'a> {
             Self::Direct(dist) => dist.url,
             Self::Git(dist) => dist.url,
             Self::Path(dist) => dist.url,
+            Self::Directory(dist) => dist.url,
         }
     }
 }
@@ -81,6 +83,7 @@ impl std::fmt::Display for SourceUrl<'_> {
             Self::Direct(url) => write!(f, "{url}"),
             Self::Git(url) => write!(f, "{url}"),
             Self::Path(url) => write!(f, "{url}"),
+            Self::Directory(url) => write!(f, "{url}"),
         }
     }
 }
@@ -127,6 +130,27 @@ impl std::fmt::Display for PathSourceUrl<'_> {
 
 impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
     fn from(dist: &'a PathSourceDist) -> Self {
+        Self {
+            url: &dist.url,
+            path: Cow::Borrowed(&dist.path),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DirectorySourceUrl<'a> {
+    pub url: &'a Url,
+    pub path: Cow<'a, Path>,
+}
+
+impl std::fmt::Display for DirectorySourceUrl<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{url}", url = self.url)
+    }
+}
+
+impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
+    fn from(dist: &'a DirectorySourceDist) -> Self {
         Self {
             url: &dist.url,
             path: Cow::Borrowed(&dist.path),
