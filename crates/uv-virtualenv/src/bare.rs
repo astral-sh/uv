@@ -265,9 +265,27 @@ pub fn create_bare_venv(
 
     // Construct the path to the `site-packages` directory.
     let site_packages = location.join(&interpreter.virtualenv().purelib);
+    fs::create_dir_all(&site_packages)?;
+
+    // If necessary, create a symlink from `lib64` to `lib`.
+    // See: https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L135C11-L135C16
+    #[cfg(unix)]
+    if interpreter.pointer_size().is_64()
+        && interpreter.markers().os_name() == "posix"
+        && interpreter.markers().sys_platform() != "darwin"
+    {
+        let lib64 = location.join("lib64");
+        let lib = location.join("lib");
+        match std::os::unix::fs::symlink(lib, lib64) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(err) => {
+                return Err(err.into());
+            }
+        }
+    }
 
     // Populate `site-packages` with a `_virtualenv.py` file.
-    fs::create_dir_all(&site_packages)?;
     fs::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
     fs::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
 

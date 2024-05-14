@@ -17,6 +17,7 @@ use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
+use crate::pointer_size::PointerSize;
 use crate::{Error, PythonVersion, Target, VirtualEnvironment};
 
 /// A Python executable and its associated platform markers.
@@ -35,6 +36,7 @@ pub struct Interpreter {
     stdlib: PathBuf,
     tags: OnceCell<Tags>,
     target: Option<Target>,
+    pointer_size: PointerSize,
     gil_disabled: bool,
 }
 
@@ -56,6 +58,7 @@ impl Interpreter {
             virtualenv: info.virtualenv,
             prefix: info.prefix,
             base_exec_prefix: info.base_exec_prefix,
+            pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
             base_prefix: info.base_prefix,
             base_executable: info.base_executable,
@@ -95,6 +98,7 @@ impl Interpreter {
             stdlib: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
             target: None,
+            pointer_size: PointerSize::_64,
             gil_disabled: false,
         }
     }
@@ -326,6 +330,11 @@ impl Interpreter {
         &self.virtualenv
     }
 
+    /// Return the [`PointerSize`] of the Python interpreter (i.e., 32- vs. 64-bit).
+    pub fn pointer_size(&self) -> PointerSize {
+        self.pointer_size
+    }
+
     /// Return whether this is a Python 3.13+ freethreading Python, as specified by the sysconfig var
     /// `Py_GIL_DISABLED`.
     ///
@@ -429,6 +438,7 @@ struct InterpreterInfo {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
+    pointer_size: PointerSize,
     gil_disabled: bool,
 }
 
@@ -662,6 +672,7 @@ mod tests {
                     "purelib": "lib/python3.12/site-packages",
                     "scripts": "bin"
                 },
+                "pointer_size": "64",
                 "gil_disabled": true
             }
         "##};
