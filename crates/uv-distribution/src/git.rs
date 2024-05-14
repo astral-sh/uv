@@ -9,7 +9,7 @@ use tracing::debug;
 use url::Url;
 
 use cache_key::{CanonicalUrl, RepositoryUrl};
-use distribution_types::ParsedGitUrl;
+use distribution_types::{GitSourceUrl, ParsedGitUrl};
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::LockedFile;
 use uv_git::{Fetch, GitReference, GitSha, GitSource, GitUrl};
@@ -92,27 +92,24 @@ pub(crate) async fn fetch_git_archive(
 /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
 /// prefix kinds.
 pub(crate) async fn resolve_precise(
-    url: &Url,
+    url: &GitSourceUrl<'_>,
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
-) -> Result<Option<Url>, Error> {
-    let ParsedGitUrl { url, subdirectory } =
-        ParsedGitUrl::try_from(url.clone()).map_err(Box::new)?;
-
+) -> Result<Option<ParsedGitUrl>, Error> {
     // If the Git reference already contains a complete SHA, short-circuit.
-    if url.precise().is_some() {
+    if url.git.precise().is_some() {
         return Ok(None);
     }
 
     // If the Git reference is in the in-memory cache, return it.
     {
         let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        let reference = RepositoryReference::new(&url);
+        let reference = RepositoryReference::new(&url.git);
         if let Some(precise) = resolved_git_refs.get(&reference) {
-            return Ok(Some(Url::from(ParsedGitUrl {
-                url: url.with_precise(*precise),
-                subdirectory,
-            })));
+            return Ok(Some(ParsedGitUrl {
+                url: url.git.clone().with_precise(*precise),
+                subdirectory: url.subdirectory.map(|dir| dir.to_path_buf()),
+            }));
         }
     }
 
@@ -121,9 +118,9 @@ pub(crate) async fn resolve_precise(
     // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
     // commit, etc.).
     let source = if let Some(reporter) = reporter {
-        GitSource::new(url.clone(), git_dir).with_reporter(Facade::from(reporter.clone()))
+        GitSource::new(url.git.clone(), git_dir).with_reporter(Facade::from(reporter.clone()))
     } else {
-        GitSource::new(url.clone(), git_dir)
+        GitSource::new(url.git.clone(), git_dir)
     };
     let fetch = tokio::task::spawn_blocking(move || source.fetch())
         .await?
@@ -133,15 +130,14 @@ pub(crate) async fn resolve_precise(
     // Insert the resolved URL into the in-memory cache.
     if let Some(precise) = git.precise() {
         let mut resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        let reference = RepositoryReference::new(&url);
+        let reference = RepositoryReference::new(&url.git);
         resolved_git_refs.insert(reference, precise);
     }
 
-    // Re-encode as a URL.
-    Ok(Some(Url::from(ParsedGitUrl {
+    Ok(Some(ParsedGitUrl {
         url: git,
-        subdirectory,
-    })))
+        subdirectory: url.subdirectory.map(|dir| dir.to_path_buf()),
+    }))
 }
 
 /// Given a remote source distribution, return a precise variant, if possible.

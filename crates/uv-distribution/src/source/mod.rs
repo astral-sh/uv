@@ -17,8 +17,8 @@ use zip::ZipArchive;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuildableSource, DirectorySourceDist, DirectorySourceUrl, Dist, FileLocation, GitSourceUrl,
-    HashPolicy, Hashed, LocalEditable, ParsedArchiveUrl, PathSourceUrl, RemoteSource, SourceDist,
-    SourceUrl,
+    HashPolicy, Hashed, LocalEditable, ParsedArchiveUrl, ParsedGitUrl, PathSourceUrl, RemoteSource,
+    SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
@@ -1023,26 +1023,30 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Resolve to a precise Git SHA.
-        let url = if let Some(url) = resolve_precise(
-            resource.url,
-            self.build_context.cache(),
-            self.reporter.as_ref(),
-        )
-        .await?
+        let url = if let Some(url) =
+            resolve_precise(resource, self.build_context.cache(), self.reporter.as_ref()).await?
         {
-            Cow::Owned(url)
+            url
         } else {
-            Cow::Borrowed(resource.url)
+            // TODO(konsti): No need to clone here.
+            ParsedGitUrl {
+                url: resource.git.clone(),
+                subdirectory: resource.subdirectory.map(|dir| dir.to_path_buf()),
+            }
         };
 
         // Fetch the Git repository.
-        let (fetch, subdirectory) =
-            fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
+        let (fetch, subdirectory) = fetch_git_archive(
+            url.url.repository(),
+            self.build_context.cache(),
+            self.reporter.as_ref(),
+        )
+        .await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(&url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(url.url.repository(), &git_sha.to_short_string()).root(),
         );
 
         let _lock = lock_shard(&cache_shard).await?;
@@ -1097,26 +1101,30 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Resolve to a precise Git SHA.
-        let url = if let Some(url) = resolve_precise(
-            resource.url,
-            self.build_context.cache(),
-            self.reporter.as_ref(),
-        )
-        .await?
+        let url = if let Some(url) =
+            resolve_precise(resource, self.build_context.cache(), self.reporter.as_ref()).await?
         {
-            Cow::Owned(url)
+            url
         } else {
-            Cow::Borrowed(resource.url)
+            // TODO(konsti): No need to clone here.
+            ParsedGitUrl {
+                url: resource.git.clone(),
+                subdirectory: resource.subdirectory.map(|dir| dir.to_path_buf()),
+            }
         };
 
         // Fetch the Git repository.
-        let (fetch, subdirectory) =
-            fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
+        let (fetch, subdirectory) = fetch_git_archive(
+            url.url.repository(),
+            self.build_context.cache(),
+            self.reporter.as_ref(),
+        )
+        .await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(&url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(url.url.repository(), &git_sha.to_short_string()).root(),
         );
 
         let _lock = lock_shard(&cache_shard).await?;
