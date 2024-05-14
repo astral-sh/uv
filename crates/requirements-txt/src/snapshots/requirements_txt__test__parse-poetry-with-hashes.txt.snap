@@ -27,25 +27,21 @@ RequirementsTxt {
                         And(
                             [
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: GreaterEqual,
-                                        r_value: QuotedString(
-                                            "3.8",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: GreaterThanEqual,
+                                            version: "3.8",
+                                        },
                                     },
                                 ),
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: LessThan,
-                                        r_value: QuotedString(
-                                            "4.0",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: LessThan,
+                                            version: "4.0",
+                                        },
                                     },
                                 ),
                             ],
@@ -85,25 +81,21 @@ RequirementsTxt {
                         And(
                             [
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: GreaterEqual,
-                                        r_value: QuotedString(
-                                            "3.8",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: GreaterThanEqual,
+                                            version: "3.8",
+                                        },
                                     },
                                 ),
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: LessThan,
-                                        r_value: QuotedString(
-                                            "4",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: LessThan,
+                                            version: "4",
+                                        },
                                     },
                                 ),
                             ],
@@ -143,36 +135,28 @@ RequirementsTxt {
                         And(
                             [
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: GreaterEqual,
-                                        r_value: QuotedString(
-                                            "3.8",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: GreaterThanEqual,
+                                            version: "3.8",
+                                        },
                                     },
                                 ),
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: LessThan,
-                                        r_value: QuotedString(
-                                            "4",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: LessThan,
+                                            version: "4",
+                                        },
                                     },
                                 ),
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvString(
-                                            PlatformSystem,
-                                        ),
+                                    String {
+                                        key: PlatformSystem,
                                         operator: Equal,
-                                        r_value: QuotedString(
-                                            "Windows",
-                                        ),
+                                        value: "Windows",
                                     },
                                 ),
                             ],
@@ -212,25 +196,21 @@ RequirementsTxt {
                         And(
                             [
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: GreaterEqual,
-                                        r_value: QuotedString(
-                                            "3.8",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: GreaterThanEqual,
+                                            version: "3.8",
+                                        },
                                     },
                                 ),
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: LessThan,
-                                        r_value: QuotedString(
-                                            "4.0",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: LessThan,
+                                            version: "4.0",
+                                        },
                                     },
                                 ),
                             ],
@@ -271,25 +251,21 @@ RequirementsTxt {
                         And(
                             [
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: GreaterEqual,
-                                        r_value: QuotedString(
-                                            "3.8",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: GreaterThanEqual,
+                                            version: "3.8",
+                                        },
                                     },
                                 ),
                                 Expression(
-                                    MarkerExpression {
-                                        l_value: MarkerEnvVersion(
-                                            PythonVersion,
-                                        ),
-                                        operator: LessThan,
-                                        r_value: QuotedString(
-                                            "4.0",
-                                        ),
+                                    Version {
+                                        key: PythonVersion,
+                                        specifier: VersionSpecifier {
+                                            operator: LessThan,
+                                            version: "4.0",
+                                        },
                                     },
                                 ),
                             ],
