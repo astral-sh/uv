@@ -75,13 +75,122 @@ impl ResolutionGraph {
         preferences: &Preferences,
         editables: Editables,
     ) -> Result<Self, ResolveError> {
+        // Collect and validate the extras.
+        let mut extras = FxHashMap::default();
+        let mut diagnostics = Vec::new();
+        for (package, version) in selection {
+            match package {
+                PubGrubPackage::Package(package_name, Some(extra), None) => {
+                    if let Some((editable, metadata, _)) = editables.get(package_name) {
+                        if metadata.provides_extras.contains(extra) {
+                            extras
+                                .entry(package_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(extra.clone());
+                        } else {
+                            let pinned_package =
+                                Dist::from_editable(package_name.clone(), editable.clone())?;
+
+                            diagnostics.push(Diagnostic::MissingExtra {
+                                dist: pinned_package.into(),
+                                extra: extra.clone(),
+                            });
+                        }
+                    } else {
+                        let dist = PubGrubDistribution::from_registry(package_name, version);
+
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        });
+
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        };
+
+                        if archive.metadata.provides_extras.contains(extra) {
+                            extras
+                                .entry(package_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(extra.clone());
+                        } else {
+                            let pinned_package = pins
+                                .get(package_name, version)
+                                .unwrap_or_else(|| {
+                                    panic!("Every package should be pinned: {package_name:?}")
+                                })
+                                .clone();
+
+                            diagnostics.push(Diagnostic::MissingExtra {
+                                dist: pinned_package,
+                                extra: extra.clone(),
+                            });
+                        }
+                    }
+                }
+                PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
+                    if let Some((editable, metadata, _)) = editables.get(package_name) {
+                        if metadata.provides_extras.contains(extra) {
+                            extras
+                                .entry(package_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(extra.clone());
+                        } else {
+                            let pinned_package =
+                                Dist::from_editable(package_name.clone(), editable.clone())?;
+
+                            diagnostics.push(Diagnostic::MissingExtra {
+                                dist: pinned_package.into(),
+                                extra: extra.clone(),
+                            });
+                        }
+                    } else {
+                        let dist = PubGrubDistribution::from_url(package_name, url);
+
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        });
+
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        };
+
+                        if archive.metadata.provides_extras.contains(extra) {
+                            extras
+                                .entry(package_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(extra.clone());
+                        } else {
+                            let pinned_package =
+                                Dist::from_url(package_name.clone(), url_to_precise(url.clone()))?;
+
+                            diagnostics.push(Diagnostic::MissingExtra {
+                                dist: pinned_package.into(),
+                                extra: extra.clone(),
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            };
+        }
+
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
         let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
         let mut hashes =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
-        let mut extras = FxHashMap::default();
-        let mut diagnostics = Vec::new();
 
         // Add every package to the graph.
         let mut inverse =
@@ -151,110 +260,6 @@ impl ResolutionGraph {
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(pinned_package.into());
                     inverse.insert(package_name, index);
-                }
-                PubGrubPackage::Package(package_name, Some(extra), None) => {
-                    // Validate that the `extra` exists.
-                    let dist = PubGrubDistribution::from_registry(package_name, version);
-
-                    if let Some((editable, metadata, _)) = editables.get(package_name) {
-                        if metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(package_name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
-                        } else {
-                            let pinned_package =
-                                Dist::from_editable(package_name.clone(), editable.clone())?;
-
-                            diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package.into(),
-                                extra: extra.clone(),
-                            });
-                        }
-                    } else {
-                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.version_id()
-                            )
-                        });
-
-                        let MetadataResponse::Found(archive) = &*response else {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.version_id()
-                            )
-                        };
-
-                        if archive.metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(package_name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
-                        } else {
-                            let pinned_package = pins
-                                .get(package_name, version)
-                                .unwrap_or_else(|| {
-                                    panic!("Every package should be pinned: {package_name:?}")
-                                })
-                                .clone();
-
-                            diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package,
-                                extra: extra.clone(),
-                            });
-                        }
-                    }
-                }
-                PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
-                    // Validate that the `extra` exists.
-                    let dist = PubGrubDistribution::from_url(package_name, url);
-
-                    if let Some((editable, metadata, _)) = editables.get(package_name) {
-                        if metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(package_name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
-                        } else {
-                            let pinned_package =
-                                Dist::from_editable(package_name.clone(), editable.clone())?;
-
-                            diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package.into(),
-                                extra: extra.clone(),
-                            });
-                        }
-                    } else {
-                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.version_id()
-                            )
-                        });
-
-                        let MetadataResponse::Found(archive) = &*response else {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.version_id()
-                            )
-                        };
-
-                        if archive.metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(package_name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
-                        } else {
-                            let pinned_package =
-                                Dist::from_url(package_name.clone(), url_to_precise(url.clone()))?;
-
-                            diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package.into(),
-                                extra: extra.clone(),
-                            });
-                        }
-                    }
                 }
                 _ => {}
             };
