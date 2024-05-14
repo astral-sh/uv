@@ -2,23 +2,18 @@ use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{
-    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, LocalEditables, Name, ResolvedDist,
-};
+use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, Name, ResolvedDist};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
-use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
-use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
-use uv_client::{
-    BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
-};
+use uv_cache::Cache;
+use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy,
@@ -27,8 +22,8 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
-use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion, Target};
+use uv_installer::{Downloader, Plan, Planner, SitePackages};
+use uv_interpreter::{PythonEnvironment, PythonVersion, Target};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
@@ -39,6 +34,7 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::editables::ResolvedEditables;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
@@ -300,7 +296,7 @@ pub(crate) async fn pip_sync(
     };
 
     // Resolve any editables.
-    let resolved_editables = resolve_editables(
+    let editables = ResolvedEditables::resolve(
         editables,
         &site_packages,
         reinstall,
@@ -323,7 +319,7 @@ pub(crate) async fn pip_sync(
         reinstalls,
         extraneous,
     } = Planner::with_requirements(&requirements)
-        .with_editable_requirements(&resolved_editables.editables)
+        .with_editable_requirements(&editables)
         .build(
             site_packages,
             reinstall,
@@ -610,157 +606,4 @@ pub(crate) async fn pip_sync(
     }
 
     Ok(ExitStatus::Success)
-}
-
-#[derive(Debug)]
-struct ResolvedEditables {
-    /// The set of resolved editables, including both those that were already installed and those
-    /// that were built.
-    editables: Vec<ResolvedEditable>,
-    /// The temporary directory in which the built editables were stored.
-    #[allow(dead_code)]
-    temp_dir: Option<tempfile::TempDir>,
-}
-
-/// Resolve the set of editables that need to be installed.
-#[allow(clippy::too_many_arguments)]
-async fn resolve_editables(
-    editables: Vec<EditableRequirement>,
-    site_packages: &SitePackages<'_>,
-    reinstall: &Reinstall,
-    hasher: &HashStrategy,
-    interpreter: &Interpreter,
-    tags: &Tags,
-    cache: &Cache,
-    client: &RegistryClient,
-    build_dispatch: &BuildDispatch<'_>,
-    concurrency: Concurrency,
-    printer: Printer,
-) -> Result<ResolvedEditables> {
-    // Partition the editables into those that are already installed, and those that must be built.
-    let mut installed = Vec::with_capacity(editables.len());
-    let mut uninstalled = Vec::with_capacity(editables.len());
-    for editable in editables {
-        match reinstall {
-            Reinstall::None => {
-                let existing = site_packages.get_editables(editable.raw());
-                match existing.as_slice() {
-                    [] => uninstalled.push(editable),
-                    [dist] => {
-                        if ArchiveTimestamp::up_to_date_with(
-                            &editable.path,
-                            ArchiveTarget::Install(dist),
-                        )? && !is_dynamic(&editable)
-                        {
-                            installed.push((*dist).clone());
-                        } else {
-                            uninstalled.push(editable);
-                        }
-                    }
-                    _ => {
-                        uninstalled.push(editable);
-                    }
-                }
-            }
-            Reinstall::All => {
-                uninstalled.push(editable);
-            }
-            Reinstall::Packages(packages) => {
-                let existing = site_packages.get_editables(editable.raw());
-                match existing.as_slice() {
-                    [] => uninstalled.push(editable),
-                    [dist] => {
-                        if packages.contains(dist.name()) {
-                            uninstalled.push(editable);
-                        } else if ArchiveTimestamp::up_to_date_with(
-                            &editable.path,
-                            ArchiveTarget::Install(dist),
-                        )? && !is_dynamic(&editable)
-                        {
-                            installed.push((*dist).clone());
-                        } else {
-                            uninstalled.push(editable);
-                        }
-                    }
-                    _ => {
-                        uninstalled.push(editable);
-                    }
-                }
-            }
-        }
-    }
-
-    // Build any editable installs.
-    let (built_editables, temp_dir) = if uninstalled.is_empty() {
-        (Vec::new(), None)
-    } else {
-        let start = std::time::Instant::now();
-
-        let downloader = Downloader::new(
-            cache,
-            tags,
-            hasher,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
-        )
-        .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
-
-        let editables = LocalEditables::from_editables(uninstalled.iter().map(|editable| {
-            let EditableRequirement {
-                url,
-                path,
-                extras,
-                origin: _,
-            } = editable;
-            LocalEditable {
-                url: url.clone(),
-                path: path.clone(),
-                extras: extras.clone(),
-            }
-        }));
-
-        let editable_wheel_dir = tempfile::tempdir_in(cache.root())?;
-        let editables: Vec<_> = downloader
-            .build_editables(editables, editable_wheel_dir.path())
-            .await
-            .context("Failed to build editables")?
-            .into_iter()
-            .collect();
-
-        // Validate that the editables are compatible with the target Python version.
-        for editable in &editables {
-            if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
-                if !python_requires.contains(interpreter.python_version()) {
-                    return Err(anyhow!(
-                        "Editable `{}` requires Python {}, but {} is installed",
-                        editable.metadata.name,
-                        python_requires,
-                        interpreter.python_version()
-                    ));
-                }
-            }
-        }
-
-        let s = if editables.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Built {} in {}",
-                format!("{} editable{}", editables.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-
-        (editables, Some(editable_wheel_dir))
-    };
-
-    Ok(ResolvedEditables {
-        editables: installed
-            .into_iter()
-            .map(ResolvedEditable::Installed)
-            .chain(built_editables.into_iter().map(ResolvedEditable::Built))
-            .collect::<Vec<_>>(),
-        temp_dir,
-    })
 }

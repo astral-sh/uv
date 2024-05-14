@@ -837,18 +837,15 @@ fn install_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 10 packages in [TIME]
     Downloaded 6 packages in [TIME]
-    Installed 7 packages in [TIME]
+    Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 }

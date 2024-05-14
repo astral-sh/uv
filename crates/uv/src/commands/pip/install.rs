@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -8,12 +7,11 @@ use fs_err as fs;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tempfile::tempdir_in;
 use tracing::{debug, enabled, Level};
 
 use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist,
-    LocalEditable, LocalEditables, Name, ParsedUrl, ParsedUrlError, RequirementSource, Resolution,
+    DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
+    ParsedUrl, ParsedUrlError, RequirementSource, Resolution,
 };
 use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
@@ -21,7 +19,6 @@ use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::Tags;
 use pypi_types::Yanked;
-use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{
@@ -35,9 +32,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
-use uv_installer::{
-    BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SatisfiesResult, SitePackages,
-};
+use uv_installer::{Downloader, Plan, Planner, ResolvedEditable, SatisfiesResult, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_requirements::{
@@ -52,6 +47,7 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::editables::ResolvedEditables;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::DryRunEvent;
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -340,27 +336,22 @@ pub(crate) async fn pip_install(
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
     // Build all editable distributions. The editables are shared between resolution and
-    // installation, and should live for the duration of the command. If an editable is already
-    // installed in the environment, we'll still re-build it here.
-    let editable_wheel_dir;
-    let editables = if editables.is_empty() {
-        vec![]
-    } else {
-        editable_wheel_dir = tempdir_in(cache.root())?;
-        build_editables(
-            &editables,
-            editable_wheel_dir.path(),
-            &hasher,
-            &cache,
-            &interpreter,
-            &tags,
-            concurrency,
-            &client,
-            &resolve_dispatch,
-            printer,
-        )
-        .await?
-    };
+    // installation, and should live for the duration of the command.
+    // Resolve any editables.
+    let editables = ResolvedEditables::resolve(
+        editables,
+        &site_packages,
+        &reinstall,
+        &hasher,
+        venv.interpreter(),
+        &tags,
+        &cache,
+        &client,
+        &resolve_dispatch,
+        concurrency,
+        printer,
+    )
+    .await?;
 
     // Resolve the requirements.
     let resolution = if let Some(ref root) = uv_lock {
@@ -488,7 +479,7 @@ pub(crate) async fn pip_install(
     // Sync the environment.
     install(
         &resolution,
-        editables,
+        &editables,
         site_packages,
         &reinstall,
         &no_binary,
@@ -569,81 +560,6 @@ async fn read_requirements(
     Ok(spec)
 }
 
-/// Build a set of editable distributions.
-#[allow(clippy::too_many_arguments)]
-async fn build_editables(
-    editables: &[EditableRequirement],
-    editable_wheel_dir: &Path,
-    hasher: &HashStrategy,
-    cache: &Cache,
-    interpreter: &Interpreter,
-    tags: &Tags,
-    concurrency: Concurrency,
-    client: &RegistryClient,
-    build_dispatch: &BuildDispatch<'_>,
-    printer: Printer,
-) -> Result<Vec<BuiltEditable>, Error> {
-    let start = std::time::Instant::now();
-
-    let downloader = Downloader::new(
-        cache,
-        tags,
-        hasher,
-        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
-    )
-    .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
-
-    let editables = LocalEditables::from_editables(editables.iter().map(|editable| {
-        let EditableRequirement {
-            url,
-            extras,
-            path,
-            origin: _,
-        } = editable;
-        LocalEditable {
-            url: url.clone(),
-            extras: extras.clone(),
-            path: path.clone(),
-        }
-    }));
-
-    let editables: Vec<_> = downloader
-        .build_editables(editables, editable_wheel_dir)
-        .await
-        .context("Failed to build editables")?
-        .into_iter()
-        .collect();
-
-    // Validate that the editables are compatible with the target Python version.
-    for editable in &editables {
-        if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
-            if !python_requires.contains(interpreter.python_version()) {
-                return Err(anyhow!(
-                    "Editable `{}` requires Python {}, but {} is installed",
-                    editable.metadata.name,
-                    python_requires,
-                    interpreter.python_version()
-                )
-                .into());
-            }
-        }
-    }
-
-    let s = if editables.len() == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Built {} in {}",
-            format!("{} editable{}", editables.len(), s).bold(),
-            elapsed(start.elapsed())
-        )
-        .dimmed()
-    )?;
-
-    Ok(editables)
-}
-
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
 async fn resolve(
@@ -651,7 +567,7 @@ async fn resolve(
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
     project: Option<PackageName>,
-    editables: &[BuiltEditable],
+    editables: &[ResolvedEditable],
     hasher: &HashStrategy,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
@@ -713,17 +629,17 @@ async fn resolve(
     // Map the editables to their metadata.
     let editables: Vec<_> = editables
         .iter()
-        .map(|built_editable| {
-            let dependencies: Vec<_> = built_editable
-                .metadata
+        .map(|editable| {
+            let dependencies: Vec<_> = editable
+                .metadata()
                 .requires_dist
                 .iter()
                 .cloned()
                 .map(Requirement::from_pep508)
                 .collect::<Result<_, _>>()?;
             Ok::<_, Box<ParsedUrlError>>((
-                built_editable.editable.clone(),
-                built_editable.metadata.clone(),
+                editable.local().clone(),
+                editable.metadata().clone(),
                 Requirements {
                     dependencies,
                     optional_dependencies: IndexMap::default(),
@@ -811,7 +727,7 @@ async fn resolve(
 #[allow(clippy::too_many_arguments)]
 async fn install(
     resolution: &Resolution,
-    built_editables: Vec<BuiltEditable>,
+    editables: &[ResolvedEditable],
     site_packages: SitePackages<'_>,
     reinstall: &Reinstall,
     no_binary: &NoBinary,
@@ -833,16 +749,10 @@ async fn install(
 
     let requirements = resolution.requirements();
 
-    // Map the built editables to their resolved form.
-    let editables = built_editables
-        .into_iter()
-        .map(ResolvedEditable::Built)
-        .collect::<Vec<_>>();
-
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let plan = Planner::with_requirements(&requirements)
-        .with_editable_requirements(&editables)
+        .with_editable_requirements(editables)
         .build(
             site_packages,
             reinstall,
