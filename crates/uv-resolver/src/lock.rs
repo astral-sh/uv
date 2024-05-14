@@ -164,7 +164,7 @@ impl TryFrom<LockWire> for Lock {
             // Also check that our sources are consistent with whether we have
             // hashes or not.
             let requires_hash = dist.id.source.kind.requires_hash();
-            if let Some(ref sdist) = dist.sourcedist {
+            if let Some(ref sdist) = dist.sdist {
                 if requires_hash != sdist.hash.is_some() {
                     return Err(LockError::hash(
                         dist.id.clone(),
@@ -194,7 +194,7 @@ pub(crate) struct Distribution {
     #[serde(default)]
     pub(crate) marker: Option<String>,
     #[serde(default)]
-    pub(crate) sourcedist: Option<SourceDist>,
+    pub(crate) sdist: Option<SourceDist>,
     #[serde(default, rename = "wheel", skip_serializing_if = "Vec::is_empty")]
     pub(crate) wheels: Vec<Wheel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -206,19 +206,19 @@ impl Distribution {
         resolved_dist: &ResolvedDist,
     ) -> Result<Distribution, LockError> {
         let id = DistributionId::from_resolved_dist(resolved_dist);
-        let mut sourcedist = None;
+        let mut sdist = None;
         let mut wheels = vec![];
-        if let Some(wheel) = Wheel::from_resolved_dist(resolved_dist)? {
-            wheels.push(wheel);
-        } else if let Some(sdist) = SourceDist::from_resolved_dist(resolved_dist)? {
-            sourcedist = Some(sdist);
+        if let Some(dist) = Wheel::from_resolved_dist(resolved_dist)? {
+            wheels.push(dist);
+        } else if let Some(dist) = SourceDist::from_resolved_dist(resolved_dist)? {
+            sdist = Some(dist);
         }
         Ok(Distribution {
             id,
             // TODO: Refactoring is needed to get the marker expressions for a
             // particular resolved dist to this point.
             marker: None,
-            sourcedist,
+            sdist,
             wheels,
             dependencies: vec![],
         })
