@@ -127,9 +127,9 @@ impl std::fmt::Display for InstalledVersion<'_> {
     }
 }
 
-/// Either a built distribution, a wheel, or a source distribution that exists at some location
+/// Either a built distribution, a wheel, or a source distribution that exists at some location.
 ///
-/// The location can be index, url or path (wheel) or index, url, path or git (source distribution)
+/// The location can be an index, URL or path (wheel), or index, URL, path or Git repository (source distribution).
 #[derive(Debug, Clone)]
 pub enum Dist {
     Built(BuiltDist),
@@ -170,10 +170,10 @@ pub struct DirectUrlBuiltDist {
     /// We require that wheel urls end in the full wheel filename, e.g.
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
-    /// The url without subdirectory fragment.
+    /// The URL without the subdirectory fragment.
     pub location: Url,
     pub subdirectory: Option<PathBuf>,
-    /// The url with subdirectory fragment.
+    /// The URL with the subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -199,10 +199,10 @@ pub struct DirectUrlSourceDist {
     /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
-    /// The url without subdirectory fragment.
+    /// The URL without the subdirectory fragment.
     pub location: Url,
     pub subdirectory: Option<PathBuf>,
-    /// The url with subdirectory fragment.
+    /// The URL with the subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -210,10 +210,10 @@ pub struct DirectUrlSourceDist {
 #[derive(Debug, Clone)]
 pub struct GitSourceDist {
     pub name: PackageName,
-    /// The url without revision and subdirectory fragment.
+    /// The URL without the revision and subdirectory fragment.
     pub git: Box<GitUrl>,
     pub subdirectory: Option<PathBuf>,
-    /// The url with revision and subdirectory fragment.
+    /// The URL with the revision and subdirectory fragment.
     pub url: VerbatimUrl,
 }
 

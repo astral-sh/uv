@@ -238,9 +238,11 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             Some(Scheme::Http | Scheme::Https) => SourceUrl::Direct(DirectSourceUrl {
                 url: &requirement.url,
             }),
-            Some(Scheme::GitSsh | Scheme::GitHttps) => SourceUrl::Git(GitSourceUrl {
-                url: &requirement.url,
-            }),
+            Some(Scheme::GitSsh | Scheme::GitHttps | Scheme::GitHttp) => {
+                SourceUrl::Git(GitSourceUrl {
+                    url: &requirement.url,
+                })
+            }
             _ => {
                 return Err(anyhow::anyhow!(
                     "Unsupported scheme for unnamed requirement: {}",

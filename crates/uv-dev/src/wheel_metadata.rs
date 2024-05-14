@@ -31,7 +31,7 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
     )?;
 
     let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
-        bail!("Only https is supported");
+        bail!("Only HTTPS is supported");
     };
 
     let metadata = client
