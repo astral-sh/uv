@@ -34,6 +34,11 @@ impl Editables {
         self.0.get(name)
     }
 
+    /// Returns `true` if the given package is editable.
+    pub(crate) fn contains(&self, name: &PackageName) -> bool {
+        self.0.contains_key(name)
+    }
+
     /// Iterate over all editables.
     pub(crate) fn iter(&self) -> impl Iterator<Item = &(LocalEditable, Metadata23, Requirements)> {
         self.0.values()
