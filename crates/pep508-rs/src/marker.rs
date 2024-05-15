@@ -214,7 +214,7 @@ impl Display for MarkerValue {
 }
 
 /// How to compare key and value, such as by `==`, `>` or `not in`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub enum MarkerOperator {
     /// `==`
     Equal,
@@ -238,7 +238,7 @@ pub enum MarkerOperator {
 
 impl MarkerOperator {
     /// Compare two versions, returning None for `in` and `not in`
-    fn to_pep440_operator(&self) -> Option<pep440_rs::Operator> {
+    fn to_pep440_operator(self) -> Option<pep440_rs::Operator> {
         match self {
             Self::Equal => Some(pep440_rs::Operator::Equal),
             Self::NotEqual => Some(pep440_rs::Operator::NotEqual),
@@ -1017,7 +1017,7 @@ impl MarkerExpression {
                     );
                 };
 
-                match MarkerExpression::version(key.clone(), operator.clone(), &value, reporter) {
+                match MarkerExpression::version(key.clone(), operator, &value, reporter) {
                     Some(expr) => expr,
                     None => MarkerExpression::arbitrary(
                         MarkerValue::MarkerEnvVersion(key),
@@ -1071,7 +1071,7 @@ impl MarkerExpression {
                     MarkerValue::QuotedString(value) => value,
                 };
 
-                match MarkerExpression::extra(operator.clone(), &value, reporter) {
+                match MarkerExpression::extra(operator, &value, reporter) {
                     Some(expr) => expr,
                     None => MarkerExpression::arbitrary(
                         MarkerValue::Extra,
@@ -1087,7 +1087,7 @@ impl MarkerExpression {
                     MarkerValue::MarkerEnvVersion(key) => {
                         match MarkerExpression::version_inverted(
                             &l_string,
-                            operator.clone(),
+                            operator,
                             key.clone(),
                             reporter,
                         ) {
@@ -1107,7 +1107,7 @@ impl MarkerExpression {
                     },
                     // `'...' == extra`
                     MarkerValue::Extra => {
-                        match MarkerExpression::extra(operator.clone(), &l_string, reporter) {
+                        match MarkerExpression::extra(operator, &l_string, reporter) {
                             Some(expr) => expr,
                             None => MarkerExpression::arbitrary(
                                 MarkerValue::QuotedString(l_string),
@@ -1267,7 +1267,7 @@ impl MarkerExpression {
             }
         };
 
-        match ExtraOperator::from_marker_operator(operator.clone()) {
+        match ExtraOperator::from_marker_operator(operator) {
             Some(operator) => Some(MarkerExpression::Extra { operator, name }),
             None => {
                 reporter.report(
