@@ -1,5 +1,5 @@
 use std::hash::BuildHasherDefault;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
@@ -45,8 +45,8 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
-        packages: &OnceMap<PackageName, Rc<VersionsResponse>>,
-        distributions: &OnceMap<VersionId, Rc<MetadataResponse>>,
+        packages: &OnceMap<PackageName, Arc<VersionsResponse>>,
+        distributions: &OnceMap<VersionId, Arc<MetadataResponse>>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,

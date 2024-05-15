@@ -242,7 +242,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     resolution: &Resolution,
-    site_packages: SitePackages<'_>,
+    site_packages: SitePackages,
     no_binary: &NoBinary,
     link_mode: LinkMode,
     index_urls: &IndexLocations,

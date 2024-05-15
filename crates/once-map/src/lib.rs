@@ -63,6 +63,27 @@ impl<K: Eq + Hash, V: Clone> OnceMap<K, V> {
         }
     }
 
+    /// Wait for the result of a job that is running.
+    ///
+    /// Will hang if [`OnceMap::done`] isn't called for this key.
+    pub fn wait_blocking(&self, key: &K) -> Option<V> {
+        let entry = self.items.get(key)?;
+        match entry.value() {
+            Value::Filled(value) => Some(value.clone()),
+            Value::Waiting(notify) => {
+                let notify = notify.clone();
+                drop(entry);
+                futures::executor::block_on(notify.notified());
+
+                let entry = self.items.get(key).expect("map is append-only");
+                match entry.value() {
+                    Value::Filled(value) => Some(value.clone()),
+                    Value::Waiting(_) => unreachable!("notify was called"),
+                }
+            }
+        }
+    }
+
     /// Return the result of a previous job, if any.
     pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
     where

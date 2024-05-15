@@ -43,7 +43,7 @@ impl ResolvedEditables {
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn resolve(
         editables: Vec<EditableRequirement>,
-        site_packages: &SitePackages<'_>,
+        site_packages: &SitePackages,
         reinstall: &Reinstall,
         hasher: &HashStrategy,
         interpreter: &Interpreter,

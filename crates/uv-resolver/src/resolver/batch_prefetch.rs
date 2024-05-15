@@ -3,7 +3,7 @@ use std::cmp::min;
 use itertools::Itertools;
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, trace};
 
 use distribution_types::DistributionMetadata;
@@ -44,12 +44,12 @@ pub(crate) struct BatchPrefetcher {
 
 impl BatchPrefetcher {
     /// Prefetch a large number of versions if we already unsuccessfully tried many versions.
-    pub(crate) async fn prefetch_batches(
+    pub(crate) fn prefetch_batches(
         &mut self,
         next: &PubGrubPackage,
         version: &Version,
         current_range: &Range<Version>,
-        request_sink: &Sender<Request>,
+        request_sink: &UnboundedSender<Request>,
         index: &InMemoryIndex,
         selector: &CandidateSelector,
     ) -> anyhow::Result<(), ResolveError> {
@@ -66,8 +66,7 @@ impl BatchPrefetcher {
         // This is immediate, we already fetched the version map.
         let versions_response = index
             .packages
-            .wait(package_name)
-            .await
+            .wait_blocking(package_name)
             .ok_or(ResolveError::Unregistered)?;
 
         let VersionsResponse::Found(ref version_map) = *versions_response else {
@@ -144,7 +143,7 @@ impl BatchPrefetcher {
             prefetch_count += 1;
             if index.distributions.register(candidate.version_id()) {
                 let request = Request::from(dist);
-                request_sink.send(request).await?;
+                request_sink.send(request)?;
             }
         }
 

@@ -128,7 +128,7 @@ pub trait SourceBuildTrait {
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]
-pub trait InstalledPackagesProvider {
+pub trait InstalledPackagesProvider: Send + Sync + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
 }

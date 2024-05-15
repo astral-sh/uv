@@ -574,7 +574,7 @@ async fn resolve(
     project: Option<PackageName>,
     editables: &[ResolvedEditable],
     hasher: &HashStrategy,
-    site_packages: &SitePackages<'_>,
+    site_packages: &SitePackages,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     interpreter: &Interpreter,
@@ -733,7 +733,7 @@ async fn resolve(
 async fn install(
     resolution: &Resolution,
     editables: &[ResolvedEditable],
-    site_packages: SitePackages<'_>,
+    site_packages: SitePackages,
     reinstall: &Reinstall,
     no_binary: &NoBinary,
     link_mode: LinkMode,

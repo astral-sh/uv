@@ -2364,6 +2364,7 @@ name = "once-map"
 version = "0.0.1"
 dependencies = [
  "dashmap",
+ "futures",
  "tokio",
 ]
 
@@ -4998,6 +4999,7 @@ dependencies = [
  "cache-key",
  "chrono",
  "clap",
+ "dashmap",
  "derivative",
  "distribution-filename",
  "distribution-types",
@@ -5016,6 +5018,7 @@ dependencies = [
  "platform-tags",
  "pubgrub",
  "pypi-types",
+ "rayon",
  "requirements-txt",
  "rkyv",
  "rustc-hash",
