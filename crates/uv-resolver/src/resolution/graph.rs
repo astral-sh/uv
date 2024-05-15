@@ -79,7 +79,7 @@ impl ResolutionGraph {
                             .or_insert_with(Vec::new)
                             .push(extra.clone());
                     } else {
-                        let pinned_package = pins
+                        let dist = pins
                             .get(package_name, version)
                             .unwrap_or_else(|| {
                                 panic!("Every package should be pinned: {package_name:?}")
@@ -87,7 +87,7 @@ impl ResolutionGraph {
                             .clone();
 
                         diagnostics.push(Diagnostic::MissingExtra {
-                            dist: pinned_package,
+                            dist,
                             extra: extra.clone(),
                         });
                     }
@@ -100,11 +100,10 @@ impl ResolutionGraph {
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let pinned_package =
-                                Dist::from_editable(package_name.clone(), editable.clone())?;
+                            let dist = Dist::from_editable(package_name.clone(), editable.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package.into(),
+                                dist: dist.into(),
                                 extra: extra.clone(),
                             });
                         }
@@ -131,11 +130,11 @@ impl ResolutionGraph {
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let pinned_package =
+                            let dist =
                                 Dist::from_url(package_name.clone(), url_to_precise(url.clone()))?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package.into(),
+                                dist: dist.into(),
                                 extra: extra.clone(),
                             });
                         }
