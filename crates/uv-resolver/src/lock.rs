@@ -231,6 +231,7 @@ impl Distribution {
             .push(Dependency::from_annotated_dist(annotated_dist));
     }
 
+    /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
     fn to_dist(&self, _marker_env: &MarkerEnvironment, tags: &Tags) -> Dist {
         if let Some(wheel) = self.find_best_wheel(tags) {
             return match self.id.source.kind {
@@ -255,11 +256,46 @@ impl Distribution {
                     let built_dist = BuiltDist::Registry(reg_dist);
                     Dist::Built(built_dist)
                 }
+                SourceKind::Path => {
+                    let filename: WheelFilename = wheel.filename.clone();
+                    let path_dist = PathBuiltDist {
+                        filename,
+                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
+                        path: self.id.source.url.to_file_path().unwrap(),
+                    };
+                    let built_dist = BuiltDist::Path(path_dist);
+                    Dist::Built(built_dist)
+                }
                 // TODO: Handle other kinds of sources.
                 _ => todo!(),
             };
         }
-        // TODO: Handle source dists.
+
+        if let Some(sdist) = &self.sdist {
+            return match self.id.source.kind {
+                SourceKind::Path => {
+                    let path_dist = PathSourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
+                        path: self.id.source.url.to_file_path().unwrap(),
+                    };
+                    let source_dist = distribution_types::SourceDist::Path(path_dist);
+                    Dist::Source(source_dist)
+                }
+                SourceKind::Directory => {
+                    let dir_dist = DirectorySourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
+                        path: self.id.source.url.to_file_path().unwrap(),
+                        editable: false,
+                    };
+                    let source_dist = distribution_types::SourceDist::Directory(dir_dist);
+                    Dist::Source(source_dist)
+                }
+                // TODO: Handle other kinds of sources.
+                _ => todo!(),
+            };
+        }
 
         // TODO: Convert this to a deserialization error.
         panic!("invalid lock distribution")
