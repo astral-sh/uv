@@ -230,7 +230,7 @@ If both project- and user-level configuration are found, the settings will be me
 project-level configuration taking precedence. Specifically, if a string, number, or boolean is
 present in both tables, the project-level value will be used, and the user-level value will be
 ignored. If an array is present in both tables, the arrays will be concatenated, with the
-project-level settings appearing later in the merged array.
+project-level settings appearing earlier in the merged array.
 
 Settings provided via environment variables take precedence over persistent configuration, and
 settings provided via the command line take precedence over both.
