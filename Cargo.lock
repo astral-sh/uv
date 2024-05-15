@@ -5071,9 +5071,6 @@ version = "0.1.44"
 name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
- "anstream",
- "clap",
- "directories",
  "fs-err",
  "itertools 0.12.1",
  "pathdiff",
@@ -5081,8 +5078,6 @@ dependencies = [
  "pypi-types",
  "thiserror",
  "tracing",
- "tracing-subscriber",
- "uv-cache",
  "uv-fs",
  "uv-interpreter",
  "uv-version",
