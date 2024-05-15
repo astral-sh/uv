@@ -123,15 +123,15 @@ async fn resolve(
     markers: &'static MarkerEnvironment,
     tags: &Tags,
 ) -> Result<ResolutionGraph> {
-    let client = RegistryClientBuilder::new(Cache::temp()?).build();
+    let cache = Cache::temp().unwrap().init().unwrap();
+    let real_interpreter = find_default_python(&cache).expect("Expected a python to be installed");
+    let client = RegistryClientBuilder::new(cache).build();
     let flat_index = FlatIndex::default();
     let index = InMemoryIndex::default();
-    // TODO(konstin): Should we also use the bootstrapped pythons here?
-    let real_interpreter =
-        find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let python_requirement = PythonRequirement::from_marker_environment(&interpreter, markers);
-    let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
+    let cache = Cache::temp().unwrap().init().unwrap();
+    let build_context = DummyContext::new(cache, interpreter.clone());
     let hashes = HashStrategy::None;
     let installed_packages = EmptyInstalledPackages;
     let concurrency = Concurrency::default();

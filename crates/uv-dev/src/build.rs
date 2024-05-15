@@ -53,7 +53,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         BuildKind::Wheel
     };
 
-    let cache = Cache::try_from(args.cache_args)?;
+    let cache = Cache::try_from(args.cache_args)?.init()?;
 
     let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
