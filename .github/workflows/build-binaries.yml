@@ -558,6 +558,9 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+          - target: powerpc64le-unknown-linux-musl
+            arch: ppc64le
+            toolchain: nightly
 
     steps:
       - uses: actions/checkout@v4
@@ -575,6 +578,7 @@ jobs:
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update
           docker-options: ${{ matrix.platform.maturin_docker_options }}
+          rust-toolchain: ${{ matrix.platform.toolchain || 'stable' }}
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
