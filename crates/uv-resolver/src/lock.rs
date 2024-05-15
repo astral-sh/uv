@@ -753,6 +753,11 @@ impl Wheel {
     fn from_dist(dist: &Dist, hashes: &[HashDigest]) -> Result<Vec<Wheel>, LockError> {
         match *dist {
             Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes),
+            Dist::Source(distribution_types::SourceDist::Registry(ref source_dist)) => source_dist
+                .wheels
+                .iter()
+                .map(Wheel::from_registry_wheel)
+                .collect(),
             Dist::Source(_) => Ok(vec![]),
         }
     }
@@ -771,24 +776,28 @@ impl Wheel {
     }
 
     fn from_registry_dist(reg_dist: &RegistryBuiltDist) -> Result<Vec<Wheel>, LockError> {
-        let mut wheels = vec![];
-        for wheel in &reg_dist.wheels {
-            let filename = wheel.filename.clone();
-            let url = wheel
-                .file
-                .url
-                .to_url()
-                .map_err(LockError::invalid_file_url)?;
-            // FIXME: Is it guaranteed that there is at least one hash?
-            // If not, we probably need to make this fallible.
-            let hash = Some(Hash::from(wheel.file.hashes[0].clone()));
-            wheels.push(Wheel {
-                url,
-                hash,
-                filename,
-            });
-        }
-        Ok(wheels)
+        reg_dist
+            .wheels
+            .iter()
+            .map(Wheel::from_registry_wheel)
+            .collect()
+    }
+
+    fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
+        let filename = wheel.filename.clone();
+        let url = wheel
+            .file
+            .url
+            .to_url()
+            .map_err(LockError::invalid_file_url)?;
+        // FIXME: Is it guaranteed that there is at least one hash?
+        // If not, we probably need to make this fallible.
+        let hash = wheel.file.hashes.first().cloned().map(Hash::from);
+        Ok(Wheel {
+            url,
+            hash,
+            filename,
+        })
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {

@@ -221,6 +221,14 @@ pub struct RegistrySourceDist {
     pub filename: SourceDistFilename,
     pub file: Box<File>,
     pub index: IndexUrl,
+    /// When an sdist is selected, it may be the case that there were
+    /// available wheels too. There are many reasons why a wheel might not
+    /// have been chosen (maybe none available are compatible with the
+    /// current environment), but we still want to track that they exist. In
+    /// particular, for generating a universal lock file, we do not want to
+    /// skip emitting wheels to the lock file just because the host generating
+    /// the lock file didn't have any compatible wheels available.
+    pub wheels: Vec<RegistryBuiltWheel>,
 }
 
 /// A source distribution that exists at an arbitrary URL.

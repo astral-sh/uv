@@ -346,12 +346,17 @@ impl PrioritizedDist {
     /// If this prioritized dist has an sdist, then this creates a source
     /// distribution.
     pub fn source_dist(&self) -> Option<RegistrySourceDist> {
-        // FIXME: We shouldn't be dropping all wheels here. When doing
-        // universal resolution, just because the host machine wants to use an
-        // sdist doesn't mean we should not put any wheels in the lock file.
-        // This probably means modifying RegistrySourceDist to look more like
-        // RegistryBuiltDist, but prioritizes the sdist.
-        let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone())?;
+        let mut sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone())?;
+        assert!(
+            sdist.wheels.is_empty(),
+            "source distribution should not have any wheels yet"
+        );
+        sdist.wheels = self
+            .0
+            .wheels
+            .iter()
+            .map(|(wheel, _)| wheel.clone())
+            .collect();
         Some(sdist)
     }
 

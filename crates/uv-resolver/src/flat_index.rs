@@ -101,6 +101,7 @@ impl FlatIndex {
                     filename: filename.clone(),
                     file: Box::new(file),
                     index,
+                    wheels: vec![],
                 };
                 match distributions.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
