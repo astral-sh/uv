@@ -677,7 +677,7 @@ mod tests {
             }
         "##};
 
-        let cache = Cache::temp().unwrap();
+        let cache = Cache::temp().unwrap().init().unwrap();
 
         fs::write(
             &mocked_interpreter,

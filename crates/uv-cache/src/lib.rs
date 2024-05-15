@@ -128,7 +128,7 @@ impl Cache {
     /// A persistent cache directory at `root`.
     pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
         Ok(Self {
-            root: Self::init(root)?,
+            root: root.into(),
             refresh: Refresh::None,
             _temp_dir_drop: None,
         })
@@ -138,7 +138,7 @@ impl Cache {
     pub fn temp() -> Result<Self, io::Error> {
         let temp_dir = tempdir()?;
         Ok(Self {
-            root: Self::init(temp_dir.path())?,
+            root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None,
             _temp_dir_drop: Some(Arc::new(temp_dir)),
         })
@@ -243,15 +243,15 @@ impl Cache {
         Ok(id)
     }
 
-    /// Initialize a directory for use as a cache.
-    fn init(root: impl Into<PathBuf>) -> Result<PathBuf, io::Error> {
-        let root = root.into();
+    /// Initialize the cache.
+    pub fn init(self) -> Result<Self, io::Error> {
+        let root = &self.root;
 
         // Create the cache directory, if it doesn't exist.
-        fs::create_dir_all(&root)?;
+        fs::create_dir_all(root)?;
 
         // Add the CACHEDIR.TAG.
-        cachedir::ensure_tag(&root)?;
+        cachedir::ensure_tag(root)?;
 
         // Add the .gitignore.
         match fs::OpenOptions::new()
@@ -289,7 +289,10 @@ impl Cache {
             .write(true)
             .open(root.join(CacheBucket::BuiltWheels.to_str()).join(".git"))?;
 
-        fs::canonicalize(root)
+        Ok(Self {
+            root: fs::canonicalize(root)?,
+            ..self
+        })
     }
 
     /// Clear the cache, removing all entries.

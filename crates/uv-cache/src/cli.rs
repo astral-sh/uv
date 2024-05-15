@@ -51,13 +51,6 @@ impl Cache {
 impl TryFrom<CacheArgs> for Cache {
     type Error = io::Error;
 
-    /// Prefer, in order:
-    /// 1. A temporary cache directory, if the user requested `--no-cache`.
-    /// 2. The specific cache directory specified by the user via `--cache-dir` or `UV_CACHE_DIR`.
-    /// 3. The system-appropriate cache directory.
-    /// 4. A `.uv_cache` directory in the current working directory.
-    ///
-    /// Returns an absolute cache dir.
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
         Cache::from_settings(value.no_cache, value.cache_dir)
     }

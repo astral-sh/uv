@@ -727,12 +727,12 @@ mod windows {
         #[test]
         #[cfg_attr(not(windows), ignore)]
         fn no_such_python_path() {
-            let result =
-                find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap())
-                    .unwrap()
-                    .ok_or(Error::RequestedPythonNotFound(
-                        r"C:\does\not\exists\python3.12".to_string(),
-                    ));
+            let cache = Cache::temp().unwrap().init().unwrap();
+            let result = find_requested_python(r"C:\does\not\exists\python3.12", &cache)
+                .unwrap()
+                .ok_or(Error::RequestedPythonNotFound(
+                    r"C:\does\not\exists\python3.12".to_string(),
+                ));
             assert_snapshot!(
                 format_err(result),
                 @"Failed to locate Python interpreter at: `C:\\does\\not\\exists\\python3.12`"
@@ -760,8 +760,9 @@ mod tests {
     #[test]
     #[cfg_attr(not(unix), ignore)]
     fn no_such_python_version() {
+        let cache = Cache::temp().unwrap().init().unwrap();
         let request = "3.1000";
-        let result = find_requested_python(request, &Cache::temp().unwrap())
+        let result = find_requested_python(request, &cache)
             .unwrap()
             .ok_or(Error::NoSuchPython(request.to_string()));
         assert_snapshot!(
@@ -773,8 +774,9 @@ mod tests {
     #[test]
     #[cfg_attr(not(unix), ignore)]
     fn no_such_python_binary() {
+        let cache = Cache::temp().unwrap().init().unwrap();
         let request = "python3.1000";
-        let result = find_requested_python(request, &Cache::temp().unwrap())
+        let result = find_requested_python(request, &cache)
             .unwrap()
             .ok_or(Error::NoSuchPython(request.to_string()));
         assert_snapshot!(
@@ -786,7 +788,8 @@ mod tests {
     #[test]
     #[cfg_attr(not(unix), ignore)]
     fn no_such_python_path() {
-        let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap())
+        let cache = Cache::temp().unwrap().init().unwrap();
+        let result = find_requested_python("/does/not/exists/python3.12", &cache)
             .unwrap()
             .ok_or(Error::RequestedPythonNotFound(
                 "/does/not/exists/python3.12".to_string(),
