@@ -52,7 +52,7 @@ pub fn install_wheel(
         }
 
         let version = Version::from_str(&version)?;
-        if version != filename.version {
+        if version != filename.version && version != filename.version.clone().without_local() {
             return Err(Error::MismatchedVersion(version, filename.version.clone()));
         }
     }
