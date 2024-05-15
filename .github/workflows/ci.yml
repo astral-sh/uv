@@ -77,17 +77,26 @@ jobs:
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
-      - name: Install xwin pre-requisites
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y llvm clang cmake ninja-build
       - name: "Install Rust toolchain"
         run: rustup target add x86_64-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2
+      - name: Load xwin cache
+        uses: actions/cache@v4
+        with:
+          path: "${{ github.workspace}}/.xwin"
+          key: cargo-xwin-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Load rust cache
+        uses: Swatinem/rust-cache@v2
       - name: "Install cargo-xwin"
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-xwin
+      - name: Install xwin dependencies
+        run: sudo apt-get install --no-install-recommends -y llvm clang cmake ninja-build
       - name: "Clippy"
         run: cargo xwin clippy --target x86_64-pc-windows-msvc --workspace --all-targets --all-features --locked --profile fast-build -- -D warnings
+        env:
+          XWIN_ARCH: "x86_64"
+          XWIN_CACHE_DIR: "${{ github.workspace}}/.xwin"
 
   cargo-shear:
     name: "cargo shear"
