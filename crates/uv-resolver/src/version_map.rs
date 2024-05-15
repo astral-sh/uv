@@ -416,6 +416,7 @@ impl VersionMapLazy {
                             filename,
                             file: Box::new(file),
                             index: self.index.clone(),
+                            wheels: vec![],
                         };
                         priority_dist.insert_source(dist, hashes, compatibility);
                     }
