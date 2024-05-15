@@ -25,7 +25,7 @@ use uv_resolver::{
     Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph,
     Resolver,
 };
-use uv_types::{EmptyInstalledPackages, HashStrategy, InFlight};
+use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 
 use crate::commands::project::discovery::Project;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -113,8 +113,9 @@ pub(crate) fn init(
 
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn resolve(
+pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     spec: RequirementsSpecification,
+    installed_packages: &InstalledPackages,
     hasher: &HashStrategy,
     interpreter: &Interpreter,
     tags: &Tags,
@@ -135,7 +136,6 @@ pub(crate) async fn resolve(
     let overrides = Overrides::default();
     let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
     let editables = Vec::new();
-    let installed_packages = EmptyInstalledPackages;
 
     // Resolve the requirements from the provided sources.
     let requirements = {
@@ -206,7 +206,7 @@ pub(crate) async fn resolve(
         index,
         hasher,
         build_dispatch,
-        &installed_packages,
+        installed_packages,
         DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
     )?
     .with_reporter(ResolverReporter::from(printer));
