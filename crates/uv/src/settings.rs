@@ -17,7 +17,7 @@ use uv_interpreter::{PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_requirements::ExtrasSpecification;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_workspace::{Combine, PipOptions, Workspace};
+use uv_workspace::{PipOptions, Workspace};
 
 use crate::cli::{
     ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
@@ -961,123 +961,93 @@ impl PipSharedSettings {
 
         Self {
             index_locations: IndexLocations::new(
-                args.index_url.combine(index_url),
-                args.extra_index_url
-                    .combine(extra_index_url)
-                    .unwrap_or_default(),
-                args.find_links.combine(find_links).unwrap_or_default(),
-                args.no_index.combine(no_index).unwrap_or_default(),
+                args.index_url.or(index_url),
+                args.extra_index_url.or(extra_index_url).unwrap_or_default(),
+                args.find_links.or(find_links).unwrap_or_default(),
+                args.no_index.or(no_index).unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(
-                args.all_extras.combine(all_extras).unwrap_or_default(),
-                args.extra.combine(extra).unwrap_or_default(),
+                args.all_extras.or(all_extras).unwrap_or_default(),
+                args.extra.or(extra).unwrap_or_default(),
             ),
-            dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
+            dependency_mode: if args.no_deps.or(no_deps).unwrap_or_default() {
                 DependencyMode::Direct
             } else {
                 DependencyMode::Transitive
             },
-            resolution: args.resolution.combine(resolution).unwrap_or_default(),
-            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
-            output_file: args.output_file.combine(output_file),
-            no_strip_extras: args
-                .no_strip_extras
-                .combine(no_strip_extras)
-                .unwrap_or_default(),
-            no_annotate: args.no_annotate.combine(no_annotate).unwrap_or_default(),
-            no_header: args.no_header.combine(no_header).unwrap_or_default(),
-            custom_compile_command: args.custom_compile_command.combine(custom_compile_command),
+            resolution: args.resolution.or(resolution).unwrap_or_default(),
+            prerelease: args.prerelease.or(prerelease).unwrap_or_default(),
+            output_file: args.output_file.or(output_file),
+            no_strip_extras: args.no_strip_extras.or(no_strip_extras).unwrap_or_default(),
+            no_annotate: args.no_annotate.or(no_annotate).unwrap_or_default(),
+            no_header: args.no_header.or(no_header).unwrap_or_default(),
+            custom_compile_command: args.custom_compile_command.or(custom_compile_command),
             annotation_style: args
                 .annotation_style
-                .combine(annotation_style)
+                .or(annotation_style)
                 .unwrap_or_default(),
-            connectivity: if args.offline.combine(offline).unwrap_or_default() {
+            connectivity: if args.offline.or(offline).unwrap_or_default() {
                 Connectivity::Offline
             } else {
                 Connectivity::Online
             },
-            index_strategy: args
-                .index_strategy
-                .combine(index_strategy)
-                .unwrap_or_default(),
+            index_strategy: args.index_strategy.or(index_strategy).unwrap_or_default(),
             keyring_provider: args
                 .keyring_provider
-                .combine(keyring_provider)
+                .or(keyring_provider)
                 .unwrap_or_default(),
-            generate_hashes: args
-                .generate_hashes
-                .combine(generate_hashes)
-                .unwrap_or_default(),
-            setup_py: if args
-                .legacy_setup_py
-                .combine(legacy_setup_py)
-                .unwrap_or_default()
-            {
+            generate_hashes: args.generate_hashes.or(generate_hashes).unwrap_or_default(),
+            setup_py: if args.legacy_setup_py.or(legacy_setup_py).unwrap_or_default() {
                 SetupPyStrategy::Setuptools
             } else {
                 SetupPyStrategy::Pep517
             },
             no_build_isolation: args
                 .no_build_isolation
-                .combine(no_build_isolation)
+                .or(no_build_isolation)
                 .unwrap_or_default(),
             no_build: NoBuild::from_args(
-                args.only_binary.combine(only_binary).unwrap_or_default(),
-                args.no_build.combine(no_build).unwrap_or_default(),
+                args.only_binary.or(only_binary).unwrap_or_default(),
+                args.no_build.or(no_build).unwrap_or_default(),
             ),
-            config_setting: args
-                .config_settings
-                .combine(config_settings)
-                .unwrap_or_default(),
-            python_version: args.python_version.combine(python_version),
-            python_platform: args.python_platform.combine(python_platform),
-            exclude_newer: args.exclude_newer.combine(exclude_newer),
-            no_emit_package: args
-                .no_emit_package
-                .combine(no_emit_package)
-                .unwrap_or_default(),
-            emit_index_url: args
-                .emit_index_url
-                .combine(emit_index_url)
-                .unwrap_or_default(),
-            emit_find_links: args
-                .emit_find_links
-                .combine(emit_find_links)
-                .unwrap_or_default(),
+            config_setting: args.config_settings.or(config_settings).unwrap_or_default(),
+            python_version: args.python_version.or(python_version),
+            python_platform: args.python_platform.or(python_platform),
+            exclude_newer: args.exclude_newer.or(exclude_newer),
+            no_emit_package: args.no_emit_package.or(no_emit_package).unwrap_or_default(),
+            emit_index_url: args.emit_index_url.or(emit_index_url).unwrap_or_default(),
+            emit_find_links: args.emit_find_links.or(emit_find_links).unwrap_or_default(),
             emit_marker_expression: args
                 .emit_marker_expression
-                .combine(emit_marker_expression)
+                .or(emit_marker_expression)
                 .unwrap_or_default(),
             emit_index_annotation: args
                 .emit_index_annotation
-                .combine(emit_index_annotation)
+                .or(emit_index_annotation)
                 .unwrap_or_default(),
-            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
-            require_hashes: args
-                .require_hashes
-                .combine(require_hashes)
-                .unwrap_or_default(),
-            python: args.python.combine(python),
-            system: args.system.combine(system).unwrap_or_default(),
+            link_mode: args.link_mode.or(link_mode).unwrap_or_default(),
+            require_hashes: args.require_hashes.or(require_hashes).unwrap_or_default(),
+            python: args.python.or(python),
+            system: args.system.or(system).unwrap_or_default(),
             break_system_packages: args
                 .break_system_packages
-                .combine(break_system_packages)
+                .or(break_system_packages)
                 .unwrap_or_default(),
-            target: args.target.combine(target).map(Target::from),
-            no_binary: NoBinary::from_args(args.no_binary.combine(no_binary).unwrap_or_default()),
+            target: args.target.or(target).map(Target::from),
+            no_binary: NoBinary::from_args(args.no_binary.or(no_binary).unwrap_or_default()),
             compile_bytecode: args
                 .compile_bytecode
-                .combine(compile_bytecode)
+                .or(compile_bytecode)
                 .unwrap_or_default(),
-            strict: args.strict.combine(strict).unwrap_or_default(),
+            strict: args.strict.or(strict).unwrap_or_default(),
             concurrency: Concurrency {
                 downloads: args
                     .concurrent_downloads
-                    .combine(concurrent_downloads)
+                    .or(concurrent_downloads)
                     .map_or(Concurrency::DEFAULT_DOWNLOADS, NonZeroUsize::get),
                 builds: args
                     .concurrent_builds
-                    .combine(concurrent_builds)
+                    .or(concurrent_builds)
                     .map_or_else(Concurrency::default_builds, NonZeroUsize::get),
             },
         }
