@@ -1337,7 +1337,7 @@ pub(crate) struct PipInstallArgs {
     #[arg(long)]
     pub(crate) dry_run: bool,
 
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, group = "sources")]
     pub(crate) unstable_uv_lock_file: Option<String>,
 
     #[command(flatten)]
