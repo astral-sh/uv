@@ -199,6 +199,11 @@ impl EditableRequirement {
         origin: Option<&Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtParserError> {
+        // Identify (but discard) any markers, to match pip.
+        let given = Self::split_markers(given)
+            .map(|(requirement, _)| requirement)
+            .unwrap_or(given);
+
         // Identify the extras.
         let (requirement, extras) = if let Some((requirement, extras)) = Self::split_extras(given) {
             let extras = Extras::parse(extras).map_err(|err| {
@@ -299,6 +304,22 @@ impl EditableRequirement {
             .find(|(_, c)| *c == '[')?;
 
         Some(given.split_at(index))
+    }
+
+    /// Identify the markers in an editable URL (e.g., `../editable ; python_version > "3.8"`).
+    pub fn split_markers(given: &str) -> Option<(&str, &str)> {
+        // Take until we see whitespace, unless it's escaped with a backslash.
+        let mut backslash = false;
+        for (index, c) in given.char_indices() {
+            if backslash {
+                backslash = false;
+            } else if c == '\\' {
+                backslash = true;
+            } else if c.is_whitespace() {
+                return Some(given.split_at(index));
+            }
+        }
+        None
     }
 }
 
@@ -1395,6 +1416,7 @@ mod test {
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
+    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
     async fn parse(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
