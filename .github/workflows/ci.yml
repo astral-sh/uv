@@ -93,27 +93,38 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
 
+      - name: Enable Windows Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+        with:
+          arch: x64
+
       - name: "Install Rust toolchain"
         working-directory: ${{ env.DEV_DRIVE }}/uv
         env:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: rustup component add clippy
+        run: rustup target add x86_64-pc-windows-msvc
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ env.DEV_DRIVE }}/uv
-          save-if: ${{ github.ref == 'refs/heads/main' }}
         env:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
+      - name: Install cargo-xwin
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        run: cargo install cargo-xwin
 
       - name: "Clippy"
         working-directory: ${{ env.DEV_DRIVE }}/uv
         env:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo xwin clippy --target x86_64-pc-windows-msvc --workspace --all-targets --all-features --locked --profile fast-build -- -D warnings
 
   cargo-shear:
     name: "cargo shear"
