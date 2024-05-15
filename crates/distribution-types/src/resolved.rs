@@ -3,8 +3,9 @@ use std::fmt::{Display, Formatter};
 use pep508_rs::PackageName;
 
 use crate::{
-    Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist, Name,
-    RegistryBuiltWheel, RegistrySourceDist, ResourceId, VersionOrUrlRef,
+    BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
+    Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist,
+    VersionOrUrlRef,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -20,8 +21,18 @@ pub enum ResolvedDist {
 #[derive(Debug, Clone)]
 pub enum ResolvedDistRef<'a> {
     Installed(&'a InstalledDist),
-    InstallableRegistrySourceDist(&'a RegistrySourceDist),
-    InstallableRegistryBuiltDist(&'a RegistryBuiltWheel),
+    InstallableRegistrySourceDist {
+        /// The source distribution that should be used.
+        sdist: &'a RegistrySourceDist,
+        /// The prioritized distribution that the wheel came from.
+        prioritized: &'a PrioritizedDist,
+    },
+    InstallableRegistryBuiltDist {
+        /// The wheel that should be used.
+        wheel: &'a RegistryBuiltWheel,
+        /// The prioritized distribution that the wheel came from.
+        prioritized: &'a PrioritizedDist,
+    },
 }
 
 impl ResolvedDist {
@@ -45,11 +56,28 @@ impl ResolvedDist {
 impl ResolvedDistRef<'_> {
     pub fn to_owned(&self) -> ResolvedDist {
         match self {
-            Self::InstallableRegistrySourceDist(dist) => {
-                ResolvedDist::Installable(Dist::from((*dist).clone()))
+            Self::InstallableRegistrySourceDist { sdist, prioritized } => {
+                // This is okay because we're only here if the prioritized dist
+                // has an sdist, so this always succeeds.
+                let source = prioritized.source_dist().expect("a source distribution");
+                assert_eq!(
+                    sdist.filename, source.filename,
+                    "expected chosen sdist to match prioritized sdist"
+                );
+                ResolvedDist::Installable(Dist::Source(SourceDist::Registry(source)))
             }
-            Self::InstallableRegistryBuiltDist(dist) => {
-                ResolvedDist::Installable(Dist::from((*dist).clone()))
+            Self::InstallableRegistryBuiltDist {
+                wheel, prioritized, ..
+            } => {
+                assert_eq!(
+                    Some(&wheel.filename),
+                    prioritized.best_wheel().map(|(wheel, _)| &wheel.filename),
+                    "expected chosen wheel to match best wheel"
+                );
+                // This is okay because we're only here if the prioritized dist
+                // has at least one wheel, so this always succeeds.
+                let built = prioritized.built_dist().expect("at least one wheel");
+                ResolvedDist::Installable(Dist::Built(BuiltDist::Registry(built)))
             }
             Self::Installed(dist) => ResolvedDist::Installed((*dist).clone()),
         }
@@ -59,8 +87,8 @@ impl ResolvedDistRef<'_> {
 impl Display for ResolvedDistRef<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InstallableRegistrySourceDist(dist) => Display::fmt(dist, f),
-            Self::InstallableRegistryBuiltDist(dist) => Display::fmt(dist, f),
+            Self::InstallableRegistrySourceDist { sdist, .. } => Display::fmt(sdist, f),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => Display::fmt(wheel, f),
             Self::Installed(dist) => Display::fmt(dist, f),
         }
     }
@@ -69,8 +97,8 @@ impl Display for ResolvedDistRef<'_> {
 impl Name for ResolvedDistRef<'_> {
     fn name(&self) -> &PackageName {
         match self {
-            Self::InstallableRegistrySourceDist(dist) => dist.name(),
-            Self::InstallableRegistryBuiltDist(dist) => dist.name(),
+            Self::InstallableRegistrySourceDist { sdist, .. } => sdist.name(),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.name(),
             Self::Installed(dist) => dist.name(),
         }
     }
@@ -80,8 +108,8 @@ impl DistributionMetadata for ResolvedDistRef<'_> {
     fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
             Self::Installed(installed) => VersionOrUrlRef::Version(installed.version()),
-            Self::InstallableRegistrySourceDist(dist) => dist.version_or_url(),
-            Self::InstallableRegistryBuiltDist(dist) => dist.version_or_url(),
+            Self::InstallableRegistrySourceDist { sdist, .. } => sdist.version_or_url(),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.version_or_url(),
         }
     }
 }
@@ -90,16 +118,16 @@ impl Identifier for ResolvedDistRef<'_> {
     fn distribution_id(&self) -> DistributionId {
         match self {
             Self::Installed(dist) => dist.distribution_id(),
-            Self::InstallableRegistrySourceDist(dist) => dist.distribution_id(),
-            Self::InstallableRegistryBuiltDist(dist) => dist.distribution_id(),
+            Self::InstallableRegistrySourceDist { sdist, .. } => sdist.distribution_id(),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
             Self::Installed(dist) => dist.resource_id(),
-            Self::InstallableRegistrySourceDist(dist) => dist.resource_id(),
-            Self::InstallableRegistryBuiltDist(dist) => dist.resource_id(),
+            Self::InstallableRegistrySourceDist { sdist, .. } => sdist.resource_id(),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.resource_id(),
         }
     }
 }

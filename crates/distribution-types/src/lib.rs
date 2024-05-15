@@ -182,7 +182,7 @@ pub struct RegistryBuiltDist {
     /// with the user configuration. (e.g., If `Requires-Python` isn't
     /// compatible with the installed/target Python versions, or if something
     /// like `--exclude-newer` was used.)
-    pub source_dist: Option<RegistrySourceDist>,
+    pub sdist: Option<RegistrySourceDist>,
     // Ideally, this type would have an index URL on it, and the
     // `RegistryBuiltDist` and `RegistrySourceDist` types would *not* have an
     // index URL on them. Alas, the --find-links feature makes it technically
@@ -431,23 +431,6 @@ impl Dist {
             Self::Built(wheel) => Some(wheel.version()),
             Self::Source(source_dist) => source_dist.version(),
         }
-    }
-}
-
-impl From<RegistryBuiltWheel> for Dist {
-    fn from(wheel: RegistryBuiltWheel) -> Dist {
-        let regdist = RegistryBuiltDist {
-            wheels: vec![wheel],
-            best_wheel_index: 0,
-            source_dist: None,
-        };
-        Dist::Built(BuiltDist::Registry(regdist))
-    }
-}
-
-impl From<RegistrySourceDist> for Dist {
-    fn from(sdist: RegistrySourceDist) -> Dist {
-        Dist::Source(SourceDist::Registry(sdist))
     }
 }
 

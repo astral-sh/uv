@@ -143,15 +143,7 @@ impl BatchPrefetcher {
             );
             prefetch_count += 1;
             if index.distributions.register(candidate.version_id()) {
-                let request = match dist {
-                    ResolvedDistRef::InstallableRegistrySourceDist(dist) => {
-                        Request::Dist(Dist::from((*dist).clone()))
-                    }
-                    ResolvedDistRef::InstallableRegistryBuiltDist(dist) => {
-                        Request::Dist(Dist::from((*dist).clone()))
-                    }
-                    ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
-                };
+                let request = Request::from(dist);
                 request_sink.send(request).await?;
             }
         }

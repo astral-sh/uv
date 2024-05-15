@@ -4,7 +4,9 @@ use pep440_rs::VersionSpecifiers;
 use platform_tags::{IncompatibleTag, TagPriority};
 use pypi_types::{HashDigest, Yanked};
 
-use crate::{InstalledDist, RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef};
+use crate::{
+    InstalledDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef,
+};
 
 /// A collection of distributions that have been filtered by relevance.
 #[derive(Debug, Default, Clone)]
@@ -30,14 +32,30 @@ pub enum CompatibleDist<'a> {
     /// The distribution is already installed and can be used.
     InstalledDist(&'a InstalledDist),
     /// The distribution should be resolved and installed using a source distribution.
-    SourceDist(&'a RegistrySourceDist),
+    SourceDist {
+        /// The source distribution that should be used.
+        sdist: &'a RegistrySourceDist,
+        /// The prioritized distribution that the sdist came from.
+        prioritized: &'a PrioritizedDist,
+    },
     /// The distribution should be resolved and installed using a wheel distribution.
-    CompatibleWheel(&'a RegistryBuiltWheel, TagPriority),
+    CompatibleWheel {
+        /// The wheel that should be used.
+        wheel: &'a RegistryBuiltWheel,
+        /// The platform priority associated with the wheel.
+        priority: TagPriority,
+        /// The prioritized distribution that the wheel came from.
+        prioritized: &'a PrioritizedDist,
+    },
     /// The distribution should be resolved using an incompatible wheel distribution, but
     /// installed using a source distribution.
     IncompatibleWheel {
-        source_dist: &'a RegistrySourceDist,
+        /// The sdist to be used during installation.
+        sdist: &'a RegistrySourceDist,
+        /// The wheel to be used during resolution.
         wheel: &'a RegistryBuiltWheel,
+        /// The prioritized distribution that the wheel and sdist came from.
+        prioritized: &'a PrioritizedDist,
     },
 }
 
@@ -228,17 +246,28 @@ impl PrioritizedDist {
             // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
             (
                 Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority))),
-                Some((source_dist, SourceDistCompatibility::Compatible(source_hash))),
+                Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
             ) => {
-                if source_hash > wheel_hash {
-                    Some(CompatibleDist::SourceDist(source_dist))
+                if sdist_hash > wheel_hash {
+                    Some(CompatibleDist::SourceDist {
+                        sdist,
+                        prioritized: self,
+                    })
                 } else {
-                    Some(CompatibleDist::CompatibleWheel(wheel, *tag_priority))
+                    Some(CompatibleDist::CompatibleWheel {
+                        wheel,
+                        priority: *tag_priority,
+                        prioritized: self,
+                    })
                 }
             }
             // Prefer the highest-priority, platform-compatible wheel.
             (Some((wheel, WheelCompatibility::Compatible(_, tag_priority))), _) => {
-                Some(CompatibleDist::CompatibleWheel(wheel, *tag_priority))
+                Some(CompatibleDist::CompatibleWheel {
+                    wheel,
+                    priority: *tag_priority,
+                    prioritized: self,
+                })
             }
             // If we have a compatible source distribution and an incompatible wheel, return the
             // wheel. We assume that all distributions have the same metadata for a given package
@@ -246,11 +275,18 @@ impl PrioritizedDist {
             // using the wheel is faster.
             (
                 Some((wheel, WheelCompatibility::Incompatible(_))),
-                Some((source_dist, SourceDistCompatibility::Compatible(_))),
-            ) => Some(CompatibleDist::IncompatibleWheel { source_dist, wheel }),
+                Some((sdist, SourceDistCompatibility::Compatible(_))),
+            ) => Some(CompatibleDist::IncompatibleWheel {
+                sdist,
+                wheel,
+                prioritized: self,
+            }),
             // Otherwise, if we have a source distribution, return it.
-            (None, Some((source_dist, SourceDistCompatibility::Compatible(_)))) => {
-                Some(CompatibleDist::SourceDist(source_dist))
+            (None, Some((sdist, SourceDistCompatibility::Compatible(_)))) => {
+                Some(CompatibleDist::SourceDist {
+                    sdist,
+                    prioritized: self,
+                })
             }
             _ => None,
         }
@@ -289,9 +325,39 @@ impl PrioritizedDist {
         self.0.source.is_none() && self.0.wheels.is_empty()
     }
 
+    /// If this prioritized dist has at least one wheel, then this creates
+    /// a built distribution with the best wheel in this prioritized dist.
+    pub fn built_dist(&self) -> Option<RegistryBuiltDist> {
+        let best_wheel_index = self.0.best_wheel_index?;
+        let wheels = self
+            .0
+            .wheels
+            .iter()
+            .map(|(wheel, _)| wheel.clone())
+            .collect();
+        let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone());
+        Some(RegistryBuiltDist {
+            wheels,
+            best_wheel_index,
+            sdist,
+        })
+    }
+
+    /// If this prioritized dist has an sdist, then this creates a source
+    /// distribution.
+    pub fn source_dist(&self) -> Option<RegistrySourceDist> {
+        // FIXME: We shouldn't be dropping all wheels here. When doing
+        // universal resolution, just because the host machine wants to use an
+        // sdist doesn't mean we should not put any wheels in the lock file.
+        // This probably means modifying RegistrySourceDist to look more like
+        // RegistryBuiltDist, but prioritizes the sdist.
+        let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone())?;
+        Some(sdist)
+    }
+
     /// Returns the "best" wheel in this prioritized distribution, if one
     /// exists.
-    fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
+    pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
     }
 }
@@ -301,15 +367,15 @@ impl<'a> CompatibleDist<'a> {
     pub fn for_resolution(&self) -> ResolvedDistRef<'a> {
         match *self {
             CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed(dist),
-            CompatibleDist::SourceDist(sdist) => {
-                ResolvedDistRef::InstallableRegistrySourceDist(sdist)
+            CompatibleDist::SourceDist { sdist, prioritized } => {
+                ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
-            CompatibleDist::CompatibleWheel(wheel, _) => {
-                ResolvedDistRef::InstallableRegistryBuiltDist(wheel)
-            }
-            CompatibleDist::IncompatibleWheel { wheel, .. } => {
-                ResolvedDistRef::InstallableRegistryBuiltDist(wheel)
-            }
+            CompatibleDist::CompatibleWheel {
+                wheel, prioritized, ..
+            } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
+            CompatibleDist::IncompatibleWheel {
+                wheel, prioritized, ..
+            } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
         }
     }
 
@@ -317,15 +383,15 @@ impl<'a> CompatibleDist<'a> {
     pub fn for_installation(&self) -> ResolvedDistRef<'a> {
         match *self {
             CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed(dist),
-            CompatibleDist::SourceDist(sdist) => {
-                ResolvedDistRef::InstallableRegistrySourceDist(sdist)
+            CompatibleDist::SourceDist { sdist, prioritized } => {
+                ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
-            CompatibleDist::CompatibleWheel(wheel, _) => {
-                ResolvedDistRef::InstallableRegistryBuiltDist(wheel)
-            }
-            CompatibleDist::IncompatibleWheel { source_dist, .. } => {
-                ResolvedDistRef::InstallableRegistrySourceDist(source_dist)
-            }
+            CompatibleDist::CompatibleWheel {
+                wheel, prioritized, ..
+            } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
+            CompatibleDist::IncompatibleWheel {
+                sdist, prioritized, ..
+            } => ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized },
         }
     }
 
@@ -334,9 +400,9 @@ impl<'a> CompatibleDist<'a> {
     /// Avoid building source distributions we don't need.
     pub fn prefetchable(&self) -> bool {
         match *self {
-            CompatibleDist::SourceDist(_) => false,
+            CompatibleDist::SourceDist { .. } => false,
             CompatibleDist::InstalledDist(_)
-            | CompatibleDist::CompatibleWheel(_, _)
+            | CompatibleDist::CompatibleWheel { .. }
             | CompatibleDist::IncompatibleWheel { .. } => true,
         }
     }

@@ -839,12 +839,12 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 };
 
                 let filename = match dist.for_installation() {
-                    ResolvedDistRef::InstallableRegistrySourceDist(dist) => {
-                        dist.filename().unwrap_or(Cow::Borrowed("unknown filename"))
-                    }
-                    ResolvedDistRef::InstallableRegistryBuiltDist(dist) => {
-                        dist.filename().unwrap_or(Cow::Borrowed("unknown filename"))
-                    }
+                    ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
+                        .filename()
+                        .unwrap_or(Cow::Borrowed("unknown filename")),
+                    ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
+                        .filename()
+                        .unwrap_or(Cow::Borrowed("unknown filename")),
                     ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
                 };
 
@@ -864,15 +864,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 // Emit a request to fetch the metadata for this version.
                 if matches!(package, PubGrubPackage::Package(_, _, _)) {
                     if self.index.distributions.register(candidate.version_id()) {
-                        let request = match dist.for_resolution() {
-                            ResolvedDistRef::InstallableRegistrySourceDist(dist) => {
-                                Request::Dist(Dist::from((*dist).clone()))
-                            }
-                            ResolvedDistRef::InstallableRegistryBuiltDist(dist) => {
-                                Request::Dist(Dist::from((*dist).clone()))
-                            }
-                            ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
-                        };
+                        let request = Request::from(dist.for_resolution());
                         request_sink.send(request).await?;
                     }
                 }
@@ -1446,6 +1438,42 @@ pub(crate) enum Request {
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>),
+}
+
+impl<'a> From<ResolvedDistRef<'a>> for Request {
+    fn from(dist: ResolvedDistRef<'a>) -> Request {
+        // N.B. This is almost identical to `ResolvedDistRef::to_owned`, but
+        // creates a `Request` instead of a `ResolvedDist`. There's probably
+        // some room for DRYing this up a bit. The obvious way would be to
+        // add a method to create a `Dist`, but a `Dist` cannot reprented an
+        // installed dist.
+        match dist {
+            ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized } => {
+                // This is okay because we're only here if the prioritized dist
+                // has an sdist, so this always succeeds.
+                let source = prioritized.source_dist().expect("a source distribution");
+                assert_eq!(
+                    sdist.filename, source.filename,
+                    "expected chosen sdist to match prioritized sdist"
+                );
+                Request::Dist(Dist::Source(SourceDist::Registry(source)))
+            }
+            ResolvedDistRef::InstallableRegistryBuiltDist {
+                wheel, prioritized, ..
+            } => {
+                assert_eq!(
+                    Some(&wheel.filename),
+                    prioritized.best_wheel().map(|(wheel, _)| &wheel.filename),
+                    "expected chosen wheel to match best wheel"
+                );
+                // This is okay because we're only here if the prioritized dist
+                // has at least one wheel, so this always succeeds.
+                let built = prioritized.built_dist().expect("at least one wheel");
+                Request::Dist(Dist::Built(BuiltDist::Registry(built)))
+            }
+            ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
+        }
+    }
 }
 
 impl Display for Request {
