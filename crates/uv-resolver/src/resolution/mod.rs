@@ -14,7 +14,7 @@ mod graph;
 /// specific distribution (e.g., a specific wheel), while the [`Metadata23`] refers to the metadata
 /// for the package-version pair.
 #[derive(Debug)]
-pub struct AnnotatedDist {
+pub(crate) struct AnnotatedDist {
     pub(crate) dist: ResolvedDist,
     pub(crate) extras: Vec<ExtraName>,
     pub(crate) hashes: Vec<HashDigest>,
