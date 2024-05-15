@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use distribution_types::{DistributionMetadata, ResolvedDistRef};
+use distribution_types::DistributionMetadata;
 use pep440_rs::Version;
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
@@ -143,10 +143,7 @@ impl BatchPrefetcher {
             );
             prefetch_count += 1;
             if index.distributions.register(candidate.version_id()) {
-                let request = match dist {
-                    ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
-                    ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
-                };
+                let request = Request::from(dist);
                 request_sink.send(request).await?;
             }
         }

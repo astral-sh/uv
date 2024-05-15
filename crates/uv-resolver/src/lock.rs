@@ -10,8 +10,8 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
-    GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistrySourceDist,
-    Resolution, ResolvedDist, ToUrlError,
+    GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -208,13 +208,8 @@ impl Distribution {
         annotated_dist: &AnnotatedDist,
     ) -> Result<Distribution, LockError> {
         let id = DistributionId::from_annotated_dist(annotated_dist);
-        let mut sdist = None;
-        let mut wheels = vec![];
-        if let Some(dist) = Wheel::from_annotated_dist(annotated_dist)? {
-            wheels.push(dist);
-        } else if let Some(dist) = SourceDist::from_annotated_dist(annotated_dist)? {
-            sdist = Some(dist);
-        }
+        let wheels = Wheel::from_annotated_dist(annotated_dist)?;
+        let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
         Ok(Distribution {
             id,
             // TODO: Refactoring is needed to get the marker expressions for a
@@ -233,31 +228,23 @@ impl Distribution {
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
     fn to_dist(&self, _marker_env: &MarkerEnvironment, tags: &Tags) -> Dist {
-        if let Some(wheel) = self.find_best_wheel(tags) {
+        if let Some(best_wheel_index) = self.find_best_wheel(tags) {
             return match self.id.source.kind {
                 SourceKind::Registry => {
-                    let filename: WheelFilename = wheel.filename.clone();
-                    let file = Box::new(distribution_types::File {
-                        dist_info_metadata: false,
-                        filename: filename.to_string(),
-                        hashes: vec![],
-                        requires_python: None,
-                        size: None,
-                        upload_time_utc_ms: None,
-                        url: FileLocation::AbsoluteUrl(wheel.url.to_string()),
-                        yanked: None,
-                    });
-                    let index = IndexUrl::Pypi(VerbatimUrl::from_url(self.id.source.url.clone()));
-                    let reg_dist = RegistryBuiltDist {
-                        filename,
-                        file,
-                        index,
+                    let wheels = self
+                        .wheels
+                        .iter()
+                        .map(|wheel| wheel.to_registry_dist(&self.id.source))
+                        .collect();
+                    let reg_built_dist = RegistryBuiltDist {
+                        wheels,
+                        best_wheel_index,
+                        sdist: None,
                     };
-                    let built_dist = BuiltDist::Registry(reg_dist);
-                    Dist::Built(built_dist)
+                    Dist::Built(BuiltDist::Registry(reg_built_dist))
                 }
                 SourceKind::Path => {
-                    let filename: WheelFilename = wheel.filename.clone();
+                    let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let path_dist = PathBuiltDist {
                         filename,
                         url: VerbatimUrl::from_url(self.id.source.url.clone()),
@@ -301,24 +288,24 @@ impl Distribution {
         panic!("invalid lock distribution")
     }
 
-    fn find_best_wheel(&self, tags: &Tags) -> Option<&Wheel> {
-        let mut best: Option<(TagPriority, &Wheel)> = None;
-        for wheel in &self.wheels {
+    fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
+        let mut best: Option<(TagPriority, usize)> = None;
+        for (i, wheel) in self.wheels.iter().enumerate() {
             let TagCompatibility::Compatible(priority) = wheel.filename.compatibility(tags) else {
                 continue;
             };
             match best {
                 None => {
-                    best = Some((priority, wheel));
+                    best = Some((priority, i));
                 }
                 Some((best_priority, _)) => {
                     if priority > best_priority {
-                        best = Some((priority, wheel));
+                        best = Some((priority, i));
                     }
                 }
             }
         }
-        best.map(|(_, wheel)| wheel)
+        best.map(|(_, i)| i)
     }
 }
 
@@ -375,7 +362,7 @@ impl Source {
 
     fn from_built_dist(built_dist: &BuiltDist) -> Source {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist(reg_dist),
+            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist2(reg_dist),
             BuiltDist::DirectUrl(ref direct_dist) => Source::from_direct_built_dist(direct_dist),
             BuiltDist::Path(ref path_dist) => Source::from_path_built_dist(path_dist),
         }
@@ -399,8 +386,12 @@ impl Source {
         }
     }
 
-    fn from_registry_built_dist(reg_dist: &RegistryBuiltDist) -> Source {
+    fn from_registry_built_dist(reg_dist: &RegistryBuiltWheel) -> Source {
         Source::from_index_url(&reg_dist.index)
+    }
+
+    fn from_registry_built_dist2(reg_dist: &RegistryBuiltDist) -> Source {
+        Source::from_index_url(&reg_dist.best_wheel().index)
     }
 
     fn from_registry_source_dist(reg_dist: &RegistrySourceDist) -> Source {
@@ -647,6 +638,12 @@ impl SourceDist {
 
     fn from_dist(dist: &Dist, hashes: &[HashDigest]) -> Result<Option<SourceDist>, LockError> {
         match *dist {
+            Dist::Built(BuiltDist::Registry(ref built_dist)) => {
+                let Some(sdist) = built_dist.sdist.as_ref() else {
+                    return Ok(None);
+                };
+                SourceDist::from_registry_dist(sdist).map(Some)
+            }
             Dist::Built(_) => Ok(None),
             Dist::Source(ref source_dist) => {
                 SourceDist::from_source_dist(source_dist, hashes).map(Some)
@@ -744,7 +741,7 @@ pub(crate) struct Wheel {
 }
 
 impl Wheel {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Option<Wheel>, LockError> {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Wheel>, LockError> {
         match annotated_dist.dist {
             // TODO: Do we want to try to lock already-installed distributions?
             // Or should we return an error?
@@ -753,36 +750,45 @@ impl Wheel {
         }
     }
 
-    fn from_dist(dist: &Dist, hashes: &[HashDigest]) -> Result<Option<Wheel>, LockError> {
+    fn from_dist(dist: &Dist, hashes: &[HashDigest]) -> Result<Vec<Wheel>, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes).map(Some),
-            Dist::Source(_) => Ok(None),
+            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes),
+            Dist::Source(_) => Ok(vec![]),
         }
     }
 
-    fn from_built_dist(built_dist: &BuiltDist, hashes: &[HashDigest]) -> Result<Wheel, LockError> {
+    fn from_built_dist(
+        built_dist: &BuiltDist,
+        hashes: &[HashDigest],
+    ) -> Result<Vec<Wheel>, LockError> {
         match *built_dist {
             BuiltDist::Registry(ref reg_dist) => Wheel::from_registry_dist(reg_dist),
             BuiltDist::DirectUrl(ref direct_dist) => {
-                Ok(Wheel::from_direct_dist(direct_dist, hashes))
+                Ok(vec![Wheel::from_direct_dist(direct_dist, hashes)])
             }
-            BuiltDist::Path(ref path_dist) => Ok(Wheel::from_path_dist(path_dist, hashes)),
+            BuiltDist::Path(ref path_dist) => Ok(vec![Wheel::from_path_dist(path_dist, hashes)]),
         }
     }
 
-    fn from_registry_dist(reg_dist: &RegistryBuiltDist) -> Result<Wheel, LockError> {
-        let filename = reg_dist.filename.clone();
-        let url = reg_dist
-            .file
-            .url
-            .to_url()
-            .map_err(LockError::invalid_file_url)?;
-        let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
-        Ok(Wheel {
-            url,
-            hash,
-            filename,
-        })
+    fn from_registry_dist(reg_dist: &RegistryBuiltDist) -> Result<Vec<Wheel>, LockError> {
+        let mut wheels = vec![];
+        for wheel in &reg_dist.wheels {
+            let filename = wheel.filename.clone();
+            let url = wheel
+                .file
+                .url
+                .to_url()
+                .map_err(LockError::invalid_file_url)?;
+            // FIXME: Is it guaranteed that there is at least one hash?
+            // If not, we probably need to make this fallible.
+            let hash = Some(Hash::from(wheel.file.hashes[0].clone()));
+            wheels.push(Wheel {
+                url,
+                hash,
+                filename,
+            });
+        }
+        Ok(wheels)
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
@@ -798,6 +804,26 @@ impl Wheel {
             url: path_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
             filename: path_dist.filename.clone(),
+        }
+    }
+
+    fn to_registry_dist(&self, source: &Source) -> RegistryBuiltWheel {
+        let filename: WheelFilename = self.filename.clone();
+        let file = Box::new(distribution_types::File {
+            dist_info_metadata: false,
+            filename: filename.to_string(),
+            hashes: vec![],
+            requires_python: None,
+            size: None,
+            upload_time_utc_ms: None,
+            url: FileLocation::AbsoluteUrl(self.url.to_string()),
+            yanked: None,
+        });
+        let index = IndexUrl::Url(VerbatimUrl::from_url(source.url.clone()));
+        RegistryBuiltWheel {
+            filename,
+            file,
+            index,
         }
     }
 }

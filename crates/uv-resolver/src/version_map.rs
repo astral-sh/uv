@@ -7,8 +7,8 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
-    Dist, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    SourceDistCompatibility, WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::{TagCompatibility, Tags};
@@ -396,11 +396,11 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
-                        let dist = Dist::from_registry(
-                            DistFilename::WheelFilename(filename),
-                            file,
-                            self.index.clone(),
-                        );
+                        let dist = RegistryBuiltWheel {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                        };
                         priority_dist.insert_built(dist, hashes, compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
@@ -412,11 +412,11 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
-                        let dist = Dist::from_registry(
-                            DistFilename::SourceDistFilename(filename),
-                            file,
-                            self.index.clone(),
-                        );
+                        let dist = RegistrySourceDist {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                        };
                         priority_dist.insert_source(dist, hashes, compatibility);
                     }
                 }

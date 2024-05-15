@@ -6,9 +6,9 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuiltDist, Dist, File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel,
-    IndexUrl, PrioritizedDist, RegistryBuiltDist, RegistrySourceDist, SourceDist,
-    SourceDistCompatibility, WheelCompatibility,
+    File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use pep440_rs::Version;
 use platform_tags::{TagCompatibility, Tags};
@@ -80,11 +80,11 @@ impl FlatIndex {
 
                 let compatibility =
                     Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, no_binary);
-                let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+                let dist = RegistryBuiltWheel {
                     filename,
                     file: Box::new(file),
                     index,
-                }));
+                };
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_built(dist, vec![], compatibility);
@@ -97,11 +97,11 @@ impl FlatIndex {
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility =
                     Self::source_dist_compatibility(&filename, &file.hashes, hasher, no_build);
-                let dist = Dist::Source(SourceDist::Registry(RegistrySourceDist {
+                let dist = RegistrySourceDist {
                     filename: filename.clone(),
                     file: Box::new(file),
                     index,
-                }));
+                };
                 match distributions.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_source(dist, vec![], compatibility);

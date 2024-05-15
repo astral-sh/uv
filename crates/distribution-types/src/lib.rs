@@ -39,7 +39,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use url::Url;
 
-use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
+use distribution_filename::{SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
 use pep508_rs::{Pep508Url, VerbatimUrl};
 use uv_git::GitUrl;
@@ -158,10 +158,40 @@ pub enum SourceDist {
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone)]
-pub struct RegistryBuiltDist {
+pub struct RegistryBuiltWheel {
     pub filename: WheelFilename,
     pub file: Box<File>,
     pub index: IndexUrl,
+}
+
+/// A built distribution (wheel) that exists in a registry, like `PyPI`.
+#[derive(Debug, Clone)]
+pub struct RegistryBuiltDist {
+    /// All wheels associated with this distribution. It is guaranteed
+    /// that there is at least one wheel.
+    pub wheels: Vec<RegistryBuiltWheel>,
+    /// The "best" wheel selected based on the current wheel tag
+    /// environment.
+    ///
+    /// This is guaranteed to point into a valid entry in `wheels`.
+    pub best_wheel_index: usize,
+    /// A source distribution if one exists for this distribution.
+    ///
+    /// It is possible for this to be `None`. For example, when a distribution
+    /// has no source distribution, or if it does have one but isn't compatible
+    /// with the user configuration. (e.g., If `Requires-Python` isn't
+    /// compatible with the installed/target Python versions, or if something
+    /// like `--exclude-newer` was used.)
+    pub sdist: Option<RegistrySourceDist>,
+    // Ideally, this type would have an index URL on it, and the
+    // `RegistryBuiltDist` and `RegistrySourceDist` types would *not* have an
+    // index URL on them. Alas, the --find-links feature makes it technically
+    // possible for the indexes to diverge across wheels/sdists in the same
+    // distribution.
+    //
+    // Note though that at time of writing, when generating a universal lock
+    // file, we require that all index URLs across wheels/sdists for a single
+    // distribution are equivalent.
 }
 
 /// A built distribution (wheel) that exists at an arbitrary URL.
@@ -235,26 +265,6 @@ pub struct DirectorySourceDist {
 }
 
 impl Dist {
-    /// Create a [`Dist`] for a registry-based distribution.
-    pub fn from_registry(filename: DistFilename, file: File, index: IndexUrl) -> Self {
-        match filename {
-            DistFilename::WheelFilename(filename) => {
-                Self::Built(BuiltDist::Registry(RegistryBuiltDist {
-                    filename,
-                    file: Box::new(file),
-                    index,
-                }))
-            }
-            DistFilename::SourceDistFilename(filename) => {
-                Self::Source(SourceDist::Registry(RegistrySourceDist {
-                    filename,
-                    file: Box::new(file),
-                    index,
-                }))
-            }
-        }
-    }
-
     /// A remote built distribution (`.whl`) or source distribution from a `http://` or `https://`
     /// URL.
     pub fn from_http_url(
@@ -428,7 +438,7 @@ impl BuiltDist {
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
-            Self::Registry(registry) => Some(&registry.index),
+            Self::Registry(registry) => Some(&registry.best_wheel().index),
             Self::DirectUrl(_) => None,
             Self::Path(_) => None,
         }
@@ -437,14 +447,14 @@ impl BuiltDist {
     /// Returns the [`File`] instance, if this distribution is from a registry.
     pub fn file(&self) -> Option<&File> {
         match self {
-            Self::Registry(registry) => Some(&registry.file),
+            Self::Registry(registry) => Some(&registry.best_wheel().file),
             Self::DirectUrl(_) | Self::Path(_) => None,
         }
     }
 
     pub fn version(&self) -> &Version {
         match self {
-            Self::Registry(wheel) => &wheel.filename.version,
+            Self::Registry(wheels) => &wheels.best_wheel().filename.version,
             Self::DirectUrl(wheel) => &wheel.filename.version,
             Self::Path(wheel) => &wheel.filename.version,
         }
@@ -493,9 +503,22 @@ impl SourceDist {
     }
 }
 
-impl Name for RegistryBuiltDist {
+impl RegistryBuiltDist {
+    /// Returns the best or "most compatible" wheel in this distribution.
+    pub fn best_wheel(&self) -> &RegistryBuiltWheel {
+        &self.wheels[self.best_wheel_index]
+    }
+}
+
+impl Name for RegistryBuiltWheel {
     fn name(&self) -> &PackageName {
         &self.filename.name
+    }
+}
+
+impl Name for RegistryBuiltDist {
+    fn name(&self) -> &PackageName {
+        self.best_wheel().name()
     }
 }
 
@@ -572,9 +595,15 @@ impl Name for Dist {
     }
 }
 
-impl DistributionMetadata for RegistryBuiltDist {
+impl DistributionMetadata for RegistryBuiltWheel {
     fn version_or_url(&self) -> VersionOrUrlRef {
         VersionOrUrlRef::Version(&self.filename.version)
+    }
+}
+
+impl DistributionMetadata for RegistryBuiltDist {
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        self.best_wheel().version_or_url()
     }
 }
 
@@ -680,13 +709,23 @@ impl RemoteSource for Url {
     }
 }
 
-impl RemoteSource for RegistryBuiltDist {
+impl RemoteSource for RegistryBuiltWheel {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         self.file.filename()
     }
 
     fn size(&self) -> Option<u64> {
         self.file.size()
+    }
+}
+
+impl RemoteSource for RegistryBuiltDist {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        self.best_wheel().filename()
+    }
+
+    fn size(&self) -> Option<u64> {
+        self.best_wheel().size()
     }
 }
 
@@ -892,13 +931,23 @@ impl Identifier for FileLocation {
     }
 }
 
-impl Identifier for RegistryBuiltDist {
+impl Identifier for RegistryBuiltWheel {
     fn distribution_id(&self) -> DistributionId {
         self.file.distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
         self.file.resource_id()
+    }
+}
+
+impl Identifier for RegistryBuiltDist {
+    fn distribution_id(&self) -> DistributionId {
+        self.best_wheel().distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.best_wheel().resource_id()
     }
 }
 
