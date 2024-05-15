@@ -376,13 +376,6 @@ impl ResolutionGraph {
         &self.diagnostics
     }
 
-    /// Return the underlying graph.
-    pub fn petgraph(
-        &self,
-    ) -> &petgraph::graph::Graph<AnnotatedDist, Range<Version>, petgraph::Directed> {
-        &self.petgraph
-    }
-
     /// Return the marker tree specific to this resolution.
     ///
     /// This accepts a manifest, in-memory-index and marker environment. All

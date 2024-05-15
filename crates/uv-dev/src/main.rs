@@ -16,15 +16,12 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-use resolve_many::ResolveManyArgs;
-
 use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
 use crate::fetch_python::FetchPythonArgs;
 use crate::generate_json_schema::GenerateJsonSchemaArgs;
 use crate::render_benchmarks::RenderBenchmarksArgs;
-use crate::resolve_cli::ResolveCliArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
 
 #[cfg(target_os = "windows")]
@@ -49,36 +46,23 @@ mod compile;
 mod fetch_python;
 mod generate_json_schema;
 mod render_benchmarks;
-mod resolve_cli;
-mod resolve_many;
 mod wheel_metadata;
 
 const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
 
 #[derive(Parser)]
 enum Cli {
-    /// Build a source distribution into a wheel
+    /// Build a source distribution into a wheel.
     Build(BuildArgs),
-    /// Resolve many requirements independently in parallel and report failures and successes.
-    ///
-    /// Run `scripts/popular_packages/pypi_8k_downloads.sh` once, then
-    /// ```bash
-    /// cargo run --bin uv-dev -- resolve-many scripts/popular_packages/pypi_8k_downloads.txt
-    /// ```
-    /// or
-    /// ```bash
-    /// cargo run --bin uv-dev -- resolve-many scripts/popular_packages/pypi_10k_most_dependents.txt
-    /// ```
-    ResolveMany(ResolveManyArgs),
-    /// Resolve requirements passed on the CLI
-    Resolve(ResolveCliArgs),
+    /// Display the metadata for a `.whl` at a given URL.
     WheelMetadata(WheelMetadataArgs),
+    /// Render the benchmarks.
     RenderBenchmarks(RenderBenchmarksArgs),
     /// Compile all `.py` to `.pyc` files in the tree.
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
     ClearCompile(ClearCompileArgs),
-    /// Fetch Python versions for testing
+    /// Fetch Python versions for testing.
     FetchPython(FetchPythonArgs),
     /// Generate JSON schema for the TOML configuration file.
     GenerateJSONSchema(GenerateJsonSchemaArgs),
@@ -91,12 +75,6 @@ async fn run() -> Result<()> {
         Cli::Build(args) => {
             let target = build(args).await?;
             println!("Wheel built to {}", target.display());
-        }
-        Cli::ResolveMany(args) => {
-            resolve_many::resolve_many(args).await?;
-        }
-        Cli::Resolve(args) => {
-            resolve_cli::resolve_cli(args).await?;
         }
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
