@@ -461,6 +461,10 @@ impl std::str::FromStr for Source {
                 kind: SourceKind::Path,
                 url,
             }),
+            "directory" => Ok(Source {
+                kind: SourceKind::Directory,
+                url,
+            }),
             name => Err(SourceParseError::unrecognized_source_name(s, name)),
         }
     }
