@@ -308,14 +308,20 @@ impl EditableRequirement {
 
     /// Identify the markers in an editable URL (e.g., `../editable ; python_version > "3.8"`).
     pub fn split_markers(given: &str) -> Option<(&str, &str)> {
-        // Take until we see whitespace, unless it's escaped with a backslash.
+        // Take until we see whitespace, unless it's escaped with a backslash, or within brackets
+        // (which would indicate an extra).
         let mut backslash = false;
+        let mut depth = 0;
         for (index, c) in given.char_indices() {
             if backslash {
                 backslash = false;
             } else if c == '\\' {
                 backslash = true;
-            } else if c.is_whitespace() {
+            } else if c == '[' {
+                depth += 1;
+            } else if c == ']' {
+                depth -= 1;
+            } else if depth == 0 && c.is_whitespace() {
                 return Some(given.split_at(index));
             }
         }
@@ -1416,7 +1422,6 @@ mod test {
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
-    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
     async fn parse(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
@@ -1449,7 +1454,6 @@ mod test {
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
-    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
     async fn line_endings(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
@@ -1491,8 +1495,9 @@ mod test {
 
     #[cfg(unix)]
     #[test_case(Path::new("bare-url.txt"))]
+    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
-    async fn parse_unnamed_unix(path: &Path) {
+    async fn parse_unix(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
@@ -1512,8 +1517,9 @@ mod test {
 
     #[cfg(windows)]
     #[test_case(Path::new("bare-url.txt"))]
+    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
-    async fn parse_unnamed_windows(path: &Path) {
+    async fn parse_windows(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 

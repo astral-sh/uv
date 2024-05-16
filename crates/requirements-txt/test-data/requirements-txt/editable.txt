@@ -1,17 +1,17 @@
-# OK
--e /editable[d,dev]
+# OK (standard)
+-e ./editable[d,dev]
 
-# Disallowed (whitespace between extras)
--e /editable[d, dev]
-
-# OK
--e /editable[d,dev] ; python_version >= "3.9" and python_ver
-
-# Disallowed (whitespace between extras)
--e /editable[d, dev] ; python_version >= "3.9" and python_ver
+# OK (whitespace between extras; disallowed by pip)
+-e ./editable[d, dev]
 
 # OK
--e /editable ; python_version >= "3.9" and python_ver
+-e ./editable[d,dev] ; python_version >= "3.9" and python_ver
+
+# OK (whitespace between extras; disallowed by pip)
+-e ./editable[d, dev] ; python_version >= "3.9" and python_ver
+
+# OK
+-e ./editable ; python_version >= "3.9" and python_ver
 
 # Disallowed (missing whitespace before colon)
--e /editable; python_version >= "3.9" and python_ver
+-e ./editable; python_version >= "3.9" and python_ver

@@ -15,12 +15,12 @@ RequirementsTxt {
                     password: None,
                     host: None,
                     port: None,
-                    path: "/editable",
+                    path: "/<REQUIREMENTS_DIR>/editable",
                     query: None,
                     fragment: None,
                 },
                 given: Some(
-                    "/editable",
+                    "./editable",
                 ),
             },
             extras: [
@@ -31,7 +31,7 @@ RequirementsTxt {
                     "dev",
                 ),
             ],
-            path: "/editable",
+            path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
                     "<REQUIREMENTS_DIR>/editable.txt",
@@ -47,37 +47,12 @@ RequirementsTxt {
                     password: None,
                     host: None,
                     port: None,
-                    path: "/editable[d,",
+                    path: "/<REQUIREMENTS_DIR>/editable",
                     query: None,
                     fragment: None,
                 },
                 given: Some(
-                    "/editable[d,",
-                ),
-            },
-            extras: [],
-            path: "/editable[d,",
-            origin: Some(
-                File(
-                    "<REQUIREMENTS_DIR>/editable.txt",
-                ),
-            ),
-        },
-        EditableRequirement {
-            url: VerbatimUrl {
-                url: Url {
-                    scheme: "file",
-                    cannot_be_a_base: false,
-                    username: "",
-                    password: None,
-                    host: None,
-                    port: None,
-                    path: "/editable",
-                    query: None,
-                    fragment: None,
-                },
-                given: Some(
-                    "/editable",
+                    "./editable",
                 ),
             },
             extras: [
@@ -88,7 +63,7 @@ RequirementsTxt {
                     "dev",
                 ),
             ],
-            path: "/editable",
+            path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
                     "<REQUIREMENTS_DIR>/editable.txt",
@@ -104,16 +79,23 @@ RequirementsTxt {
                     password: None,
                     host: None,
                     port: None,
-                    path: "/editable[d,",
+                    path: "/<REQUIREMENTS_DIR>/editable",
                     query: None,
                     fragment: None,
                 },
                 given: Some(
-                    "/editable[d,",
+                    "./editable",
                 ),
             },
-            extras: [],
-            path: "/editable[d,",
+            extras: [
+                ExtraName(
+                    "d",
+                ),
+                ExtraName(
+                    "dev",
+                ),
+            ],
+            path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
                     "<REQUIREMENTS_DIR>/editable.txt",
@@ -129,16 +111,23 @@ RequirementsTxt {
                     password: None,
                     host: None,
                     port: None,
-                    path: "/editable",
+                    path: "/<REQUIREMENTS_DIR>/editable",
                     query: None,
                     fragment: None,
                 },
                 given: Some(
-                    "/editable",
+                    "./editable",
                 ),
             },
-            extras: [],
-            path: "/editable",
+            extras: [
+                ExtraName(
+                    "d",
+                ),
+                ExtraName(
+                    "dev",
+                ),
+            ],
+            path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
                     "<REQUIREMENTS_DIR>/editable.txt",
@@ -154,16 +143,41 @@ RequirementsTxt {
                     password: None,
                     host: None,
                     port: None,
-                    path: "/editable;",
+                    path: "/<REQUIREMENTS_DIR>/editable",
                     query: None,
                     fragment: None,
                 },
                 given: Some(
-                    "/editable;",
+                    "./editable",
                 ),
             },
             extras: [],
-            path: "/editable;",
+            path: "<REQUIREMENTS_DIR>/editable",
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/editable.txt",
+                ),
+            ),
+        },
+        EditableRequirement {
+            url: VerbatimUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/<REQUIREMENTS_DIR>/editable;",
+                    query: None,
+                    fragment: None,
+                },
+                given: Some(
+                    "./editable;",
+                ),
+            },
+            extras: [],
+            path: "<REQUIREMENTS_DIR>/editable;",
             origin: Some(
                 File(
                     "<REQUIREMENTS_DIR>/editable.txt",
