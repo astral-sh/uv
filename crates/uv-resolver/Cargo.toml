@@ -57,7 +57,6 @@ tokio-stream = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 dashmap = { workspace = true }
-rayon = { workspace = true }
 
 [dev-dependencies]
 uv-interpreter = { workspace = true }
