@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
+use std::thread;
 
 use anyhow::Result;
 use dashmap::{DashMap, DashSet};
@@ -193,6 +194,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
     solver_state: Option<SolverState>,
 }
 
+/// State used by the solver task.
 struct SolverState {
     requirements: Vec<Requirement>,
     constraints: Constraints,
@@ -333,17 +335,22 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         // Run the fetcher.
         let requests_fut = self.fetch(request_stream).fuse();
 
-        // Run the solver.
+        // Spawn the solver thread.
         let solver = Solver::new(&self, solver_state);
         let (tx, rx) = tokio::sync::oneshot::channel();
-        std::thread::Builder::new()
-            .name("solver".into())
+        thread::Builder::new()
+            .name("uv-resolver".into())
             .spawn(move || {
                 let result = solver.solve(request_sink);
                 tx.send(result).unwrap();
             })
             .unwrap();
-        let resolve_fut = async { rx.await.unwrap() };
+
+        let resolve_fut = async move {
+            rx.await
+                .map_err(|_| ResolveError::ChannelClosed)
+                .and_then(|result| result)
+        };
 
         // Wait for both to complete.
         match tokio::try_join!(requests_fut, resolve_fut) {
@@ -591,6 +598,10 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     }
 }
 
+/// The PubGrub solver task.
+///
+/// This solver task is spawned on a separate thread and delegates all I/O to
+/// the async thread through a channel the `InMemoryIndex`.
 struct Solver<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,

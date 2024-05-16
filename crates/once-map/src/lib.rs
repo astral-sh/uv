@@ -63,7 +63,7 @@ impl<K: Eq + Hash, V: Clone> OnceMap<K, V> {
         }
     }
 
-    /// Wait for the result of a job that is running.
+    /// Wait for the result of a job that is running, in a blocking context.
     ///
     /// Will hang if [`OnceMap::done`] isn't called for this key.
     pub fn wait_blocking(&self, key: &K) -> Option<V> {
