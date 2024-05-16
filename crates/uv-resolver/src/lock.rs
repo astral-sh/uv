@@ -3,6 +3,8 @@
 #![allow(dead_code, unreachable_code, unused_variables)]
 
 use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
 use url::Url;
@@ -17,6 +19,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::HashDigest;
+use uv_git::{GitReference, GitSha};
 use uv_normalize::PackageName;
 
 use crate::resolution::AnnotatedDist;
@@ -229,7 +232,7 @@ impl Distribution {
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
     fn to_dist(&self, _marker_env: &MarkerEnvironment, tags: &Tags) -> Dist {
         if let Some(best_wheel_index) = self.find_best_wheel(tags) {
-            return match self.id.source.kind {
+            return match &self.id.source.kind {
                 SourceKind::Registry => {
                     let wheels = self
                         .wheels
@@ -259,7 +262,7 @@ impl Distribution {
         }
 
         if let Some(sdist) = &self.sdist {
-            return match self.id.source.kind {
+            return match &self.id.source.kind {
                 SourceKind::Path => {
                     let path_dist = PathSourceDist {
                         name: self.id.name.clone(),
@@ -279,6 +282,33 @@ impl Distribution {
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
                     Dist::Source(source_dist)
                 }
+                SourceKind::Git(git) => {
+                    // Reconstruct the `GitUrl` from the `GitSource`.
+                    let mut git_url = uv_git::GitUrl::new(
+                        self.id.source.url.clone(),
+                        GitReference::from(git.kind.clone()),
+                    );
+                    if let Some(precise) = &git.precise {
+                        if let Ok(precise) = GitSha::from_str(precise) {
+                            git_url.set_precise(precise);
+                        }
+                    }
+
+                    // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                    // TODO(charlie): This shouldn't be necessary; it's only necessary because we're
+                    // still losing the `GitUrl` somewhere along the path to installation.
+                    let url = Url::from(git_url.clone());
+
+                    let git_dist = GitSourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(url),
+                        git: Box::new(git_url),
+                        subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                    };
+                    let source_dist = distribution_types::SourceDist::Git(git_dist);
+                    Dist::Source(source_dist)
+                }
+
                 // TODO: Handle other kinds of sources.
                 _ => todo!(),
             };
@@ -451,14 +481,17 @@ impl Source {
     }
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
-        // TODO(konsti): Fill in the Git revision details. GitSource and GitSourceDist are
-        // slightly mismatched.
         Source {
             kind: SourceKind::Git(GitSource {
+                kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().map(|git_sha| git_sha.to_string()),
-                kind: GitSourceKind::DefaultBranch,
+                subdirectory: git_dist
+                    .subdirectory
+                    .as_deref()
+                    .and_then(Path::to_str)
+                    .map(ToString::to_string),
             }),
-            url: git_dist.git.repository().clone(),
+            url: locked_git_url(git_dist),
         }
     }
 }
@@ -570,6 +603,7 @@ impl SourceKind {
 )]
 pub(crate) struct GitSource {
     precise: Option<String>,
+    subdirectory: Option<String>,
     kind: GitSourceKind,
 }
 
@@ -581,18 +615,24 @@ impl GitSource {
     /// URL in place.
     fn from_url(url: &mut Url) -> GitSource {
         let mut kind = GitSourceKind::DefaultBranch;
+        let mut subdirectory = None;
         for (key, val) in url.query_pairs() {
-            kind = match &*key {
-                "tag" => GitSourceKind::Tag(val.into_owned()),
-                "branch" => GitSourceKind::Branch(val.into_owned()),
-                "rev" => GitSourceKind::Rev(val.into_owned()),
+            match &*key {
+                "tag" => kind = GitSourceKind::Tag(val.into_owned()),
+                "branch" => kind = GitSourceKind::Branch(val.into_owned()),
+                "rev" => kind = GitSourceKind::Rev(val.into_owned()),
+                "subdirectory" => subdirectory = Some(val.into_owned()),
                 _ => continue,
             };
         }
         let precise = url.fragment().map(ToString::to_string);
         url.set_query(None);
         url.set_fragment(None);
-        GitSource { precise, kind }
+        GitSource {
+            precise,
+            subdirectory,
+            kind,
+        }
     }
 }
 
@@ -693,7 +733,7 @@ impl SourceDist {
 
     fn from_git_dist(git_dist: &GitSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist {
-            url: git_dist.url.to_url(),
+            url: locked_git_url(git_dist),
             hash: hashes.first().cloned().map(Hash::from),
         }
     }
@@ -714,6 +754,80 @@ impl SourceDist {
             hash: hashes.first().cloned().map(Hash::from),
         }
     }
+}
+
+impl From<GitReference> for GitSourceKind {
+    fn from(value: GitReference) -> Self {
+        match value {
+            GitReference::Branch(branch) => GitSourceKind::Branch(branch.to_string()),
+            GitReference::Tag(tag) => GitSourceKind::Tag(tag.to_string()),
+            GitReference::ShortCommit(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::BranchOrTag(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::BranchOrTagOrCommit(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::NamedRef(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::FullCommit(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::DefaultBranch => GitSourceKind::DefaultBranch,
+        }
+    }
+}
+
+impl From<GitSourceKind> for GitReference {
+    fn from(value: GitSourceKind) -> Self {
+        match value {
+            GitSourceKind::Branch(branch) => GitReference::Branch(branch),
+            GitSourceKind::Tag(tag) => GitReference::Tag(tag),
+            GitSourceKind::Rev(rev) => GitReference::from_rev(&rev),
+            GitSourceKind::DefaultBranch => GitReference::DefaultBranch,
+        }
+    }
+}
+
+/// Construct the lockfile-compatible [`URL`] for a [`GitSourceDist`].
+fn locked_git_url(git_dist: &GitSourceDist) -> Url {
+    let mut url = git_dist.git.repository().clone();
+
+    // Clear out any existing state.
+    url.set_fragment(None);
+    url.set_query(None);
+
+    // Put the subdirectory in the query.
+    if let Some(subdirectory) = git_dist.subdirectory.as_deref().and_then(Path::to_str) {
+        url.query_pairs_mut()
+            .append_pair("subdirectory", subdirectory);
+    }
+
+    // Put the requested reference in the query.
+    match git_dist.git.reference() {
+        GitReference::Branch(branch) => {
+            url.query_pairs_mut()
+                .append_pair("branch", branch.to_string().as_str());
+        }
+        GitReference::Tag(tag) => {
+            url.query_pairs_mut()
+                .append_pair("tag", tag.to_string().as_str());
+        }
+        GitReference::ShortCommit(rev)
+        | GitReference::BranchOrTag(rev)
+        | GitReference::BranchOrTagOrCommit(rev)
+        | GitReference::NamedRef(rev)
+        | GitReference::FullCommit(rev) => {
+            url.query_pairs_mut()
+                .append_pair("rev", rev.to_string().as_str());
+        }
+        GitReference::DefaultBranch => {}
+    }
+
+    // Put the precise commit in the fragment.
+    url.set_fragment(
+        git_dist
+            .git
+            .precise()
+            .as_ref()
+            .map(GitSha::to_string)
+            .as_deref(),
+    );
+
+    url
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>

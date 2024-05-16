@@ -212,10 +212,10 @@ fn lock_git() -> Result<()> {
     [[distribution]]
     name = "anyio"
     version = "3.7.0"
-    source = "git+https://github.com/agronholm/anyio"
+    source = "git+https://github.com/agronholm/anyio?rev=3.7.0#f7a880ffac4766efb39e6fb60fc28d944f5d2f65"
 
     [distribution.sdist]
-    url = "git+https://github.com/agronholm/anyio@f7a880ffac4766efb39e6fb60fc28d944f5d2f65"
+    url = "https://github.com/agronholm/anyio?rev=3.7.0#f7a880ffac4766efb39e6fb60fc28d944f5d2f65"
 
     [[distribution.dependencies]]
     name = "exceptiongroup"
@@ -290,6 +290,22 @@ fn lock_git() -> Result<()> {
     hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475"
     "###
     );
+
+    // Install from the lockfile.
+    uv_snapshot!(context.install().arg("--unstable-uv-lock-file").arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Downloaded 4 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==3.7.0 (from https://github.com/agronholm/anyio@f7a880ffac4766efb39e6fb60fc28d944f5d2f65)
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
 
     Ok(())
 }
