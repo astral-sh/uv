@@ -31,6 +31,7 @@ RequirementsTxt {
                     "dev",
                 ),
             ],
+            marker: None,
             path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
@@ -63,6 +64,7 @@ RequirementsTxt {
                     "dev",
                 ),
             ],
+            marker: None,
             path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
@@ -95,6 +97,28 @@ RequirementsTxt {
                     "dev",
                 ),
             ],
+            marker: Some(
+                And(
+                    [
+                        Expression(
+                            Version {
+                                key: PythonVersion,
+                                specifier: VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: "3.9",
+                                },
+                            },
+                        ),
+                        Expression(
+                            String {
+                                key: OsName,
+                                operator: Equal,
+                                value: "posix",
+                            },
+                        ),
+                    ],
+                ),
+            ),
             path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
@@ -127,6 +151,28 @@ RequirementsTxt {
                     "dev",
                 ),
             ],
+            marker: Some(
+                And(
+                    [
+                        Expression(
+                            Version {
+                                key: PythonVersion,
+                                specifier: VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: "3.9",
+                                },
+                            },
+                        ),
+                        Expression(
+                            String {
+                                key: OsName,
+                                operator: Equal,
+                                value: "posix",
+                            },
+                        ),
+                    ],
+                ),
+            ),
             path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
@@ -152,6 +198,28 @@ RequirementsTxt {
                 ),
             },
             extras: [],
+            marker: Some(
+                And(
+                    [
+                        Expression(
+                            Version {
+                                key: PythonVersion,
+                                specifier: VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: "3.9",
+                                },
+                            },
+                        ),
+                        Expression(
+                            String {
+                                key: OsName,
+                                operator: Equal,
+                                value: "posix",
+                            },
+                        ),
+                    ],
+                ),
+            ),
             path: "<REQUIREMENTS_DIR>/editable",
             origin: Some(
                 File(
@@ -168,16 +236,17 @@ RequirementsTxt {
                     password: None,
                     host: None,
                     port: None,
-                    path: "<REQUIREMENTS_DIR>/editable;",
+                    path: "<REQUIREMENTS_DIR>/editable;%20python_version%20%3E=%20%223.9%22%20and%20os_name%20==%20%22posix%22",
                     query: None,
                     fragment: None,
                 },
                 given: Some(
-                    "./editable;",
+                    "./editable; python_version >= \"3.9\" and os_name == \"posix\"",
                 ),
             },
             extras: [],
-            path: "<REQUIREMENTS_DIR>/editable;",
+            marker: None,
+            path: "<REQUIREMENTS_DIR>/editable; python_version >= \"3.9\" and os_name == \"posix\"",
             origin: Some(
                 File(
                     "<REQUIREMENTS_DIR>/editable.txt",

@@ -427,6 +427,7 @@ pub(crate) async fn pip_compile(
                 url,
                 extras,
                 path,
+                marker: _,
                 origin: _,
             } = editable;
             LocalEditable { url, path, extras }
