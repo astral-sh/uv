@@ -304,7 +304,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             reporter: None,
             installed_packages,
         };
-        Ok(Self { provider, state })
+        Ok(Self { state, provider })
     }
 
     /// Set the [`Reporter`] to use for this installer.
@@ -334,7 +334,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         // Run the fetcher.
         let requests_fut = state.clone().fetch(provider.clone(), request_stream).fuse();
 
-        // Spawn the PubGrub solver task.
+        // Spawn the PubGrub solver on a dedicated thread.
         let solver = state.clone();
         let (tx, rx) = oneshot::channel();
         thread::Builder::new()

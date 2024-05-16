@@ -1,4 +1,5 @@
-use std::{str::FromStr, sync::Arc};
+use std::str::FromStr;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use tracing::trace;
