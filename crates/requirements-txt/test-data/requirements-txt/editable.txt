@@ -5,13 +5,13 @@
 -e ./editable[d, dev]
 
 # OK
--e ./editable[d,dev] ; python_version >= "3.9" and python_ver
+-e ./editable[d,dev] ; python_version >= "3.9" and os_name == "posix"
 
 # OK (whitespace between extras; disallowed by pip)
--e ./editable[d, dev] ; python_version >= "3.9" and python_ver
+-e ./editable[d, dev] ; python_version >= "3.9" and os_name == "posix"
 
 # OK
--e ./editable ; python_version >= "3.9" and python_ver
+-e ./editable ; python_version >= "3.9" and os_name == "posix"
 
 # Disallowed (missing whitespace before colon)
--e ./editable; python_version >= "3.9" and python_ver
+-e ./editable; python_version >= "3.9" and os_name == "posix"

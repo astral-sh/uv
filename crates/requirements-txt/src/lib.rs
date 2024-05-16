@@ -48,7 +48,7 @@ use distribution_types::{
     ParsedUrlError, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource,
+    expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
     RequirementOrigin, Scheme, VerbatimUrl,
 };
 #[cfg(feature = "http")]
@@ -168,6 +168,8 @@ pub struct EditableRequirement {
     pub url: VerbatimUrl,
     /// The extras that should be included when resolving the editable requirements.
     pub extras: Vec<ExtraName>,
+    /// The markers such as `python_version > "3.8"` in `-e ../editable ; python_version > "3.8"`.
+    pub marker: Option<MarkerTree>,
     /// The local path to the editable.
     pub path: PathBuf,
     /// The source file containing the requirement.
@@ -199,10 +201,37 @@ impl EditableRequirement {
         origin: Option<&Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtParserError> {
-        // Identify (but discard) any markers, to match pip.
-        let given = Self::split_markers(given)
-            .map(|(requirement, _)| requirement)
-            .unwrap_or(given);
+        // Identify the markers.
+        let (given, marker) = if let Some((requirement, marker)) = Self::split_markers(given) {
+            let marker = MarkerTree::from_str(marker).map_err(|err| {
+                // Map from error on the markers to error on the whole requirement.
+                let err = Pep508Error {
+                    message: err.message,
+                    start: requirement.len() + err.start,
+                    len: err.len,
+                    input: given.to_string(),
+                };
+                match err.message {
+                    Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
+                        RequirementsTxtParserError::Pep508 {
+                            start: err.start,
+                            end: err.start + err.len,
+                            source: err,
+                        }
+                    }
+                    Pep508ErrorSource::UnsupportedRequirement(_) => {
+                        RequirementsTxtParserError::UnsupportedRequirement {
+                            start: err.start,
+                            end: err.start + err.len,
+                            source: err,
+                        }
+                    }
+                }
+            })?;
+            (requirement, Some(marker))
+        } else {
+            (given, None)
+        };
 
         // Identify the extras.
         let (requirement, extras) = if let Some((requirement, extras)) = Self::split_extras(given) {
@@ -279,6 +308,7 @@ impl EditableRequirement {
         Ok(Self {
             url,
             extras,
+            marker,
             path,
             origin: origin.map(Path::to_path_buf).map(RequirementOrigin::File),
         })
@@ -322,7 +352,27 @@ impl EditableRequirement {
             } else if c == ']' {
                 depth -= 1;
             } else if depth == 0 && c.is_whitespace() {
-                return Some(given.split_at(index));
+                // We found the end of the requirement; now, find the start of the markers,
+                // delimited by a semicolon.
+                let (requirement, markers) = given.split_at(index);
+
+                // Skip the whitespace.
+                for (index, c) in markers.char_indices() {
+                    if backslash {
+                        backslash = false;
+                    } else if c == '\\' {
+                        backslash = true;
+                    } else if c.is_whitespace() {
+                        continue;
+                    } else if c == ';' {
+                        // The marker starts just after the semicolon.
+                        let markers = &markers[index + 1..];
+                        return Some((requirement, markers));
+                    } else {
+                        // We saw some other character, so this isn't a marker.
+                        return None;
+                    }
+                }
             }
         }
         None
@@ -1995,6 +2045,7 @@ mod test {
                             ),
                         },
                         extras: [],
+                        marker: None,
                         path: "/foo/bar",
                         origin: Some(
                             File(
