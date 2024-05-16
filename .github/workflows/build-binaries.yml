@@ -593,11 +593,11 @@ jobs:
             .venv/bin/${{ env.MODULE_NAME }} --help
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel (manylinux)
+        if: matrix.platform.arch == 'aarch64'
         with:
           arch: aarch64
           distro: ubuntu20.04
           githubToken: ${{ github.token }}
-          if: matrix.platform.arch == 'aarch64'
           install: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip
