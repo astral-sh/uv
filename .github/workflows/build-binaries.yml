@@ -579,6 +579,9 @@ jobs:
           args: --release --locked --out dist --features self-update
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || 'stable' }}
+      - name: Retag wheel
+        if: matrix.platform.target == 'aarch64-unknown-linux-musl'
+        run: pipx run wheel tags --remove --platform-tag +manylinux_2_17_aarch64.manylinux2014_aarch64 uv-*-py3-none-musllinux_1_1_aarch64.whl
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
@@ -591,6 +594,19 @@ jobs:
             python -m venv .venv
             .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
+      - uses: uraimo/run-on-arch-action@v2
+        name: Test wheel (manylinux)
+        with:
+          arch: aarch64
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip
+            pip3 install -U pip
+          run: |
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
