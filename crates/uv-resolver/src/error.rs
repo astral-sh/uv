@@ -6,11 +6,10 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use distribution_types::{BuiltDist, IndexLocations, InstalledDist, ParsedUrlError, SourceDist};
-use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::Requirement;
 use uv_normalize::PackageName;
@@ -19,7 +18,9 @@ use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
-use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason, VersionsResponse};
+use crate::resolver::{
+    FxOnceMap, IncompletePackage, UnavailablePackage, UnavailableReason, VersionsResponse,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -235,8 +236,8 @@ impl NoSolutionError {
     pub(crate) fn with_available_versions(
         mut self,
         python_requirement: &PythonRequirement,
-        visited: &DashSet<PackageName>,
-        package_versions: &OnceMap<PackageName, Arc<VersionsResponse>>,
+        visited: &FxHashSet<PackageName>,
+        package_versions: &FxOnceMap<PackageName, Arc<VersionsResponse>>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {
