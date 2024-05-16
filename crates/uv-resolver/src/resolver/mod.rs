@@ -14,7 +14,8 @@ use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::oneshot;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{debug, enabled, instrument, trace, warn, Level};
 
@@ -329,15 +330,15 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         // Channel size is set large to accommodate batch prefetching.
-        let (request_sink, request_stream) = tokio::sync::mpsc::unbounded_channel();
+        let (request_sink, request_stream) = mpsc::unbounded_channel();
         let solver_state = self.solver_state.take().unwrap();
 
         // Run the fetcher.
         let requests_fut = self.fetch(request_stream).fuse();
 
-        // Spawn the solver thread.
+        // Spawn the PubGrub solver task.
         let solver = Solver::new(&self, solver_state);
-        let (tx, rx) = tokio::sync::oneshot::channel();
+        let (tx, rx) = oneshot::channel();
         thread::Builder::new()
             .name("uv-resolver".into())
             .spawn(move || {
@@ -630,7 +631,7 @@ struct Solver<InstalledPackages: InstalledPackagesProvider> {
 }
 
 impl<InstalledPackages: InstalledPackagesProvider> Solver<InstalledPackages> {
-    fn new<'a, Provider: ResolverProvider>(
+    fn new<Provider: ResolverProvider>(
         resolver: &Resolver<Provider, InstalledPackages>,
         state: SolverState,
     ) -> Self {

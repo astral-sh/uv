@@ -142,7 +142,7 @@ impl BatchPrefetcher {
             );
             prefetch_count += 1;
 
-            if index.distributions.register(candidate.version_id()) {
+            if index.distributions().register(candidate.version_id()) {
                 let request = Request::from(dist);
                 request_sink.send(request)?;
             }

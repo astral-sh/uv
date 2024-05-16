@@ -8,10 +8,10 @@ use crate::resolver::provider::{MetadataResponse, VersionsResponse};
 
 /// In-memory index of package metadata.
 #[derive(Default, Clone)]
-pub struct InMemoryIndex(Arc<InMemoryIndexState>);
+pub struct InMemoryIndex(Arc<SharedInMemoryIndex>);
 
 #[derive(Default)]
-struct InMemoryIndexState {
+struct SharedInMemoryIndex {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
     pub(crate) packages: OnceMap<PackageName, Arc<VersionsResponse>>,
