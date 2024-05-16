@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use rustc_hash::FxHashMap;
 use tracing::trace;
@@ -69,7 +69,7 @@ impl Preference {
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
 #[derive(Debug, Clone)]
-pub(crate) struct Preferences(FxHashMap<PackageName, Pin>);
+pub(crate) struct Preferences(Arc<FxHashMap<PackageName, Pin>>);
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
@@ -81,10 +81,10 @@ impl Preferences {
         preferences: PreferenceIterator,
         markers: Option<&MarkerEnvironment>,
     ) -> Self {
-        Self(
-            // TODO(zanieb): We should explicitly ensure that when a package name is seen multiple times
-            // that the newest or oldest version is preferred dependning on the resolution strategy;
-            // right now, the order is dependent on the given iterator.
+        // TODO(zanieb): We should explicitly ensure that when a package name is seen multiple times
+        // that the newest or oldest version is preferred dependning on the resolution strategy;
+        // right now, the order is dependent on the given iterator.
+        let preferences =
             preferences
                 .into_iter()
                 .filter_map(|preference| {
@@ -130,8 +130,9 @@ impl Preferences {
                         }
                     }
                 })
-                .collect(),
-        )
+                .collect();
+
+        Self(Arc::new(preferences))
     }
 
     /// Return the pinned version for a package, if any.

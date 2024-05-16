@@ -174,14 +174,14 @@ enum ResolverVersion {
 pub(crate) type SharedMap<K, V> = Arc<DashMap<K, V>>;
 pub(crate) type SharedSet<K> = Arc<DashSet<K>>;
 
-pub struct Resolver<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
+pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     preferences: Preferences,
     exclusions: Exclusions,
-    python_requirement: &'a PythonRequirement,
+    python_requirement: PythonRequirement,
     selector: CandidateSelector,
-    index: &'a InMemoryIndex,
-    installed_packages: &'a InstalledPackages,
+    index: InMemoryIndex,
+    installed_packages: InstalledPackages,
     /// Incompatibilities for packages that are entirely unavailable.
     unavailable_packages: SharedMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
@@ -190,10 +190,10 @@ pub struct Resolver<'a, Provider: ResolverProvider, InstalledPackages: Installed
     visited: SharedSet<PackageName>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
-    solver_state: Option<SolverState<'a>>,
+    solver_state: Option<SolverState>,
 }
 
-struct SolverState<'a> {
+struct SolverState {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
@@ -201,13 +201,13 @@ struct SolverState<'a> {
     urls: Urls,
     locals: Locals,
     dependency_mode: DependencyMode,
-    hasher: &'a HashStrategy,
+    hasher: HashStrategy,
     /// When not set, the resolver is in "universal" mode.
-    markers: Option<&'a MarkerEnvironment>,
+    markers: Option<MarkerEnvironment>,
 }
 
 impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
-    Resolver<'a, DefaultResolverProvider<'a, Context>, InstalledPackages>
+    Resolver<DefaultResolverProvider<'a, Context>, InstalledPackages>
 {
     /// Initialize a new resolver using the default backend doing real requests.
     ///
@@ -238,7 +238,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,
         build_context: &'a Context,
-        installed_packages: &'a InstalledPackages,
+        installed_packages: InstalledPackages,
         database: DistributionDatabase<'a, Context>,
     ) -> Result<Self, ResolveError> {
         let provider = DefaultResolverProvider::new(
@@ -266,23 +266,24 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
     }
 }
 
-impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
-    Resolver<'a, Provider, InstalledPackages>
+impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
+    Resolver<Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
     #[allow(clippy::too_many_arguments)]
     pub fn new_custom_io(
         manifest: Manifest,
         options: Options,
-        hasher: &'a HashStrategy,
-        markers: Option<&'a MarkerEnvironment>,
-        python_requirement: &'a PythonRequirement,
-        index: &'a InMemoryIndex,
+        hasher: &HashStrategy,
+        markers: Option<&MarkerEnvironment>,
+        python_requirement: &PythonRequirement,
+        index: &InMemoryIndex,
         provider: Provider,
-        installed_packages: &'a InstalledPackages,
+        installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
         let selector = CandidateSelector::for_resolution(options, &manifest, markers);
         let solver_state = SolverState {
+            hasher: hasher.clone(),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers, options.dependency_mode)?,
             locals: Locals::from_manifest(&manifest, markers, options.dependency_mode),
@@ -290,12 +291,11 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
             constraints: manifest.constraints,
             overrides: manifest.overrides,
             editables: Editables::from_requirements(manifest.editables),
-            hasher,
-            markers,
+            markers: markers.cloned(),
         };
 
         Ok(Self {
-            index,
+            index: index.clone(),
             unavailable_packages: SharedMap::default(),
             incomplete_packages: SharedMap::default(),
             visited: SharedSet::default(),
@@ -303,7 +303,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
             project: manifest.project,
             preferences: Preferences::from_iter(manifest.preferences, markers),
             exclusions: manifest.exclusions,
-            python_requirement,
+            python_requirement: python_requirement.clone(),
             reporter: None,
             provider,
             installed_packages,
@@ -334,9 +334,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
         let requests_fut = self.fetch(request_stream).fuse();
 
         // Run the solver.
-        #[allow(unsafe_code)]
-        let solver: Solver<'static, InstalledPackages> =
-            unsafe { std::mem::transmute(Solver::new(&self, solver_state)) };
+        let solver = Solver::new(&self, solver_state);
         let (tx, rx) = tokio::sync::oneshot::channel();
         std::thread::Builder::new()
             .name("solver".into())
@@ -358,12 +356,12 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 Err(if let ResolveError::NoSolution(err) = err {
                     ResolveError::NoSolution(
                         err.with_available_versions(
-                            self.python_requirement,
+                            &self.python_requirement,
                             &self.visited,
-                            &self.index.packages,
+                            self.index.packages(),
                         )
                         .with_selector(self.selector.clone())
-                        .with_python_requirement(self.python_requirement)
+                        .with_python_requirement(&self.python_requirement)
                         .with_index_locations(self.provider.index_locations())
                         .with_unavailable_packages(&self.unavailable_packages)
                         .with_incomplete_packages(&self.incomplete_packages),
@@ -389,12 +387,12 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 Some(Response::Package(package_name, version_map)) => {
                     trace!("Received package metadata for: {package_name}");
                     self.index
-                        .packages
+                        .packages()
                         .done(package_name, Arc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
-                    self.index.distributions.done(
+                    self.index.distributions().done(
                         dist.version_id(),
                         Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
                     );
@@ -414,7 +412,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         _ => {}
                     }
                     self.index
-                        .distributions
+                        .distributions()
                         .done(dist.version_id(), Arc::new(metadata));
                 }
                 Some(Response::Dist {
@@ -432,7 +430,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                         _ => {}
                     }
                     self.index
-                        .distributions
+                        .distributions()
                         .done(dist.version_id(), Arc::new(metadata));
                 }
                 None => {}
@@ -494,7 +492,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 // Wait for the package metadata to become available.
                 let versions_response = self
                     .index
-                    .packages
+                    .packages()
                     .wait(&package_name)
                     .await
                     .ok_or(ResolveError::Unregistered)?;
@@ -529,7 +527,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                     &range,
                     version_map,
                     &self.preferences,
-                    self.installed_packages,
+                    &self.installed_packages,
                     &self.exclusions,
                 ) else {
                     return Ok(None);
@@ -541,7 +539,7 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
                 };
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions.register(candidate.version_id()) {
+                if self.index.distributions().register(candidate.version_id()) {
                     let dist = dist.for_resolution().to_owned();
 
                     let response = match dist {
@@ -593,24 +591,24 @@ impl<'a, Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvide
     }
 }
 
-struct Solver<'a, InstalledPackages: InstalledPackagesProvider> {
+struct Solver<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
-    preferences: &'a Preferences,
-    exclusions: &'a Exclusions,
+    preferences: Preferences,
+    exclusions: Exclusions,
     editables: Editables,
     urls: Urls,
     locals: Locals,
     dependency_mode: DependencyMode,
-    hasher: &'a HashStrategy,
+    hasher: HashStrategy,
     /// When not set, the resolver is in "universal" mode.
-    markers: Option<&'a MarkerEnvironment>,
+    markers: Option<MarkerEnvironment>,
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
-    index: &'a InMemoryIndex,
-    installed_packages: &'a InstalledPackages,
+    index: InMemoryIndex,
+    installed_packages: InstalledPackages,
     /// Incompatibilities for packages that are entirely unavailable.
     unavailable_packages: SharedMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
@@ -620,13 +618,12 @@ struct Solver<'a, InstalledPackages: InstalledPackagesProvider> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPackages> {
-    fn new<Provider: ResolverProvider>(
-        resolver: &'a Resolver<'a, Provider, InstalledPackages>,
-        state: SolverState<'a>,
+impl<InstalledPackages: InstalledPackagesProvider> Solver<InstalledPackages> {
+    fn new<'a, Provider: ResolverProvider>(
+        resolver: &Resolver<Provider, InstalledPackages>,
+        state: SolverState,
     ) -> Self {
         Solver {
-            project: resolver.project.clone(),
             requirements: state.requirements,
             constraints: state.constraints,
             overrides: state.overrides,
@@ -636,12 +633,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
             dependency_mode: state.dependency_mode,
             hasher: state.hasher,
             markers: state.markers,
-            preferences: &resolver.preferences,
-            exclusions: &resolver.exclusions,
+            project: resolver.project.clone(),
+            preferences: resolver.preferences.clone(),
+            exclusions: resolver.exclusions.clone(),
             python_requirement: resolver.python_requirement.clone(),
             selector: resolver.selector.clone(),
-            index: resolver.index,
-            installed_packages: resolver.installed_packages,
+            index: resolver.index.clone(),
+            installed_packages: resolver.installed_packages.clone(),
             unavailable_packages: resolver.unavailable_packages.clone(),
             incomplete_packages: resolver.incomplete_packages.clone(),
             visited: resolver.visited.clone(),
@@ -696,8 +694,8 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                 return ResolutionGraph::from_state(
                     &selection,
                     &state.pins,
-                    &self.index.packages,
-                    &self.index.distributions,
+                    self.index.packages(),
+                    self.index.distributions(),
                     &state.pubgrub,
                     &self.preferences,
                     self.editables.clone(),
@@ -808,7 +806,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                 &version,
                 term_intersection.unwrap_positive(),
                 &request_sink,
-                self.index,
+                &self.index,
                 &self.selector,
             )?;
 
@@ -897,7 +895,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                 }
 
                 // Emit a request to fetch the metadata for this package.
-                if self.index.packages.register(name.clone()) {
+                if self.index.packages().register(name.clone()) {
                     request_sink.send(Request::Package(name.clone()))?;
                 }
             }
@@ -914,7 +912,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
 
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
-                if self.index.distributions.register(dist.version_id()) {
+                if self.index.distributions().register(dist.version_id()) {
                     request_sink.send(Request::Dist(dist))?;
                 }
             }
@@ -946,7 +944,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
     #[instrument(skip_all, fields(%package))]
     fn choose_version(
         &self,
-        package: &'a PubGrubPackage,
+        package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
         request_sink: &UnboundedSender<Request>,
@@ -1007,7 +1005,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                 let dist = PubGrubDistribution::from_url(package_name, url);
                 let response = self
                     .index
-                    .distributions
+                    .distributions()
                     .wait_blocking(&dist.version_id())
                     .ok_or(ResolveError::Unregistered)?;
 
@@ -1070,7 +1068,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
-                    .packages
+                    .packages()
                     .wait_blocking(package_name)
                     .ok_or(ResolveError::Unregistered)?;
                 self.visited.insert(package_name.clone());
@@ -1102,7 +1100,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                     range,
                     version_maps,
                     &self.preferences,
-                    self.installed_packages,
+                    &self.installed_packages,
                     &self.exclusions,
                 ) else {
                     // Short circuit: we couldn't find _any_ versions for a package.
@@ -1145,7 +1143,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
 
                 // Emit a request to fetch the metadata for this version.
                 if matches!(package, PubGrubPackage::Package(_, _, _)) {
-                    if self.index.distributions.register(candidate.version_id()) {
+                    if self.index.distributions().register(candidate.version_id()) {
                         let request = Request::from(dist.for_resolution());
                         request_sink.send(request)?;
                     }
@@ -1176,7 +1174,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                     None,
                     &self.urls,
                     &self.locals,
-                    self.markers,
+                    self.markers.as_ref(),
                 );
 
                 let mut dependencies = match dependencies {
@@ -1224,7 +1222,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
 
                     // Add any constraints.
                     for constraint in self.constraints.get(&metadata.name).into_iter().flatten() {
-                        if constraint.evaluate_markers(self.markers, &[]) {
+                        if constraint.evaluate_markers(self.markers.as_ref(), &[]) {
                             let PubGrubRequirement { package, version } =
                                 PubGrubRequirement::from_constraint(
                                     constraint,
@@ -1256,7 +1254,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
 
                         // Wait for the metadata to be available.
                         self.index
-                            .distributions
+                            .distributions()
                             .wait_blocking(&version_id)
                             .ok_or(ResolveError::Unregistered)?;
                     }
@@ -1280,7 +1278,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                         extra.as_ref(),
                         &self.urls,
                         &self.locals,
-                        self.markers,
+                        self.markers.as_ref(),
                     )?;
 
                     for (dep_package, dep_version) in dependencies.iter() {
@@ -1322,7 +1320,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                 // Wait for the metadata to be available.
                 let response = self
                     .index
-                    .distributions
+                    .distributions()
                     .wait_blocking(&version_id)
                     .ok_or(ResolveError::Unregistered)?;
 
@@ -1390,7 +1388,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> Solver<'a, InstalledPacka
                     extra.as_ref(),
                     &self.urls,
                     &self.locals,
-                    self.markers,
+                    self.markers.as_ref(),
                 )?;
 
                 for (dep_package, dep_version) in dependencies.iter() {

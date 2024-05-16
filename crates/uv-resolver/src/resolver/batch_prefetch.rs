@@ -65,7 +65,7 @@ impl BatchPrefetcher {
 
         // This is immediate, we already fetched the version map.
         let versions_response = index
-            .packages
+            .packages()
             .wait_blocking(package_name)
             .ok_or(ResolveError::Unregistered)?;
 
@@ -141,6 +141,7 @@ impl BatchPrefetcher {
                 dist
             );
             prefetch_count += 1;
+
             if index.distributions.register(candidate.version_id()) {
                 let request = Request::from(dist);
                 request_sink.send(request)?;

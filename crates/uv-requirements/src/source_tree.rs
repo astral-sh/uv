@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::stream::FuturesOrdered;
@@ -117,17 +118,18 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = VersionId::from_url(source.url());
-            if let Some(archive) = self
-                .index
-                .get_metadata(&id)
-                .as_deref()
-                .and_then(|response| {
-                    if let MetadataResponse::Found(archive) = response {
-                        Some(archive)
-                    } else {
-                        None
-                    }
-                })
+            if let Some(archive) =
+                self.index
+                    .distributions()
+                    .get(&id)
+                    .as_deref()
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive) = response {
+                            Some(archive)
+                        } else {
+                            None
+                        }
+                    })
             {
                 // If the metadata is already in the index, return it.
                 archive.metadata.clone()
@@ -138,7 +140,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
                 // Insert the metadata into the index.
                 self.index
-                    .insert_metadata(id, MetadataResponse::Found(archive.clone()));
+                    .distributions()
+                    .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
 
                 archive.metadata
             }

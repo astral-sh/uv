@@ -23,7 +23,7 @@ use crate::satisfies::RequirementSatisfaction;
 /// An index over the packages installed in an environment.
 ///
 /// Packages are indexed by both name and (for editable installs) URL.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SitePackages {
     venv: PythonEnvironment,
     /// The vector of all installed distributions. The `by_name` and `by_url` indices index into

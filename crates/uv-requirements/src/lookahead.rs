@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::Arc};
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
@@ -197,17 +197,18 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let requires_dist = {
             let id = dist.version_id();
-            if let Some(archive) = self
-                .index
-                .get_metadata(&id)
-                .as_deref()
-                .and_then(|response| {
-                    if let MetadataResponse::Found(archive, ..) = response {
-                        Some(archive)
-                    } else {
-                        None
-                    }
-                })
+            if let Some(archive) =
+                self.index
+                    .distributions()
+                    .get(&id)
+                    .as_deref()
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive, ..) = response {
+                            Some(archive)
+                        } else {
+                            None
+                        }
+                    })
             {
                 // If the metadata is already in the index, return it.
                 archive
@@ -234,7 +235,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
                 // Insert the metadata into the index.
                 self.index
-                    .insert_metadata(id, MetadataResponse::Found(archive));
+                    .distributions()
+                    .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                 requires_dist
                     .into_iter()

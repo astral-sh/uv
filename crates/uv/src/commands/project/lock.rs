@@ -111,7 +111,7 @@ pub(crate) async fn lock(
     // Resolve the requirements.
     let resolution = project::resolve(
         spec,
-        &EmptyInstalledPackages,
+        EmptyInstalledPackages,
         &hasher,
         &interpreter,
         tags,

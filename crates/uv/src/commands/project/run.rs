@@ -292,7 +292,7 @@ async fn update_environment(
     // Resolve the requirements.
     let resolution = match project::resolve(
         spec,
-        &site_packages,
+        site_packages.clone(),
         &hasher,
         &interpreter,
         tags,

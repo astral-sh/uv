@@ -145,7 +145,7 @@ async fn resolve(
         &index,
         &hashes,
         &build_context,
-        &installed_packages,
+        installed_packages,
         DistributionDatabase::new(&client, &build_context, concurrency.downloads),
     )?;
     Ok(resolver.resolve().await?)

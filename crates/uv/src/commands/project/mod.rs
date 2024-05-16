@@ -115,7 +115,7 @@ pub(crate) fn init(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     spec: RequirementsSpecification,
-    installed_packages: &InstalledPackages,
+    installed_packages: InstalledPackages,
     hasher: &HashStrategy,
     interpreter: &Interpreter,
     tags: &Tags,

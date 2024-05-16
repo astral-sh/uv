@@ -7,8 +7,11 @@ use uv_normalize::PackageName;
 use crate::resolver::provider::{MetadataResponse, VersionsResponse};
 
 /// In-memory index of package metadata.
+#[derive(Default, Clone)]
+pub struct InMemoryIndex(Arc<InMemoryIndexState>);
+
 #[derive(Default)]
-pub struct InMemoryIndex {
+struct InMemoryIndexState {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
     pub(crate) packages: OnceMap<PackageName, Arc<VersionsResponse>>,
@@ -19,22 +22,12 @@ pub struct InMemoryIndex {
 
 impl InMemoryIndex {
     /// Insert a [`VersionsResponse`] into the index.
-    pub fn insert_package(&self, package_name: PackageName, response: VersionsResponse) {
-        self.packages.done(package_name, Arc::new(response));
+    pub fn packages(&self) -> &OnceMap<PackageName, Arc<VersionsResponse>> {
+        &self.0.packages
     }
 
     /// Insert a [`Metadata23`] into the index.
-    pub fn insert_metadata(&self, version_id: VersionId, response: MetadataResponse) {
-        self.distributions.done(version_id, Arc::new(response));
-    }
-
-    /// Get the [`VersionsResponse`] for a given package name, without waiting.
-    pub fn get_package(&self, package_name: &PackageName) -> Option<Arc<VersionsResponse>> {
-        self.packages.get(package_name)
-    }
-
-    /// Get the [`MetadataResponse`] for a given package ID, without waiting.
-    pub fn get_metadata(&self, version_id: &VersionId) -> Option<Arc<MetadataResponse>> {
-        self.distributions.get(version_id)
+    pub fn distributions(&self) -> &OnceMap<VersionId, Arc<MetadataResponse>> {
+        &self.0.distributions
     }
 }

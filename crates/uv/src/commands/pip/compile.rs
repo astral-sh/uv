@@ -545,7 +545,7 @@ pub(crate) async fn pip_compile(
         &top_level_index,
         &hasher,
         &build_dispatch,
-        &EmptyInstalledPackages,
+        EmptyInstalledPackages,
         DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )?
     .with_reporter(ResolverReporter::from(printer));

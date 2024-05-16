@@ -128,12 +128,13 @@ pub trait SourceBuildTrait {
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]
-pub trait InstalledPackagesProvider: Send + Sync + 'static {
+pub trait InstalledPackagesProvider: Clone + Send + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
 }
 
 /// An [`InstalledPackagesProvider`] with no packages in it.
+#[derive(Clone)]
 pub struct EmptyInstalledPackages;
 
 impl InstalledPackagesProvider for EmptyInstalledPackages {

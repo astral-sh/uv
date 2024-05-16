@@ -458,7 +458,7 @@ impl ResolutionGraph {
                 VersionOrUrlRef::Url(verbatim_url) => VersionId::from_url(verbatim_url.raw()),
             };
             let res = index
-                .distributions
+                .distributions()
                 .get(&version_id)
                 .expect("every package in resolution graph has metadata");
             let MetadataResponse::Found(archive, ..) = &*res else {

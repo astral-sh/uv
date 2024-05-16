@@ -153,7 +153,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.index,
             &HashStrategy::None,
             self,
-            &EmptyInstalledPackages,
+            EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
         let graph = resolver.resolve().await.with_context(|| {
