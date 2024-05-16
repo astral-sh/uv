@@ -53,7 +53,7 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl) -> VerbatimParsedUrl {
         .reference()
         .as_str()
         .map_or(GitReference::DefaultBranch, |rev| {
-            GitReference::from_rev(rev)
+            GitReference::from_rev(rev.to_string())
         });
     let git_url = GitUrl::new(git_url.repository().clone(), lowered_git_ref);
 

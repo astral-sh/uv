@@ -874,7 +874,7 @@ impl From<GitSourceKind> for GitReference {
         match value {
             GitSourceKind::Branch(branch) => GitReference::Branch(branch),
             GitSourceKind::Tag(tag) => GitReference::Tag(tag),
-            GitSourceKind::Rev(rev) => GitReference::from_rev(&rev),
+            GitSourceKind::Rev(rev) => GitReference::from_rev(rev),
             GitSourceKind::DefaultBranch => GitReference::DefaultBranch,
         }
     }
