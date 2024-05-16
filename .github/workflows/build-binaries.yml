@@ -576,12 +576,9 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
-          args: --release --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17 musllinux_1_1' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || 'stable' }}
-      - name: Retag wheel
-        if: matrix.platform.target == 'aarch64-unknown-linux-musl'
-        run: pipx run wheel tags --remove --platform-tag +manylinux_2_17_aarch64.manylinux2014_aarch64 uv-*-py3-none-musllinux_1_1_aarch64.whl
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
