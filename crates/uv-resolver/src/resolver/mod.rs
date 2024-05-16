@@ -14,9 +14,9 @@ use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, enabled, instrument, trace, warn, Level};
 
 use distribution_types::{
@@ -340,7 +340,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         // Channel size is set large to accommodate batch prefetching.
-        let (request_sink, request_stream) = mpsc::unbounded_channel();
+        let (request_sink, request_stream) = mpsc::channel(300);
 
         // Run the fetcher.
         let requests_fut = state.clone().fetch(provider.clone(), request_stream).fuse();
@@ -396,7 +396,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
     #[instrument(skip_all)]
     fn solve(
         self: Arc<Self>,
-        request_sink: UnboundedSender<Request>,
+        request_sink: Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
         let mut prefetcher = BatchPrefetcher::default();
@@ -627,7 +627,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
     fn visit_package(
         &self,
         package: &PubGrubPackage,
-        request_sink: &UnboundedSender<Request>,
+        request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {}
@@ -641,7 +641,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
 
                 // Emit a request to fetch the metadata for this package.
                 if self.index.packages().register(name.clone()) {
-                    request_sink.send(Request::Package(name.clone()))?;
+                    request_sink.blocking_send(Request::Package(name.clone()))?;
                 }
             }
             PubGrubPackage::Package(name, _extra, Some(url)) => {
@@ -658,7 +658,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
                 if self.index.distributions().register(dist.version_id()) {
-                    request_sink.send(Request::Dist(dist))?;
+                    request_sink.blocking_send(Request::Dist(dist))?;
                 }
             }
         }
@@ -669,7 +669,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
     /// metadata for all of the packages in parallel.
     fn pre_visit<'data>(
         packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
-        request_sink: &UnboundedSender<Request>,
+        request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
@@ -677,7 +677,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
             let PubGrubPackage::Package(package_name, None, None) = package else {
                 continue;
             };
-            request_sink.send(Request::Prefetch(package_name.clone(), range.clone()))?;
+            request_sink.blocking_send(Request::Prefetch(package_name.clone(), range.clone()))?;
         }
         Ok(())
     }
@@ -692,7 +692,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
-        request_sink: &UnboundedSender<Request>,
+        request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         match package {
             PubGrubPackage::Root(_) => Ok(Some(ResolverVersion::Available(MIN_VERSION.clone()))),
@@ -890,7 +890,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
                 if matches!(package, PubGrubPackage::Package(_, _, _)) {
                     if self.index.distributions().register(candidate.version_id()) {
                         let request = Request::from(dist.for_resolution());
-                        request_sink.send(request)?;
+                        request_sink.blocking_send(request)?;
                     }
                 }
 
@@ -906,7 +906,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
         package: &PubGrubPackage,
         version: &Version,
         priorities: &mut PubGrubPriorities,
-        request_sink: &UnboundedSender<Request>,
+        request_sink: &Sender<Request>,
     ) -> Result<Dependencies, ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {
@@ -1167,9 +1167,9 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
     async fn fetch<Provider: ResolverProvider>(
         self: Arc<Self>,
         provider: Arc<Provider>,
-        request_stream: UnboundedReceiver<Request>,
+        request_stream: Receiver<Request>,
     ) -> Result<(), ResolveError> {
-        let mut response_stream = UnboundedReceiverStream::new(request_stream)
+        let mut response_stream = ReceiverStream::new(request_stream)
             .map(|request| self.process_request(request, &*provider).boxed_local())
             // Allow as many futures as possible to start in the background.
             // Backpressure is provided by at a more granular level by `DistributionDatabase`

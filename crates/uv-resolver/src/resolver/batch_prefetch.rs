@@ -3,7 +3,7 @@ use std::cmp::min;
 use itertools::Itertools;
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
 use distribution_types::DistributionMetadata;
@@ -49,7 +49,7 @@ impl BatchPrefetcher {
         next: &PubGrubPackage,
         version: &Version,
         current_range: &Range<Version>,
-        request_sink: &UnboundedSender<Request>,
+        request_sink: &Sender<Request>,
         index: &InMemoryIndex,
         selector: &CandidateSelector,
     ) -> anyhow::Result<(), ResolveError> {
@@ -144,7 +144,7 @@ impl BatchPrefetcher {
 
             if index.distributions().register(candidate.version_id()) {
                 let request = Request::from(dist);
-                request_sink.send(request)?;
+                request_sink.blocking_send(request)?;
             }
         }
 
