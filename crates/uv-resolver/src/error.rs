@@ -8,6 +8,7 @@ use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
 use rustc_hash::FxHashMap;
 
+use dashmap::{DashMap, DashSet};
 use distribution_types::{BuiltDist, IndexLocations, InstalledDist, ParsedUrlError, SourceDist};
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -18,10 +19,7 @@ use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
-use crate::resolver::{
-    IncompletePackage, SharedMap, SharedSet, UnavailablePackage, UnavailableReason,
-    VersionsResponse,
-};
+use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason, VersionsResponse};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -237,7 +235,7 @@ impl NoSolutionError {
     pub(crate) fn with_available_versions(
         mut self,
         python_requirement: &PythonRequirement,
-        visited: &SharedSet<PackageName>,
+        visited: &DashSet<PackageName>,
         package_versions: &OnceMap<PackageName, Arc<VersionsResponse>>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
@@ -301,7 +299,7 @@ impl NoSolutionError {
     #[must_use]
     pub(crate) fn with_unavailable_packages(
         mut self,
-        unavailable_packages: &SharedMap<PackageName, UnavailablePackage>,
+        unavailable_packages: &DashMap<PackageName, UnavailablePackage>,
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
@@ -319,7 +317,7 @@ impl NoSolutionError {
     #[must_use]
     pub(crate) fn with_incomplete_packages(
         mut self,
-        incomplete_packages: &SharedMap<PackageName, SharedMap<Version, IncompletePackage>>,
+        incomplete_packages: &DashMap<PackageName, DashMap<Version, IncompletePackage>>,
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {

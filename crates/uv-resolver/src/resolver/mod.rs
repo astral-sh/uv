@@ -173,25 +173,14 @@ enum ResolverVersion {
     Unavailable(Version, UnavailableVersion),
 }
 
-pub(crate) type SharedMap<K, V> = Arc<DashMap<K, V>>;
-pub(crate) type SharedSet<K> = Arc<DashSet<K>>;
-
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
-    state: Shared<InstalledPackages>,
+    state: ResolverState<InstalledPackages>,
     provider: Provider,
 }
 
-impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> Deref
-    for Resolver<Provider, InstalledPackages>
-{
-    type Target = Shared<InstalledPackages>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.state
-    }
-}
-
-pub struct Shared<InstalledPackages: InstalledPackagesProvider> {
+/// State that is shared between the prefetcher and the PubGrub solver during
+/// resolution.
+struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
@@ -210,11 +199,11 @@ pub struct Shared<InstalledPackages: InstalledPackagesProvider> {
     index: InMemoryIndex,
     installed_packages: InstalledPackages,
     /// Incompatibilities for packages that are entirely unavailable.
-    unavailable_packages: SharedMap<PackageName, UnavailablePackage>,
+    unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: SharedMap<PackageName, SharedMap<Version, IncompletePackage>>,
+    incomplete_packages: DashMap<PackageName, DashMap<Version, IncompletePackage>>,
     /// The set of all registry-based packages visited during resolution.
-    visited: SharedSet<PackageName>,
+    visited: DashSet<PackageName>,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -293,11 +282,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
-        let state = Shared {
+        let state = ResolverState {
             index: index.clone(),
-            unavailable_packages: SharedMap::default(),
-            incomplete_packages: SharedMap::default(),
-            visited: SharedSet::default(),
+            unavailable_packages: DashMap::default(),
+            incomplete_packages: DashMap::default(),
+            visited: DashSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers, options.dependency_mode)?,
@@ -324,7 +313,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let reporter = Arc::new(reporter);
 
         Self {
-            state: Shared {
+            state: ResolverState {
                 reporter: Some(reporter.clone()),
                 ..self.state
             },
@@ -391,7 +380,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     }
 }
 
-impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
+impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackages> {
     /// Run the PubGrub solver.
     #[instrument(skip_all)]
     fn solve(
@@ -400,7 +389,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
         let mut prefetcher = BatchPrefetcher::default();
-        let mut state = ResolverState {
+        let mut state = SolveState {
             pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
             next: root,
             pins: FilePins::default(),
@@ -1404,7 +1393,7 @@ impl<InstalledPackages: InstalledPackagesProvider> Shared<InstalledPackages> {
 
 /// State that is used during unit propagation in the resolver.
 #[derive(Clone)]
-struct ResolverState {
+struct SolveState {
     /// The internal state used by the resolver.
     ///
     /// Note that not all parts of this state are strictly internal. For
