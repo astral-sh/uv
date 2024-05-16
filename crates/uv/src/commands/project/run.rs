@@ -292,6 +292,7 @@ async fn update_environment(
     // Resolve the requirements.
     let resolution = match project::resolve(
         spec,
+        &site_packages,
         &hasher,
         &interpreter,
         tags,
@@ -316,7 +317,7 @@ async fn update_environment(
     // Sync the environment.
     project::install(
         &resolution,
-        SitePackages::from_executable(&venv)?,
+        site_packages,
         &no_binary,
         link_mode,
         &index_locations,

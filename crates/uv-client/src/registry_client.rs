@@ -369,27 +369,30 @@ impl RegistryClient {
     #[instrument(skip_all, fields(% built_dist))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata23, Error> {
         let metadata = match &built_dist {
-            BuiltDist::Registry(wheel) => match &wheel.file.url {
-                FileLocation::RelativeUrl(base, url) => {
-                    let url = pypi_types::base_url_join_relative(base, url)
-                        .map_err(ErrorKind::JoinRelativeError)?;
-                    self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
-                        .await?
+            BuiltDist::Registry(wheels) => {
+                let wheel = wheels.best_wheel();
+                match &wheel.file.url {
+                    FileLocation::RelativeUrl(base, url) => {
+                        let url = pypi_types::base_url_join_relative(base, url)
+                            .map_err(ErrorKind::JoinRelativeError)?;
+                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
+                            .await?
+                    }
+                    FileLocation::AbsoluteUrl(url) => {
+                        let url = Url::parse(url).map_err(ErrorKind::UrlParseError)?;
+                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
+                            .await?
+                    }
+                    FileLocation::Path(path) => {
+                        let file = fs_err::tokio::File::open(&path)
+                            .await
+                            .map_err(ErrorKind::Io)?;
+                        let reader = tokio::io::BufReader::new(file);
+                        read_metadata_async_seek(&wheel.filename, built_dist.to_string(), reader)
+                            .await?
+                    }
                 }
-                FileLocation::AbsoluteUrl(url) => {
-                    let url = Url::parse(url).map_err(ErrorKind::UrlParseError)?;
-                    self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
-                        .await?
-                }
-                FileLocation::Path(path) => {
-                    let file = fs_err::tokio::File::open(&path)
-                        .await
-                        .map_err(ErrorKind::Io)?;
-                    let reader = tokio::io::BufReader::new(file);
-                    read_metadata_async_seek(&wheel.filename, built_dist.to_string(), reader)
-                        .await?
-                }
-            },
+            }
             BuiltDist::DirectUrl(wheel) => {
                 self.wheel_metadata_no_pep658(
                     &wheel.filename,

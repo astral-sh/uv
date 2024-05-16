@@ -374,7 +374,7 @@ pub fn python_path_with_versions(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())?;
+    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())?.init()?;
     let selected_pythons = python_versions
         .iter()
         .flat_map(|python_version| {

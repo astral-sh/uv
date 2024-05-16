@@ -3,7 +3,9 @@ use std::path::Path;
 use thiserror::Error;
 
 use distribution_types::ParsedUrlError;
-use pep508_rs::{Pep508Error, Pep508ErrorSource, RequirementOrigin, UnnamedRequirement};
+use pep508_rs::{
+    Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
+};
 
 /// A requirement specifier in a `requirements.txt` file.
 ///
@@ -52,6 +54,7 @@ impl RequirementsTxtRequirement {
                     Ok(Self::Unnamed(UnnamedRequirement::parse(
                         input,
                         &working_dir,
+                        &mut TracingReporter,
                     )?))
                 }
                 _ => Err(RequirementsTxtRequirementError::Pep508(err)),

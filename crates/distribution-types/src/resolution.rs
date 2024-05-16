@@ -74,9 +74,11 @@ impl From<&ResolvedDist> for Requirement {
     fn from(resolved_dist: &ResolvedDist) -> Self {
         let source = match resolved_dist {
             ResolvedDist::Installable(dist) => match dist {
-                Dist::Built(BuiltDist::Registry(wheel)) => RequirementSource::Registry {
+                Dist::Built(BuiltDist::Registry(wheels)) => RequirementSource::Registry {
                     specifier: pep440_rs::VersionSpecifiers::from(
-                        pep440_rs::VersionSpecifier::equals_version(wheel.filename.version.clone()),
+                        pep440_rs::VersionSpecifier::equals_version(
+                            wheels.best_wheel().filename.version.clone(),
+                        ),
                     ),
                     index: None,
                 },

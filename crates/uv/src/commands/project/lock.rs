@@ -11,7 +11,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_requirements::{ExtrasSpecification, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
-use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::project::discovery::Project;
@@ -111,6 +111,7 @@ pub(crate) async fn lock(
     // Resolve the requirements.
     let resolution = project::resolve(
         spec,
+        &EmptyInstalledPackages,
         &hasher,
         &interpreter,
         tags,

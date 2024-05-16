@@ -18,9 +18,8 @@ pub(crate) struct WheelMetadataArgs {
 }
 
 pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
-    let cache_dir = Cache::try_from(args.cache_args)?;
-
-    let client = RegistryClientBuilder::new(cache_dir.clone()).build();
+    let cache = Cache::try_from(args.cache_args)?.init()?;
+    let client = RegistryClientBuilder::new(cache).build();
 
     let filename = WheelFilename::from_str(
         args.url

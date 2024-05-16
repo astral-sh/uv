@@ -4482,7 +4482,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.1.43"
+version = "0.1.44"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4703,14 +4703,11 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "indicatif",
  "install-wheel-rs",
  "itertools 0.12.1",
  "mimalloc",
  "owo-colors",
- "pep440_rs",
  "pep508_rs",
- "petgraph",
  "poloto",
  "pretty_assertions",
  "resvg",
@@ -4730,11 +4727,9 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
- "uv-distribution",
  "uv-fs",
  "uv-installer",
  "uv-interpreter",
- "uv-normalize",
  "uv-requirements",
  "uv-resolver",
  "uv-types",
@@ -5065,15 +5060,12 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.1.43"
+version = "0.1.44"
 
 [[package]]
 name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
- "anstream",
- "clap",
- "directories",
  "fs-err",
  "itertools 0.12.1",
  "pathdiff",
@@ -5081,8 +5073,6 @@ dependencies = [
  "pypi-types",
  "thiserror",
  "tracing",
- "tracing-subscriber",
- "uv-cache",
  "uv-fs",
  "uv-interpreter",
  "uv-version",

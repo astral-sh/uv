@@ -31,6 +31,7 @@ mod exclusions;
 mod flat_index;
 mod lock;
 mod manifest;
+mod marker;
 mod options;
 mod pins;
 mod preferences;

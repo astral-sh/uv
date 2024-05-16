@@ -40,8 +40,9 @@ use unicode_width::UnicodeWidthChar;
 use url::Url;
 
 pub use marker::{
-    MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree,
-    MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
+    ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
+    MarkerTree, MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
+    StringVersion,
 };
 #[cfg(feature = "pyo3")]
 use pep440_rs::PyVersion;
@@ -220,7 +221,7 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
-type MarkerWarning = (MarkerWarningKind, String, String);
+type MarkerWarning = (MarkerWarningKind, String);
 
 #[cfg(feature = "pyo3")]
 #[pyclass(module = "pep508", name = "Requirement")]
@@ -437,16 +438,14 @@ impl<T: Pep508Url> Requirement<T> {
         let marker = match self.marker {
             Some(expression) => MarkerTree::And(vec![
                 expression,
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::Extra,
-                    operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString(extra.to_string()),
+                MarkerTree::Expression(MarkerExpression::Extra {
+                    operator: ExtraOperator::Equal,
+                    name: extra.clone(),
                 }),
             ]),
-            None => MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::Extra,
-                operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString(extra.to_string()),
+            None => MarkerTree::Expression(MarkerExpression::Extra {
+                operator: ExtraOperator::Equal,
+                name: extra.clone(),
             }),
         };
         Self {
@@ -473,19 +472,64 @@ impl Pep508Url for Url {
     }
 }
 
+/// A reporter for warnings that occur during marker parsing or evaluation.
+pub trait Reporter {
+    /// Report a warning.
+    fn report(&mut self, kind: MarkerWarningKind, warning: String);
+}
+
+impl<F> Reporter for F
+where
+    F: FnMut(MarkerWarningKind, String),
+{
+    fn report(&mut self, kind: MarkerWarningKind, warning: String) {
+        (self)(kind, warning)
+    }
+}
+
+/// A simple [`Reporter`] that logs to tracing when the `tracing` feature is enabled.
+pub struct TracingReporter;
+
+impl Reporter for TracingReporter {
+    fn report(&mut self, _kind: MarkerWarningKind, _message: String) {
+        #[cfg(feature = "tracing")]
+        {
+            tracing::warn!("{}", _message);
+        }
+    }
+}
+
 impl<T: Pep508Url> FromStr for Requirement<T> {
     type Err = Pep508Error<T>;
 
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse_pep508_requirement::<T>(&mut Cursor::new(input), None)
+        parse_pep508_requirement::<T>(&mut Cursor::new(input), None, &mut TracingReporter)
     }
 }
 
 impl<T: Pep508Url> Requirement<T> {
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
     pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error<T>> {
-        parse_pep508_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
+        parse_pep508_requirement(
+            &mut Cursor::new(input),
+            Some(working_dir.as_ref()),
+            &mut TracingReporter,
+        )
+    }
+
+    /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
+    /// with the given reporter for warnings.
+    pub fn parse_reporter(
+        input: &str,
+        working_dir: impl AsRef<Path>,
+        reporter: &mut impl Reporter,
+    ) -> Result<Self, Pep508Error<T>> {
+        parse_pep508_requirement(
+            &mut Cursor::new(input),
+            Some(working_dir.as_ref()),
+            reporter,
+        )
     }
 
     /// Convert a requirement with one URL type into one with another URL type.
@@ -925,6 +969,7 @@ fn parse_version_specifier_parentheses<T: Pep508Url>(
 fn parse_pep508_requirement<T: Pep508Url>(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
+    reporter: &mut impl Reporter,
 ) -> Result<Requirement<T>, Pep508Error<T>> {
     let start = cursor.pos();
 
@@ -997,7 +1042,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        Some(marker::parse_markers_cursor(cursor)?)
+        Some(marker::parse_markers_cursor(cursor, reporter)?)
     } else {
         None
     };
@@ -1078,10 +1123,10 @@ mod tests {
 
     use crate::cursor::Cursor;
     use crate::marker::{
-        parse_markers_cursor, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
-        MarkerValueString, MarkerValueVersion,
+        parse_markers_cursor, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+        MarkerValueVersion,
     };
-    use crate::{Requirement, VerbatimUrl, VersionOrUrl};
+    use crate::{Requirement, TracingReporter, VerbatimUrl, VersionOrUrl};
 
     fn parse_pep508_err(input: &str) -> String {
         Requirement::<VerbatimUrl>::from_str(input)
@@ -1171,10 +1216,13 @@ mod tests {
                 .into_iter()
                 .collect(),
             )),
-            marker: Some(MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
-                operator: MarkerOperator::LessThan,
-                r_value: MarkerValue::QuotedString("2.7".to_string()),
+            marker: Some(MarkerTree::Expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion,
+                specifier: VersionSpecifier::from_pattern(
+                    pep440_rs::Operator::LessThan,
+                    "2.7".parse().unwrap(),
+                )
+                .unwrap(),
             })),
             origin: None,
         };
@@ -1410,31 +1458,33 @@ mod tests {
     #[test]
     fn test_marker_parsing() {
         let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
-        let actual = parse_markers_cursor::<Url>(&mut Cursor::new(marker)).unwrap();
+        let actual =
+            parse_markers_cursor::<Url>(&mut Cursor::new(marker), &mut TracingReporter).unwrap();
         let expected = MarkerTree::And(vec![
-            MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
-                operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("2.7".to_string()),
+            MarkerTree::Expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion,
+                specifier: VersionSpecifier::from_pattern(
+                    pep440_rs::Operator::Equal,
+                    "2.7".parse().unwrap(),
+                )
+                .unwrap(),
             }),
             MarkerTree::Or(vec![
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::MarkerEnvString(MarkerValueString::SysPlatform),
+                MarkerTree::Expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("win32".to_string()),
+                    value: "win32".to_string(),
                 }),
                 MarkerTree::And(vec![
-                    MarkerTree::Expression(MarkerExpression {
-                        l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                    MarkerTree::Expression(MarkerExpression::String {
+                        key: MarkerValueString::OsName,
                         operator: MarkerOperator::Equal,
-                        r_value: MarkerValue::QuotedString("linux".to_string()),
+                        value: "linux".to_string(),
                     }),
-                    MarkerTree::Expression(MarkerExpression {
-                        l_value: MarkerValue::MarkerEnvString(
-                            MarkerValueString::ImplementationName,
-                        ),
+                    MarkerTree::Expression(MarkerExpression::String {
+                        key: MarkerValueString::ImplementationName,
                         operator: MarkerOperator::Equal,
-                        r_value: MarkerValue::QuotedString("cpython".to_string()),
+                        value: "cpython".to_string(),
                     }),
                 ]),
             ]),

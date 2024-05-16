@@ -7,8 +7,8 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
-    Dist, Hash, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    SourceDistCompatibility, WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::{TagCompatibility, Tags};
@@ -396,11 +396,11 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
-                        let dist = Dist::from_registry(
-                            DistFilename::WheelFilename(filename),
-                            file,
-                            self.index.clone(),
-                        );
+                        let dist = RegistryBuiltWheel {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                        };
                         priority_dist.insert_built(dist, hashes, compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
@@ -412,11 +412,12 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
-                        let dist = Dist::from_registry(
-                            DistFilename::SourceDistFilename(filename),
-                            file,
-                            self.index.clone(),
-                        );
+                        let dist = RegistrySourceDist {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                            wheels: vec![],
+                        };
                         priority_dist.insert_source(dist, hashes, compatibility);
                     }
                 }
@@ -474,17 +475,17 @@ impl VersionMapLazy {
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
         let hash = if self.required_hashes.is_empty() {
-            Hash::Matched
+            HashComparison::Matched
         } else {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if hashes
                 .iter()
                 .any(|hash| self.required_hashes.contains(hash))
             {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         };
 
@@ -538,17 +539,17 @@ impl VersionMapLazy {
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
         let hash = if self.required_hashes.is_empty() {
-            Hash::Matched
+            HashComparison::Matched
         } else {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if hashes
                 .iter()
                 .any(|hash| self.required_hashes.contains(hash))
             {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         };
 

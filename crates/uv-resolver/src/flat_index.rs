@@ -6,8 +6,8 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuiltDist, Dist, File, Hash, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
-    PrioritizedDist, RegistryBuiltDist, RegistrySourceDist, SourceDist, SourceDistCompatibility,
+    File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
     WheelCompatibility,
 };
 use pep440_rs::Version;
@@ -80,11 +80,11 @@ impl FlatIndex {
 
                 let compatibility =
                     Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, no_binary);
-                let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+                let dist = RegistryBuiltWheel {
                     filename,
                     file: Box::new(file),
                     index,
-                }));
+                };
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_built(dist, vec![], compatibility);
@@ -97,11 +97,12 @@ impl FlatIndex {
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility =
                     Self::source_dist_compatibility(&filename, &file.hashes, hasher, no_build);
-                let dist = Dist::Source(SourceDist::Registry(RegistrySourceDist {
+                let dist = RegistrySourceDist {
                     filename: filename.clone(),
                     file: Box::new(file),
                     index,
-                }));
+                    wheels: vec![],
+                };
                 match distributions.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_source(dist, vec![], compatibility);
@@ -134,14 +135,14 @@ impl FlatIndex {
         // Check if hashes line up
         let hash = if let HashPolicy::Validate(required) = hasher.get_package(&filename.name) {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if required.iter().any(|hash| hashes.contains(hash)) {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         } else {
-            Hash::Matched
+            HashComparison::Matched
         };
 
         SourceDistCompatibility::Compatible(hash)
@@ -176,14 +177,14 @@ impl FlatIndex {
         // Check if hashes line up
         let hash = if let HashPolicy::Validate(required) = hasher.get_package(&filename.name) {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if required.iter().any(|hash| hashes.contains(hash)) {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         } else {
-            Hash::Matched
+            HashComparison::Matched
         };
 
         WheelCompatibility::Compatible(hash, priority)

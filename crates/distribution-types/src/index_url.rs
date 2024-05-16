@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use itertools::Either;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use url::Url;
 
 use pep508_rs::{expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl};
@@ -110,7 +109,7 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.verbatim().serialize(serializer)
+        self.to_string().serialize(serializer)
     }
 }
 
@@ -159,7 +158,7 @@ impl Deref for IndexUrl {
 /// A directory with distributions or a URL to an HTML file with a flat listing of distributions.
 ///
 /// Also known as `--find-links`.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum FlatIndexLocation {
     Path(PathBuf),
     Url(Url),
@@ -182,6 +181,25 @@ impl schemars::JsonSchema for FlatIndexLocation {
             ..schemars::schema::SchemaObject::default()
         }
         .into()
+    }
+}
+
+impl serde::ser::Serialize for FlatIndexLocation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for FlatIndexLocation {
+    fn deserialize<D>(deserializer: D) -> Result<FlatIndexLocation, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        FlatIndexLocation::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 

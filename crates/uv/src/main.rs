@@ -177,7 +177,8 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, workspace);
 
-            let cache = cache.with_refresh(args.refresh);
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
             let requirements = args
                 .src_file
                 .into_iter()
@@ -247,7 +248,8 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, workspace);
 
-            let cache = cache.with_refresh(args.refresh);
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
             let sources = args
                 .src_file
                 .into_iter()
@@ -288,10 +290,12 @@ async fn run() -> Result<ExitStatus> {
             command: PipCommand::Install(args),
         }) => {
             args.compat_args.validate()?;
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, workspace);
 
-            let cache = cache.with_refresh(args.refresh);
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
             let requirements = args
                 .package
                 .into_iter()
@@ -360,6 +364,9 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipUninstallSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             let sources = args
                 .package
                 .into_iter()
@@ -391,6 +398,9 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipFreezeSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::pip_freeze(
                 args.exclude_editable,
                 args.shared.strict,
@@ -407,6 +417,9 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipListSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
 
             commands::pip_list(
                 args.editable,
@@ -426,6 +439,9 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipShowSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::pip_show(
                 args.package,
                 args.shared.strict,
@@ -440,6 +456,9 @@ async fn run() -> Result<ExitStatus> {
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCheckSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
 
             commands::pip_check(
                 args.shared.python.as_deref(),
@@ -466,6 +485,9 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VenvSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
 
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
@@ -498,6 +520,9 @@ async fn run() -> Result<ExitStatus> {
         Commands::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::RunSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
 
             let requirements = args
                 .with
@@ -535,11 +560,17 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let _args = settings::SyncSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::sync(globals.preview, &cache, printer).await
         }
         Commands::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let _args = settings::LockSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
 
             commands::lock(globals.preview, &cache, printer).await
         }

@@ -10,8 +10,8 @@ use uv_normalize::ExtraName;
 use crate::marker::parse_markers_cursor;
 use crate::{
     expand_env_vars, parse_extras_cursor, split_extras, split_scheme, strip_host, Cursor,
-    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, RequirementOrigin, Scheme,
-    VerbatimUrl, VerbatimUrlError,
+    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Reporter, RequirementOrigin,
+    Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError,
 };
 
 /// A PEP 508-like, direct URL dependency specifier without a package name.
@@ -110,7 +110,7 @@ impl FromStr for UnnamedRequirement {
 
     /// Parse a PEP 508-like direct URL requirement without a package name.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse_unnamed_requirement(&mut Cursor::new(input), None)
+        parse_unnamed_requirement(&mut Cursor::new(input), None, &mut TracingReporter)
     }
 }
 
@@ -119,8 +119,13 @@ impl UnnamedRequirement {
     pub fn parse(
         input: &str,
         working_dir: impl AsRef<Path>,
+        reporter: &mut impl Reporter,
     ) -> Result<Self, Pep508Error<VerbatimUrl>> {
-        parse_unnamed_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
+        parse_unnamed_requirement(
+            &mut Cursor::new(input),
+            Some(working_dir.as_ref()),
+            reporter,
+        )
     }
 }
 
@@ -130,6 +135,7 @@ impl UnnamedRequirement {
 fn parse_unnamed_requirement(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
+    reporter: &mut impl Reporter,
 ) -> Result<UnnamedRequirement, Pep508Error<VerbatimUrl>> {
     cursor.eat_whitespace();
 
@@ -143,7 +149,7 @@ fn parse_unnamed_requirement(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        Some(parse_markers_cursor(cursor)?)
+        Some(parse_markers_cursor(cursor, reporter)?)
     } else {
         None
     };

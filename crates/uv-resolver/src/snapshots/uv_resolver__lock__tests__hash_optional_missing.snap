@@ -28,7 +28,7 @@ Ok(
                     },
                 },
                 marker: None,
-                sourcedist: None,
+                sdist: None,
                 wheels: [
                     Wheel {
                         url: Url {

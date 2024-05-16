@@ -4,20 +4,22 @@
 
 use std::collections::VecDeque;
 
+use rustc_hash::FxHashMap;
+use url::Url;
+
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, GitSourceDist, IndexUrl, Name, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
-    VersionOrUrlRef,
+    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
+    GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::HashDigest;
-use rustc_hash::FxHashMap;
-use url::Url;
 use uv_normalize::PackageName;
+
+use crate::resolution::AnnotatedDist;
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(into = "LockWire", try_from = "LockWire")]
@@ -71,7 +73,7 @@ impl Lock {
                 let dep_dist = self.find_by_id(&dep.id);
                 queue.push_back(dep_dist);
             }
-            let name = PackageName::new(dist.id.name.to_string()).unwrap();
+            let name = dist.id.name.clone();
             let resolved_dist = ResolvedDist::Installable(dist.to_dist(marker_env, tags));
             map.insert(name, resolved_dist);
         }
@@ -164,7 +166,7 @@ impl TryFrom<LockWire> for Lock {
             // Also check that our sources are consistent with whether we have
             // hashes or not.
             let requires_hash = dist.id.source.kind.requires_hash();
-            if let Some(ref sdist) = dist.sourcedist {
+            if let Some(ref sdist) = dist.sdist {
                 if requires_hash != sdist.hash.is_some() {
                     return Err(LockError::hash(
                         dist.id.clone(),
@@ -194,7 +196,7 @@ pub(crate) struct Distribution {
     #[serde(default)]
     pub(crate) marker: Option<String>,
     #[serde(default)]
-    pub(crate) sourcedist: Option<SourceDist>,
+    pub(crate) sdist: Option<SourceDist>,
     #[serde(default, rename = "wheel", skip_serializing_if = "Vec::is_empty")]
     pub(crate) wheels: Vec<Wheel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -202,85 +204,108 @@ pub(crate) struct Distribution {
 }
 
 impl Distribution {
-    pub(crate) fn from_resolved_dist(
-        resolved_dist: &ResolvedDist,
+    pub(crate) fn from_annotated_dist(
+        annotated_dist: &AnnotatedDist,
     ) -> Result<Distribution, LockError> {
-        let id = DistributionId::from_resolved_dist(resolved_dist);
-        let mut sourcedist = None;
-        let mut wheels = vec![];
-        if let Some(wheel) = Wheel::from_resolved_dist(resolved_dist)? {
-            wheels.push(wheel);
-        } else if let Some(sdist) = SourceDist::from_resolved_dist(resolved_dist)? {
-            sourcedist = Some(sdist);
-        }
+        let id = DistributionId::from_annotated_dist(annotated_dist);
+        let wheels = Wheel::from_annotated_dist(annotated_dist)?;
+        let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
         Ok(Distribution {
             id,
             // TODO: Refactoring is needed to get the marker expressions for a
             // particular resolved dist to this point.
             marker: None,
-            sourcedist,
+            sdist,
             wheels,
             dependencies: vec![],
         })
     }
 
-    pub(crate) fn add_dependency(&mut self, resolved_dist: &ResolvedDist) {
+    pub(crate) fn add_dependency(&mut self, annotated_dist: &AnnotatedDist) {
         self.dependencies
-            .push(Dependency::from_resolved_dist(resolved_dist));
+            .push(Dependency::from_annotated_dist(annotated_dist));
     }
 
+    /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
     fn to_dist(&self, _marker_env: &MarkerEnvironment, tags: &Tags) -> Dist {
-        if let Some(wheel) = self.find_best_wheel(tags) {
+        if let Some(best_wheel_index) = self.find_best_wheel(tags) {
             return match self.id.source.kind {
                 SourceKind::Registry => {
-                    let filename: WheelFilename = wheel.filename.clone();
-                    let file = Box::new(distribution_types::File {
-                        dist_info_metadata: false,
-                        filename: filename.to_string(),
-                        hashes: vec![],
-                        requires_python: None,
-                        size: None,
-                        upload_time_utc_ms: None,
-                        url: FileLocation::AbsoluteUrl(wheel.url.to_string()),
-                        yanked: None,
-                    });
-                    let index = IndexUrl::Pypi(VerbatimUrl::from_url(self.id.source.url.clone()));
-                    let reg_dist = RegistryBuiltDist {
-                        filename,
-                        file,
-                        index,
+                    let wheels = self
+                        .wheels
+                        .iter()
+                        .map(|wheel| wheel.to_registry_dist(&self.id.source))
+                        .collect();
+                    let reg_built_dist = RegistryBuiltDist {
+                        wheels,
+                        best_wheel_index,
+                        sdist: None,
                     };
-                    let built_dist = BuiltDist::Registry(reg_dist);
+                    Dist::Built(BuiltDist::Registry(reg_built_dist))
+                }
+                SourceKind::Path => {
+                    let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
+                    let path_dist = PathBuiltDist {
+                        filename,
+                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
+                        path: self.id.source.url.to_file_path().unwrap(),
+                    };
+                    let built_dist = BuiltDist::Path(path_dist);
                     Dist::Built(built_dist)
                 }
                 // TODO: Handle other kinds of sources.
                 _ => todo!(),
             };
         }
-        // TODO: Handle source dists.
+
+        if let Some(sdist) = &self.sdist {
+            return match self.id.source.kind {
+                SourceKind::Path => {
+                    let path_dist = PathSourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
+                        path: self.id.source.url.to_file_path().unwrap(),
+                    };
+                    let source_dist = distribution_types::SourceDist::Path(path_dist);
+                    Dist::Source(source_dist)
+                }
+                SourceKind::Directory => {
+                    let dir_dist = DirectorySourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
+                        path: self.id.source.url.to_file_path().unwrap(),
+                        editable: false,
+                    };
+                    let source_dist = distribution_types::SourceDist::Directory(dir_dist);
+                    Dist::Source(source_dist)
+                }
+                // TODO: Handle other kinds of sources.
+                _ => todo!(),
+            };
+        }
 
         // TODO: Convert this to a deserialization error.
         panic!("invalid lock distribution")
     }
 
-    fn find_best_wheel(&self, tags: &Tags) -> Option<&Wheel> {
-        let mut best: Option<(TagPriority, &Wheel)> = None;
-        for wheel in &self.wheels {
+    fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
+        let mut best: Option<(TagPriority, usize)> = None;
+        for (i, wheel) in self.wheels.iter().enumerate() {
             let TagCompatibility::Compatible(priority) = wheel.filename.compatibility(tags) else {
                 continue;
             };
             match best {
                 None => {
-                    best = Some((priority, wheel));
+                    best = Some((priority, i));
                 }
                 Some((best_priority, _)) => {
                     if priority > best_priority {
-                        best = Some((priority, wheel));
+                        best = Some((priority, i));
                     }
                 }
             }
         }
-        best.map(|(_, wheel)| wheel)
+        best.map(|(_, i)| i)
     }
 }
 
@@ -294,16 +319,10 @@ pub(crate) struct DistributionId {
 }
 
 impl DistributionId {
-    fn from_resolved_dist(resolved_dist: &ResolvedDist) -> DistributionId {
-        let name = resolved_dist.name().clone();
-        let version = match resolved_dist.version_or_url() {
-            VersionOrUrlRef::Version(v) => v.clone(),
-            // TODO: We need a way to thread the version number for these
-            // cases down into this routine. The version number isn't yet in a
-            // `ResolutionGraph`, so this will require a bit of refactoring.
-            VersionOrUrlRef::Url(_) => todo!(),
-        };
-        let source = Source::from_resolved_dist(resolved_dist);
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> DistributionId {
+        let name = annotated_dist.metadata.name.clone();
+        let version = annotated_dist.metadata.version.clone();
+        let source = Source::from_resolved_dist(&annotated_dist.dist);
         DistributionId {
             name,
             version,
@@ -343,7 +362,7 @@ impl Source {
 
     fn from_built_dist(built_dist: &BuiltDist) -> Source {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist(reg_dist),
+            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist2(reg_dist),
             BuiltDist::DirectUrl(ref direct_dist) => Source::from_direct_built_dist(direct_dist),
             BuiltDist::Path(ref path_dist) => Source::from_path_built_dist(path_dist),
         }
@@ -367,8 +386,12 @@ impl Source {
         }
     }
 
-    fn from_registry_built_dist(reg_dist: &RegistryBuiltDist) -> Source {
+    fn from_registry_built_dist(reg_dist: &RegistryBuiltWheel) -> Source {
         Source::from_index_url(&reg_dist.index)
+    }
+
+    fn from_registry_built_dist2(reg_dist: &RegistryBuiltDist) -> Source {
+        Source::from_index_url(&reg_dist.best_wheel().index)
     }
 
     fn from_registry_source_dist(reg_dist: &RegistrySourceDist) -> Source {
@@ -463,6 +486,10 @@ impl std::str::FromStr for Source {
             }),
             "path" => Ok(Source {
                 kind: SourceKind::Path,
+                url,
+            }),
+            "directory" => Ok(Source {
+                kind: SourceKind::Directory,
                 url,
             }),
             name => Err(SourceParseError::unrecognized_source_name(s, name)),
@@ -596,85 +623,95 @@ pub(crate) struct SourceDist {
 }
 
 impl SourceDist {
-    fn from_resolved_dist(resolved_dist: &ResolvedDist) -> Result<Option<SourceDist>, LockError> {
-        match *resolved_dist {
+    fn from_annotated_dist(
+        annotated_dist: &AnnotatedDist,
+    ) -> Result<Option<SourceDist>, LockError> {
+        match annotated_dist.dist {
             // TODO: Do we want to try to lock already-installed distributions?
             // Or should we return an error?
             ResolvedDist::Installed(_) => todo!(),
-            ResolvedDist::Installable(ref dist) => SourceDist::from_dist(dist),
+            ResolvedDist::Installable(ref dist) => {
+                SourceDist::from_dist(dist, &annotated_dist.hashes)
+            }
         }
     }
 
-    fn from_dist(dist: &Dist) -> Result<Option<SourceDist>, LockError> {
+    fn from_dist(dist: &Dist, hashes: &[HashDigest]) -> Result<Option<SourceDist>, LockError> {
         match *dist {
+            Dist::Built(BuiltDist::Registry(ref built_dist)) => {
+                let Some(sdist) = built_dist.sdist.as_ref() else {
+                    return Ok(None);
+                };
+                SourceDist::from_registry_dist(sdist).map(Some)
+            }
             Dist::Built(_) => Ok(None),
-            Dist::Source(ref source_dist) => SourceDist::from_source_dist(source_dist).map(Some),
+            Dist::Source(ref source_dist) => {
+                SourceDist::from_source_dist(source_dist, hashes).map(Some)
+            }
         }
     }
 
     fn from_source_dist(
         source_dist: &distribution_types::SourceDist,
+        hashes: &[HashDigest],
     ) -> Result<SourceDist, LockError> {
         match *source_dist {
             distribution_types::SourceDist::Registry(ref reg_dist) => {
                 SourceDist::from_registry_dist(reg_dist)
             }
             distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
-                Ok(SourceDist::from_direct_dist(direct_dist))
+                Ok(SourceDist::from_direct_dist(direct_dist, hashes))
             }
             distribution_types::SourceDist::Git(ref git_dist) => {
-                Ok(SourceDist::from_git_dist(git_dist))
+                Ok(SourceDist::from_git_dist(git_dist, hashes))
             }
             distribution_types::SourceDist::Path(ref path_dist) => {
-                Ok(SourceDist::from_path_dist(path_dist))
+                Ok(SourceDist::from_path_dist(path_dist, hashes))
             }
             distribution_types::SourceDist::Directory(ref directory_dist) => {
-                Ok(SourceDist::from_directory_dist(directory_dist))
+                Ok(SourceDist::from_directory_dist(directory_dist, hashes))
             }
         }
     }
 
     fn from_registry_dist(reg_dist: &RegistrySourceDist) -> Result<SourceDist, LockError> {
-        // FIXME: Is it guaranteed that there is at least one hash?
-        // If not, we probably need to make this fallible.
         let url = reg_dist
             .file
             .url
             .to_url()
             .map_err(LockError::invalid_file_url)?;
-        let hash = Hash::from(reg_dist.file.hashes[0].clone());
-        Ok(SourceDist {
-            url,
-            hash: Some(hash),
-        })
+        let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
+        Ok(SourceDist { url, hash })
     }
 
-    fn from_direct_dist(direct_dist: &DirectUrlSourceDist) -> SourceDist {
+    fn from_direct_dist(direct_dist: &DirectUrlSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist {
             url: direct_dist.url.to_url(),
-            // TODO: We want a hash for the artifact at the URL.
-            hash: todo!(),
+            hash: hashes.first().cloned().map(Hash::from),
         }
     }
 
-    fn from_git_dist(git_dist: &GitSourceDist) -> SourceDist {
+    fn from_git_dist(git_dist: &GitSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist {
             url: git_dist.url.to_url(),
-            hash: None,
+            hash: hashes.first().cloned().map(Hash::from),
         }
     }
 
-    fn from_path_dist(path_dist: &PathSourceDist) -> SourceDist {
+    fn from_path_dist(path_dist: &PathSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist {
             url: path_dist.url.to_url(),
-            hash: None,
+            hash: hashes.first().cloned().map(Hash::from),
         }
     }
 
-    fn from_directory_dist(directory_dist: &DirectorySourceDist) -> SourceDist {
+    fn from_directory_dist(
+        directory_dist: &DirectorySourceDist,
+        hashes: &[HashDigest],
+    ) -> SourceDist {
         SourceDist {
             url: directory_dist.url.to_url(),
-            hash: None,
+            hash: hashes.first().cloned().map(Hash::from),
         }
     }
 }
@@ -704,61 +741,98 @@ pub(crate) struct Wheel {
 }
 
 impl Wheel {
-    fn from_resolved_dist(resolved_dist: &ResolvedDist) -> Result<Option<Wheel>, LockError> {
-        match *resolved_dist {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Wheel>, LockError> {
+        match annotated_dist.dist {
             // TODO: Do we want to try to lock already-installed distributions?
             // Or should we return an error?
             ResolvedDist::Installed(_) => todo!(),
-            ResolvedDist::Installable(ref dist) => Wheel::from_dist(dist),
+            ResolvedDist::Installable(ref dist) => Wheel::from_dist(dist, &annotated_dist.hashes),
         }
     }
 
-    fn from_dist(dist: &Dist) -> Result<Option<Wheel>, LockError> {
+    fn from_dist(dist: &Dist, hashes: &[HashDigest]) -> Result<Vec<Wheel>, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist).map(Some),
-            Dist::Source(_) => Ok(None),
+            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes),
+            Dist::Source(distribution_types::SourceDist::Registry(ref source_dist)) => source_dist
+                .wheels
+                .iter()
+                .map(Wheel::from_registry_wheel)
+                .collect(),
+            Dist::Source(_) => Ok(vec![]),
         }
     }
 
-    fn from_built_dist(built_dist: &BuiltDist) -> Result<Wheel, LockError> {
+    fn from_built_dist(
+        built_dist: &BuiltDist,
+        hashes: &[HashDigest],
+    ) -> Result<Vec<Wheel>, LockError> {
         match *built_dist {
             BuiltDist::Registry(ref reg_dist) => Wheel::from_registry_dist(reg_dist),
-            BuiltDist::DirectUrl(ref direct_dist) => Ok(Wheel::from_direct_dist(direct_dist)),
-            BuiltDist::Path(ref path_dist) => Ok(Wheel::from_path_dist(path_dist)),
+            BuiltDist::DirectUrl(ref direct_dist) => {
+                Ok(vec![Wheel::from_direct_dist(direct_dist, hashes)])
+            }
+            BuiltDist::Path(ref path_dist) => Ok(vec![Wheel::from_path_dist(path_dist, hashes)]),
         }
     }
 
-    fn from_registry_dist(reg_dist: &RegistryBuiltDist) -> Result<Wheel, LockError> {
-        // FIXME: Is it guaranteed that there is at least one hash?
-        // If not, we probably need to make this fallible.
-        let filename = reg_dist.filename.clone();
-        let url = reg_dist
+    fn from_registry_dist(reg_dist: &RegistryBuiltDist) -> Result<Vec<Wheel>, LockError> {
+        reg_dist
+            .wheels
+            .iter()
+            .map(Wheel::from_registry_wheel)
+            .collect()
+    }
+
+    fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
+        let filename = wheel.filename.clone();
+        let url = wheel
             .file
             .url
             .to_url()
             .map_err(LockError::invalid_file_url)?;
-        let hash = Hash::from(reg_dist.file.hashes[0].clone());
+        // FIXME: Is it guaranteed that there is at least one hash?
+        // If not, we probably need to make this fallible.
+        let hash = wheel.file.hashes.first().cloned().map(Hash::from);
         Ok(Wheel {
             url,
-            hash: Some(hash),
+            hash,
             filename,
         })
     }
 
-    fn from_direct_dist(direct_dist: &DirectUrlBuiltDist) -> Wheel {
+    fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
             url: direct_dist.url.to_url(),
-            // TODO: We want a hash for the artifact at the URL.
-            hash: todo!(),
+            hash: hashes.first().cloned().map(Hash::from),
             filename: direct_dist.filename.clone(),
         }
     }
 
-    fn from_path_dist(path_dist: &PathBuiltDist) -> Wheel {
+    fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
             url: path_dist.url.to_url(),
-            hash: None,
+            hash: hashes.first().cloned().map(Hash::from),
             filename: path_dist.filename.clone(),
+        }
+    }
+
+    fn to_registry_dist(&self, source: &Source) -> RegistryBuiltWheel {
+        let filename: WheelFilename = self.filename.clone();
+        let file = Box::new(distribution_types::File {
+            dist_info_metadata: false,
+            filename: filename.to_string(),
+            hashes: vec![],
+            requires_python: None,
+            size: None,
+            upload_time_utc_ms: None,
+            url: FileLocation::AbsoluteUrl(self.url.to_string()),
+            yanked: None,
+        });
+        let index = IndexUrl::Url(VerbatimUrl::from_url(source.url.clone()));
+        RegistryBuiltWheel {
+            filename,
+            file,
+            index,
         }
     }
 }
@@ -816,8 +890,8 @@ pub(crate) struct Dependency {
 }
 
 impl Dependency {
-    fn from_resolved_dist(resolved_dist: &ResolvedDist) -> Dependency {
-        let id = DistributionId::from_resolved_dist(resolved_dist);
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Dependency {
+        let id = DistributionId::from_annotated_dist(annotated_dist);
         Dependency { id }
     }
 }

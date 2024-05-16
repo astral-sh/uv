@@ -297,12 +297,10 @@ jobs:
         run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
-        env:
-          # Workaround ring 0.17 build issue
-          CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
         with:
           target: ${{ matrix.platform.target }}
-          manylinux: auto
+          # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
+          manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update
       - uses: uraimo/run-on-arch-action@v2
@@ -560,6 +558,9 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+          - target: powerpc64le-unknown-linux-musl
+            arch: ppc64le
+            toolchain: nightly
 
     steps:
       - uses: actions/checkout@v4
@@ -577,6 +578,7 @@ jobs:
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update
           docker-options: ${{ matrix.platform.maturin_docker_options }}
+          rust-toolchain: ${{ matrix.platform.toolchain || 'stable' }}
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
