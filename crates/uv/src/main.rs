@@ -176,6 +176,10 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
@@ -247,6 +251,10 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
@@ -293,6 +301,10 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);

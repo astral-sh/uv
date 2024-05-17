@@ -115,6 +115,7 @@ impl Combine for PipOptions {
                 .concurrent_downloads
                 .combine(other.concurrent_downloads),
             concurrent_builds: self.concurrent_builds.combine(other.concurrent_builds),
+            concurrent_installs: self.concurrent_installs.combine(other.concurrent_installs),
         }
     }
 }

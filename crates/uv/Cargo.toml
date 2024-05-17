@@ -51,6 +51,7 @@ indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
 owo-colors = { workspace = true }
+rayon = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }

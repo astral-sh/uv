@@ -307,6 +307,7 @@ impl PipCompileSettings {
                     link_mode,
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
+                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -415,6 +416,7 @@ impl PipSyncSettings {
                     require_hashes: flag(require_hashes, no_require_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
+                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -567,6 +569,7 @@ impl PipInstallSettings {
                     require_hashes: flag(require_hashes, no_require_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
+                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -955,6 +958,7 @@ impl PipSharedSettings {
             require_hashes,
             concurrent_builds,
             concurrent_downloads,
+            concurrent_installs,
         } = workspace
             .and_then(|workspace| workspace.options.pip)
             .unwrap_or_default();
@@ -1044,11 +1048,18 @@ impl PipSharedSettings {
                 downloads: args
                     .concurrent_downloads
                     .or(concurrent_downloads)
-                    .map_or(Concurrency::DEFAULT_DOWNLOADS, NonZeroUsize::get),
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
                 builds: args
                     .concurrent_builds
                     .or(concurrent_builds)
-                    .map_or_else(Concurrency::default_builds, NonZeroUsize::get),
+                    .map(NonZeroUsize::get)
+                    .unwrap_or_else(Concurrency::threads),
+                installs: args
+                    .concurrent_installs
+                    .or(concurrent_installs)
+                    .map(NonZeroUsize::get)
+                    .unwrap_or_else(Concurrency::threads),
             },
         }
     }
@@ -1061,6 +1072,9 @@ mod env {
 
     pub(super) const CONCURRENT_BUILDS: (&str, &str) =
         ("UV_CONCURRENT_BUILDS", "a non-zero integer");
+
+    pub(super) const CONCURRENT_INSTALLS: (&str, &str) =
+        ("UV_CONCURRENT_INSTALLS", "a non-zero integer");
 }
 
 /// Attempt to load and parse an environment variable with the given name.
