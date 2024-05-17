@@ -39,7 +39,7 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
-    let venv = PythonEnvironment::from_default_python(&cache).unwrap();
+    let venv = PythonEnvironment::from_default_python(cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
         Requirement::from_pep508("apache-airflow[all]".parse().unwrap()).unwrap(),
@@ -147,7 +147,7 @@ mod resolver {
         let build_isolation = BuildIsolation::Isolated;
 
         let build_context = BuildDispatch::new(
-            &client,
+            client,
             &cache,
             &interpreter,
             &index_locations,

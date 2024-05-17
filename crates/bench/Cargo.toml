@@ -38,6 +38,7 @@ uv-dispatch = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-interpreter = { workspace = true }
+uv-virtualenv = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 install-wheel-rs = { workspace = true }
