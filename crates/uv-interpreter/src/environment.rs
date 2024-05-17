@@ -13,10 +13,10 @@ use crate::{find_default_python, find_requested_python, Error, Interpreter, Targ
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone)]
-pub struct PythonEnvironment(Arc<SharedPythonEnvironment>);
+pub struct PythonEnvironment(Arc<PythonEnvironmentShared>);
 
 #[derive(Debug, Clone)]
-struct SharedPythonEnvironment {
+struct PythonEnvironmentShared {
     root: PathBuf,
     interpreter: Interpreter,
 }
@@ -50,7 +50,7 @@ impl PythonEnvironment {
             interpreter.base_prefix().display()
         );
 
-        Ok(Self(Arc::new(SharedPythonEnvironment {
+        Ok(Self(Arc::new(PythonEnvironmentShared {
             root: venv,
             interpreter,
         })))
@@ -61,7 +61,7 @@ impl PythonEnvironment {
         let Some(interpreter) = find_requested_python(python, cache)? else {
             return Err(Error::RequestedPythonNotFound(python.to_string()));
         };
-        Ok(Self(Arc::new(SharedPythonEnvironment {
+        Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
         })))
@@ -70,7 +70,7 @@ impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] for the default Python interpreter.
     pub fn from_default_python(cache: &Cache) -> Result<Self, Error> {
         let interpreter = find_default_python(cache)?;
-        Ok(Self(Arc::new(SharedPythonEnvironment {
+        Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
         })))
@@ -78,7 +78,7 @@ impl PythonEnvironment {
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and root directory.
     pub fn from_interpreter(interpreter: Interpreter) -> Self {
-        Self(Arc::new(SharedPythonEnvironment {
+        Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
         }))
@@ -88,7 +88,7 @@ impl PythonEnvironment {
     #[must_use]
     pub fn with_target(self, target: Target) -> Self {
         let inner = Arc::unwrap_or_clone(self.0);
-        Self(Arc::new(SharedPythonEnvironment {
+        Self(Arc::new(PythonEnvironmentShared {
             interpreter: inner.interpreter.with_target(target),
             ..inner
         }))
