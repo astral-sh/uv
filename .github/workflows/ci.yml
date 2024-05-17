@@ -858,6 +858,41 @@ jobs:
       - name: "Validate global Python install"
         run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
 
+  system-test-windows-mingw64:
+    needs: build-binary-windows
+    name: "check system | mingw64 on windows"
+    runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      # See: https://github.com/scikit-build/scikit-build-core/blob/86f40d949741d8e6ce4d9f55264a6d05224408dd/.github/workflows/ci.yml#L251
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ucrt64
+          path-type: minimal
+          update: true
+          install: >-
+            base-devel git
+          pacboy: >-
+            python:p python-pip:p gcc:p cmake:p
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: python -c "import sys; print(sys.executable)"
+        shell: msys2 {0}
+
+
+      - name: "Validate global Python install"
+        run: python ./scripts/check_system_python.py --uv ./uv.exe
+        shell: msys2 {0}
+
   system-test-choco:
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
