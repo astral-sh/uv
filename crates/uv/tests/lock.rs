@@ -440,6 +440,22 @@ fn lock_wheel_url() -> Result<()> {
     "###
     );
 
+    // Install from the lockfile.
+    uv_snapshot!(context.install().arg("--unstable-uv-lock-file").arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Downloaded 4 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
     Ok(())
 }
 
@@ -572,6 +588,22 @@ fn lock_sdist_url() -> Result<()> {
     hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475"
     "###
     );
+
+    // Install from the lockfile.
+    uv_snapshot!(context.install().arg("--unstable-uv-lock-file").arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Downloaded 4 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
 
     Ok(())
 }

@@ -12,8 +12,8 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
-    GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
+    GitSourceDist, IndexUrl, ParsedArchiveUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -256,8 +256,27 @@ impl Distribution {
                     let built_dist = BuiltDist::Path(path_dist);
                     Dist::Built(built_dist)
                 }
-                // TODO: Handle other kinds of sources.
-                _ => todo!(),
+                SourceKind::Direct(direct) => {
+                    let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
+                    let url = Url::from(ParsedArchiveUrl {
+                        url: self.id.source.url.clone(),
+                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    });
+                    let direct_dist = DirectUrlBuiltDist {
+                        filename,
+                        location: self.id.source.url.clone(),
+                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                        url: VerbatimUrl::from_url(url),
+                    };
+                    let built_dist = BuiltDist::DirectUrl(direct_dist);
+                    Dist::Built(built_dist)
+                }
+                SourceKind::Git(_) => {
+                    unreachable!("Wheels cannot come from Git sources")
+                }
+                SourceKind::Directory => {
+                    unreachable!("Wheels cannot come from directory sources")
+                }
             };
         }
 
@@ -304,9 +323,21 @@ impl Distribution {
                     let source_dist = distribution_types::SourceDist::Git(git_dist);
                     Dist::Source(source_dist)
                 }
-
-                // TODO: Handle other kinds of sources.
-                _ => todo!(),
+                SourceKind::Direct(direct) => {
+                    let url = Url::from(ParsedArchiveUrl {
+                        url: self.id.source.url.clone(),
+                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    });
+                    let direct_dist = DirectUrlSourceDist {
+                        name: self.id.name.clone(),
+                        location: self.id.source.url.clone(),
+                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                        url: VerbatimUrl::from_url(url),
+                    };
+                    let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
+                    Dist::Source(source_dist)
+                }
+                SourceKind::Registry => todo!(),
             };
         }
 
@@ -426,14 +457,26 @@ impl Source {
 
     fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Source {
         Source {
-            kind: SourceKind::Direct,
+            kind: SourceKind::Direct(DirectSource {
+                subdirectory: direct_dist
+                    .subdirectory
+                    .as_deref()
+                    .and_then(Path::to_str)
+                    .map(ToString::to_string),
+            }),
             url: direct_dist.url.to_url(),
         }
     }
 
     fn from_direct_source_dist(direct_dist: &DirectUrlSourceDist) -> Source {
         Source {
-            kind: SourceKind::Direct,
+            kind: SourceKind::Direct(DirectSource {
+                subdirectory: direct_dist
+                    .subdirectory
+                    .as_deref()
+                    .and_then(Path::to_str)
+                    .map(ToString::to_string),
+            }),
             url: direct_dist.url.to_url(),
         }
     }
@@ -513,7 +556,7 @@ impl std::str::FromStr for Source {
                 url,
             }),
             "direct" => Ok(Source {
-                kind: SourceKind::Direct,
+                kind: SourceKind::Direct(DirectSource::from_url(&mut url)),
                 url,
             }),
             "path" => Ok(Source {
@@ -562,7 +605,7 @@ impl<'de> serde::Deserialize<'de> for Source {
 pub(crate) enum SourceKind {
     Registry,
     Git(GitSource),
-    Direct,
+    Direct(DirectSource),
     Path,
     Directory,
 }
@@ -572,7 +615,7 @@ impl SourceKind {
         match *self {
             SourceKind::Registry => "registry",
             SourceKind::Git(_) => "git",
-            SourceKind::Direct => "direct",
+            SourceKind::Direct(_) => "direct",
             SourceKind::Path => "path",
             SourceKind::Directory => "directory",
         }
@@ -584,9 +627,35 @@ impl SourceKind {
     /// _not_ be present.
     fn requires_hash(&self) -> bool {
         match *self {
-            SourceKind::Registry | SourceKind::Direct | SourceKind::Path => true,
+            SourceKind::Registry | SourceKind::Direct(_) | SourceKind::Path => true,
             SourceKind::Git(_) | SourceKind::Directory => false,
         }
+    }
+}
+
+#[derive(
+    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
+pub(crate) struct DirectSource {
+    subdirectory: Option<String>,
+}
+
+impl DirectSource {
+    /// Extracts a direct source reference from the query pairs in the given URL.
+    ///
+    /// This also removes the query pairs and hash fragment from the given
+    /// URL in place.
+    fn from_url(url: &mut Url) -> DirectSource {
+        let subdirectory = url.query_pairs().find_map(|(key, val)| {
+            if key == "subdirectory" {
+                Some(val.into_owned())
+            } else {
+                None
+            }
+        });
+        url.set_query(None);
+        url.set_fragment(None);
+        DirectSource { subdirectory }
     }
 }
 

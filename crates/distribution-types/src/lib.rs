@@ -202,6 +202,7 @@ pub struct DirectUrlBuiltDist {
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
     pub location: Url,
+    /// The subdirectory fragment, if any.
     pub subdirectory: Option<PathBuf>,
     /// The URL with the subdirectory fragment.
     pub url: VerbatimUrl,
