@@ -207,11 +207,19 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 };
 
                 match self.annotation_style {
-                    AnnotationStyle::Line => {
-                        if !edges.is_empty() {
+                    AnnotationStyle::Line => match edges.as_slice() {
+                        [] if source.is_empty() => {}
+                        [] if source.len() == 1 => {
+                            let separator = if has_hashes { "\n    " } else { "  " };
+                            let comment = format!("# via {}", source.iter().next().unwrap())
+                                .green()
+                                .to_string();
+                            annotation = Some((separator, comment));
+                        }
+                        edges => {
                             let separator = if has_hashes { "\n    " } else { "  " };
                             let deps = edges
-                                .into_iter()
+                                .iter()
                                 .map(|dependency| format!("{}", dependency.name()))
                                 .chain(source.iter().map(std::string::ToString::to_string))
                                 .collect::<Vec<_>>()
@@ -219,7 +227,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let comment = format!("# via {deps}").green().to_string();
                             annotation = Some((separator, comment));
                         }
-                    }
+                    },
                     AnnotationStyle::Split => match edges.as_slice() {
                         [] if source.is_empty() => {}
                         [] if source.len() == 1 => {
