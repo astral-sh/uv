@@ -44,7 +44,7 @@ pub(crate) struct BatchPrefetcher {
 
 impl BatchPrefetcher {
     /// Prefetch a large number of versions if we already unsuccessfully tried many versions.
-    pub(crate) async fn prefetch_batches(
+    pub(crate) fn prefetch_batches(
         &mut self,
         next: &PubGrubPackage,
         version: &Version,
@@ -65,9 +65,8 @@ impl BatchPrefetcher {
 
         // This is immediate, we already fetched the version map.
         let versions_response = index
-            .packages
-            .wait(package_name)
-            .await
+            .packages()
+            .wait_blocking(package_name)
             .ok_or(ResolveError::Unregistered)?;
 
         let VersionsResponse::Found(ref version_map) = *versions_response else {
@@ -142,9 +141,10 @@ impl BatchPrefetcher {
                 dist
             );
             prefetch_count += 1;
-            if index.distributions.register(candidate.version_id()) {
+
+            if index.distributions().register(candidate.version_id()) {
                 let request = Request::from(dist);
-                request_sink.send(request).await?;
+                request_sink.blocking_send(request)?;
             }
         }
 

@@ -381,7 +381,7 @@ pub(crate) async fn pip_sync(
             &hasher,
             &build_dispatch,
             // TODO(zanieb): We should consider support for installed packages in pip sync
-            &EmptyInstalledPackages,
+            EmptyInstalledPackages,
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )?
         .with_reporter(reporter);

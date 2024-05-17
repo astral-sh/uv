@@ -68,7 +68,7 @@ impl<'a> Planner<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn build(
         self,
-        mut site_packages: SitePackages<'_>,
+        mut site_packages: SitePackages,
         reinstall: &Reinstall,
         no_binary: &NoBinary,
         hasher: &HashStrategy,

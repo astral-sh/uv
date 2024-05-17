@@ -108,7 +108,7 @@ mod resolver {
             &index,
             &hashes,
             &build_context,
-            &installed_packages,
+            installed_packages,
             DistributionDatabase::new(client, &build_context, concurrency.downloads),
         )?;
 

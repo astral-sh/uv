@@ -23,9 +23,9 @@ use crate::satisfies::RequirementSatisfaction;
 /// An index over the packages installed in an environment.
 ///
 /// Packages are indexed by both name and (for editable installs) URL.
-#[derive(Debug)]
-pub struct SitePackages<'a> {
-    venv: &'a PythonEnvironment,
+#[derive(Debug, Clone)]
+pub struct SitePackages {
+    venv: PythonEnvironment,
     /// The vector of all installed distributions. The `by_name` and `by_url` indices index into
     /// this vector. The vector may contain `None` values, which represent distributions that were
     /// removed from the virtual environment.
@@ -38,9 +38,9 @@ pub struct SitePackages<'a> {
     by_url: FxHashMap<Url, Vec<usize>>,
 }
 
-impl<'a> SitePackages<'a> {
+impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
-    pub fn from_executable(venv: &'a PythonEnvironment) -> Result<SitePackages<'a>> {
+    pub fn from_executable(venv: &PythonEnvironment) -> Result<SitePackages> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
@@ -68,7 +68,7 @@ impl<'a> SitePackages<'a> {
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     return Ok(Self {
-                        venv,
+                        venv: venv.clone(),
                         distributions,
                         by_name,
                         by_url,
@@ -107,7 +107,7 @@ impl<'a> SitePackages<'a> {
         }
 
         Ok(Self {
-            venv,
+            venv: venv.clone(),
             distributions,
             by_name,
             by_url,
@@ -439,7 +439,7 @@ pub enum SatisfiesResult {
     Unsatisfied(String),
 }
 
-impl IntoIterator for SitePackages<'_> {
+impl IntoIterator for SitePackages {
     type Item = InstalledDist;
     type IntoIter = Flatten<std::vec::IntoIter<Option<InstalledDist>>>;
 
@@ -540,7 +540,7 @@ impl Diagnostic {
     }
 }
 
-impl InstalledPackagesProvider for SitePackages<'_> {
+impl InstalledPackagesProvider for SitePackages {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         self.iter()
     }
