@@ -72,48 +72,33 @@ jobs:
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-  cargo-clippy-windows:
-    runs-on: windows-latest-large
+  cargo-clippy-xwin:
+    runs-on: ubuntu-latest
     name: "cargo clippy | windows"
     steps:
-      - name: Create Dev Drive using ReFS
-        run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
-
       - uses: actions/checkout@v4
-
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
-
       - name: "Install Rust toolchain"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: rustup component add clippy
-
-      - uses: Swatinem/rust-cache@v2
+        run: rustup target add x86_64-pc-windows-msvc
+      - name: Load xwin cache
+        uses: actions/cache@v4
         with:
-          workspaces: ${{ env.DEV_DRIVE }}/uv
+          path: "${{ github.workspace}}/.xwin"
+          key: cargo-xwin
+      - name: Load rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-
+      - name: "Install cargo-xwin"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-xwin
+      - name: Install xwin dependencies
+        run: sudo apt-get install --no-install-recommends -y llvm clang cmake ninja-build
       - name: "Clippy"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
+        run: cargo xwin clippy --target x86_64-pc-windows-msvc --workspace --all-targets --all-features --locked --profile fast-build -- -D warnings
         env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          XWIN_ARCH: "x86_64"
+          XWIN_CACHE_DIR: "${{ github.workspace}}/.xwin"
 
   cargo-shear:
     name: "cargo shear"
