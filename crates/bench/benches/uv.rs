@@ -3,6 +3,7 @@ use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, C
 use distribution_types::Requirement;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
+use uv_interpreter::PythonEnvironment;
 use uv_resolver::Manifest;
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
@@ -12,10 +13,10 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
+    let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
         Requirement::from_pep508("jupyter".parse().unwrap()).unwrap()
     ]);
-    let client = &RegistryClientBuilder::new(cache.clone()).build();
 
     let run = || {
         runtime
@@ -23,6 +24,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
                 black_box(manifest.clone()),
                 black_box(cache.clone()),
                 black_box(client),
+                None,
             ))
             .unwrap();
     };
@@ -31,12 +33,14 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
 }
 
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
-    let runtime = &tokio::runtime::Builder::new_current_thread()
+    let runtime = &tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
 
     let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
+    let venv = PythonEnvironment::from_default_python(&cache).unwrap();
+    let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
         Requirement::from_pep508("apache-airflow[all]".parse().unwrap()).unwrap(),
         Requirement::from_pep508(
@@ -46,7 +50,16 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
         )
         .unwrap(),
     ]);
-    let client = &RegistryClientBuilder::new(cache.clone()).build();
+
+    // install source distributions
+    runtime
+        .block_on(resolver::resolve(
+            black_box(manifest.clone()),
+            black_box(cache.clone()),
+            black_box(client),
+            Some(&venv),
+        ))
+        .unwrap();
 
     let run = || {
         runtime
@@ -54,6 +67,7 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
                 black_box(manifest.clone()),
                 black_box(cache.clone()),
                 black_box(client),
+                Some(&venv),
             ))
             .unwrap();
     };
@@ -65,9 +79,8 @@ criterion_group!(uv, resolve_warm_jupyter, resolve_warm_airflow);
 criterion_main!(uv);
 
 mod resolver {
-    use std::path::{Path, PathBuf};
-
     use anyhow::Result;
+    use install_wheel_rs::linker::LinkMode;
     use once_cell::sync::Lazy;
 
     use distribution_types::{CachedDist, IndexLocations, Requirement, Resolution, SourceDist};
@@ -75,15 +88,14 @@ mod resolver {
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{BuildKind, Concurrency, NoBinary, NoBuild, SetupPyStrategy};
+    use uv_configuration::{Concurrency, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+    use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
     use uv_interpreter::{Interpreter, PythonEnvironment};
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph, Resolver,
     };
-    use uv_types::{
-        BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceBuildTrait,
-    };
+    use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
     static MARKERS: Lazy<MarkerEnvironment> = Lazy::new(|| {
         MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -116,15 +128,40 @@ mod resolver {
         manifest: Manifest,
         cache: Cache,
         client: &RegistryClient,
+        venv: Option<&PythonEnvironment>,
     ) -> Result<ResolutionGraph> {
+        let interpreter = venv
+            .as_ref()
+            .map(|venv| venv.interpreter().clone())
+            .unwrap_or_else(|| Interpreter::artificial(PLATFORM.clone(), MARKERS.clone()));
+
         let flat_index = FlatIndex::default();
         let index = InMemoryIndex::default();
-        let interpreter = Interpreter::artificial(PLATFORM.clone(), MARKERS.clone());
-        let build_context = Context::new(cache, interpreter.clone());
         let hashes = HashStrategy::None;
+        let index_locations = IndexLocations::default();
+        let in_flight = InFlight::default();
         let installed_packages = EmptyInstalledPackages;
         let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &MARKERS);
         let concurrency = Concurrency::default();
+        let config_settings = ConfigSettings::default();
+        let build_isolation = BuildIsolation::Isolated;
+
+        let build_context = BuildDispatch::new(
+            &client,
+            &cache,
+            &interpreter,
+            &index_locations,
+            &flat_index,
+            &index,
+            &in_flight,
+            SetupPyStrategy::default(),
+            &config_settings,
+            build_isolation,
+            LinkMode::default(),
+            &NoBuild::None,
+            &NoBinary::None,
+            concurrency,
+        );
 
         let resolver = Resolver::new(
             manifest,
@@ -141,88 +178,5 @@ mod resolver {
         )?;
 
         Ok(resolver.resolve().await?)
-    }
-
-    struct Context {
-        cache: Cache,
-        interpreter: Interpreter,
-        index_locations: IndexLocations,
-    }
-
-    impl Context {
-        fn new(cache: Cache, interpreter: Interpreter) -> Self {
-            Self {
-                cache,
-                interpreter,
-                index_locations: IndexLocations::default(),
-            }
-        }
-    }
-
-    impl BuildContext for Context {
-        type SourceDistBuilder = DummyBuilder;
-
-        fn cache(&self) -> &Cache {
-            &self.cache
-        }
-
-        fn interpreter(&self) -> &Interpreter {
-            &self.interpreter
-        }
-
-        fn build_isolation(&self) -> BuildIsolation {
-            BuildIsolation::Isolated
-        }
-
-        fn no_build(&self) -> &NoBuild {
-            &NoBuild::None
-        }
-
-        fn no_binary(&self) -> &NoBinary {
-            &NoBinary::None
-        }
-
-        fn setup_py_strategy(&self) -> SetupPyStrategy {
-            SetupPyStrategy::default()
-        }
-
-        fn index_locations(&self) -> &IndexLocations {
-            &self.index_locations
-        }
-
-        async fn resolve<'a>(&'a self, _: &'a [Requirement]) -> Result<Resolution> {
-            panic!("benchmarks should not build source distributions")
-        }
-
-        async fn install<'a>(
-            &'a self,
-            _: &'a Resolution,
-            _: &'a PythonEnvironment,
-        ) -> Result<Vec<CachedDist>> {
-            panic!("benchmarks should not build source distributions")
-        }
-
-        async fn setup_build<'a>(
-            &'a self,
-            _: &'a Path,
-            _: Option<&'a Path>,
-            _: &'a str,
-            _: Option<&'a SourceDist>,
-            _: BuildKind,
-        ) -> Result<Self::SourceDistBuilder> {
-            Ok(DummyBuilder)
-        }
-    }
-
-    struct DummyBuilder;
-
-    impl SourceBuildTrait for DummyBuilder {
-        async fn metadata(&mut self) -> Result<Option<PathBuf>> {
-            panic!("benchmarks should not build source distributions")
-        }
-
-        async fn wheel<'a>(&'a self, _: &'a Path) -> Result<String> {
-            panic!("benchmarks should not build source distributions")
-        }
     }
 }
