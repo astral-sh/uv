@@ -284,15 +284,11 @@ impl Distribution {
                 }
                 SourceKind::Git(git) => {
                     // Reconstruct the `GitUrl` from the `GitSource`.
-                    let mut git_url = uv_git::GitUrl::new(
+                    let git_url = uv_git::GitUrl::new(
                         self.id.source.url.clone(),
                         GitReference::from(git.kind.clone()),
-                    );
-                    if let Some(precise) = &git.precise {
-                        if let Ok(precise) = GitSha::from_str(precise) {
-                            git_url.set_precise(precise);
-                        }
-                    }
+                    )
+                    .with_precise(git.precise);
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                     // TODO(charlie): This shouldn't be necessary; it's only necessary because we're
@@ -484,7 +480,7 @@ impl Source {
         Source {
             kind: SourceKind::Git(GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
-                precise: git_dist.git.precise().map(|git_sha| git_sha.to_string()),
+                precise: git_dist.git.precise().expect("precise commit"),
                 subdirectory: git_dist
                     .subdirectory
                     .as_deref()
@@ -510,7 +506,10 @@ impl std::str::FromStr for Source {
                 url,
             }),
             "git" => Ok(Source {
-                kind: SourceKind::Git(GitSource::from_url(&mut url)),
+                kind: SourceKind::Git(GitSource::from_url(&mut url).map_err(|err| match err {
+                    GitSourceError::InvalidSha => SourceParseError::invalid_sha(s),
+                    GitSourceError::MissingSha => SourceParseError::missing_sha(s),
+                })?),
                 url,
             }),
             "direct" => Ok(Source {
@@ -559,10 +558,7 @@ impl<'de> serde::Deserialize<'de> for Source {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub(crate) enum SourceKind {
     Registry,
     Git(GitSource),
@@ -598,13 +594,18 @@ impl SourceKind {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub(crate) struct GitSource {
-    precise: Option<String>,
+    precise: GitSha,
     subdirectory: Option<String>,
     kind: GitSourceKind,
+}
+
+/// An error that occurs when a source string could not be parsed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GitSourceError {
+    InvalidSha,
+    MissingSha,
 }
 
 impl GitSource {
@@ -613,7 +614,7 @@ impl GitSource {
     ///
     /// This also removes the query pairs and hash fragment from the given
     /// URL in place.
-    fn from_url(url: &mut Url) -> GitSource {
+    fn from_url(url: &mut Url) -> Result<GitSource, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
         for (key, val) in url.query_pairs() {
@@ -625,14 +626,16 @@ impl GitSource {
                 _ => continue,
             };
         }
-        let precise = url.fragment().map(ToString::to_string);
+        let precise = GitSha::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
+            .map_err(|_| GitSourceError::InvalidSha)?;
+
         url.set_query(None);
         url.set_fragment(None);
-        GitSource {
+        Ok(GitSource {
             precise,
             subdirectory,
             kind,
-        }
+        })
     }
 }
 
@@ -1277,14 +1280,27 @@ impl SourceParseError {
         let kind = SourceParseErrorKind::InvalidUrl { err };
         SourceParseError { given, kind }
     }
+
+    fn missing_sha(given: &str) -> SourceParseError {
+        let given = given.to_string();
+        let kind = SourceParseErrorKind::MissingSha;
+        SourceParseError { given, kind }
+    }
+
+    fn invalid_sha(given: &str) -> SourceParseError {
+        let given = given.to_string();
+        let kind = SourceParseErrorKind::InvalidSha;
+        SourceParseError { given, kind }
+    }
 }
 
 impl std::error::Error for SourceParseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self.kind {
-            SourceParseErrorKind::NoPlus | SourceParseErrorKind::UnrecognizedSourceName { .. } => {
-                None
-            }
+            SourceParseErrorKind::NoPlus
+            | SourceParseErrorKind::UnrecognizedSourceName { .. }
+            | SourceParseErrorKind::MissingSha
+            | SourceParseErrorKind::InvalidSha => None,
             SourceParseErrorKind::InvalidUrl { ref err } => Some(err),
         }
     }
@@ -1299,6 +1315,8 @@ impl std::fmt::Display for SourceParseError {
                 write!(f, "unrecognized name `{name}` in source `{given}`")
             }
             SourceParseErrorKind::InvalidUrl { .. } => write!(f, "invalid URL in source `{given}`"),
+            SourceParseErrorKind::MissingSha => write!(f, "missing SHA in source `{given}`"),
+            SourceParseErrorKind::InvalidSha => write!(f, "invalid SHA in source `{given}`"),
         }
     }
 }
@@ -1318,6 +1336,10 @@ enum SourceParseErrorKind {
         /// The URL parse error.
         err: url::ParseError,
     },
+    /// An error that occurs when a Git URL is missing a precise commit SHA.
+    MissingSha,
+    /// An error that occurs when a Git URL has an invalid SHA.
+    InvalidSha,
 }
 
 /// An error that occurs when a hash digest could not be parsed.

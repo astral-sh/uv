@@ -38,10 +38,6 @@ impl GitUrl {
         self
     }
 
-    pub fn set_precise(&mut self, precise: GitSha) {
-        self.precise = Some(precise);
-    }
-
     /// Return the [`Url`] of the Git repository.
     pub fn repository(&self) -> &Url {
         &self.repository
