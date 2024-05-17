@@ -1,0 +1,263 @@
+---
+source: crates/requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [],
+    constraints: [],
+    editables: [
+        EditableRequirement {
+            url: VerbatimUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/<REQUIREMENTS_DIR>/editable",
+                    query: None,
+                    fragment: None,
+                },
+                given: Some(
+                    "./editable",
+                ),
+            },
+            extras: [
+                ExtraName(
+                    "d",
+                ),
+                ExtraName(
+                    "dev",
+                ),
+            ],
+            marker: None,
+            path: "<REQUIREMENTS_DIR>/editable",
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/editable.txt",
+                ),
+            ),
+        },
+        EditableRequirement {
+            url: VerbatimUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/<REQUIREMENTS_DIR>/editable",
+                    query: None,
+                    fragment: None,
+                },
+                given: Some(
+                    "./editable",
+                ),
+            },
+            extras: [
+                ExtraName(
+                    "d",
+                ),
+                ExtraName(
+                    "dev",
+                ),
+            ],
+            marker: None,
+            path: "<REQUIREMENTS_DIR>/editable",
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/editable.txt",
+                ),
+            ),
+        },
+        EditableRequirement {
+            url: VerbatimUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/<REQUIREMENTS_DIR>/editable",
+                    query: None,
+                    fragment: None,
+                },
+                given: Some(
+                    "./editable",
+                ),
+            },
+            extras: [
+                ExtraName(
+                    "d",
+                ),
+                ExtraName(
+                    "dev",
+                ),
+            ],
+            marker: Some(
+                And(
+                    [
+                        Expression(
+                            Version {
+                                key: PythonVersion,
+                                specifier: VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: "3.9",
+                                },
+                            },
+                        ),
+                        Expression(
+                            String {
+                                key: OsName,
+                                operator: Equal,
+                                value: "posix",
+                            },
+                        ),
+                    ],
+                ),
+            ),
+            path: "<REQUIREMENTS_DIR>/editable",
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/editable.txt",
+                ),
+            ),
+        },
+        EditableRequirement {
+            url: VerbatimUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/<REQUIREMENTS_DIR>/editable",
+                    query: None,
+                    fragment: None,
+                },
+                given: Some(
+                    "./editable",
+                ),
+            },
+            extras: [
+                ExtraName(
+                    "d",
+                ),
+                ExtraName(
+                    "dev",
+                ),
+            ],
+            marker: Some(
+                And(
+                    [
+                        Expression(
+                            Version {
+                                key: PythonVersion,
+                                specifier: VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: "3.9",
+                                },
+                            },
+                        ),
+                        Expression(
+                            String {
+                                key: OsName,
+                                operator: Equal,
+                                value: "posix",
+                            },
+                        ),
+                    ],
+                ),
+            ),
+            path: "<REQUIREMENTS_DIR>/editable",
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/editable.txt",
+                ),
+            ),
+        },
+        EditableRequirement {
+            url: VerbatimUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/<REQUIREMENTS_DIR>/editable",
+                    query: None,
+                    fragment: None,
+                },
+                given: Some(
+                    "./editable",
+                ),
+            },
+            extras: [],
+            marker: Some(
+                And(
+                    [
+                        Expression(
+                            Version {
+                                key: PythonVersion,
+                                specifier: VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: "3.9",
+                                },
+                            },
+                        ),
+                        Expression(
+                            String {
+                                key: OsName,
+                                operator: Equal,
+                                value: "posix",
+                            },
+                        ),
+                    ],
+                ),
+            ),
+            path: "<REQUIREMENTS_DIR>/editable",
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/editable.txt",
+                ),
+            ),
+        },
+        EditableRequirement {
+            url: VerbatimUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/<REQUIREMENTS_DIR>/editable;%20python_version%20%3E=%20%223.9%22%20and%20os_name%20==%20%22posix%22",
+                    query: None,
+                    fragment: None,
+                },
+                given: Some(
+                    "./editable; python_version >= \"3.9\" and os_name == \"posix\"",
+                ),
+            },
+            extras: [],
+            marker: None,
+            path: "<REQUIREMENTS_DIR>/editable; python_version >= \"3.9\" and os_name == \"posix\"",
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/editable.txt",
+                ),
+            ),
+        },
+    ],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
+}

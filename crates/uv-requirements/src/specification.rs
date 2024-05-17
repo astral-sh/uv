@@ -191,6 +191,7 @@ impl RequirementsSpecification {
                             Either::Left(EditableRequirement {
                                 url,
                                 path,
+                                marker: requirement.marker,
                                 extras: requirement.extras,
                                 origin: requirement.origin,
                             })

@@ -48,7 +48,7 @@ use distribution_types::{
     ParsedUrlError, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource,
+    expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
     RequirementOrigin, Scheme, VerbatimUrl,
 };
 #[cfg(feature = "http")]
@@ -168,6 +168,8 @@ pub struct EditableRequirement {
     pub url: VerbatimUrl,
     /// The extras that should be included when resolving the editable requirements.
     pub extras: Vec<ExtraName>,
+    /// The markers such as `python_version > "3.8"` in `-e ../editable ; python_version > "3.8"`.
+    pub marker: Option<MarkerTree>,
     /// The local path to the editable.
     pub path: PathBuf,
     /// The source file containing the requirement.
@@ -199,6 +201,38 @@ impl EditableRequirement {
         origin: Option<&Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtParserError> {
+        // Identify the markers.
+        let (given, marker) = if let Some((requirement, marker)) = Self::split_markers(given) {
+            let marker = MarkerTree::from_str(marker).map_err(|err| {
+                // Map from error on the markers to error on the whole requirement.
+                let err = Pep508Error {
+                    message: err.message,
+                    start: requirement.len() + err.start,
+                    len: err.len,
+                    input: given.to_string(),
+                };
+                match err.message {
+                    Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
+                        RequirementsTxtParserError::Pep508 {
+                            start: err.start,
+                            end: err.start + err.len,
+                            source: err,
+                        }
+                    }
+                    Pep508ErrorSource::UnsupportedRequirement(_) => {
+                        RequirementsTxtParserError::UnsupportedRequirement {
+                            start: err.start,
+                            end: err.start + err.len,
+                            source: err,
+                        }
+                    }
+                }
+            })?;
+            (requirement, Some(marker))
+        } else {
+            (given, None)
+        };
+
         // Identify the extras.
         let (requirement, extras) = if let Some((requirement, extras)) = Self::split_extras(given) {
             let extras = Extras::parse(extras).map_err(|err| {
@@ -274,6 +308,7 @@ impl EditableRequirement {
         Ok(Self {
             url,
             extras,
+            marker,
             path,
             origin: origin.map(Path::to_path_buf).map(RequirementOrigin::File),
         })
@@ -299,6 +334,48 @@ impl EditableRequirement {
             .find(|(_, c)| *c == '[')?;
 
         Some(given.split_at(index))
+    }
+
+    /// Identify the markers in an editable URL (e.g., `../editable ; python_version > "3.8"`).
+    pub fn split_markers(given: &str) -> Option<(&str, &str)> {
+        // Take until we see whitespace, unless it's escaped with a backslash, or within brackets
+        // (which would indicate an extra).
+        let mut backslash = false;
+        let mut depth = 0;
+        for (index, c) in given.char_indices() {
+            if backslash {
+                backslash = false;
+            } else if c == '\\' {
+                backslash = true;
+            } else if c == '[' {
+                depth += 1;
+            } else if c == ']' {
+                depth -= 1;
+            } else if depth == 0 && c.is_whitespace() {
+                // We found the end of the requirement; now, find the start of the markers,
+                // delimited by a semicolon.
+                let (requirement, markers) = given.split_at(index);
+
+                // Skip the whitespace.
+                for (index, c) in markers.char_indices() {
+                    if backslash {
+                        backslash = false;
+                    } else if c == '\\' {
+                        backslash = true;
+                    } else if c.is_whitespace() {
+                        continue;
+                    } else if c == ';' {
+                        // The marker starts just after the semicolon.
+                        let markers = &markers[index + 1..];
+                        return Some((requirement, markers));
+                    } else {
+                        // We saw some other character, so this isn't a marker.
+                        return None;
+                    }
+                }
+            }
+        }
+        None
     }
 }
 
@@ -1427,7 +1504,6 @@ mod test {
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
-    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
     async fn line_endings(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
@@ -1469,8 +1545,9 @@ mod test {
 
     #[cfg(unix)]
     #[test_case(Path::new("bare-url.txt"))]
+    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
-    async fn parse_unnamed_unix(path: &Path) {
+    async fn parse_unix(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
@@ -1490,8 +1567,9 @@ mod test {
 
     #[cfg(windows)]
     #[test_case(Path::new("bare-url.txt"))]
+    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
-    async fn parse_unnamed_windows(path: &Path) {
+    async fn parse_windows(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
@@ -1967,6 +2045,7 @@ mod test {
                             ),
                         },
                         extras: [],
+                        marker: None,
                         path: "/foo/bar",
                         origin: Some(
                             File(

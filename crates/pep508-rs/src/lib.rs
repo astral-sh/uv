@@ -137,7 +137,7 @@ create_exception!(
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub struct Requirement<T: Pep508Url = VerbatimUrl> {
-    /// The distribution name such as `numpy` in
+    /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     pub name: PackageName,
     /// The list of extras such as `security`, `tests` in
@@ -145,7 +145,7 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     pub extras: Vec<ExtraName>,
     /// The version specifier such as `>= 2.8.1`, `== 2.8.*` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
-    /// or a url
+    /// or a URL.
     pub version_or_url: Option<VersionOrUrl<T>>,
     /// The markers such as `python_version > "3.8"` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
@@ -241,7 +241,7 @@ impl Deref for PyRequirement {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl PyRequirement {
-    /// The distribution name such as `numpy` in
+    /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     #[getter]
     pub fn name(&self) -> String {

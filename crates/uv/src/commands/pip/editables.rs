@@ -108,6 +108,7 @@ impl ResolvedEditables {
                     url,
                     path,
                     extras,
+                    marker: _,
                     origin: _,
                 } = editable;
                 LocalEditable {
