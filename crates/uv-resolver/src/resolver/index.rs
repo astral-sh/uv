@@ -14,19 +14,19 @@ pub struct InMemoryIndex(Arc<SharedInMemoryIndex>);
 struct SharedInMemoryIndex {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
-    pub(crate) packages: OnceMap<PackageName, Arc<VersionsResponse>>,
+    packages: OnceMap<PackageName, Arc<VersionsResponse>>,
 
     /// A map from package ID to metadata for that distribution.
-    pub(crate) distributions: OnceMap<VersionId, Arc<MetadataResponse>>,
+    distributions: OnceMap<VersionId, Arc<MetadataResponse>>,
 }
 
 impl InMemoryIndex {
-    /// Insert a [`VersionsResponse`] into the index.
+    /// Returns a reference to the package metadata map.
     pub fn packages(&self) -> &OnceMap<PackageName, Arc<VersionsResponse>> {
         &self.0.packages
     }
 
-    /// Insert a [`Metadata23`] into the index.
+    /// Returns a reference to the distribution metadata map.
     pub fn distributions(&self) -> &OnceMap<VersionId, Arc<MetadataResponse>> {
         &self.0.distributions
     }
