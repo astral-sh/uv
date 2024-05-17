@@ -79,7 +79,7 @@ impl<'a> Installer<'a> {
 }
 
 pub trait Reporter: Send + Sync {
-    /// Callback to invoke when a dependency is resolved.
+    /// Callback to invoke when a dependency is installed.
     fn on_install_progress(&self, wheel: &CachedDist);
 
     /// Callback to invoke when the resolution is complete.
