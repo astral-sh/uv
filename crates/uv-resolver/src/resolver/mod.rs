@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::thread;
 
 use anyhow::Result;
-use dashmap::{DashMap, DashSet};
-use futures::{FutureExt, StreamExt};
+use dashmap::DashMap;
+use futures::{FutureExt, StreamExt, TryFutureExt};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
@@ -49,6 +49,7 @@ use crate::pubgrub::{
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
 use crate::resolver::batch_prefetch::BatchPrefetcher;
+pub(crate) use crate::resolver::index::FxOnceMap;
 pub use crate::resolver::index::InMemoryIndex;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
@@ -202,8 +203,6 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
     incomplete_packages: DashMap<PackageName, DashMap<Version, IncompletePackage>>,
-    /// The set of all registry-based packages visited during resolution.
-    visited: DashSet<PackageName>,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -286,7 +285,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             index: index.clone(),
             unavailable_packages: DashMap::default(),
             incomplete_packages: DashMap::default(),
-            visited: DashSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers, options.dependency_mode)?,
@@ -332,7 +330,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let (request_sink, request_stream) = mpsc::channel(300);
 
         // Run the fetcher.
-        let requests_fut = state.clone().fetch(provider.clone(), request_stream).fuse();
+        let requests_fut = state
+            .clone()
+            .fetch(provider.clone(), request_stream)
+            .map_err(|err| (err, FxHashSet::default()))
+            .fuse();
 
         // Spawn the PubGrub solver on a dedicated thread.
         let solver = state.clone();
@@ -347,7 +349,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 
         let resolve_fut = async move {
             rx.await
-                .map_err(|_| ResolveError::ChannelClosed)
+                .map_err(|_| (ResolveError::ChannelClosed, FxHashSet::default()))
                 .and_then(|result| result)
         };
 
@@ -357,13 +359,13 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
                 state.on_complete();
                 Ok(resolution)
             }
-            Err(err) => {
+            Err((err, visited)) => {
                 // Add version information to improve unsat error messages.
                 Err(if let ResolveError::NoSolution(err) = err {
                     ResolveError::NoSolution(
                         err.with_available_versions(
                             &state.python_requirement,
-                            &state.visited,
+                            &visited,
                             state.index.packages(),
                         )
                         .with_selector(state.selector.clone())
@@ -381,10 +383,22 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 }
 
 impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackages> {
-    /// Run the PubGrub solver.
     #[instrument(skip_all)]
     fn solve(
         self: Arc<Self>,
+        request_sink: Sender<Request>,
+    ) -> Result<ResolutionGraph, (ResolveError, FxHashSet<PackageName>)> {
+        let mut visited = FxHashSet::default();
+        self.solve_tracked(&mut visited, request_sink)
+            .map_err(|err| (err, visited))
+    }
+
+    /// Run the PubGrub solver, updating the `visited` set for each package visited during
+    /// resolution.
+    #[instrument(skip_all)]
+    fn solve_tracked(
+        self: Arc<Self>,
+        visited: &mut FxHashSet<PackageName>,
         request_sink: Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
@@ -450,6 +464,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 &state.next,
                 term_intersection.unwrap_positive(),
                 &mut state.pins,
+                visited,
                 &request_sink,
             )?;
 
@@ -681,6 +696,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
+        visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         match package {
@@ -805,7 +821,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .packages()
                     .wait_blocking(package_name)
                     .ok_or(ResolveError::Unregistered)?;
-                self.visited.insert(package_name.clone());
+                visited.insert(package_name.clone());
 
                 let version_maps = match *versions_response {
                     VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),

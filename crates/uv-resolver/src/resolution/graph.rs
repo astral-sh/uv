@@ -10,7 +10,6 @@ use distribution_types::{
     Dist, DistributionMetadata, Name, ParsedUrlError, Requirement, ResolvedDist, VersionId,
     VersionOrUrlRef,
 };
-use once_map::OnceMap;
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::MarkerEnvironment;
 use uv_normalize::{ExtraName, PackageName};
@@ -22,6 +21,7 @@ use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
+use crate::resolver::FxOnceMap;
 use crate::{
     lock, InMemoryIndex, Lock, LockError, Manifest, MetadataResponse, ResolveError,
     VersionsResponse,
@@ -45,8 +45,8 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
-        packages: &OnceMap<PackageName, Arc<VersionsResponse>>,
-        distributions: &OnceMap<VersionId, Arc<MetadataResponse>>,
+        packages: &FxOnceMap<PackageName, Arc<VersionsResponse>>,
+        distributions: &FxOnceMap<VersionId, Arc<MetadataResponse>>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,

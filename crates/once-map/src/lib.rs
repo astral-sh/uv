@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::hash::Hash;
+use std::hash::{BuildHasher, Hash, RandomState};
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -14,11 +14,11 @@ use tokio::sync::Notify;
 ///
 /// Note that this always clones the value out of the underlying map. Because
 /// of this, it's common to wrap the `V` in an `Arc<V>` to make cloning cheap.
-pub struct OnceMap<K, V> {
-    items: DashMap<K, Value<V>>,
+pub struct OnceMap<K, V, H = RandomState> {
+    items: DashMap<K, Value<V>, H>,
 }
 
-impl<K: Eq + Hash, V: Clone> OnceMap<K, V> {
+impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// Register that you want to start a job.
     ///
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
@@ -97,10 +97,10 @@ impl<K: Eq + Hash, V: Clone> OnceMap<K, V> {
     }
 }
 
-impl<K: Eq + Hash + Clone, V> Default for OnceMap<K, V> {
+impl<K: Eq + Hash + Clone, V, H: Default + BuildHasher + Clone> Default for OnceMap<K, V, H> {
     fn default() -> Self {
         Self {
-            items: DashMap::new(),
+            items: DashMap::with_hasher(H::default()),
         }
     }
 }
