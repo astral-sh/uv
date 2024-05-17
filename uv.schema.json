@@ -263,6 +263,14 @@
           "format": "uint",
           "minimum": 1.0
         },
+        "concurrent-installs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
+        },
         "config-settings": {
           "anyOf": [
             {
