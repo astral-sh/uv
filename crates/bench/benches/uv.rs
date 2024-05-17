@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use bench::criterion::black_box;
 use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
 use distribution_types::Requirement;
@@ -14,10 +12,9 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
-    let manifest = &Manifest::simple(vec![Requirement::from_pep508(
-        pep508_rs::Requirement::from_str("jupyter").unwrap(),
-    )
-    .unwrap()]);
+    let manifest = &Manifest::simple(vec![
+        Requirement::from_pep508("jupyter".parse().unwrap()).unwrap()
+    ]);
     let client = &RegistryClientBuilder::new(cache.clone()).build();
 
     let run = || {
@@ -33,7 +30,38 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     c.bench_function("resolve_warm_jupyter", |b| b.iter(run));
 }
 
-criterion_group!(uv, resolve_warm_jupyter);
+fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
+    let runtime = &tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
+    let manifest = &Manifest::simple(vec![
+        Requirement::from_pep508("apache-airflow[all]".parse().unwrap()).unwrap(),
+        Requirement::from_pep508(
+            "apache-airflow-providers-apache-beam>3.0.0"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap(),
+    ]);
+    let client = &RegistryClientBuilder::new(cache.clone()).build();
+
+    let run = || {
+        runtime
+            .block_on(resolver::resolve(
+                black_box(manifest.clone()),
+                black_box(cache.clone()),
+                black_box(client),
+            ))
+            .unwrap();
+    };
+
+    c.bench_function("resolve_warm_airflow", |b| b.iter(run));
+}
+
+criterion_group!(uv, resolve_warm_jupyter, resolve_warm_airflow);
 criterion_main!(uv);
 
 mod resolver {
