@@ -300,7 +300,7 @@ fn lock_git() -> Result<()> {
     ----- stderr -----
     Downloaded 4 packages in [TIME]
     Installed 5 packages in [TIME]
-     + anyio==3.7.0 (from https://github.com/agronholm/anyio@f7a880ffac4766efb39e6fb60fc28d944f5d2f65)
+     + anyio==3.7.0 (from git+https://github.com/agronholm/anyio@f7a880ffac4766efb39e6fb60fc28d944f5d2f65)
      + exceptiongroup==1.2.0
      + idna==3.6
      + sniffio==1.3.1

@@ -12,8 +12,9 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
-    GitSourceDist, IndexUrl, ParsedArchiveUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
+    GitSourceDist, IndexUrl, ParsedArchiveUrl, ParsedGitUrl, PathBuiltDist, PathSourceDist,
+    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, Resolution, ResolvedDist,
+    ToUrlError,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -310,9 +311,10 @@ impl Distribution {
                     .with_precise(git.precise);
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                    // TODO(charlie): This shouldn't be necessary; it's only necessary because we're
-                    // still losing the `GitUrl` somewhere along the path to installation.
-                    let url = Url::from(git_url.clone());
+                    let url = Url::from(ParsedGitUrl {
+                        url: git_url.clone(),
+                        subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                    });
 
                     let git_dist = GitSourceDist {
                         name: self.id.name.clone(),
