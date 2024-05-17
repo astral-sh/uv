@@ -6,7 +6,7 @@ use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_requirements::{ExtrasSpecification, RequirementsSpecification};
@@ -17,6 +17,7 @@ use uv_warnings::warn_user;
 use crate::commands::project::discovery::Project;
 use crate::commands::project::Error;
 use crate::commands::{project, ExitStatus};
+use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Resolve the project requirements into a lockfile.
@@ -81,6 +82,7 @@ pub(crate) async fn lock(
     let no_build = NoBuild::default();
     let setup_py = SetupPyStrategy::default();
     let concurrency = Concurrency::default();
+    let reinstall = Reinstall::None;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -108,10 +110,28 @@ pub(crate) async fn lock(
         // .exclude_newer(exclude_newer)
         .build();
 
+    // Build all editable distributions. The editables are shared between resolution and
+    // installation, and should live for the duration of the command.
+    let editables = ResolvedEditables::resolve(
+        spec.editables.clone(),
+        &EmptyInstalledPackages,
+        &reinstall,
+        &hasher,
+        &interpreter,
+        tags,
+        cache,
+        &client,
+        &build_dispatch,
+        concurrency,
+        printer,
+    )
+    .await?;
+
     // Resolve the requirements.
     let resolution = project::resolve(
         spec,
         EmptyInstalledPackages,
+        &editables,
         &hasher,
         &interpreter,
         tags,

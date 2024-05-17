@@ -93,14 +93,15 @@ impl ResolutionGraph {
                     }
                 }
                 PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
-                    if let Some((editable, metadata, _)) = editables.get(package_name) {
-                        if metadata.provides_extras.contains(extra) {
+                    if let Some(editable) = editables.get(package_name) {
+                        if editable.metadata.provides_extras.contains(extra) {
                             extras
                                 .entry(package_name.clone())
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let dist = Dist::from_editable(package_name.clone(), editable.clone())?;
+                            let dist =
+                                Dist::from_editable(package_name.clone(), editable.built.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
                                 dist: dist.into(),
@@ -219,15 +220,16 @@ impl ResolutionGraph {
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
                     // Create the distribution.
-                    if let Some((editable, metadata, _)) = editables.get(package_name) {
-                        let dist = Dist::from_editable(package_name.clone(), editable.clone())?;
+                    if let Some(editable) = editables.get(package_name) {
+                        let dist =
+                            Dist::from_editable(package_name.clone(), editable.built.clone())?;
 
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
                             dist: dist.into(),
-                            extras: editable.extras.clone(),
+                            extras: editable.built.extras.clone(),
                             hashes: vec![],
-                            metadata: metadata.clone(),
+                            metadata: editable.metadata.clone(),
                         });
                         inverse.insert(package_name, index);
                     } else {
@@ -487,7 +489,7 @@ impl ResolutionGraph {
             manifest
                 .editables
                 .iter()
-                .flat_map(|(_, _, uv_requirements)| &uv_requirements.dependencies),
+                .flat_map(|editable| &editable.requirements.dependencies),
         );
         for direct_req in manifest.apply(direct_reqs) {
             let Some(ref marker_tree) = direct_req.marker else {

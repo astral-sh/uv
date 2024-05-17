@@ -36,7 +36,7 @@ mod cache_dir;
 mod cache_prune;
 mod pip;
 mod project;
-mod reporters;
+pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod venv;

@@ -43,6 +43,7 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod cli;
 mod commands;
 mod compat;
+mod editables;
 mod logging;
 mod printer;
 mod settings;

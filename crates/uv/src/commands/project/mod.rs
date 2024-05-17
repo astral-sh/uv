@@ -34,6 +34,7 @@ use uv_types::{BuildIsolation, HashStrategy, InFlight, InstalledPackagesProvider
 use crate::commands::project::discovery::Project;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
+use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 mod discovery;
@@ -69,6 +70,9 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Lookahead(#[from] uv_requirements::LookaheadError),
+
+    #[error(transparent)]
+    ParsedUrl(#[from] Box<distribution_types::ParsedUrlError>),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -120,6 +124,7 @@ pub(crate) fn init(
 pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     spec: RequirementsSpecification,
     installed_packages: InstalledPackages,
+    editables: &ResolvedEditables,
     hasher: &HashStrategy,
     interpreter: &Interpreter,
     tags: &Tags,
@@ -139,13 +144,28 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let constraints = Constraints::default();
     let overrides = Overrides::default();
     let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
-    let editables = Vec::new();
+
+    let RequirementsSpecification {
+        project,
+        requirements,
+        constraints: _,
+        overrides: _,
+        editables: _,
+        source_trees,
+        extras: _,
+        index_url: _,
+        extra_index_urls: _,
+        no_index: _,
+        find_links: _,
+        no_binary: _,
+        no_build: _,
+    } = spec;
 
     // Resolve the requirements from the provided sources.
     let requirements = {
         // Convert from unnamed to named requirements.
         let mut requirements = NamedRequirementsResolver::new(
-            spec.requirements,
+            requirements,
             hasher,
             index,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -155,10 +175,10 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         .await?;
 
         // Resolve any source trees into requirements.
-        if !spec.source_trees.is_empty() {
+        if !source_trees.is_empty() {
             requirements.extend(
                 SourceTreeResolver::new(
-                    spec.source_trees,
+                    source_trees,
                     &ExtrasSpecification::None,
                     hasher,
                     index,
@@ -174,11 +194,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     };
 
     // Determine any lookahead requirements.
+    let editable_metadata = editables.as_metadata().map_err(Error::ParsedUrl)?;
     let lookaheads = LookaheadResolver::new(
         &requirements,
         &constraints,
         &overrides,
-        &editables,
+        &editable_metadata,
         hasher,
         index,
         DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -193,8 +214,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         constraints,
         overrides,
         preferences,
-        spec.project,
-        editables,
+        project,
+        editable_metadata,
         exclusions,
         lookaheads,
     );
@@ -246,6 +267,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     resolution: &Resolution,
+    resolved_editables: ResolvedEditables,
     site_packages: SitePackages,
     no_binary: &NoBinary,
     link_mode: LinkMode,
@@ -267,6 +289,7 @@ pub(crate) async fn install(
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let plan = Planner::with_requirements(&requirements)
+        .with_editable_requirements(&resolved_editables.editables)
         .build(
             site_packages,
             &Reinstall::None,
@@ -517,6 +540,7 @@ async fn update_environment(
     let no_build = NoBuild::default();
     let setup_py = SetupPyStrategy::default();
     let concurrency = Concurrency::default();
+    let reinstall = Reinstall::None;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -544,10 +568,28 @@ async fn update_environment(
         // .exclude_newer(exclude_newer)
         .build();
 
+    // Build all editable distributions. The editables are shared between resolution and
+    // installation, and should live for the duration of the command.
+    let editables = ResolvedEditables::resolve(
+        spec.editables.clone(),
+        &site_packages,
+        &reinstall,
+        &hasher,
+        &interpreter,
+        tags,
+        cache,
+        &client,
+        &build_dispatch,
+        concurrency,
+        printer,
+    )
+    .await?;
+
     // Resolve the requirements.
     let resolution = match resolve(
         spec,
         site_packages.clone(),
+        &editables,
         &hasher,
         &interpreter,
         tags,
@@ -572,6 +614,7 @@ async fn update_environment(
     // Sync the environment.
     install(
         &resolution,
+        editables,
         site_packages,
         &no_binary,
         link_mode,

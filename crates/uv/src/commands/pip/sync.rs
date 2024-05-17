@@ -34,9 +34,9 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::editables::ResolvedEditables;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.

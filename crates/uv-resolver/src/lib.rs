@@ -1,4 +1,5 @@
 pub use dependency_mode::DependencyMode;
+pub use editables::BuiltEditableMetadata;
 pub use error::ResolveError;
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;

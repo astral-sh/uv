@@ -4,16 +4,15 @@ use std::fmt::Write;
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
 use fs_err as fs;
-use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
+use distribution_types::Requirement;
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
-    ParsedUrl, ParsedUrlError, RequirementSource, Resolution,
+    ParsedUrl, RequirementSource, Resolution,
 };
-use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -47,10 +46,10 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::editables::ResolvedEditables;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::DryRunEvent;
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
@@ -342,7 +341,6 @@ pub(crate) async fn pip_install(
 
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command.
-    // Resolve any editables.
     let editables = ResolvedEditables::resolve(
         editables,
         &site_packages,
@@ -572,7 +570,7 @@ async fn resolve(
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
     project: Option<PackageName>,
-    editables: &[ResolvedEditable],
+    editables: &ResolvedEditables,
     hasher: &HashStrategy,
     site_packages: SitePackages,
     reinstall: &Reinstall,
@@ -632,27 +630,7 @@ async fn resolve(
     let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
 
     // Map the editables to their metadata.
-    let editables: Vec<_> = editables
-        .iter()
-        .map(|editable| {
-            let dependencies: Vec<_> = editable
-                .metadata()
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(Requirement::from_pep508)
-                .collect::<Result<_, _>>()?;
-            Ok::<_, Box<ParsedUrlError>>((
-                editable.local().clone(),
-                editable.metadata().clone(),
-                Requirements {
-                    dependencies,
-                    optional_dependencies: IndexMap::default(),
-                },
-            ))
-        })
-        .collect::<Result<_, _>>()
-        .map_err(Error::ParsedUrl)?;
+    let editables = editables.as_metadata().map_err(Error::ParsedUrl)?;
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {

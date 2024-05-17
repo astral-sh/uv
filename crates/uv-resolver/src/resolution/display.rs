@@ -137,8 +137,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     return None;
                 }
 
-                let node = if let Some((editable, _, _)) = self.resolution.editables.get(name) {
-                    Node::Editable(editable)
+                let node = if let Some(editable) = self.resolution.editables.get(name) {
+                    Node::Editable(&editable.built)
                 } else {
                     Node::Distribution(dist)
                 };

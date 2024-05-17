@@ -22,7 +22,6 @@ use distribution_types::{
 use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
-use pypi_types::Metadata23;
 use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -44,9 +43,9 @@ use uv_requirements::{
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex,
-    InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
-    Resolver,
+    AnnotationStyle, BuiltEditableMetadata, DependencyMode, DisplayResolutionGraph, ExcludeNewer,
+    Exclusions, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode,
+    PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -443,7 +442,7 @@ pub(crate) async fn pip_compile(
 
         // Build all editables.
         let editable_wheel_dir = tempdir_in(cache.root())?;
-        let editables: Vec<(LocalEditable, Metadata23, Requirements)> = downloader
+        let editables: Vec<BuiltEditableMetadata> = downloader
             .build_editables(editables, editable_wheel_dir.path())
             .await
             .context("Failed to build editables")?
@@ -459,21 +458,21 @@ pub(crate) async fn pip_compile(
                         .collect::<Result<_, _>>()?,
                     optional_dependencies: IndexMap::default(),
                 };
-                Ok::<_, Box<ParsedUrlError>>((
-                    built_editable.editable,
-                    built_editable.metadata,
+                Ok::<_, Box<ParsedUrlError>>(BuiltEditableMetadata {
+                    built: built_editable.editable,
+                    metadata: built_editable.metadata,
                     requirements,
-                ))
+                })
             })
             .collect::<Result<_, _>>()?;
 
         // Validate that the editables are compatible with the target Python version.
-        for (_, metadata, _) in &editables {
-            if let Some(python_requires) = metadata.requires_python.as_ref() {
+        for editable in &editables {
+            if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
                 if !python_requires.contains(python_requirement.target()) {
                     return Err(anyhow!(
                         "Editable `{}` requires Python {}, but resolution targets Python {}",
-                        metadata.name,
+                        editable.metadata.name,
                         python_requires,
                         python_requirement.target()
                     ));
