@@ -20,10 +20,10 @@
   packageRules: [
     {
       // Disable updates of `zip-rs`; intentionally pinned for now due to ownership change
-      // See https://github.com/astral-sh/uv/issues/3642
-      "matchPackagePatterns": ["zip"],
-      "matchManagers": ["cargo"],
-      "enabled": false
+      // See: https://github.com/astral-sh/uv/issues/3642
+      matchPackagePatterns: ["zip"],
+      matchManagers: ["cargo"],
+      enabled: false,
     },
     {
       // Group upload/download artifact updates, the versions are dependent
