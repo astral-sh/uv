@@ -105,7 +105,7 @@ impl<'a> BuiltWheelIndex<'a> {
         let Some(modified) =
             ArchiveTimestamp::from_source_tree(&source_dist.path).map_err(Error::CacheRead)?
         else {
-            return Err(Error::DirWithoutEntrypoint);
+            return Err(Error::DirWithoutEntrypoint(source_dist.path.clone()));
         };
 
         // If the distribution is stale, omit it from the index.

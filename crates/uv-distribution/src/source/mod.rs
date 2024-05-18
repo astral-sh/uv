@@ -978,7 +978,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let Some(modified) =
             ArchiveTimestamp::from_source_tree(&resource.path).map_err(Error::CacheRead)?
         else {
-            return Err(Error::DirWithoutEntrypoint);
+            return Err(Error::DirWithoutEntrypoint(resource.path.to_path_buf()));
         };
 
         // Read the existing metadata from the cache.
