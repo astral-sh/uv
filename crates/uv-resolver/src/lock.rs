@@ -9,12 +9,12 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
     GitSourceDist, IndexUrl, ParsedArchiveUrl, ParsedGitUrl, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, Resolution, ResolvedDist,
-    ToUrlError,
+    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution,
+    ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
@@ -339,7 +339,31 @@ impl Distribution {
                     let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
                     Dist::Source(source_dist)
                 }
-                SourceKind::Registry => todo!(),
+                SourceKind::Registry => {
+                    // TODO(charlie): Introduce an error type to the conversion functions.
+                    let filename =
+                        SourceDistFilename::parse(&sdist.url.filename().unwrap(), &self.id.name)
+                            .unwrap();
+                    let file = Box::new(distribution_types::File {
+                        dist_info_metadata: false,
+                        filename: filename.to_string(),
+                        hashes: vec![],
+                        requires_python: None,
+                        size: None,
+                        upload_time_utc_ms: None,
+                        url: FileLocation::AbsoluteUrl(sdist.url.to_string()),
+                        yanked: None,
+                    });
+                    let index = IndexUrl::Url(VerbatimUrl::from_url(self.id.source.url.clone()));
+                    let reg_dist = RegistrySourceDist {
+                        filename,
+                        file,
+                        index,
+                        wheels: vec![],
+                    };
+                    let source_dist = distribution_types::SourceDist::Registry(reg_dist);
+                    Dist::Source(source_dist)
+                }
             };
         }
 
@@ -978,8 +1002,6 @@ impl Wheel {
             .url
             .to_url()
             .map_err(LockError::invalid_file_url)?;
-        // FIXME: Is it guaranteed that there is at least one hash?
-        // If not, we probably need to make this fallible.
         let hash = wheel.file.hashes.first().cloned().map(Hash::from);
         Ok(Wheel {
             url,
