@@ -33,7 +33,7 @@ pub(crate) struct Cli {
     pub(crate) cache_args: CacheArgs,
 
     /// The path to a `uv.toml` file to use for configuration.
-    #[arg(long, env = "UV_CONFIG_FILE", hide = true)]
+    #[arg(long, env = "UV_CONFIG_FILE")]
     pub(crate) config_file: Option<PathBuf>,
 }
 
