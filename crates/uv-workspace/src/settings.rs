@@ -87,4 +87,5 @@ pub struct PipOptions {
     pub require_hashes: Option<bool>,
     pub concurrent_downloads: Option<NonZeroUsize>,
     pub concurrent_builds: Option<NonZeroUsize>,
+    pub concurrent_installs: Option<NonZeroUsize>,
 }

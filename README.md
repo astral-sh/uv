@@ -560,6 +560,8 @@ uv accepts the following command-line arguments as environment variables:
   will perform at any given time.
 - `UV_CONCURRENT_BUILDS`: Sets the maximum number of source distributions that `uv` will build
   concurrently at any given time.
+- `UV_CONCURRENT_INSTALLS`: Used to control the number of threads used when installing and unzipping
+  packages.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
@@ -583,8 +585,6 @@ In addition, uv respects the following environment variables:
 - `FISH_VERSION`: Used to detect the use of the Fish shell.
 - `BASH_VERSION`: Used to detect the use of the Bash shell.
 - `ZSH_VERSION`: Used to detect the use of the Zsh shell.
-- `RAYON_NUM_THREADS`: Used to control the number of threads used when unzipping and installing
-  packages. See the [rayon documentation](https://docs.rs/rayon/latest/rayon/) for more.
 - `MACOSX_DEPLOYMENT_TARGET`: Used with `--python-platform macos` and related variants to set the
   deployment target (i.e., the minimum supported macOS version). Defaults to `12.0`, the
   least-recent non-EOL macOS version at time of writing.

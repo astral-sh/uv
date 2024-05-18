@@ -4518,6 +4518,7 @@ dependencies = [
  "platform-tags",
  "predicates",
  "pypi-types",
+ "rayon",
  "regex",
  "requirements-txt",
  "reqwest",
