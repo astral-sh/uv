@@ -145,7 +145,7 @@ wiremock = { version = "0.6.0" }
 walkdir = { version = "2.5.0" }
 which = { version = "6.0.0" }
 winapi = { version = "0.3.9", features = ["fileapi", "handleapi", "ioapiset", "winbase", "winioctl", "winnt"] }
-zip = { version = "1.1.0", default-features = false, features = ["deflate"] }
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
 ignored = ["flate2"]
