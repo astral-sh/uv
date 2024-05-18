@@ -17,8 +17,8 @@ pub enum Error {
     #[error("Unable to extract file path from URL: {0}")]
     MissingFilePath(Url),
 
-    #[error("Could not extract path segments")]
-    MissingPathSegments,
+    #[error("Could not extract path segments from URL: {0}")]
+    MissingPathSegments(Url),
 
     #[error("Distribution not found at: {0}")]
     NotFound(Url),

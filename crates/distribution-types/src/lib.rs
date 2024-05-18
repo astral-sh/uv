@@ -704,7 +704,7 @@ impl RemoteSource for Url {
         // Identify the last segment of the URL as the filename.
         let path_segments = self
             .path_segments()
-            .ok_or_else(|| Error::MissingPathSegments)?;
+            .ok_or_else(|| Error::MissingPathSegments(self.clone()))?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
         let last = path_segments.last().expect("path segments is non-empty");

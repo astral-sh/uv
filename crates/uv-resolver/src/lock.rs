@@ -1076,10 +1076,7 @@ impl TryFrom<WheelWire> for Wheel {
 
     fn try_from(wire: WheelWire) -> Result<Wheel, String> {
         // Extract the filename segment from the URL.
-        let filename = wire
-            .url
-            .filename()
-            .map_err(|err| format!("failed to extract filename from URL `{}`: {err}", wire.url))?;
+        let filename = wire.url.filename().map_err(|err| err.to_string())?;
 
         // Parse the filename as a wheel filename.
         let filename = filename
