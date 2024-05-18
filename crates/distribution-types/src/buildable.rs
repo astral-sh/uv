@@ -32,7 +32,7 @@ impl BuildableSource<'_> {
     /// Return the [`Version`] of the source, if available.
     pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Dist(SourceDist::Registry(dist)) => Some(&dist.filename.version),
+            Self::Dist(SourceDist::Registry(dist)) => Some(&dist.version),
             Self::Dist(_) => None,
             Self::Url(_) => None,
         }

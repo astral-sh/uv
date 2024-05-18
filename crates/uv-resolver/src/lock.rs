@@ -9,7 +9,7 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_filename::{SourceDistFilename, WheelFilename};
+use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
     GitSourceDist, IndexUrl, ParsedArchiveUrl, ParsedGitUrl, PathBuiltDist, PathSourceDist,
@@ -340,13 +340,9 @@ impl Distribution {
                     Dist::Source(source_dist)
                 }
                 SourceKind::Registry => {
-                    // TODO(charlie): Introduce an error type to the conversion functions.
-                    let filename =
-                        SourceDistFilename::parse(&sdist.url.filename().unwrap(), &self.id.name)
-                            .unwrap();
                     let file = Box::new(distribution_types::File {
                         dist_info_metadata: false,
-                        filename: filename.to_string(),
+                        filename: sdist.url.filename().unwrap().to_string(),
                         hashes: vec![],
                         requires_python: None,
                         size: None,
@@ -356,7 +352,8 @@ impl Distribution {
                     });
                     let index = IndexUrl::Url(VerbatimUrl::from_url(self.id.source.url.clone()));
                     let reg_dist = RegistrySourceDist {
-                        filename,
+                        name: self.id.name.clone(),
+                        version: self.id.version.clone(),
                         file,
                         index,
                         wheels: vec![],

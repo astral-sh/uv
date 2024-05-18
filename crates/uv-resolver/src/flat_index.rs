@@ -98,7 +98,8 @@ impl FlatIndex {
                 let compatibility =
                     Self::source_dist_compatibility(&filename, &file.hashes, hasher, no_build);
                 let dist = RegistrySourceDist {
-                    filename: filename.clone(),
+                    name: filename.name.clone(),
+                    version: filename.version.clone(),
                     file: Box::new(file),
                     index,
                     wheels: vec![],

@@ -93,8 +93,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&dist.index)
-                        .wheel_dir(dist.filename.name.as_ref())
-                        .join(dist.filename.version.to_string()),
+                        .wheel_dir(dist.name.as_ref())
+                        .join(dist.version.to_string()),
                 );
 
                 let url = match &dist.file.url {
@@ -250,8 +250,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&dist.index)
-                        .wheel_dir(dist.filename.name.as_ref())
-                        .join(dist.filename.version.to_string()),
+                        .wheel_dir(dist.name.as_ref())
+                        .join(dist.version.to_string()),
                 );
 
                 let url = match &dist.file.url {
