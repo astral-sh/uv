@@ -76,7 +76,7 @@ impl TryFrom<Url> for GitUrl {
             .rsplit_once('@')
             .map(|(prefix, suffix)| (prefix.to_string(), suffix.to_string()))
         {
-            reference = GitReference::from_rev(&suffix);
+            reference = GitReference::from_rev(suffix);
             url.set_path(&prefix);
         }
 
