@@ -349,7 +349,7 @@ impl Distribution {
                         filename: filename.to_string(),
                         hashes: vec![],
                         requires_python: None,
-                        size: None,
+                        size: sdist.size,
                         upload_time_utc_ms: None,
                         url: FileLocation::AbsoluteUrl(sdist.url.to_string()),
                         yanked: None,
@@ -758,6 +758,10 @@ pub(crate) struct SourceDist {
     /// and direct URLs. Source distributions from git or path dependencies do
     /// not have hashes associated with them.
     hash: Option<Hash>,
+    /// The size of the source distribution in bytes.
+    ///
+    /// This is only present for source distributions that come from registries.
+    size: Option<u64>,
 }
 
 impl SourceDist {
@@ -819,13 +823,15 @@ impl SourceDist {
             .to_url()
             .map_err(LockError::invalid_file_url)?;
         let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
-        Ok(SourceDist { url, hash })
+        let size = reg_dist.file.size;
+        Ok(SourceDist { url, hash, size })
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist {
             url: direct_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
         }
     }
 
@@ -833,6 +839,7 @@ impl SourceDist {
         SourceDist {
             url: locked_git_url(git_dist),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
         }
     }
 
@@ -840,6 +847,7 @@ impl SourceDist {
         SourceDist {
             url: path_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
         }
     }
 
@@ -850,6 +858,7 @@ impl SourceDist {
         SourceDist {
             url: directory_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
         }
     }
 }
@@ -937,12 +946,16 @@ pub(crate) struct Wheel {
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
     url: Url,
-    /// A hash of the source distribution.
+    /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
     /// URLs. Wheels from git or path dependencies do not have hashes
     /// associated with them.
     hash: Option<Hash>,
+    /// The size of the built distribution in bytes.
+    ///
+    /// This is only present for wheels that come from registries.
+    size: Option<u64>,
     /// The filename of the wheel.
     ///
     /// This isn't part of the wire format since it's redundant with the
@@ -1003,9 +1016,11 @@ impl Wheel {
             .to_url()
             .map_err(LockError::invalid_file_url)?;
         let hash = wheel.file.hashes.first().cloned().map(Hash::from);
+        let size = wheel.file.size;
         Ok(Wheel {
             url,
             hash,
+            size,
             filename,
         })
     }
@@ -1014,6 +1029,7 @@ impl Wheel {
         Wheel {
             url: direct_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
             filename: direct_dist.filename.clone(),
         }
     }
@@ -1022,6 +1038,7 @@ impl Wheel {
         Wheel {
             url: path_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
             filename: path_dist.filename.clone(),
         }
     }
@@ -1033,7 +1050,7 @@ impl Wheel {
             filename: filename.to_string(),
             hashes: vec![],
             requires_python: None,
-            size: None,
+            size: self.size,
             upload_time_utc_ms: None,
             url: FileLocation::AbsoluteUrl(self.url.to_string()),
             yanked: None,
@@ -1054,12 +1071,16 @@ struct WheelWire {
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
     url: Url,
-    /// A hash of the source distribution.
+    /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
     /// URLs. Wheels from git or path dependencies do not have hashes
     /// associated with them.
     hash: Option<Hash>,
+    /// The size of the built distribution in bytes.
+    ///
+    /// This is only present for wheels that come from registries.
+    size: Option<u64>,
 }
 
 impl From<Wheel> for WheelWire {
@@ -1067,6 +1088,7 @@ impl From<Wheel> for WheelWire {
         WheelWire {
             url: wheel.url,
             hash: wheel.hash,
+            size: wheel.size,
         }
     }
 }
@@ -1087,6 +1109,7 @@ impl TryFrom<WheelWire> for Wheel {
         Ok(Wheel {
             url: wire.url,
             hash: wire.hash,
+            size: wire.size,
             filename,
         })
     }
