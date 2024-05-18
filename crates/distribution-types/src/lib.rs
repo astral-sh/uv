@@ -702,13 +702,15 @@ impl RemoteSource for File {
 impl RemoteSource for Url {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
-        let filename = self
+        let path_segments = self
             .path_segments()
-            .and_then(Iterator::last)
-            .ok_or_else(|| Error::UrlFilename(self.clone()))?;
+            .ok_or_else(|| Error::MissingPathSegments)?;
+
+        // This is guaranteed by the contract of `Url::path_segments`.
+        let last = path_segments.last().expect("path segments is non-empty");
 
         // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(filename)?;
+        let filename = urlencoding::decode(last)?;
 
         Ok(filename)
     }

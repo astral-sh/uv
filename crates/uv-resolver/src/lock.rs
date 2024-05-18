@@ -1075,15 +1075,17 @@ impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
     fn try_from(wire: WheelWire) -> Result<Wheel, String> {
-        let path_segments = wire
+        // Extract the filename segment from the URL.
+        let filename = wire
             .url
-            .path_segments()
-            .ok_or_else(|| format!("could not extract path from URL `{}`", wire.url))?;
-        // This is guaranteed by the contract of Url::path_segments.
-        let last = path_segments.last().expect("path segments is non-empty");
-        let filename = last
+            .filename()
+            .map_err(|err| format!("failed to extract filename from URL `{}`: {err}", wire.url))?;
+
+        // Parse the filename as a wheel filename.
+        let filename = filename
             .parse::<WheelFilename>()
-            .map_err(|err| format!("failed to parse `{last}` as wheel filename: {err}"))?;
+            .map_err(|err| format!("failed to parse `{filename}` as wheel filename: {err}"))?;
+
         Ok(Wheel {
             url: wire.url,
             hash: wire.hash,
