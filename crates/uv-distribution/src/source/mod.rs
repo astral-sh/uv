@@ -1024,7 +1024,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Resolve to a precise Git SHA.
         let url = if let Some(url) = resolve_precise(
-            resource.url,
+            &resource.git,
             self.build_context.cache(),
             self.reporter.as_ref(),
         )
@@ -1032,17 +1032,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             Cow::Owned(url)
         } else {
-            Cow::Borrowed(resource.url)
+            Cow::Borrowed(resource.git.as_ref())
         };
 
+        let subdirectory = resource.subdirectory.as_deref();
+
         // Fetch the Git repository.
-        let (fetch, subdirectory) =
+        let fetch =
             fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(&url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
 
         let _lock = lock_shard(&cache_shard).await?;
@@ -1058,7 +1060,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, fetch.path(), subdirectory.as_deref(), &cache_shard)
+            .build_distribution(source, fetch.path(), subdirectory, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -1098,7 +1100,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Resolve to a precise Git SHA.
         let url = if let Some(url) = resolve_precise(
-            resource.url,
+            &resource.git,
             self.build_context.cache(),
             self.reporter.as_ref(),
         )
@@ -1106,17 +1108,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             Cow::Owned(url)
         } else {
-            Cow::Borrowed(resource.url)
+            Cow::Borrowed(resource.git.as_ref())
         };
 
+        let subdirectory = resource.subdirectory.as_deref();
+
         // Fetch the Git repository.
-        let (fetch, subdirectory) =
+        let fetch =
             fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(&url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
 
         let _lock = lock_shard(&cache_shard).await?;
@@ -1137,7 +1141,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, fetch.path(), subdirectory.as_deref())
+            .build_metadata(source, fetch.path(), subdirectory)
             .boxed_local()
             .await?
         {
@@ -1159,7 +1163,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, fetch.path(), subdirectory.as_deref(), &cache_shard)
+            .build_distribution(source, fetch.path(), subdirectory, &cache_shard)
             .await?;
 
         if let Some(task) = task {
