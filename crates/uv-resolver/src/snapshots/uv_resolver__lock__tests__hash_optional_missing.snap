@@ -50,6 +50,7 @@ Ok(
                                 },
                             ),
                         ),
+                        size: None,
                         filename: WheelFilename {
                             name: PackageName(
                                 "anyio",
