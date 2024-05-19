@@ -185,7 +185,7 @@ pub(crate) async fn run(
 }
 
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
-async fn update_environment(
+pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
     preview: PreviewMode,

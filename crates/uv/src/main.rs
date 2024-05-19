@@ -7,6 +7,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
+use cli::{ToolCommand, ToolNamespace};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
@@ -597,6 +598,20 @@ async fn run() -> Result<ExitStatus> {
         Commands::GenerateShellCompletion { shell } => {
             shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
+        }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Run(args),
+        }) => {
+            commands::run_tool(
+                args.target,
+                args.args,
+                args.python,
+                globals.isolated,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
         }
     }
 }

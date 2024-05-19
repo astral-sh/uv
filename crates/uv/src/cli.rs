@@ -121,6 +121,8 @@ impl From<ColorChoice> for anstream::ColorChoice {
 pub(crate) enum Commands {
     /// Resolve and install Python packages.
     Pip(PipNamespace),
+    /// Run and manage executable Python packages.
+    Tool(ToolNamespace),
     /// Create a virtual environment.
     #[command(alias = "virtualenv", alias = "v")]
     Venv(VenvArgs),
@@ -1919,4 +1921,37 @@ struct AddArgs {
 struct RemoveArgs {
     /// The name of the package to remove (e.g., `Django`).
     name: PackageName,
+}
+
+#[derive(Args)]
+pub(crate) struct ToolNamespace {
+    #[command(subcommand)]
+    pub(crate) command: ToolCommand,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ToolCommand {
+    /// Run a tool
+    Run(ToolRunArgs),
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct ToolRunArgs {
+    /// The command to run.
+    pub(crate) target: String,
+
+    /// The arguments to the command.
+    #[arg(allow_hyphen_values = true)]
+    pub(crate) args: Vec<OsString>,
+
+    /// The Python interpreter to use to build the run environment.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
+    pub(crate) python: Option<String>,
 }

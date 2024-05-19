@@ -32,7 +32,7 @@ use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverRepo
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
 
-mod discovery;
+pub(crate) mod discovery;
 pub(crate) mod lock;
 pub(crate) mod run;
 pub(crate) mod sync;

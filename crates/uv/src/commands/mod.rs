@@ -17,10 +17,11 @@ pub(crate) use pip::show::pip_show;
 pub(crate) use pip::sync::pip_sync;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::lock::lock;
-pub(crate) use project::run::run;
+pub(crate) use project::run::{run, update_environment};
 pub(crate) use project::sync::sync;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
+pub(crate) use tool::run::run as run_tool;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
@@ -37,6 +38,8 @@ mod cache_prune;
 mod pip;
 mod project;
 mod reporters;
+mod tool;
+
 #[cfg(feature = "self-update")]
 mod self_update;
 mod venv;
