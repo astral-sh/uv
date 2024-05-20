@@ -1,14 +1,11 @@
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 
-use distribution_types::{
-    DistributionMetadata, IndexUrl, LocalEditable, Name, SourceAnnotations, Verbatim,
-};
+use distribution_types::{IndexUrl, LocalEditable, Name, SourceAnnotations, Verbatim};
 use pypi_types::HashDigest;
 use uv_normalize::PackageName;
 
@@ -155,13 +152,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             let mut line = match node {
                 Node::Editable(editable) => format!("-e {}", editable.verbatim()),
                 Node::Distribution(dist) => {
-                    let dist = if self.include_extras {
-                        Cow::Borrowed(dist)
-                    } else {
-                        dist.without_extras()
-                    };
-                    dist.to_requirements_txt().to_string()
-
+                    dist.to_requirements_txt(self.include_extras).to_string()
                 }
             };
 

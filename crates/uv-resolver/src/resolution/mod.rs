@@ -5,6 +5,7 @@ use std::path::Path;
 use itertools::Itertools;
 
 use distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
+use pep508_rs::{split_scheme, Scheme};
 use pypi_types::{HashDigest, Metadata23};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -32,19 +33,52 @@ impl AnnotatedDist {
     /// This typically results in a PEP 508 representation of the requirement, but will write an
     /// unnamed requirement for relative paths, which can't be represented with PEP 508 (but are
     /// supported in `requirements.txt`).
-    pub(crate) fn to_requirements_txt(&self) -> Cow<str> {
-        // If the URL is not _definitively_ an absolute `file://` URL, write it as a relative
-        // path.
+    pub(crate) fn to_requirements_txt(&self, include_extras: bool) -> Cow<str> {
+        // If the URL is not _definitively_ an absolute `file://` URL, write it as a relative path.
         if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
             let given = url.verbatim();
-            if !given.strip_prefix("file://").is_some_and(|path| {
-                path.starts_with("${PROJECT_ROOT}") || Path::new(path).is_absolute()
-            }) {
-                return given;
+            match split_scheme(&given) {
+                Some((scheme, path)) => {
+                    match Scheme::parse(scheme) {
+                        Some(Scheme::File) => {
+                            if path
+                                .strip_prefix("//localhost")
+                                .filter(|path| path.starts_with('/'))
+                                .is_some()
+                            {
+                                // Always absolute; nothing to do.
+                            } else if let Some(path) = path.strip_prefix("//") {
+                                // Strip the prefix, to convert, e.g., `file://flask-3.0.3-py3-none-any.whl` to `flask-3.0.3-py3-none-any.whl`.
+                                //
+                                // However, we should allow any of the following:
+                                // - `file://flask-3.0.3-py3-none-any.whl`
+                                // - `file://C:\Users\user\flask-3.0.3-py3-none-any.whl`
+                                // - `file:///C:\Users\user\flask-3.0.3-py3-none-any.whl`
+                                if !path.starts_with("${PROJECT_ROOT}")
+                                    && !Path::new(path).has_root()
+                                {
+                                    return Cow::Owned(path.to_string());
+                                }
+                            } else {
+                                // Ex) `file:./flask-3.0.3-py3-none-any.whl`
+                                return given;
+                            }
+                        }
+                        Some(_) => {}
+                        None => {
+                            // Ex) `flask @ C:\Users\user\flask-3.0.3-py3-none-any.whl`
+                            return given;
+                        }
+                    }
+                }
+                None => {
+                    // Ex) `flask @ flask-3.0.3-py3-none-any.whl`
+                    return given;
+                }
             }
         }
 
-        if self.extras.is_empty() {
+        if self.extras.is_empty() || !include_extras {
             self.dist.verbatim()
         } else {
             let mut extras = self.extras.clone();
@@ -56,20 +90,6 @@ impl AnnotatedDist {
                 extras.into_iter().join(", "),
                 self.version_or_url().verbatim()
             ))
-        }
-    }
-
-    /// Return the [`AnnotatedDist`] without any extras.
-    pub(crate) fn without_extras(&self) -> Cow<AnnotatedDist> {
-        if self.extras.is_empty() {
-            Cow::Borrowed(self)
-        } else {
-            Cow::Owned(AnnotatedDist {
-                dist: self.dist.clone(),
-                extras: Vec::new(),
-                hashes: self.hashes.clone(),
-                metadata: self.metadata.clone(),
-            })
         }
     }
 }
