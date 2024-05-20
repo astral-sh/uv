@@ -856,7 +856,7 @@ impl MarkerEnvironment {
 /// A builder for constructing a marker environment.
 ///
 /// A value of this type can be fallibly converted to a full
-/// [`MarkerEnvironment`] via `MarkerEnvironment::try_from`. This can fail when
+/// [`MarkerEnvironment`] via [`MarkerEnvironment::try_from`]. This can fail when
 /// the version strings given aren't valid.
 ///
 /// The main utility of this type is for constructing dummy or test environment
@@ -1138,7 +1138,7 @@ impl MarkerExpression {
         }
     }
 
-    /// Creates an instance of `MarkerExpression::Arbitrary` with the given values.
+    /// Creates an instance of [`MarkerExpression::Arbitrary`] with the given values.
     fn arbitrary(
         l_value: MarkerValue,
         operator: MarkerOperator,
@@ -1151,7 +1151,7 @@ impl MarkerExpression {
         }
     }
 
-    /// Creates an instance of `MarkerExpression::Version` with the given values.
+    /// Creates an instance of [`MarkerExpression::Version`] with the given values.
     ///
     /// Reports a warning on failure, and returns `None`.
     pub fn version(
@@ -1204,7 +1204,7 @@ impl MarkerExpression {
         Some(MarkerExpression::Version { key, specifier })
     }
 
-    /// Creates an instance of `MarkerExpression::VersionInverted` with the given values.
+    /// Creates an instance of [`MarkerExpression::VersionInverted`] with the given values.
     ///
     /// Reports a warning on failure, and returns `None`.
     fn version_inverted(
@@ -1248,8 +1248,8 @@ impl MarkerExpression {
         })
     }
 
-    /// Creates an instance of `MarkerExpression::Extra` with the given values, falling back to
-    /// `MarkerExpression::Arbitrary` on failure.
+    /// Creates an instance of [`MarkerExpression::Extra`] with the given values, falling back to
+    /// [`MarkerExpression::Arbitrary`] on failure.
     fn extra(
         operator: MarkerOperator,
         value: &str,
