@@ -250,7 +250,18 @@ impl std::error::Error for VersionSpecifiersParseError {}
 /// let version_specifier = VersionSpecifier::from_str("== 1.*").unwrap();
 /// assert!(version_specifier.contains(&version));
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Debug,
+    Clone,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
