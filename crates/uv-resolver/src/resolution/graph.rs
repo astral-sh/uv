@@ -59,6 +59,7 @@ impl ResolutionGraph {
                 PubGrubPackage::Package {
                     name,
                     extra: Some(extra),
+                    marker: None,
                     url: None,
                 } => {
                     let dist = PubGrubDistribution::from_registry(name, version);
@@ -97,6 +98,7 @@ impl ResolutionGraph {
                 PubGrubPackage::Package {
                     name,
                     extra: Some(extra),
+                    marker: None,
                     url: Some(url),
                 } => {
                     if let Some(editable) = editables.get(name) {
@@ -161,6 +163,7 @@ impl ResolutionGraph {
                 PubGrubPackage::Package {
                     name,
                     extra: None,
+                    marker: None,
                     url: None,
                 } => {
                     // Create the distribution.
@@ -229,6 +232,7 @@ impl ResolutionGraph {
                 PubGrubPackage::Package {
                     name,
                     extra: None,
+                    marker: None,
                     url: Some(url),
                 } => {
                     // Create the distribution.

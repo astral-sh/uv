@@ -223,7 +223,12 @@ impl PubGrubRequirement {
                 };
 
                 Ok(Self {
-                    package: PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
+                    package: PubGrubPackage::from_package(
+                        requirement.name.clone(),
+                        extra,
+                        None,
+                        urls,
+                    ),
                     version,
                 })
             }
@@ -247,6 +252,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::Package {
                         name: requirement.name.clone(),
                         extra,
+                        marker: None,
                         url: Some(expected.clone()),
                     },
                     version: Range::full(),
@@ -272,6 +278,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::Package {
                         name: requirement.name.clone(),
                         extra,
+                        marker: None,
                         url: Some(expected.clone()),
                     },
                     version: Range::full(),
@@ -297,6 +304,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::Package {
                         name: requirement.name.clone(),
                         extra,
+                        marker: None,
                         url: Some(expected.clone()),
                     },
                     version: Range::full(),
