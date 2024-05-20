@@ -480,8 +480,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .expect("a package was chosen but we don't have a term.");
 
                     // Check if the decision was due to the package being unavailable
-                    if let PubGrubPackage::Package(ref package_name, _, _) = state.next {
-                        if let Some(entry) = self.unavailable_packages.get(package_name) {
+                    if let PubGrubPackage::Package { ref name, .. } = state.next {
+                        if let Some(entry) = self.unavailable_packages.get(name) {
                             state
                                 .pubgrub
                                 .add_incompatibility(Incompatibility::custom_term(
@@ -636,8 +636,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         match package {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
-            PubGrubPackage::Extra(_, _, _) => {}
-            PubGrubPackage::Package(name, _extra, None) => {
+            PubGrubPackage::Extra { .. } => {}
+            PubGrubPackage::Package {
+                name, url: None, ..
+            } => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_package(name) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
@@ -648,7 +650,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     request_sink.blocking_send(Request::Package(name.clone()))?;
                 }
             }
-            PubGrubPackage::Package(name, _extra, Some(url)) => {
+            PubGrubPackage::Package {
+                name,
+                url: Some(url),
+                ..
+            } => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_url(&url.verbatim) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
@@ -678,10 +684,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package(package_name, None, None) = package else {
+            let PubGrubPackage::Package {
+                name,
+                extra: None,
+                url: None,
+            } = package
+            else {
                 continue;
             };
-            request_sink.blocking_send(Request::Prefetch(package_name.clone(), range.clone()))?;
+            request_sink.blocking_send(Request::Prefetch(name.clone(), range.clone()))?;
         }
         Ok(())
     }
@@ -720,15 +731,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            PubGrubPackage::Extra(package_name, _, Some(url))
-            | PubGrubPackage::Package(package_name, _, Some(url)) => {
+            PubGrubPackage::Extra {
+                name,
+                url: Some(url),
+                ..
+            }
+            | PubGrubPackage::Package {
+                name,
+                url: Some(url),
+                ..
+            } => {
                 debug!(
                     "Searching for a compatible version of {package} @ {} ({range})",
                     url.verbatim
                 );
 
                 // If the dist is an editable, return the version from the editable metadata.
-                if let Some(editable) = self.editables.get(package_name) {
+                if let Some(editable) = self.editables.get(name) {
                     let version = &editable.metadata.version;
 
                     // The version is incompatible with the requirement.
@@ -752,7 +771,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Some(ResolverVersion::Available(version.clone())));
                 }
 
-                let dist = PubGrubDistribution::from_url(package_name, url);
+                let dist = PubGrubDistribution::from_url(name, url);
                 let response = self
                     .index
                     .distributions()
@@ -764,26 +783,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.unavailable_packages
-                            .insert(package_name.clone(), UnavailablePackage::Offline);
+                            .insert(name.clone(), UnavailablePackage::Offline);
                         return Ok(None);
                     }
                     MetadataResponse::InvalidMetadata(err) => {
                         self.unavailable_packages.insert(
-                            package_name.clone(),
+                            name.clone(),
                             UnavailablePackage::InvalidMetadata(err.to_string()),
                         );
                         return Ok(None);
                     }
                     MetadataResponse::InconsistentMetadata(err) => {
                         self.unavailable_packages.insert(
-                            package_name.clone(),
+                            name.clone(),
                             UnavailablePackage::InvalidMetadata(err.to_string()),
                         );
                         return Ok(None);
                     }
                     MetadataResponse::InvalidStructure(err) => {
                         self.unavailable_packages.insert(
-                            package_name.clone(),
+                            name.clone(),
                             UnavailablePackage::InvalidStructure(err.to_string()),
                         );
                         return Ok(None);
@@ -813,31 +832,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
-            PubGrubPackage::Extra(package_name, _, None)
-            | PubGrubPackage::Package(package_name, _, None) => {
+            PubGrubPackage::Extra {
+                name, url: None, ..
+            }
+            | PubGrubPackage::Package {
+                name, url: None, ..
+            } => {
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
                     .packages()
-                    .wait_blocking(package_name)
+                    .wait_blocking(name)
                     .ok_or(ResolveError::Unregistered)?;
-                visited.insert(package_name.clone());
+                visited.insert(name.clone());
 
                 let version_maps = match *versions_response {
                     VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
-                            .insert(package_name.clone(), UnavailablePackage::NoIndex);
+                            .insert(name.clone(), UnavailablePackage::NoIndex);
                         &[]
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
-                            .insert(package_name.clone(), UnavailablePackage::Offline);
+                            .insert(name.clone(), UnavailablePackage::Offline);
                         &[]
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
-                            .insert(package_name.clone(), UnavailablePackage::NotFound);
+                            .insert(name.clone(), UnavailablePackage::NotFound);
                         &[]
                     }
                 };
@@ -846,7 +869,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Find a version.
                 let Some(candidate) = self.selector.select(
-                    package_name,
+                    name,
                     range,
                     version_maps,
                     &self.preferences,
@@ -892,7 +915,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if matches!(package, PubGrubPackage::Package(_, _, _)) {
+                if matches!(package, PubGrubPackage::Package { .. }) {
                     if self.index.distributions().register(candidate.version_id()) {
                         let request = Request::from(dist.for_resolution());
                         request_sink.blocking_send(request)?;
@@ -997,16 +1020,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
 
-            PubGrubPackage::Package(package_name, extra, url) => {
+            PubGrubPackage::Package { name, extra, url } => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for generating the lock file.
-                    if !self.editables.contains(package_name) {
+                    if !self.editables.contains(name) {
                         // Determine the distribution to lookup.
                         let dist = match url {
-                            Some(url) => PubGrubDistribution::from_url(package_name, url),
-                            None => PubGrubDistribution::from_registry(package_name, version),
+                            Some(url) => PubGrubDistribution::from_url(name, url),
+                            None => PubGrubDistribution::from_registry(name, version),
                         };
                         let version_id = dist.version_id();
 
@@ -1021,7 +1044,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Determine if the distribution is editable.
-                if let Some(editable) = self.editables.get(package_name) {
+                if let Some(editable) = self.editables.get(name) {
                     let requirements: Vec<_> = editable
                         .metadata
                         .requires_dist
@@ -1033,7 +1056,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &requirements,
                         &self.constraints,
                         &self.overrides,
-                        Some(package_name),
+                        Some(name),
                         extra.as_ref(),
                         &self.urls,
                         &self.locals,
@@ -1055,24 +1078,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Determine the distribution to lookup.
                 let dist = match url {
-                    Some(url) => PubGrubDistribution::from_url(package_name, url),
-                    None => PubGrubDistribution::from_registry(package_name, version),
+                    Some(url) => PubGrubDistribution::from_url(name, url),
+                    None => PubGrubDistribution::from_registry(name, version),
                 };
                 let version_id = dist.version_id();
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
-                if self.unavailable_packages.get(package_name).is_some()
-                    && self
-                        .installed_packages
-                        .get_packages(package_name)
-                        .is_empty()
+                if self.unavailable_packages.get(name).is_some()
+                    && self.installed_packages.get_packages(name).is_empty()
                 {
                     debug_assert!(
                         false,
                         "Dependencies were requested for a package that is not available"
                     );
                     return Err(ResolveError::Failure(format!(
-                        "The package is unavailable: {package_name}"
+                        "The package is unavailable: {name}"
                     )));
                 }
 
@@ -1087,15 +1107,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.incomplete_packages
-                            .entry(package_name.clone())
+                            .entry(name.clone())
                             .or_default()
                             .insert(version.clone(), IncompletePackage::Offline);
                         return Ok(Dependencies::Unavailable(UnavailableVersion::Offline));
                     }
                     MetadataResponse::InvalidMetadata(err) => {
-                        warn!("Unable to extract metadata for {package_name}: {err}");
+                        warn!("Unable to extract metadata for {name}: {err}");
                         self.incomplete_packages
-                            .entry(package_name.clone())
+                            .entry(name.clone())
                             .or_default()
                             .insert(
                                 version.clone(),
@@ -1106,9 +1126,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ));
                     }
                     MetadataResponse::InconsistentMetadata(err) => {
-                        warn!("Unable to extract metadata for {package_name}: {err}");
+                        warn!("Unable to extract metadata for {name}: {err}");
                         self.incomplete_packages
-                            .entry(package_name.clone())
+                            .entry(name.clone())
                             .or_default()
                             .insert(
                                 version.clone(),
@@ -1119,9 +1139,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ));
                     }
                     MetadataResponse::InvalidStructure(err) => {
-                        warn!("Unable to extract metadata for {package_name}: {err}");
+                        warn!("Unable to extract metadata for {name}: {err}");
                         self.incomplete_packages
-                            .entry(package_name.clone())
+                            .entry(name.clone())
                             .or_default()
                             .insert(
                                 version.clone(),
@@ -1143,7 +1163,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &requirements,
                     &self.constraints,
                     &self.overrides,
-                    Some(package_name),
+                    Some(name),
                     extra.as_ref(),
                     &self.urls,
                     &self.locals,
@@ -1164,13 +1184,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Add a dependency on both the extra and base package.
-            PubGrubPackage::Extra(package_name, extra, url) => Ok(Dependencies::Available(vec![
+            PubGrubPackage::Extra { name, extra, url } => Ok(Dependencies::Available(vec![
                 (
-                    PubGrubPackage::Package(package_name.clone(), None, url.clone()),
+                    PubGrubPackage::Package {
+                        name: name.clone(),
+                        extra: None,
+                        url: url.clone(),
+                    },
                     Range::singleton(version.clone()),
                 ),
                 (
-                    PubGrubPackage::Package(package_name.clone(), Some(extra.clone()), url.clone()),
+                    PubGrubPackage::Package {
+                        name: name.clone(),
+                        extra: Some(extra.clone()),
+                        url: url.clone(),
+                    },
                     Range::singleton(version.clone()),
                 ),
             ])),
@@ -1398,12 +1426,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             match package {
                 PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Python(_) => {}
-                PubGrubPackage::Extra(_, _, _) => {}
-                PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                    reporter.on_progress(package_name, &VersionOrUrlRef::Url(&url.verbatim));
+                PubGrubPackage::Extra { .. } => {}
+                PubGrubPackage::Package {
+                    name,
+                    url: Some(url),
+                    ..
+                } => {
+                    reporter.on_progress(name, &VersionOrUrlRef::Url(&url.verbatim));
                 }
-                PubGrubPackage::Package(package_name, _extra, None) => {
-                    reporter.on_progress(package_name, &VersionOrUrlRef::Version(version));
+                PubGrubPackage::Package {
+                    name, url: None, ..
+                } => {
+                    reporter.on_progress(name, &VersionOrUrlRef::Version(version));
                 }
             }
         }

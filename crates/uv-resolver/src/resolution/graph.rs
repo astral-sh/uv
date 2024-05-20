@@ -56,8 +56,12 @@ impl ResolutionGraph {
         let mut diagnostics = Vec::new();
         for (package, version) in selection {
             match package {
-                PubGrubPackage::Package(package_name, Some(extra), None) => {
-                    let dist = PubGrubDistribution::from_registry(package_name, version);
+                PubGrubPackage::Package {
+                    name,
+                    extra: Some(extra),
+                    url: None,
+                } => {
+                    let dist = PubGrubDistribution::from_registry(name, version);
 
                     let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
                         panic!(
@@ -75,15 +79,13 @@ impl ResolutionGraph {
 
                     if archive.metadata.provides_extras.contains(extra) {
                         extras
-                            .entry(package_name.clone())
+                            .entry(name.clone())
                             .or_insert_with(Vec::new)
                             .push(extra.clone());
                     } else {
                         let dist = pins
-                            .get(package_name, version)
-                            .unwrap_or_else(|| {
-                                panic!("Every package should be pinned: {package_name:?}")
-                            })
+                            .get(name, version)
+                            .unwrap_or_else(|| panic!("Every package should be pinned: {name:?}"))
                             .clone();
 
                         diagnostics.push(Diagnostic::MissingExtra {
@@ -92,16 +94,19 @@ impl ResolutionGraph {
                         });
                     }
                 }
-                PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
-                    if let Some(editable) = editables.get(package_name) {
+                PubGrubPackage::Package {
+                    name,
+                    extra: Some(extra),
+                    url: Some(url),
+                } => {
+                    if let Some(editable) = editables.get(name) {
                         if editable.metadata.provides_extras.contains(extra) {
                             extras
-                                .entry(package_name.clone())
+                                .entry(name.clone())
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let dist =
-                                Dist::from_editable(package_name.clone(), editable.built.clone())?;
+                            let dist = Dist::from_editable(name.clone(), editable.built.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
                                 dist: dist.into(),
@@ -109,7 +114,7 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let dist = PubGrubDistribution::from_url(package_name, url);
+                        let dist = PubGrubDistribution::from_url(name, url);
 
                         let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
                             panic!(
@@ -127,12 +132,11 @@ impl ResolutionGraph {
 
                         if archive.metadata.provides_extras.contains(extra) {
                             extras
-                                .entry(package_name.clone())
+                                .entry(name.clone())
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let dist =
-                                Dist::from_url(package_name.clone(), url_to_precise(url.clone()))?;
+                            let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
                                 dist: dist.into(),
@@ -154,21 +158,25 @@ impl ResolutionGraph {
 
         for (package, version) in selection {
             match package {
-                PubGrubPackage::Package(package_name, None, None) => {
+                PubGrubPackage::Package {
+                    name,
+                    extra: None,
+                    url: None,
+                } => {
                     // Create the distribution.
                     let dist = pins
-                        .get(package_name, version)
+                        .get(name, version)
                         .expect("Every package should be pinned")
                         .clone();
 
                     // Extract the hashes, preserving those that were already present in the
                     // lockfile if necessary.
                     let hashes = if let Some(digests) = preferences
-                        .match_hashes(package_name, version)
+                        .match_hashes(name, version)
                         .filter(|digests| !digests.is_empty())
                     {
                         digests.to_vec()
-                    } else if let Some(versions_response) = packages.get(package_name) {
+                    } else if let Some(versions_response) = packages.get(name) {
                         if let VersionsResponse::Found(ref version_maps) = *versions_response {
                             version_maps
                                 .iter()
@@ -187,7 +195,7 @@ impl ResolutionGraph {
 
                     // Extract the metadata.
                     let metadata = {
-                        let dist = PubGrubDistribution::from_registry(package_name, version);
+                        let dist = PubGrubDistribution::from_registry(name, version);
 
                         let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
                             panic!(
@@ -207,7 +215,7 @@ impl ResolutionGraph {
                     };
 
                     // Extract the extras.
-                    let extras = extras.get(package_name).cloned().unwrap_or_default();
+                    let extras = extras.get(name).cloned().unwrap_or_default();
 
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(AnnotatedDist {
@@ -216,13 +224,16 @@ impl ResolutionGraph {
                         hashes,
                         metadata,
                     });
-                    inverse.insert(package_name, index);
+                    inverse.insert(name, index);
                 }
-                PubGrubPackage::Package(package_name, None, Some(url)) => {
+                PubGrubPackage::Package {
+                    name,
+                    extra: None,
+                    url: Some(url),
+                } => {
                     // Create the distribution.
-                    if let Some(editable) = editables.get(package_name) {
-                        let dist =
-                            Dist::from_editable(package_name.clone(), editable.built.clone())?;
+                    if let Some(editable) = editables.get(name) {
+                        let dist = Dist::from_editable(name.clone(), editable.built.clone())?;
 
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
@@ -231,15 +242,14 @@ impl ResolutionGraph {
                             hashes: vec![],
                             metadata: editable.metadata.clone(),
                         });
-                        inverse.insert(package_name, index);
+                        inverse.insert(name, index);
                     } else {
-                        let dist =
-                            Dist::from_url(package_name.clone(), url_to_precise(url.clone()))?;
+                        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
 
                         // Extract the hashes, preserving those that were already present in the
                         // lockfile if necessary.
                         let hashes = if let Some(digests) = preferences
-                            .match_hashes(package_name, version)
+                            .match_hashes(name, version)
                             .filter(|digests| !digests.is_empty())
                         {
                             digests.to_vec()
@@ -259,7 +269,7 @@ impl ResolutionGraph {
 
                         // Extract the metadata.
                         let metadata = {
-                            let dist = PubGrubDistribution::from_url(package_name, url);
+                            let dist = PubGrubDistribution::from_url(name, url);
 
                             let response =
                                 distributions.get(&dist.version_id()).unwrap_or_else(|| {
@@ -280,7 +290,7 @@ impl ResolutionGraph {
                         };
 
                         // Extract the extras.
-                        let extras = extras.get(package_name).cloned().unwrap_or_default();
+                        let extras = extras.get(name).cloned().unwrap_or_default();
 
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
@@ -289,7 +299,7 @@ impl ResolutionGraph {
                             hashes,
                             metadata,
                         });
-                        inverse.insert(package_name, index);
+                        inverse.insert(name, index);
                     };
                 }
                 _ => {}
@@ -314,22 +324,28 @@ impl ResolutionGraph {
                         continue;
                     }
 
-                    let PubGrubPackage::Package(self_package, _, _) = self_package else {
+                    let PubGrubPackage::Package {
+                        name: self_name, ..
+                    } = self_package
+                    else {
                         continue;
                     };
-                    let PubGrubPackage::Package(dependency_package, _, _) = dependency_package
+                    let PubGrubPackage::Package {
+                        name: dependency_name,
+                        ..
+                    } = dependency_package
                     else {
                         continue;
                     };
 
                     // For extras, we include a dependency between the extra and the base package.
-                    if self_package == dependency_package {
+                    if self_name == dependency_name {
                         continue;
                     }
 
                     if self_version.contains(version) {
-                        let self_index = &inverse[self_package];
-                        let dependency_index = &inverse[dependency_package];
+                        let self_index = &inverse[self_name];
+                        let dependency_index = &inverse[dependency_name];
                         petgraph.update_edge(
                             *self_index,
                             *dependency_index,

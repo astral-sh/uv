@@ -127,7 +127,7 @@ fn collapse_extra_proxies(
             ) {
                 (
                     DerivationTree::External(External::FromDependencyOf(
-                        PubGrubPackage::Extra(..),
+                        PubGrubPackage::Extra { .. },
                         ..,
                     )),
                     ref mut cause,
@@ -138,7 +138,7 @@ fn collapse_extra_proxies(
                 (
                     ref mut cause,
                     DerivationTree::External(External::FromDependencyOf(
-                        PubGrubPackage::Extra(..),
+                        PubGrubPackage::Extra { .. },
                         ..,
                     )),
                 ) => {
@@ -255,8 +255,8 @@ impl NoSolutionError {
                         BTreeSet::from([python_requirement.target().deref().clone()]),
                     );
                 }
-                PubGrubPackage::Extra(_, _, _) => {}
-                PubGrubPackage::Package(name, _, _) => {
+                PubGrubPackage::Extra { .. } => {}
+                PubGrubPackage::Package { name, .. } => {
                     // Avoid including available versions for packages that exist in the derivation
                     // tree, but were never visited during resolution. We _may_ have metadata for
                     // these packages, but it's non-deterministic, and omitting them ensures that
@@ -304,7 +304,7 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package(name, _, _) = package {
+            if let PubGrubPackage::Package { name, .. } = package {
                 if let Some(reason) = unavailable_packages.get(name) {
                     new.insert(name.clone(), reason.clone());
                 }
@@ -322,7 +322,7 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package(name, _, _) = package {
+            if let PubGrubPackage::Package { name, .. } = package {
                 if let Some(versions) = incomplete_packages.get(name) {
                     for entry in versions.iter() {
                         let (version, reason) = entry.pair();

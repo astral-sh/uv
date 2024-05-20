@@ -155,14 +155,14 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         let terms_vec: Vec<_> = terms.iter().collect();
         match terms_vec.as_slice() {
             [] | [(PubGrubPackage::Root(_), _)] => "the requirements are unsatisfiable".into(),
-            [(package @ PubGrubPackage::Package(..), Term::Positive(range))] => {
+            [(package @ PubGrubPackage::Package { .. }, Term::Positive(range))] => {
                 let range = self.simplify_set(range, package);
                 format!(
                     "{} cannot be used",
                     PackageRange::compatibility(package, &range)
                 )
             }
-            [(package @ PubGrubPackage::Package(..), Term::Negative(range))] => {
+            [(package @ PubGrubPackage::Package { .. }, Term::Negative(range))] => {
                 let range = self.simplify_set(range, package);
                 format!(
                     "{} must be used",
@@ -399,10 +399,10 @@ impl PubGrubReportFormatter<'_> {
     ) -> IndexSet<PubGrubHint> {
         /// Returns `true` if pre-releases were allowed for a package.
         fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
-            let PubGrubPackage::Package(package, ..) = package else {
+            let PubGrubPackage::Package { name, .. } = package else {
                 return false;
             };
-            selector.prerelease_strategy().allows(package)
+            selector.prerelease_strategy().allows(name)
         }
 
         let mut hints = IndexSet::default();
@@ -457,7 +457,7 @@ impl PubGrubReportFormatter<'_> {
                         let no_find_links =
                             index_locations.flat_index().peekable().peek().is_none();
 
-                        if let PubGrubPackage::Package(name, ..) = package {
+                        if let PubGrubPackage::Package { name, .. } = package {
                             // Add hints due to the package being entirely unavailable.
                             match unavailable_packages.get(name) {
                                 Some(UnavailablePackage::NoIndex) => {
