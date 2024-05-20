@@ -36,12 +36,14 @@ fn install_command(context: &TestContext) -> Command {
 }
 
 #[test]
-fn list_empty() {
+fn list_empty_columns() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("list")
+        .arg("--format")
+        .arg("columns")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -50,6 +52,53 @@ fn list_empty() {
     success: true
     exit_code: 0
     ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn list_empty_freeze() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(Command::new(get_bin())
+        .arg("pip")
+        .arg("list")
+        .arg("--format")
+        .arg("freeze")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn list_empty_json() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(Command::new(get_bin())
+        .arg("pip")
+        .arg("list")
+        .arg("--format")
+        .arg("json")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    []
 
     ----- stderr -----
     "###
@@ -451,6 +500,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
+    []
 
     ----- stderr -----
     "###
