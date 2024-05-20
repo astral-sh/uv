@@ -8,6 +8,7 @@ use tokio::process::Command;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_interpreter::PythonEnvironment;
 use uv_requirements::RequirementsSource;
@@ -26,6 +27,7 @@ pub(crate) async fn run(
     package: Option<String>,
     _isolated: bool,
     preview: PreviewMode,
+    connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -64,7 +66,7 @@ pub(crate) async fn run(
 
     // Install the ephemeral requirements.
     let ephemeral_env =
-        Some(update_environment(venv, &requirements, preview, cache, printer).await?);
+        Some(update_environment(venv, &requirements, preview, connectivity, cache, printer).await?);
 
     // TODO(zanieb): Determine the command via the package entry points
     let command = target;

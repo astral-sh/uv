@@ -1840,6 +1840,13 @@ pub(crate) struct RunArgs {
     #[arg(long)]
     pub(crate) with: Vec<String>,
 
+    /// Run offline, i.e., without accessing the network.
+    #[arg(global = true, long, overrides_with("no_offline"))]
+    pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1959,4 +1966,12 @@ pub(crate) struct ToolRunArgs {
         group = "discovery"
     )]
     pub(crate) python: Option<String>,
+
+    /// Run offline, i.e., without accessing the network.
+    #[arg(global = true, long, overrides_with("no_offline"))]
+    pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
+
 }

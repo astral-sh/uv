@@ -10,7 +10,7 @@ use tracing::debug;
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
 };
@@ -35,6 +35,7 @@ pub(crate) async fn run(
     python: Option<String>,
     isolated: bool,
     preview: PreviewMode,
+    connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -73,7 +74,7 @@ pub(crate) async fn run(
         let venv = project::init(&project, cache, printer)?;
 
         // Install the project requirements.
-        Some(update_environment(venv, &project.requirements(), preview, cache, printer).await?)
+        Some(update_environment(venv, &project.requirements(), preview, connectivity, cache, printer).await?)
     };
 
     // If necessary, create an environment for the ephemeral requirements.
@@ -111,7 +112,7 @@ pub(crate) async fn run(
         )?;
 
         // Install the ephemeral requirements.
-        Some(update_environment(venv, &requirements, preview, cache, printer).await?)
+        Some(update_environment(venv, &requirements, preview, connectivity, cache, printer).await?)
     };
 
     // Construct the command
@@ -189,11 +190,12 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
     preview: PreviewMode,
+    connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment> {
     // TODO(zanieb): Support client configuration
-    let client_builder = BaseClientBuilder::default();
+    let requirements_client = BaseClientBuilder::default().connectivity(connectivity);
 
     // Read all requirements from the provided sources.
     // TODO(zanieb): Consider allowing constraints and extras
@@ -203,7 +205,7 @@ pub(crate) async fn update_environment(
         &[],
         &[],
         &ExtrasSpecification::None,
-        &client_builder,
+        &requirements_client,
         preview,
     )
     .await?;
@@ -243,9 +245,10 @@ pub(crate) async fn update_environment(
     let markers = venv.interpreter().markers();
 
     // Initialize the registry client.
-    // TODO(zanieb): Support client options e.g. offline, tls, etc.
+    // TODO(zanieb): Support client options e.g. tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
         .markers(markers)
+        .connectivity(connectivity)
         .platform(venv.interpreter().platform())
         .build();
 

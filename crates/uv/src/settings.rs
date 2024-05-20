@@ -94,6 +94,10 @@ pub(crate) struct RunSettings {
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
+
+    // Shared settings.
+    // TODO(zanieb): should be moved to a global setting
+    pub(crate) connectivity: Connectivity,
 }
 
 impl RunSettings {
@@ -105,6 +109,8 @@ impl RunSettings {
             args,
             with,
             python,
+            offline,
+            no_offline,
         } = args;
 
         Self {
@@ -113,6 +119,8 @@ impl RunSettings {
             args,
             with,
             python,
+            // Shared settings
+            connectivity: flag(offline, no_offline).map(|offline| if offline { Connectivity::Offline } else { Connectivity::Online }).unwrap_or_default()
         }
     }
 }
