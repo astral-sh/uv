@@ -61,7 +61,8 @@ impl ResolvedDistRef<'_> {
                 // has an sdist, so this always succeeds.
                 let source = prioritized.source_dist().expect("a source distribution");
                 assert_eq!(
-                    sdist.filename, source.filename,
+                    (&sdist.name, &sdist.version),
+                    (&source.name, &source.version),
                     "expected chosen sdist to match prioritized sdist"
                 );
                 ResolvedDist::Installable(Dist::Source(SourceDist::Registry(source)))

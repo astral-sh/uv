@@ -98,7 +98,7 @@ impl From<&ResolvedDist> for Requirement {
                 },
                 Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
                     specifier: pep440_rs::VersionSpecifiers::from(
-                        pep440_rs::VersionSpecifier::equals_version(sdist.filename.version.clone()),
+                        pep440_rs::VersionSpecifier::equals_version(sdist.version.clone()),
                     ),
                     index: None,
                 },

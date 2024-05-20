@@ -39,7 +39,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use url::Url;
 
-use distribution_filename::{SourceDistFilename, WheelFilename};
+use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use pep508_rs::{Pep508Url, VerbatimUrl};
 use uv_git::GitUrl;
@@ -219,7 +219,8 @@ pub struct PathBuiltDist {
 /// A source distribution that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone)]
 pub struct RegistrySourceDist {
-    pub filename: SourceDistFilename,
+    pub name: PackageName,
+    pub version: Version,
     pub file: Box<File>,
     pub index: IndexUrl,
     /// When an sdist is selected, it may be the case that there were
@@ -495,7 +496,7 @@ impl SourceDist {
 
     pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Registry(source_dist) => Some(&source_dist.filename.version),
+            Self::Registry(source_dist) => Some(&source_dist.version),
             Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) | Self::Directory(_) => None,
         }
     }
@@ -551,7 +552,7 @@ impl Name for PathBuiltDist {
 
 impl Name for RegistrySourceDist {
     fn name(&self) -> &PackageName {
-        &self.filename.name
+        &self.name
     }
 }
 
@@ -636,7 +637,7 @@ impl DistributionMetadata for PathBuiltDist {
 
 impl DistributionMetadata for RegistrySourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef {
-        VersionOrUrlRef::Version(&self.filename.version)
+        VersionOrUrlRef::Version(&self.version)
     }
 }
 
