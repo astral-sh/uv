@@ -336,7 +336,7 @@ impl<'a> Planner<'a> {
                     // Store the canonicalized path, which also serves to validate that it exists.
                     let path = match url
                         .to_file_path()
-                        .map_err(|()| Error::UrlFilename(url.to_url()))?
+                        .map_err(|()| Error::MissingFilePath(url.to_url()))?
                         .canonicalize()
                     {
                         Ok(path) => path,
