@@ -46,6 +46,8 @@ impl Combine for Options {
             preview: self.preview.combine(other.preview),
             cache_dir: self.cache_dir.combine(other.cache_dir),
             pip: self.pip.combine(other.pip),
+            // We do not merge tool definitions
+            tools: self.tools,
         }
     }
 }

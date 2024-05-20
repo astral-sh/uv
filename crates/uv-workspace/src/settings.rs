@@ -15,13 +15,13 @@ use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode}
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(crate) struct PyProjectToml {
-    pub(crate) tool: Option<Tools>,
+    pub(crate) tool: Option<PyProjectTool>,
 }
 
 /// A `[tool]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
-pub(crate) struct Tools {
+pub(crate) struct PyProjectTool {
     pub(crate) uv: Option<Options>,
 }
 
@@ -36,6 +36,7 @@ pub struct Options {
     pub preview: Option<bool>,
     pub cache_dir: Option<PathBuf>,
     pub pip: Option<PipOptions>,
+    pub tools: Option<ToolOptions>,
 }
 
 /// A `[tool.uv.pip]` section.
@@ -88,4 +89,29 @@ pub struct PipOptions {
     pub concurrent_downloads: Option<NonZeroUsize>,
     pub concurrent_builds: Option<NonZeroUsize>,
     pub concurrent_installs: Option<NonZeroUsize>,
+}
+
+/// A `[tool.uv.tools]` section.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ToolOptions {
+    installed: Option<Vec<InstalledToolSpecifier>>,
+}
+
+/// A `[tool.uv.tools.installed]` section.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct InstalledToolSpecifier {
+    name: Option<String>,
+    /// The Python interpreter request
+    pub(crate) python: Option<String>,
+
+    // TOOD(zanieb): A schema should be enforced for requirements but adding schemars support everywhere
+    // is non-trivial
+    /// The requirements
+    pub(crate) requirements: Vec<String>,
 }

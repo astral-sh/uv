@@ -618,6 +618,19 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Install(args),
+        }) => {
+            commands::install_tool(
+                args.target,
+                args.python,
+                globals.isolated,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
+        }
     }
 }
 

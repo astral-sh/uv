@@ -1940,6 +1940,8 @@ pub(crate) struct ToolNamespace {
 pub(crate) enum ToolCommand {
     /// Run a tool
     Run(ToolRunArgs),
+    /// Install a tool
+    Install(ToolInstallArgs),
 }
 
 #[derive(Args)]
@@ -1956,6 +1958,9 @@ pub(crate) struct ToolRunArgs {
     /// Use the given package specification instead of inferring it from the target command.
     #[arg(long)]
     pub(crate) package: Option<String>,
+    
+    /// Run the installed version of this tool.
+    pub(crate) installed: bool,
 
     /// The Python interpreter to use to build the run environment.
     #[arg(
@@ -1974,4 +1979,25 @@ pub(crate) struct ToolRunArgs {
     #[arg(long, overrides_with("offline"), hide = true)]
     pub(crate) no_offline: bool,
 
+}
+
+
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct ToolInstallArgs {
+    /// The tool to install.
+    pub(crate) target: String,
+
+    /// The Python interpreter to use for the tool's environment.
+    /// 
+    /// If not provided, the latest available Python version supported by the tool will be used.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
+    pub(crate) python: Option<String>,
 }

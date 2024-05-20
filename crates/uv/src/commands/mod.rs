@@ -22,6 +22,7 @@ pub(crate) use project::sync::sync;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::run::run as run_tool;
+pub(crate) use tool::install::install as install_tool;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
