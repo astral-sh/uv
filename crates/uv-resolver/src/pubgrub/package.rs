@@ -10,7 +10,7 @@ use crate::resolver::Urls;
 /// 2. Uses the same strategy as pip and posy to handle extras: for each extra, we create a virtual
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum PubGrubPackage {
     /// The root package, which is used to start the resolution process.
     Root(Option<PackageName>),
@@ -90,7 +90,7 @@ impl PubGrubPackage {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub enum PubGrubPython {
     /// The Python version installed in the current environment.
     Installed,

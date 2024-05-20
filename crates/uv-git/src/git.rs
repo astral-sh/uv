@@ -23,7 +23,7 @@ use crate::FetchStrategy;
 const CHECKOUT_READY_LOCK: &str = ".ok";
 
 /// A reference to commit or commit-ish.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum GitReference {
     /// A specific branch.
     Branch(String),
