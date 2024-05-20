@@ -11,8 +11,8 @@ use tracing::debug;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
-    RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, ParsedGitUrl,
+    PathSourceUrl, RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
     UnresolvedRequirementSpecification, VersionId,
 };
 use pep508_rs::{Scheme, UnnamedRequirement, VersionOrUrl};
@@ -240,7 +240,10 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 url: &requirement.url,
             }),
             Some(Scheme::GitSsh | Scheme::GitHttps | Scheme::GitHttp) => {
+                let git = ParsedGitUrl::try_from(requirement.url.to_url())?;
                 SourceUrl::Git(GitSourceUrl {
+                    git: Cow::Owned(git.url),
+                    subdirectory: git.subdirectory.map(Cow::Owned),
                     url: &requirement.url,
                 })
             }
