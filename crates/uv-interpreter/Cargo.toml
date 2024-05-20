@@ -53,5 +53,5 @@ winapi = { workspace = true }
 anyhow = { version = "1.0.80" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.36.1", features = ["filters"] }
-itertools = { version = "0.12.1" }
+itertools = { version = "0.13.0" }
 tempfile = { version = "3.9.0" }
