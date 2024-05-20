@@ -934,7 +934,7 @@ pub enum MarkerExpression {
     },
     /// An invalid or meaningless expression, such as '...' == '...'.
     ///
-    /// Invalid expressions always evaluate to `false`, and are warned for during parsing.
+    /// Invalid expressions always evaluate to `true`, and are warned for during parsing.
     Arbitrary {
         l_value: MarkerValue,
         operator: MarkerOperator,
