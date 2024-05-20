@@ -25,16 +25,18 @@ impl Urls {
         let mut urls: FxHashMap<PackageName, VerbatimParsedUrl> = FxHashMap::default();
 
         // Add the editables themselves to the list of required URLs.
-        for (editable, metadata, _) in &manifest.editables {
+        for editable in &manifest.editables {
             let editable_url = VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Path(ParsedPathUrl {
-                    url: editable.url.to_url(),
-                    path: editable.path.clone(),
+                    url: editable.built.url.to_url(),
+                    path: editable.built.path.clone(),
                     editable: true,
                 }),
-                verbatim: editable.url.clone(),
+                verbatim: editable.built.url.clone(),
             };
-            if let Some(previous) = urls.insert(metadata.name.clone(), editable_url.clone()) {
+            if let Some(previous) =
+                urls.insert(editable.metadata.name.clone(), editable_url.clone())
+            {
                 if !is_equal(&previous.verbatim, &editable_url.verbatim) {
                     if is_same_reference(&previous.verbatim, &editable_url.verbatim) {
                         debug!(
@@ -43,7 +45,7 @@ impl Urls {
                         );
                     } else {
                         return Err(ResolveError::ConflictingUrlsDirect(
-                            metadata.name.clone(),
+                            editable.metadata.name.clone(),
                             previous.verbatim.verbatim().to_string(),
                             editable_url.verbatim.verbatim().to_string(),
                         ));

@@ -6,15 +6,14 @@ use rustc_hash::FxHashSet;
 use thiserror::Error;
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, GitSourceDist, LocalEditable, Requirement,
-    RequirementSource, Requirements, SourceDist,
+    BuiltDist, Dist, DistributionMetadata, GitSourceDist, Requirement, RequirementSource,
+    SourceDist,
 };
 use pep508_rs::MarkerEnvironment;
-use pypi_types::Metadata23;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_git::GitUrl;
-use uv_resolver::{InMemoryIndex, MetadataResponse};
+use uv_resolver::{BuiltEditableMetadata, InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 #[derive(Debug, Error)]
@@ -53,7 +52,7 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     /// The overrides for the project.
     overrides: &'a Overrides,
     /// The editable requirements for the project.
-    editables: &'a [(LocalEditable, Metadata23, Requirements)],
+    editables: &'a [BuiltEditableMetadata],
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -69,7 +68,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
-        editables: &'a [(LocalEditable, Metadata23, Requirements)],
+        editables: &'a [BuiltEditableMetadata],
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -113,17 +112,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .constraints
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-            .chain(
-                self.editables
-                    .iter()
-                    .flat_map(|(editable, _metadata, requirements)| {
-                        self.constraints
-                            .apply(self.overrides.apply(&requirements.dependencies))
-                            .filter(|requirement| {
-                                requirement.evaluate_markers(markers, &editable.extras)
-                            })
-                    }),
-            )
+            .chain(self.editables.iter().flat_map(|editable| {
+                self.constraints
+                    .apply(self.overrides.apply(&editable.requirements.dependencies))
+                    .filter(|requirement| {
+                        requirement.evaluate_markers(markers, &editable.built.extras)
+                    })
+            }))
             .cloned()
             .collect();
 

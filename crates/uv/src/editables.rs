@@ -2,9 +2,12 @@ use std::fmt::Write;
 use std::ops::Deref;
 
 use anyhow::{anyhow, Context, Result};
+use indexmap::IndexMap;
 use owo_colors::OwoColorize;
 
-use distribution_types::{InstalledDist, LocalEditable, LocalEditables, Name};
+use distribution_types::{
+    InstalledDist, LocalEditable, LocalEditables, Name, ParsedUrlError, Requirement, Requirements,
+};
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
@@ -12,15 +15,16 @@ use uv_client::RegistryClient;
 use uv_configuration::{Concurrency, Reinstall};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_installer::{is_dynamic, Downloader, InstalledEditable, ResolvedEditable, SitePackages};
+use uv_installer::{is_dynamic, Downloader, InstalledEditable, ResolvedEditable};
 use uv_interpreter::Interpreter;
-use uv_types::HashStrategy;
+use uv_resolver::BuiltEditableMetadata;
+use uv_types::{HashStrategy, InstalledPackagesProvider};
 
 use crate::commands::elapsed;
 use crate::commands::reporters::DownloadReporter;
 use crate::printer::Printer;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct ResolvedEditables {
     /// The set of resolved editables, including both those that were already installed and those
     /// that were built.
@@ -43,7 +47,7 @@ impl ResolvedEditables {
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn resolve(
         editables: Vec<EditableRequirement>,
-        site_packages: &SitePackages,
+        installed_packages: &impl InstalledPackagesProvider,
         reinstall: &Reinstall,
         hasher: &HashStrategy,
         interpreter: &Interpreter,
@@ -60,7 +64,7 @@ impl ResolvedEditables {
         for editable in editables {
             match reinstall {
                 Reinstall::None => {
-                    if let [dist] = site_packages.get_editables(editable.raw()).as_slice() {
+                    if let [dist] = installed_packages.get_editables(editable.raw()).as_slice() {
                         if let Some(editable) = up_to_date(&editable, dist)? {
                             installed.push(editable);
                         } else {
@@ -74,7 +78,7 @@ impl ResolvedEditables {
                     builds.push(editable);
                 }
                 Reinstall::Packages(packages) => {
-                    if let [dist] = site_packages.get_editables(editable.raw()).as_slice() {
+                    if let [dist] = installed_packages.get_editables(editable.raw()).as_slice() {
                         if packages.contains(dist.name()) {
                             builds.push(editable);
                         } else if let Some(editable) = up_to_date(&editable, dist)? {
@@ -166,6 +170,28 @@ impl ResolvedEditables {
             editables,
             temp_dir,
         })
+    }
+
+    pub(crate) fn as_metadata(&self) -> Result<Vec<BuiltEditableMetadata>, Box<ParsedUrlError>> {
+        self.iter()
+            .map(|editable| {
+                let dependencies: Vec<_> = editable
+                    .metadata()
+                    .requires_dist
+                    .iter()
+                    .cloned()
+                    .map(Requirement::from_pep508)
+                    .collect::<Result<_, _>>()?;
+                Ok::<_, Box<ParsedUrlError>>(BuiltEditableMetadata {
+                    built: editable.local().clone(),
+                    metadata: editable.metadata().clone(),
+                    requirements: Requirements {
+                        dependencies,
+                        optional_dependencies: IndexMap::default(),
+                    },
+                })
+            })
+            .collect()
     }
 }
 

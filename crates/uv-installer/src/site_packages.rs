@@ -548,4 +548,8 @@ impl InstalledPackagesProvider for SitePackages {
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
         self.get_packages(name)
     }
+
+    fn get_editables(&self, url: &Url) -> Vec<&InstalledDist> {
+        self.get_editables(url)
+    }
 }

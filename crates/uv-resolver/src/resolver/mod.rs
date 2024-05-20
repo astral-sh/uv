@@ -728,8 +728,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 // If the dist is an editable, return the version from the editable metadata.
-                if let Some((_local, metadata, _)) = self.editables.get(package_name) {
-                    let version = &metadata.version;
+                if let Some(editable) = self.editables.get(package_name) {
+                    let version = &editable.metadata.version;
 
                     // The version is incompatible with the requirement.
                     if !range.contains(version) {
@@ -737,7 +737,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
 
                     // The version is incompatible due to its Python requirement.
-                    if let Some(requires_python) = metadata.requires_python.as_ref() {
+                    if let Some(requires_python) = editable.metadata.requires_python.as_ref() {
                         let target = self.python_requirement.target();
                         if !requires_python.contains(target) {
                             return Ok(Some(ResolverVersion::Unavailable(
@@ -947,10 +947,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Add a dependency on each editable.
-                for (editable, metadata, _) in self.editables.iter() {
-                    let package =
-                        PubGrubPackage::from_package(metadata.name.clone(), None, &self.urls);
-                    let version = Range::singleton(metadata.version.clone());
+                for editable in self.editables.iter() {
+                    let package = PubGrubPackage::from_package(
+                        editable.metadata.name.clone(),
+                        None,
+                        &self.urls,
+                    );
+                    let version = Range::singleton(editable.metadata.version.clone());
 
                     // Update the package priorities.
                     priorities.insert(&package, &version);
@@ -959,19 +962,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dependencies.push(package, version);
 
                     // Add a dependency on each extra.
-                    for extra in &editable.extras {
+                    for extra in &editable.built.extras {
                         dependencies.push(
                             PubGrubPackage::from_package(
-                                metadata.name.clone(),
+                                editable.metadata.name.clone(),
                                 Some(extra.clone()),
                                 &self.urls,
                             ),
-                            Range::singleton(metadata.version.clone()),
+                            Range::singleton(editable.metadata.version.clone()),
                         );
                     }
 
                     // Add any constraints.
-                    for constraint in self.constraints.get(&metadata.name).into_iter().flatten() {
+                    for constraint in self
+                        .constraints
+                        .get(&editable.metadata.name)
+                        .into_iter()
+                        .flatten()
+                    {
                         if constraint.evaluate_markers(self.markers.as_ref(), &[]) {
                             let PubGrubRequirement { package, version } =
                                 PubGrubRequirement::from_constraint(
@@ -1013,8 +1021,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Determine if the distribution is editable.
-                if let Some((_local, metadata, _)) = self.editables.get(package_name) {
-                    let requirements: Vec<_> = metadata
+                if let Some(editable) = self.editables.get(package_name) {
+                    let requirements: Vec<_> = editable
+                        .metadata
                         .requires_dist
                         .iter()
                         .cloned()

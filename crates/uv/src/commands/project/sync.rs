@@ -15,6 +15,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::project::discovery::Project;
 use crate::commands::{project, ExitStatus};
+use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Sync the project environment.
@@ -86,10 +87,16 @@ pub(crate) async fn sync(
         concurrency,
     );
 
+    // TODO(konsti): Read editables from lockfile.
+    let editables = ResolvedEditables::default();
+
+    let site_packages = SitePackages::from_executable(&venv)?;
+
     // Sync the environment.
     project::install(
         &resolution,
-        SitePackages::from_executable(&venv)?,
+        editables,
+        site_packages,
         &no_binary,
         link_mode,
         &index_locations,

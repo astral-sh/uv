@@ -2,6 +2,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use url::Url;
 
 use distribution_types::{IndexLocations, InstalledDist, Requirement, Resolution, SourceDist};
 use pep508_rs::PackageName;
@@ -131,6 +132,7 @@ pub trait SourceBuildTrait {
 pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
+    fn get_editables(&self, url: &Url) -> Vec<&InstalledDist>;
 }
 
 /// An [`InstalledPackagesProvider`] with no packages in it.
@@ -144,5 +146,9 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
 
     fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         std::iter::empty()
+    }
+
+    fn get_editables(&self, _url: &Url) -> Vec<&InstalledDist> {
+        Vec::new()
     }
 }
