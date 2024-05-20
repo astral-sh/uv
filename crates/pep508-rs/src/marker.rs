@@ -63,7 +63,7 @@ impl MarkerWarningKind {
 }
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(clippy::enum_variant_names)]
 pub enum MarkerValueVersion {
     /// `implementation_version`
@@ -85,7 +85,7 @@ impl Display for MarkerValueVersion {
 }
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueString {
     /// `implementation_name`
     ImplementationName,
@@ -142,7 +142,7 @@ impl Display for MarkerValueString {
 /// One of the predefined environment values
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValue {
     /// Those environment markers with a PEP 440 version as value such as `python_version`
     MarkerEnvVersion(MarkerValueVersion),
@@ -214,7 +214,7 @@ impl Display for MarkerValue {
 }
 
 /// How to compare key and value, such as by `==`, `>` or `not in`
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerOperator {
     /// `==`
     Equal,
@@ -900,7 +900,7 @@ impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
 }
 
 /// Represents one clause such as `python_version > "3.8"`.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(missing_docs)]
 pub enum MarkerExpression {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
@@ -943,7 +943,7 @@ pub enum MarkerExpression {
 }
 
 /// The operator for an extra expression, either '==' or '!='.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum ExtraOperator {
     /// `==`
     Equal,
@@ -1529,7 +1529,7 @@ impl Display for MarkerExpression {
 }
 
 /// Represents one of the nested marker expressions with and/or/parentheses
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerTree {
     /// A simple expression such as `python_version > "3.8"`
     Expression(MarkerExpression),
