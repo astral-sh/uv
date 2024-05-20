@@ -152,7 +152,10 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 
     /// Try to print terms of an incompatibility in a human-readable way.
     fn format_terms(&self, terms: &Map<PubGrubPackage, Term<Range<Version>>>) -> String {
-        let terms_vec: Vec<_> = terms.iter().collect();
+        let mut terms_vec: Vec<_> = terms.iter().collect();
+        // We avoid relying on hashmap iteration order here by always sorting
+        // by package first.
+        terms_vec.sort_by(|&(pkg1, _), &(pkg2, _)| pkg1.cmp(pkg2));
         match terms_vec.as_slice() {
             [] | [(PubGrubPackage::Root(_), _)] => "the requirements are unsatisfiable".into(),
             [(package @ PubGrubPackage::Package { .. }, Term::Positive(range))] => {
