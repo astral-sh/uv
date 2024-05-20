@@ -282,6 +282,17 @@ In some cases, `uv pip check` will surface diagnostics that `pip check` does not
 For example, unlike `uv pip check`, `pip check` will _not_ warn when multiple versions of a package
 are installed in the current environment.
 
+## `--user` and the `user` install scheme
+
+uv does not support the `--user` flag, which installs packages based on the `user` install scheme.
+Instead, we recommend the use of virtual environments to isolate package installations.
+
+Additionally, pip will fall back to the `user` install scheme if it detects that the user does not
+have write permissions to the target directory, as is the case on some systems when installing into
+the system Python. uv does not implement any such fallback.
+
+For more, see [#2077](https://github.com/astral-sh/uv/issues/2077).
+
 ## Strictness and spec enforcement
 
 uv tends to be stricter than `pip`, and will often reject packages that `pip` would install.
