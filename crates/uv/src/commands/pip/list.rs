@@ -65,11 +65,14 @@ pub(crate) fn pip_list(
         .filter(|dist| !exclude.contains(dist.name()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .collect_vec();
-    if results.is_empty() {
-        return Ok(ExitStatus::Success);
-    }
 
     match format {
+        ListFormat::Json => {
+            let rows = results.iter().copied().map(Entry::from).collect_vec();
+            let output = serde_json::to_string(&rows)?;
+            writeln!(printer.stdout(), "{output}")?;
+        }
+        ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
             // The package name and version are always present.
             let mut columns = vec![
@@ -111,11 +114,7 @@ pub(crate) fn pip_list(
                 writeln!(printer.stdout(), "{}", elems.join(" ").trim_end())?;
             }
         }
-        ListFormat::Json => {
-            let rows = results.iter().copied().map(Entry::from).collect_vec();
-            let output = serde_json::to_string(&rows)?;
-            writeln!(printer.stdout(), "{output}")?;
-        }
+        ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
                 writeln!(
