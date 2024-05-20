@@ -27,12 +27,20 @@ pub struct VerbatimUrl {
     #[derivative(Ord = "ignore")]
     #[derivative(Hash = "ignore")]
     given: Option<String>,
+    /// Whether the given URL was a relative path.
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    relative: Option<bool>,
 }
 
 impl VerbatimUrl {
     /// Create a [`VerbatimUrl`] from a [`Url`].
     pub fn from_url(url: Url) -> Self {
-        Self { url, given: None }
+        Self {
+            url,
+            given: None,
+            relative: None,
+        }
     }
 
     /// Create a [`VerbatimUrl`] from a file path.
@@ -56,13 +64,21 @@ impl VerbatimUrl {
             url.set_fragment(Some(fragment));
         }
 
-        Self { url, given: None }
+        Self {
+            url,
+            given: None,
+            relative: None,
+        }
     }
 
     /// Parse a URL from a string, expanding any environment variables.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
         let url = Url::parse(given.as_ref())?;
-        Ok(Self { url, given: None })
+        Ok(Self {
+            url,
+            given: None,
+            relative: None,
+        })
     }
 
     /// Parse a URL from an absolute or relative path.
@@ -70,11 +86,13 @@ impl VerbatimUrl {
     pub fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>) -> Self {
         let path = path.as_ref();
 
+        let relative = path.is_relative();
+
         // Convert the path to an absolute path, if necessary.
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
+        let path = if relative {
             working_dir.as_ref().join(path)
+        } else {
+            path.to_path_buf()
         };
 
         // Normalize the path.
@@ -97,7 +115,11 @@ impl VerbatimUrl {
             url.set_fragment(Some(fragment));
         }
 
-        Self { url, given: None }
+        Self {
+            url,
+            given: None,
+            relative: Some(relative),
+        }
     }
 
     /// Parse a URL from an absolute path.
@@ -128,7 +150,11 @@ impl VerbatimUrl {
             url.set_fragment(Some(fragment));
         }
 
-        Ok(Self { url, given: None })
+        Ok(Self {
+            url,
+            given: None,
+            relative: Some(false),
+        })
     }
 
     /// Set the verbatim representation of the URL.
@@ -160,7 +186,11 @@ impl VerbatimUrl {
     /// This method should be used sparingly (ideally, not at all), as it represents a loss of the
     /// verbatim representation.
     pub fn unknown(url: Url) -> Self {
-        Self { given: None, url }
+        Self {
+            url,
+            given: None,
+            relative: None,
+        }
     }
 }
 

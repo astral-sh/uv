@@ -155,19 +155,13 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             let mut line = match node {
                 Node::Editable(editable) => format!("-e {}", editable.verbatim()),
                 Node::Distribution(dist) => {
-                    if self.include_extras && !dist.extras.is_empty() {
-                        let mut extras = dist.extras.clone();
-                        extras.sort_unstable();
-                        extras.dedup();
-                        format!(
-                            "{}[{}]{}",
-                            dist.name(),
-                            extras.into_iter().join(", "),
-                            dist.version_or_url().verbatim()
-                        )
+                    let dist = if self.include_extras {
+                        Cow::Borrowed(dist)
                     } else {
-                        dist.verbatim().to_string()
-                    }
+                        dist.without_extras()
+                    };
+                    dist.to_requirements_txt().to_string()
+
                 }
             };
 
