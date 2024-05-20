@@ -1104,7 +1104,7 @@ dependencies = [
  "fs-err",
  "git2",
  "indexmap",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "once_cell",
  "pep440_rs",
  "pep508_rs",
@@ -1920,6 +1920,15 @@ name = "itertools"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -3064,7 +3073,7 @@ dependencies = [
  "fs-err",
  "indoc",
  "insta",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "pep508_rs",
  "regex",
  "reqwest",
@@ -4478,7 +4487,7 @@ dependencies = [
  "indoc",
  "insta",
  "install-wheel-rs",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "miette",
  "mimalloc",
  "owo-colors",
@@ -4557,7 +4566,7 @@ dependencies = [
  "fs-err",
  "indoc",
  "insta",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "once_cell",
  "pep440_rs",
  "pep508_rs",
@@ -4656,7 +4665,7 @@ dependencies = [
  "anyhow",
  "clap",
  "distribution-types",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "pep508_rs",
  "platform-tags",
  "rustc-hash",
@@ -4680,7 +4689,7 @@ dependencies = [
  "fs-err",
  "futures",
  "install-wheel-rs",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "mimalloc",
  "owo-colors",
  "pep508_rs",
@@ -4721,7 +4730,7 @@ dependencies = [
  "distribution-types",
  "futures",
  "install-wheel-rs",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "rustc-hash",
  "tracing",
  "uv-build",
@@ -4887,7 +4896,7 @@ dependencies = [
  "indoc",
  "insta",
  "install-wheel-rs",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "once_cell",
  "pep440_rs",
  "pep508_rs",
@@ -4941,7 +4950,7 @@ dependencies = [
  "indexmap",
  "indoc",
  "insta",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "path-absolutize",
  "pep440_rs",
  "pep508_rs",
@@ -4983,7 +4992,7 @@ dependencies = [
  "indexmap",
  "insta",
  "install-wheel-rs",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "once-map",
  "once_cell",
  "owo-colors",
@@ -5044,7 +5053,7 @@ name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
  "fs-err",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "pathdiff",
  "platform-tags",
  "pypi-types",
