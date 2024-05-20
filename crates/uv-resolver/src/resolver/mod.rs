@@ -687,6 +687,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let PubGrubPackage::Package {
                 name,
                 extra: None,
+                marker: None,
                 url: None,
             } = package
             else {
@@ -974,6 +975,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let package = PubGrubPackage::from_package(
                         editable.metadata.name.clone(),
                         None,
+                        None,
                         &self.urls,
                     );
                     let version = Range::singleton(editable.metadata.version.clone());
@@ -990,6 +992,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             PubGrubPackage::from_package(
                                 editable.metadata.name.clone(),
                                 Some(extra.clone()),
+                                None,
                                 &self.urls,
                             ),
                             Range::singleton(editable.metadata.version.clone()),
@@ -1020,7 +1023,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
 
-            PubGrubPackage::Package { name, extra, url } => {
+            PubGrubPackage::Package {
+                name,
+                extra,
+                marker: _marker,
+                url,
+            } => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
@@ -1184,11 +1192,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Add a dependency on both the extra and base package.
-            PubGrubPackage::Extra { name, extra, url } => Ok(Dependencies::Available(vec![
+            PubGrubPackage::Extra {
+                name,
+                extra,
+                marker: _marker,
+                url,
+            } => Ok(Dependencies::Available(vec![
                 (
                     PubGrubPackage::Package {
                         name: name.clone(),
                         extra: None,
+                        marker: None,
                         url: url.clone(),
                     },
                     Range::singleton(version.clone()),
@@ -1197,6 +1211,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     PubGrubPackage::Package {
                         name: name.clone(),
                         extra: Some(extra.clone()),
+                        marker: None,
                         url: url.clone(),
                     },
                     Range::singleton(version.clone()),

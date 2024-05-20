@@ -56,6 +56,7 @@ impl BatchPrefetcher {
         let PubGrubPackage::Package {
             name,
             extra: None,
+            marker: None,
             url: None,
         } = &next
         else {

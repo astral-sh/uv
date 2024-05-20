@@ -1,4 +1,5 @@
 use distribution_types::VerbatimParsedUrl;
+use pep508_rs::MarkerTree;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolver::Urls;
@@ -20,6 +21,7 @@ pub enum PubGrubPackage {
     Package {
         name: PackageName,
         extra: Option<ExtraName>,
+        marker: Option<MarkerTree>,
         /// The URL of the package, if it was specified in the requirement.
         ///
         /// There are a few challenges that come with URL-based packages, and how they map to
@@ -74,18 +76,34 @@ pub enum PubGrubPackage {
     Extra {
         name: PackageName,
         extra: ExtraName,
+        marker: Option<MarkerTree>,
         url: Option<VerbatimParsedUrl>,
     },
 }
 
 impl PubGrubPackage {
     /// Create a [`PubGrubPackage`] from a package name and optional extra name.
-    pub(crate) fn from_package(name: PackageName, extra: Option<ExtraName>, urls: &Urls) -> Self {
+    pub(crate) fn from_package(
+        name: PackageName,
+        extra: Option<ExtraName>,
+        marker: Option<MarkerTree>,
+        urls: &Urls,
+    ) -> Self {
         let url = urls.get(&name).cloned();
         if let Some(extra) = extra {
-            Self::Extra { name, extra, url }
+            Self::Extra {
+                name,
+                extra,
+                marker,
+                url,
+            }
         } else {
-            Self::Package { name, extra, url }
+            Self::Package {
+                name,
+                extra,
+                marker,
+                url,
+            }
         }
     }
 }
@@ -110,14 +128,32 @@ impl std::fmt::Display for PubGrubPackage {
             }
             Self::Python(_) => write!(f, "Python"),
             Self::Package {
-                name, extra: None, ..
+                name,
+                extra: None,
+                marker: None,
+                ..
             } => write!(f, "{name}"),
             Self::Package {
                 name,
                 extra: Some(extra),
+                marker: None,
                 ..
             } => {
                 write!(f, "{name}[{extra}]")
+            }
+            Self::Package {
+                name,
+                extra: None,
+                marker: Some(marker),
+                ..
+            } => write!(f, "{name}{{{marker}}}"),
+            Self::Package {
+                name,
+                extra: Some(extra),
+                marker: Some(marker),
+                ..
+            } => {
+                write!(f, "{name}[{extra}]{{{marker}}}")
             }
             Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
         }
