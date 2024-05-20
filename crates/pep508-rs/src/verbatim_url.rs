@@ -14,7 +14,7 @@ use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
 #[derive(Debug, Clone, Eq, derivative::Derivative, serde::Deserialize, serde::Serialize)]
-#[derivative(PartialEq, Hash)]
+#[derivative(PartialEq, Hash, Ord)]
 pub struct VerbatimUrl {
     /// The parsed URL.
     #[serde(
@@ -24,6 +24,7 @@ pub struct VerbatimUrl {
     url: Url,
     /// The URL as it was provided by the user.
     #[derivative(PartialEq = "ignore")]
+    #[derivative(Ord = "ignore")]
     #[derivative(Hash = "ignore")]
     given: Option<String>,
 }
@@ -160,6 +161,16 @@ impl VerbatimUrl {
     /// verbatim representation.
     pub fn unknown(url: Url) -> Self {
         Self { given: None, url }
+    }
+}
+
+// This impl is written out because the `derive` doesn't seem to get it right.
+// Or does it in a way where Clippy complains about non-canonical `PartialOrd`
+// impls. So we just do it by hand by deferring to the derived `Ord` impl. This
+// guarantees they are consistent.
+impl PartialOrd for VerbatimUrl {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
