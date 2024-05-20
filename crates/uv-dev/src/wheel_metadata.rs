@@ -5,7 +5,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, DirectUrlBuiltDist, ParsedUrl};
+use distribution_types::{BuiltDist, DirectUrlBuiltDist, ParsedUrl, RemoteSource};
 use pep508_rs::VerbatimUrl;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
@@ -21,13 +21,7 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init()?;
     let client = RegistryClientBuilder::new(cache).build();
 
-    let filename = WheelFilename::from_str(
-        args.url
-            .path()
-            .rsplit_once('/')
-            .unwrap_or(("", args.url.path()))
-            .1,
-    )?;
+    let filename = WheelFilename::from_str(&args.url.filename()?)?;
 
     let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
         bail!("Only HTTPS is supported");
@@ -37,7 +31,6 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
         .wheel_metadata(&BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
             location: archive.url,
-            subdirectory: archive.subdirectory,
             url: args.url,
         }))
         .await?;

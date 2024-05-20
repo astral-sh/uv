@@ -202,9 +202,7 @@ pub struct DirectUrlBuiltDist {
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
     pub location: Url,
-    /// The subdirectory fragment, if any.
-    pub subdirectory: Option<PathBuf>,
-    /// The URL with the subdirectory fragment.
+    /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
 
@@ -212,8 +210,10 @@ pub struct DirectUrlBuiltDist {
 #[derive(Debug, Clone)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
-    pub url: VerbatimUrl,
+    /// The path to the wheel.
     pub path: PathBuf,
+    /// The URL as it was provided by the user.
+    pub url: VerbatimUrl,
 }
 
 /// A source distribution that exists in a registry, like `PyPI`.
@@ -240,8 +240,9 @@ pub struct DirectUrlSourceDist {
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
     pub location: Url,
+    /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
-    /// The URL with the subdirectory fragment.
+    /// The URL as it was provided by the user, including the subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -251,8 +252,9 @@ pub struct GitSourceDist {
     pub name: PackageName,
     /// The URL without the revision and subdirectory fragment.
     pub git: Box<GitUrl>,
+    /// The subdirectory within the Git repository in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
-    /// The URL with the revision and subdirectory fragment.
+    /// The URL as it was provided by the user, including the revision and subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -260,17 +262,22 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone)]
 pub struct PathSourceDist {
     pub name: PackageName,
-    pub url: VerbatimUrl,
+    /// The path to the archive.
     pub path: PathBuf,
+    /// The URL as it was provided by the user.
+    pub url: VerbatimUrl,
 }
 
 /// A source distribution that exists in a local directory.
 #[derive(Debug, Clone)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
-    pub url: VerbatimUrl,
+    /// The path to the directory.
     pub path: PathBuf,
+    /// Whether the package should be installed in editable mode.
     pub editable: bool,
+    /// The URL as it was provided by the user.
+    pub url: VerbatimUrl,
 }
 
 impl Dist {
@@ -299,7 +306,6 @@ impl Dist {
             Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                 filename,
                 location,
-                subdirectory,
                 url,
             })))
         } else {
@@ -332,9 +338,9 @@ impl Dist {
         if path.is_dir() {
             Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
-                url,
                 path,
                 editable,
+                url,
             })))
         } else if path
             .extension()
@@ -356,8 +362,8 @@ impl Dist {
 
             Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                 filename,
-                url,
                 path,
+                url,
             })))
         } else {
             if editable {
@@ -366,8 +372,8 @@ impl Dist {
 
             Ok(Self::Source(SourceDist::Path(PathSourceDist {
                 name,
-                url,
                 path,
+                url,
             })))
         }
     }

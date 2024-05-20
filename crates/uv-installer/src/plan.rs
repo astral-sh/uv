@@ -247,7 +247,6 @@ impl<'a> Planner<'a> {
                         let wheel = DirectUrlBuiltDist {
                             filename,
                             location: location.clone(),
-                            subdirectory: subdirectory.clone(),
                             url: url.clone(),
                         };
 
