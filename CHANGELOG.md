@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.1.45
+
+### Enhancements
+
+- Parse and store extras on editable requirements ([#3629](https://github.com/astral-sh/uv/pull/3629))
+- Allow local versions in wheel filenames ([#3596](https://github.com/astral-sh/uv/pull/3596))
+- Create lib64 symlink for 64-bit, non-macOS, POSIX environments ([#3584](https://github.com/astral-sh/uv/pull/3584))
+
+### Configuration
+
+- Add `UV_CONCURRENT_INSTALLS` variable in favor of `RAYON_NUM_THREADS` ([#3646](https://github.com/astral-sh/uv/pull/3646))
+- Add serialization and deserialization for `--find-links` ([#3619](https://github.com/astral-sh/uv/pull/3619))
+- Apply combination logic to merge CLI and persistent configuration ([#3618](https://github.com/astral-sh/uv/pull/3618))
+
+### Performance
+
+- Parallelize resolver ([#3627](https://github.com/astral-sh/uv/pull/3627))
+
+### Bug fixes
+
+- Reduce sensitivity of unknown option error to discard Python 2 interpreters ([#3580](https://github.com/astral-sh/uv/pull/3580))
+- Respect installed packages in `uv run` ([#3603](https://github.com/astral-sh/uv/pull/3603))
+- Separate cache construction from initialization ([#3607](https://github.com/astral-sh/uv/pull/3607))
+- Add missing `"directory"` branch in source match ([#3608](https://github.com/astral-sh/uv/pull/3608))
+- Fix source annotation in pip compile `annotation-style=line` output ([#3637](https://github.com/astral-sh/uv/pull/3637))
+- Run cargo update to pull in h2 ([#3638](https://github.com/astral-sh/uv/pull/3638))
+- URL-decode hashes in HTML fragments ([#3655](https://github.com/astral-sh/uv/pull/3655))
+- Always print JSON output with `--format` json ([#3671](https://github.com/astral-sh/uv/pull/3671))
+
+### Documentation
+
+- Add `UV_CONFIG_FILE` environment variable to documentation ([#3653](https://github.com/astral-sh/uv/pull/3653))
+- Explicitly mention `--user` in compatibility guide ([#3666](https://github.com/astral-sh/uv/pull/3666))
+
+### Release
+
+- Add musl ppc64le support ([#3537](https://github.com/astral-sh/uv/pull/3537))
+- Retag musl aarch64 for manylinux2014 ([#3624](https://github.com/astral-sh/uv/pull/3624))
+
 ## 0.1.44
 
 ### Release
