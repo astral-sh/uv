@@ -1345,7 +1345,7 @@ impl MarkerExpression {
                 operator: ExtraOperator::NotEqual,
                 name,
             } => !extras.contains(name),
-            MarkerExpression::Arbitrary { .. } => true,
+            MarkerExpression::Arbitrary { .. } => false,
         }
     }
 

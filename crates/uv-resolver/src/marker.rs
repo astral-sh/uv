@@ -35,7 +35,8 @@ pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
             string_is_disjoint(expr1, expr2)
         }
         MarkerExpression::Extra { operator, name } => extra_is_disjoint(operator, name, expr2),
-        MarkerExpression::Arbitrary { .. } => false,
+        // `Arbitrary` expressions always evaluate to `false`, and are thus always disjoint.
+        MarkerExpression::Arbitrary { .. } => true,
     }
 }
 
