@@ -261,12 +261,11 @@ impl Distribution {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let url = Url::from(ParsedArchiveUrl {
                         url: self.id.source.url.clone(),
-                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                        subdirectory: None,
                     });
                     let direct_dist = DirectUrlBuiltDist {
                         filename,
                         location: self.id.source.url.clone(),
-                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                         url: VerbatimUrl::from_url(url),
                     };
                     let built_dist = BuiltDist::DirectUrl(direct_dist);
@@ -483,13 +482,7 @@ impl Source {
 
     fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Source {
         Source {
-            kind: SourceKind::Direct(DirectSource {
-                subdirectory: direct_dist
-                    .subdirectory
-                    .as_deref()
-                    .and_then(Path::to_str)
-                    .map(ToString::to_string),
-            }),
+            kind: SourceKind::Direct(DirectSource { subdirectory: None }),
             url: direct_dist.url.to_url(),
         }
     }

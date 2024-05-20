@@ -88,7 +88,7 @@ impl From<&ResolvedDist> for Requirement {
                     RequirementSource::Url {
                         url: wheel.url.clone(),
                         location,
-                        subdirectory: wheel.subdirectory.clone(),
+                        subdirectory: None,
                     }
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {

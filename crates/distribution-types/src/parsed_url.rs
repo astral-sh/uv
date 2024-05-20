@@ -33,7 +33,8 @@ pub struct VerbatimParsedUrl {
 /// * The path to a file or directory (`file://`)
 /// * A Git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
 ///   string to checkout.
-/// * A remote archive (`https://`), optional with a subdirectory (source dist only)
+/// * A remote archive (`https://`), optional with a subdirectory (source dist only).
+///
 /// A URL in a requirement `foo @ <url>` must be one of the above.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum ParsedUrl {
@@ -41,7 +42,8 @@ pub enum ParsedUrl {
     Path(ParsedPathUrl),
     /// The direct URL is path to a Git repository.
     Git(ParsedGitUrl),
-    /// The direct URL is a URL to an archive.
+    /// The direct URL is a URL to a source archive (e.g., a `.tar.gz` file) or built archive
+    /// (i.e., a `.whl` file).
     Archive(ParsedArchiveUrl),
 }
 
@@ -88,12 +90,12 @@ impl TryFrom<Url> for ParsedGitUrl {
     }
 }
 
-/// An archive URL.
+/// A URL to a source or built archive.
 ///
 /// Examples:
-/// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
-/// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
-/// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
+/// * A built distribution: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1-py2.py3-none-any.whl`
+/// * A source distribution with a valid name: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
+/// * A source dist with a recognizable extension but invalid name: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ParsedArchiveUrl {
     pub url: Url,

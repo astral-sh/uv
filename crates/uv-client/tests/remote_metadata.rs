@@ -22,7 +22,6 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
         let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
             location: Url::parse(url).unwrap(),
-            subdirectory: None,
             url: VerbatimUrl::from_str(url).unwrap(),
         });
         let metadata = client.wheel_metadata(&dist).await.unwrap();
