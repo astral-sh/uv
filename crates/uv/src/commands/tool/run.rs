@@ -23,6 +23,7 @@ pub(crate) async fn run(
     target: String,
     args: Vec<OsString>,
     python: Option<String>,
+    package: Option<String>,
     _isolated: bool,
     preview: PreviewMode,
     cache: &Cache,
@@ -32,9 +33,8 @@ pub(crate) async fn run(
         warn_user!("`uv tool run` is experimental and may change without warning.");
     }
 
-    // TODO(zanieb): Allow users to pass an explicit package name different than the target
-    // as well as additional requirements
-    let requirements = [RequirementsSource::from_package(target.clone())];
+    // TODO(zanieb): Allow users to pass additional requirements
+    let requirements = [RequirementsSource::from_package(package.unwrap_or_else(|| target.clone()))];
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool
     // TOOD(zanieb): Determine if we sould layer on top of the project environment if it is present

@@ -606,6 +606,7 @@ async fn run() -> Result<ExitStatus> {
                 args.target,
                 args.args,
                 args.python,
+                args.package,
                 globals.isolated,
                 globals.preview,
                 &cache,

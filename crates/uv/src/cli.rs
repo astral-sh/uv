@@ -1945,6 +1945,11 @@ pub(crate) struct ToolRunArgs {
     #[arg(allow_hyphen_values = true)]
     pub(crate) args: Vec<OsString>,
 
+    // TODO(zanieb): Consider using `Vec<String>` instead, treating the first as the target package
+    /// Use the given package specification instead of inferring it from the target command.
+    #[arg(long)]
+    pub(crate) package: Option<String>,
+
     /// The Python interpreter to use to build the run environment.
     #[arg(
         long,
