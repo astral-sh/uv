@@ -20,9 +20,9 @@ pub enum PubGrubPackage {
     /// A Python version.
     Python(PubGrubPython),
     /// A Python package.
-    Package(
-        PackageName,
-        Option<ExtraName>,
+    Package {
+        name: PackageName,
+        extra: Option<ExtraName>,
         /// The URL of the package, if it was specified in the requirement.
         ///
         /// There are a few challenges that come with URL-based packages, and how they map to
@@ -59,8 +59,8 @@ pub enum PubGrubPackage {
         /// we're going to have a dependency that's provided as a URL, we _need_ to visit the URL
         /// version before the registry version. So we could just error if we visit a URL variant
         /// _after_ a registry variant.
-        Option<VerbatimParsedUrl>,
-    ),
+        url: Option<VerbatimParsedUrl>,
+    },
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
     ///
     /// For a given package `black`, and an extra `colorama`, we create a virtual package
@@ -74,7 +74,11 @@ pub enum PubGrubPackage {
     /// the exact same version of the base variant. Without the proxy package, then when provided
     /// requirements like `black==23.0.1` and `black[colorama]`, PubGrub may attempt to retrieve
     /// metadata for `black[colorama]` versions other than `23.0.1`.
-    Extra(PackageName, ExtraName, Option<VerbatimParsedUrl>),
+    Extra {
+        name: PackageName,
+        extra: ExtraName,
+        url: Option<VerbatimParsedUrl>,
+    },
 }
 
 impl PubGrubPackage {
@@ -82,9 +86,9 @@ impl PubGrubPackage {
     pub(crate) fn from_package(name: PackageName, extra: Option<ExtraName>, urls: &Urls) -> Self {
         let url = urls.get(&name).cloned();
         if let Some(extra) = extra {
-            Self::Extra(name, extra, url)
+            Self::Extra { name, extra, url }
         } else {
-            Self::Package(name, extra, url)
+            Self::Package { name, extra, url }
         }
     }
 }
@@ -108,11 +112,17 @@ impl std::fmt::Display for PubGrubPackage {
                 }
             }
             Self::Python(_) => write!(f, "Python"),
-            Self::Package(name, None, ..) => write!(f, "{name}"),
-            Self::Package(name, Some(extra), ..) => {
+            Self::Package {
+                name, extra: None, ..
+            } => write!(f, "{name}"),
+            Self::Package {
+                name,
+                extra: Some(extra),
+                ..
+            } => {
                 write!(f, "{name}[{extra}]")
             }
-            Self::Extra(name, extra, ..) => write!(f, "{name}[{extra}]"),
+            Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
         }
     }
 }

@@ -103,7 +103,7 @@ fn add_requirements(
             let PubGrubRequirement { package, version } = result?;
 
             match &package {
-                PubGrubPackage::Package(name, ..) => {
+                PubGrubPackage::Package { name, .. } => {
                     // Detect self-dependencies.
                     if source_name.is_some_and(|source_name| source_name == name) {
                         warn!("{name} has a dependency on itself");
@@ -112,7 +112,7 @@ fn add_requirements(
 
                     dependencies.push((package.clone(), version.clone()));
                 }
-                PubGrubPackage::Extra(name, extra, ..) => {
+                PubGrubPackage::Extra { name, extra, .. } => {
                     // Recursively add the dependencies of the current package (e.g., `black` depending on
                     // `black[colorama]`).
                     if source_name.is_some_and(|source_name| source_name == name) {
@@ -158,7 +158,7 @@ fn add_requirements(
                     PubGrubRequirement::from_constraint(constraint, urls, locals)?;
 
                 // Ignore self-dependencies.
-                if let PubGrubPackage::Package(name, ..) = &package {
+                if let PubGrubPackage::Package { name, .. } = &package {
                     // Detect self-dependencies.
                     if source_name.is_some_and(|source_name| source_name == name) {
                         warn!("{name} has a dependency on itself");
@@ -244,11 +244,11 @@ impl PubGrubRequirement {
                 }
 
                 Ok(Self {
-                    package: PubGrubPackage::Package(
-                        requirement.name.clone(),
+                    package: PubGrubPackage::Package {
+                        name: requirement.name.clone(),
                         extra,
-                        Some(expected.clone()),
-                    ),
+                        url: Some(expected.clone()),
+                    },
                     version: Range::full(),
                 })
             }
@@ -269,11 +269,11 @@ impl PubGrubRequirement {
                 }
 
                 Ok(Self {
-                    package: PubGrubPackage::Package(
-                        requirement.name.clone(),
+                    package: PubGrubPackage::Package {
+                        name: requirement.name.clone(),
                         extra,
-                        Some(expected.clone()),
-                    ),
+                        url: Some(expected.clone()),
+                    },
                     version: Range::full(),
                 })
             }
@@ -294,11 +294,11 @@ impl PubGrubRequirement {
                 }
 
                 Ok(Self {
-                    package: PubGrubPackage::Package(
-                        requirement.name.clone(),
+                    package: PubGrubPackage::Package {
+                        name: requirement.name.clone(),
                         extra,
-                        Some(expected.clone()),
-                    ),
+                        url: Some(expected.clone()),
+                    },
                     version: Range::full(),
                 })
             }
