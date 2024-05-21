@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use tempfile::tempdir_in;
 use tokio::process::Command;
@@ -166,8 +166,10 @@ pub(crate) async fn run(
         "Running `{command}{space}{}`",
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
-    let mut handle = process.spawn()?;
-    let status = handle.wait().await?;
+    let mut handle = process
+        .spawn()
+        .with_context(|| format!("Failed to spawn: `{command}`"))?;
+    let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
     // TODO(zanieb): Do we want to exit with the code of the child process? Probably.
