@@ -1057,11 +1057,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: "Install requirements"
+      - name: "Install requirements and prime cache"
         run: |
-          cargo run venv --cache-dir .cache
-          cargo run pip compile scripts/requirements/airflow.in --output-file airflow.txt
-          cargo run pip install -r airflow.txt --cache-dir .cache
+          sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
+          cargo run --bin uv -- venv --cache-dir .cache
+          cargo run --bin uv -- pip install -r scripts/requirements/airflow.in --cache-dir .cache
 
       - name: "Build benchmarks"
         run: cargo codspeed build --features codspeed -p bench

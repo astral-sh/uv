@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use bench::criterion::black_box;
 use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
 use distribution_types::Requirement;
@@ -14,8 +12,8 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .build()
         .unwrap();
 
-    let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
-    let venv = PythonEnvironment::from_root(Path::new(".venv"), cache).unwrap();
+    let cache = &Cache::from_path("../../.cache").unwrap().init().unwrap();
+    let venv = PythonEnvironment::from_virtualenv(cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
         Requirement::from_pep508("jupyter".parse().unwrap()).unwrap()
@@ -36,13 +34,13 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
 }
 
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
-    let runtime = &tokio::runtime::Builder::new_current_thread()
+    let runtime = &tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
 
-    let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
-    let venv = PythonEnvironment::from_root(Path::new(".venv"), cache).unwrap();
+    let cache = &Cache::from_path("../../.cache").unwrap().init().unwrap();
+    let venv = PythonEnvironment::from_virtualenv(cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
         Requirement::from_pep508("apache-airflow[all]".parse().unwrap()).unwrap(),
@@ -68,7 +66,7 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     c.bench_function("resolve_warm_airflow", |b| b.iter(run));
 }
 
-criterion_group!(uv, resolve_warm_jupyter, resolve_warm_airflow);
+criterion_group!(uv, resolve_warm_airflow, resolve_warm_jupyter);
 criterion_main!(uv);
 
 mod resolver {
@@ -84,7 +82,7 @@ mod resolver {
     use uv_configuration::{Concurrency, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
-    use uv_interpreter::{Interpreter, PythonEnvironment};
+    use uv_interpreter::PythonEnvironment;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph, Resolver,
     };
@@ -129,11 +127,11 @@ mod resolver {
         let index_locations = IndexLocations::default();
         let in_flight = InFlight::default();
         let installed_packages = EmptyInstalledPackages;
-        let interpreter = Interpreter::artificial(PLATFORM.clone(), MARKERS.clone());
+        let interpreter = venv.interpreter().clone();
         let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &MARKERS);
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
-        let build_isolation = BuildIsolation::Shared(venv);
+        let build_isolation = BuildIsolation::Isolated;
 
         let build_context = BuildDispatch::new(
             client,
