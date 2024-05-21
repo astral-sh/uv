@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+
 use tokio::task::JoinError;
 use zip::result::ZipError;
 
@@ -7,6 +8,7 @@ use distribution_types::ParsedUrlError;
 use pep440_rs::Version;
 use pypi_types::HashDigest;
 use uv_client::BetterReqwestError;
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
 #[derive(Debug, thiserror::Error)]
@@ -60,8 +62,8 @@ pub enum Error {
     DistInfo(#[from] install_wheel_rs::Error),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
-    #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py")]
-    DirWithoutEntrypoint,
+    #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py: `{}`", _0.user_display())]
+    DirWithoutEntrypoint(PathBuf),
     #[error("Failed to extract archive")]
     Extract(#[from] uv_extract::Error),
     #[error("Source distribution not found at: {0}")]
