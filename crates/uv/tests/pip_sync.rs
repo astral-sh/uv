@@ -2123,19 +2123,25 @@ fn refresh_package() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "maturin")]
 fn sync_editable() -> Result<()> {
     let context = TestContext::new("3.12");
+    let poetry_editable = context.temp_dir.child("poetry_editable");
+    // Copy into the temporary directory so we can mutate it
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/poetry_editable"),
+        &poetry_editable,
+    )?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
         boltons==23.1.1
-        -e {workspace_root}/scripts/packages/maturin_editable
         numpy==1.26.2
             # via poetry-editable
-        -e file://{workspace_root}/scripts/packages/poetry_editable
+        -e file://{poetry_editable}
         ",
-        workspace_root = context.workspace_root.simplified_display(),
+        poetry_editable = poetry_editable.display()
     })?;
 
     // Install the editable packages.
@@ -2146,14 +2152,13 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 2 editables in [TIME]
+    Built 1 editable in [TIME]
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Installed 3 packages in [TIME]
      + boltons==23.1.1
-     + maturin-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/maturin_editable)
      + numpy==1.26.2
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
@@ -2170,49 +2175,43 @@ fn sync_editable() -> Result<()> {
     Built 1 editable in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
-    // Make sure we have the right base case.
-    let python_source_file = context
-        .workspace_root
-        .join("scripts/packages/maturin_editable/python/maturin_editable/__init__.py");
-    let python_version_1 = indoc::indoc! {r"
-        from .maturin_editable import *
+    let python_source_file = poetry_editable.path().join("poetry_editable/__init__.py");
+    let check_installed = indoc::indoc! {r#"
+        from poetry_editable import a
 
+        assert a() == "a", a()
+   "#};
+    context.assert_command(check_installed).success();
+
+    // Edit the sources and make sure the changes are respected without syncing again
+    let python_version_1 = indoc::indoc! {r"
         version = 1
    "};
     fs_err::write(&python_source_file, python_version_1)?;
 
-    let check_installed = indoc::indoc! {r#"
-        from maturin_editable import sum_as_string, version
+    let check_installed = indoc::indoc! {r"
+        from poetry_editable import version
 
         assert version == 1, version
-        assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
-   "#};
+   "};
     context.assert_command(check_installed).success();
 
-    // Edit the sources.
     let python_version_2 = indoc::indoc! {r"
-        from .maturin_editable import *
-
         version = 2
    "};
     fs_err::write(&python_source_file, python_version_2)?;
 
-    let check_installed = indoc::indoc! {r#"
-        from maturin_editable import sum_as_string, version
-        from pathlib import Path
+    let check_installed = indoc::indoc! {r"
+        from poetry_editable import version
 
         assert version == 2, version
-        assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
-   "#};
+   "};
     context.assert_command(check_installed).success();
-
-    // Don't create a git diff.
-    fs_err::write(&python_source_file, python_version_1)?;
 
     uv_snapshot!(context.filters(), command(&context)
         .arg(requirements_txt.path()), @r###"
@@ -2221,7 +2220,7 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###
     );
 

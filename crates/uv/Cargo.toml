@@ -90,7 +90,7 @@ reqwest = { workspace = true, features = ["blocking"], default-features = false 
 ignored = ["flate2"]
 
 [features]
-default = ["flate2/zlib-ng", "python", "pypi", "git", "maturin", "python-patch"]
+default = ["flate2/zlib-ng", "python", "pypi", "git", "python-patch"]
 # Introduces a dependency on a local Python installation.
 python = []
 # Introduces a dependency on a local Python installation with specific patch versions.
@@ -99,8 +99,6 @@ python-patch = []
 pypi = []
 # Introduces a dependency on Git.
 git = []
-# Introduces a dependency on Maturin.
-maturin = []
 # Adds self-update functionality.
 self-update = ["axoupdater"]
 
