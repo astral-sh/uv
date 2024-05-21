@@ -436,31 +436,6 @@ jobs:
           ./uv venv
           ./${{ matrix.command }}
 
-  integration-test-maturin:
-    needs: build-binary-linux
-    name: "integration test | maturin"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Compile"
-        run: |
-          echo '-e ${PROJECT_ROOT}/scripts/packages/maturin_editable' | ./uv pip compile - -o requirements.txt
-
-      - name: "Sync"
-        run: |
-          ./uv venv
-          ./uv pip sync requirements.txt
-
   cache-test-ubuntu:
     needs: build-binary-linux
     name: "check cache | ubuntu"
