@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use glob::{glob, GlobError, PatternError};
+use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
 
-use uv_fs::Simplified;
+use uv_fs::{absolutize_path, Simplified};
 use uv_normalize::PackageName;
 use uv_warnings::warn_user;
 
@@ -25,8 +26,12 @@ pub enum WorkspaceError {
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
     Toml(PathBuf, #[source] Box<toml::de::Error>),
-    #[error("No `project` section found in: `{}`", _0.simplified_display())]
+    #[error("No `project` table found in: `{}`", _0.simplified_display())]
     MissingProject(PathBuf),
+    #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
+    CantBeDynamic(&'static str),
+    #[error("Failed to normalize workspace member path")]
+    Normalize(#[source] std::io::Error),
 }
 
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
@@ -172,22 +177,62 @@ pub struct ProjectWorkspace {
 }
 
 impl ProjectWorkspace {
-    /// Find the current project and workspace.
-    pub fn discover(path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
-        let Some(project_root) = path
+    /// Find the current project and workspace, given the current directory.
+    pub async fn discover(path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
+        let project_root = path
             .as_ref()
             .ancestors()
             .find(|path| path.join("pyproject.toml").is_file())
-        else {
-            return Err(WorkspaceError::MissingPyprojectToml);
-        };
+            .ok_or(WorkspaceError::MissingPyprojectToml)?;
 
         debug!(
             "Found project root: `{}`",
             project_root.simplified_display()
         );
 
-        Self::from_project_root(project_root)
+        Self::from_project_root(project_root).await
+    }
+
+    /// Discover the workspace starting from the directory containing the `pyproject.toml`.
+    pub async fn from_project_root(project_root: &Path) -> Result<Self, WorkspaceError> {
+        // Read the current `pyproject.toml`.
+        let pyproject_path = project_root.join("pyproject.toml");
+        let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+        // It must have a `[project]` table.
+        let project = pyproject_toml
+            .project
+            .clone()
+            .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path.clone()))?;
+
+        Self::from_project(project_root, &pyproject_toml, project.name).await
+    }
+
+    /// If the current directory contains a `pyproject.toml` with a `project` table, discover the
+    /// workspace and return it, otherwise it is a dynamic path dependency and we return `Ok(None)`.
+    pub async fn from_maybe_project_root(
+        project_root: &Path,
+    ) -> Result<Option<Self>, WorkspaceError> {
+        // Read the `pyproject.toml`.
+        let pyproject_path = project_root.join("pyproject.toml");
+        let Ok(contents) = fs_err::tokio::read_to_string(&pyproject_path).await else {
+            // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
+            return Ok(None);
+        };
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+        // Extract the `[project]` metadata.
+        let Some(project) = pyproject_toml.project.clone() else {
+            // We have to build to get the metadata.
+            return Ok(None);
+        };
+
+        Ok(Some(
+            Self::from_project(project_root, &pyproject_toml, project.name).await?,
+        ))
     }
 
     /// The directory containing the closest `pyproject.toml`, defining the current project.
@@ -205,48 +250,31 @@ impl ProjectWorkspace {
         &self.workspace
     }
 
-    /// Return the requirements for the project.
-    pub fn requirements(&self) -> Vec<RequirementsSource> {
-        vec![
-            RequirementsSource::from_requirements_file(self.project_root.join("pyproject.toml")),
-            RequirementsSource::from_source_tree(self.project_root.clone()),
-        ]
+    /// The current project.
+    pub fn current_project(&self) -> &WorkspaceMember {
+        &self.workspace().packages[&self.project_name]
     }
 
-    fn from_project_root(path: &Path) -> Result<Self, WorkspaceError> {
-        let pyproject_path = path.join("pyproject.toml");
-
-        // Read the `pyproject.toml`.
-        let contents = fs_err::read_to_string(&pyproject_path)?;
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
-
-        // Extract the `[project]` metadata.
-        let Some(project) = pyproject_toml.project.clone() else {
-            return Err(WorkspaceError::MissingProject(pyproject_path));
-        };
-
-        Self::from_project(path.to_path_buf(), &pyproject_toml, project.name)
+    /// Return the requirements for the project, which is the current project as editable.
+    pub fn requirements(&self) -> Vec<RequirementsSource> {
+        vec![RequirementsSource::Editable(
+            self.project_root.to_string_lossy().to_string(),
+        )]
     }
 
     /// Find the workspace for a project.
-    fn from_project(
-        project_path: PathBuf,
+    async fn from_project(
+        project_path: &Path,
         project: &PyProjectToml,
         project_name: PackageName,
     ) -> Result<Self, WorkspaceError> {
-        let mut workspace = project
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.workspace.as_ref())
-            .map(|workspace| (project_path.clone(), workspace.clone(), project.clone()));
-
-        if workspace.is_none() {
-            workspace = find_workspace(&project_path)?;
-        }
+        let project_path = absolutize_path(project_path)
+            .map_err(WorkspaceError::Normalize)?
+            .to_path_buf();
 
         let mut workspace_members = BTreeMap::new();
+        // The current project is always a workspace member, especially in a single project
+        // workspace.
         workspace_members.insert(
             project_name.clone(),
             WorkspaceMember {
@@ -255,9 +283,24 @@ impl ProjectWorkspace {
             },
         );
 
-        let Some((workspace_root, workspace_definition, project_in_workspace_root)) = workspace
+        // Check if the current project is also an explicit workspace root.
+        let mut workspace = project
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+            .map(|workspace| (project_path.clone(), workspace.clone(), project.clone()));
+
+        if workspace.is_none() {
+            // The project isn't an explicit workspace root, check if we're a regular workspace
+            // member by looking for an explicit workspace root above.
+            workspace = find_workspace(&project_path).await?;
+        }
+
+        let Some((workspace_root, workspace_definition, workspace_pyproject_toml)) = workspace
         else {
-            // The project and the workspace root are identical
+            // The project isn't an explicit workspace root, but there's also no workspace root
+            // above it, so the project is an implicit workspace root identical to the project root.
             debug!("No workspace root found, using project root");
             return Ok(Self {
                 project_root: project_path.clone(),
@@ -282,7 +325,7 @@ impl ProjectWorkspace {
             let pyproject_toml = toml::from_str(&contents)
                 .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
 
-            if let Some(project) = &project_in_workspace_root.project {
+            if let Some(project) = &workspace_pyproject_toml.project {
                 workspace_members.insert(
                     project.name.clone(),
                     WorkspaceMember {
@@ -292,6 +335,7 @@ impl ProjectWorkspace {
                 );
             };
         }
+        let mut seen = FxHashSet::default();
         for member_glob in workspace_definition.members.unwrap_or_default() {
             let absolute_glob = workspace_root
                 .join(member_glob.as_str())
@@ -300,10 +344,18 @@ impl ProjectWorkspace {
             for member_root in glob(&absolute_glob)
                 .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
             {
-                // TODO(konsti): Filter already seen.
                 let member_root = member_root
                     .map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
-                // Read the `pyproject.toml`.
+                // Avoid reading the file more than once.
+                if !seen.insert(member_root.clone()) {
+                    continue;
+                }
+                let member_root = absolutize_path(&member_root)
+                    .map_err(WorkspaceError::Normalize)?
+                    .to_path_buf();
+
+                trace!("Processing workspace member {}", member_root.user_display());
+                // Read the member `pyproject.toml`.
                 let pyproject_path = member_root.join("pyproject.toml");
                 let contents = fs_err::read_to_string(&pyproject_path)?;
                 let pyproject_toml: PyProjectToml = toml::from_str(&contents)
@@ -314,10 +366,6 @@ impl ProjectWorkspace {
                     return Err(WorkspaceError::MissingProject(member_root));
                 };
 
-                let pyproject_toml = workspace_root.join("pyproject.toml");
-                let contents = fs_err::read_to_string(&pyproject_toml)?;
-                let pyproject_toml = toml::from_str(&contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_toml, Box::new(err)))?;
                 let member = WorkspaceMember {
                     root: member_root.clone(),
                     pyproject_toml,
@@ -325,7 +373,7 @@ impl ProjectWorkspace {
                 workspace_members.insert(project.name, member);
             }
         }
-        let workspace_sources = project_in_workspace_root
+        let workspace_sources = workspace_pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
@@ -344,10 +392,37 @@ impl ProjectWorkspace {
             },
         })
     }
+
+    #[cfg(test)]
+    pub(crate) fn dummy(root: &Path, project_name: &PackageName) -> Self {
+        // This doesn't necessarily match the exact test case, but we don't use the other fields
+        // for the test cases atm.
+        let root_member = WorkspaceMember {
+            root: root.to_path_buf(),
+            pyproject_toml: PyProjectToml {
+                project: Some(crate::pyproject::Project {
+                    name: project_name.clone(),
+                    dependencies: None,
+                    optional_dependencies: None,
+                    dynamic: None,
+                }),
+                tool: None,
+            },
+        };
+        Self {
+            project_root: root.to_path_buf(),
+            project_name: project_name.clone(),
+            workspace: Workspace {
+                root: root.to_path_buf(),
+                packages: [(project_name.clone(), root_member)].into_iter().collect(),
+                sources: BTreeMap::default(),
+            },
+        }
+    }
 }
 
 /// Find the workspace root above the current project, if any.
-fn find_workspace(
+async fn find_workspace(
     project_root: &Path,
 ) -> Result<Option<(PathBuf, ToolUvWorkspace, PyProjectToml)>, WorkspaceError> {
     // Skip 1 to ignore the current project itself.
@@ -362,7 +437,7 @@ fn find_workspace(
         );
 
         // Read the `pyproject.toml`.
-        let contents = fs_err::read_to_string(&pyproject_path)?;
+        let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
         let pyproject_toml: PyProjectToml = toml::from_str(&contents)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
@@ -521,7 +596,7 @@ mod tests {
 
     use crate::workspace::ProjectWorkspace;
 
-    fn workspace_test(folder: impl AsRef<Path>) -> (ProjectWorkspace, String) {
+    async fn workspace_test(folder: impl AsRef<Path>) -> (ProjectWorkspace, String) {
         let root_dir = env::current_dir()
             .unwrap()
             .parent()
@@ -530,14 +605,17 @@ mod tests {
             .unwrap()
             .join("scripts")
             .join("workspaces");
-        let project = ProjectWorkspace::discover(root_dir.join(folder)).unwrap();
+        let project = ProjectWorkspace::discover(root_dir.join(folder))
+            .await
+            .unwrap();
         let root_escaped = regex::escape(root_dir.to_string_lossy().as_ref());
         (project, root_escaped)
     }
 
-    #[test]
-    fn albatross_in_example() {
-        let (project, root_escaped) = workspace_test("albatross-in-example/examples/bird-feeder");
+    #[tokio::test]
+    async fn albatross_in_example() {
+        let (project, root_escaped) =
+            workspace_test("albatross-in-example/examples/bird-feeder").await;
         let filters = vec![(root_escaped.as_str(), "[ROOT]")];
         insta::with_settings!({filters => filters}, {
         assert_json_snapshot!(
@@ -564,10 +642,10 @@ mod tests {
         });
     }
 
-    #[test]
-    fn albatross_project_in_excluded() {
+    #[tokio::test]
+    async fn albatross_project_in_excluded() {
         let (project, root_escaped) =
-            workspace_test("albatross-project-in-excluded/excluded/bird-feeder");
+            workspace_test("albatross-project-in-excluded/excluded/bird-feeder").await;
         let filters = vec![(root_escaped.as_str(), "[ROOT]")];
         insta::with_settings!({filters => filters}, {
             assert_json_snapshot!(
@@ -594,9 +672,9 @@ mod tests {
         });
     }
 
-    #[test]
-    fn albatross_root_workspace() {
-        let (project, root_escaped) = workspace_test("albatross-root-workspace");
+    #[tokio::test]
+    async fn albatross_root_workspace() {
+        let (project, root_escaped) = workspace_test("albatross-root-workspace").await;
         let filters = vec![(root_escaped.as_str(), "[ROOT]")];
         insta::with_settings!({filters => filters}, {
             assert_json_snapshot!(
@@ -636,10 +714,10 @@ mod tests {
         });
     }
 
-    #[test]
-    fn albatross_virtual_workspace() {
+    #[tokio::test]
+    async fn albatross_virtual_workspace() {
         let (project, root_escaped) =
-            workspace_test("albatross-virtual-workspace/packages/albatross");
+            workspace_test("albatross-virtual-workspace/packages/albatross").await;
         let filters = vec![(root_escaped.as_str(), "[ROOT]")];
         insta::with_settings!({filters => filters}, {
             assert_json_snapshot!(
@@ -674,9 +752,9 @@ mod tests {
         });
     }
 
-    #[test]
-    fn albatross_just_project() {
-        let (project, root_escaped) = workspace_test("albatross-just-project");
+    #[tokio::test]
+    async fn albatross_just_project() {
+        let (project, root_escaped) = workspace_test("albatross-just-project").await;
         let filters = vec![(root_escaped.as_str(), "[ROOT]")];
         insta::with_settings!({filters => filters}, {
             assert_json_snapshot!(

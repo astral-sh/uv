@@ -19,7 +19,7 @@ use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
 use uv_requirements::{
-    ExtrasSpecification, ProjectWorkspace, RequirementsSource, RequirementsSpecification,
+    ExtrasSpecification, ProjectWorkspace, RequirementsSource, RequirementsSpecification, Workspace,
 };
 use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -92,6 +92,7 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
+    workspace: Option<&Workspace>,
     preview: PreviewMode,
     connectivity: Connectivity,
     cache: &Cache,
@@ -107,6 +108,7 @@ pub(crate) async fn update_environment(
         requirements,
         &[],
         &[],
+        workspace,
         &ExtrasSpecification::None,
         &client_builder,
         preview,

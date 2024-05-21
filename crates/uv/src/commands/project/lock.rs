@@ -31,7 +31,7 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
+    let project = ProjectWorkspace::discover(std::env::current_dir()?).await?;
 
     // Discover or create the virtual environment.
     let venv = project::init_environment(&project, preview, cache, printer)?;
@@ -43,9 +43,13 @@ pub(crate) async fn lock(
     // TODO(zanieb): Consider allowing constraints and extras
     // TODO(zanieb): Allow specifying extras somehow
     let spec = RequirementsSpecification::from_sources(
+        // TODO(konsti): With workspace (just like with extras), these are the requirements for
+        // syncing. For locking, we want to use the entire workspace with all extras.
+        // See https://github.com/astral-sh/uv/issues/3700
         &project.requirements(),
         &[],
         &[],
+        None,
         &ExtrasSpecification::None,
         &client_builder,
         preview,

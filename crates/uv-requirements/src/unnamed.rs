@@ -18,6 +18,7 @@ use distribution_types::{
 use pep508_rs::{UnnamedRequirement, VersionOrUrl};
 use pypi_types::{Metadata10, ParsedUrl, VerbatimParsedUrl};
 use uv_distribution::{DistributionDatabase, Reporter};
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};

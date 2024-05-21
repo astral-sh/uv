@@ -35,9 +35,9 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 glob = { workspace = true }
 indexmap = { workspace = true }
-itertools = { workspace = true }
 path-absolutize = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
@@ -52,6 +52,7 @@ schemars = ["dep:schemars"]
 indoc = "2.0.5"
 insta = { version = "1.38.0", features = ["filters", "redactions", "json"] }
 regex = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true
