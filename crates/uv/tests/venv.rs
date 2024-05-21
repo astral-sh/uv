@@ -220,27 +220,18 @@ fn create_venv_unknown_python_minor() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.15");
-    if cfg!(windows) {
-        uv_snapshot!(&mut command, @r###"
-        success: false
-        exit_code: 1
-        ----- stdout -----
 
-        ----- stderr -----
-          × No Python 3.15 found through `py --list-paths` or in `PATH`. Is Python 3.15 installed?
-        "###
-        );
-    } else {
-        uv_snapshot!(&mut command, @r###"
-        success: false
-        exit_code: 1
-        ----- stdout -----
+    // Note the `py` launcher is not included in the search in Windows due to
+    // `UV_TEST_PYTHON_PATH` being set
+    uv_snapshot!(&mut command, @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
 
-        ----- stderr -----
-          × No Python 3.15 in `PATH`. Is Python 3.15 installed?
-        "###
-        );
-    }
+    ----- stderr -----
+      × No interpreter found for Python 3.15 in active virtual environment or search path
+    "###
+    );
 
     context.venv.assert(predicates::path::missing());
 }
@@ -249,17 +240,7 @@ fn create_venv_unknown_python_minor() {
 fn create_venv_unknown_python_patch() {
     let context = VenvTestContext::new(&["3.12"]);
 
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (
-            r"No Python 3\.8\.0 found through `py --list-paths` or in `PATH`\. Is Python 3\.8\.0 installed\?",
-            "No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?",
-        ),
-    ];
-    uv_snapshot!(filters, context.venv_command()
+    uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.8.0"), @r###"
@@ -268,7 +249,7 @@ fn create_venv_unknown_python_patch() {
     ----- stdout -----
 
     ----- stderr -----
-      × No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?
+      × No interpreter found for Python 3.8.0 in active virtual environment or search path
     "###
     );
 

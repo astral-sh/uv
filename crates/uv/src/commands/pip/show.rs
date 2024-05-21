@@ -10,7 +10,7 @@ use distribution_types::Name;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_interpreter::PythonEnvironment;
+use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
@@ -39,19 +39,12 @@ pub(crate) fn pip_show(
     }
 
     // Detect the current Python interpreter.
-    let venv = if let Some(python) = python {
-        PythonEnvironment::from_requested_python(python, cache)?
-    } else if system {
-        PythonEnvironment::from_default_python(cache)?
+    let system = if system {
+        SystemPython::Required
     } else {
-        match PythonEnvironment::from_virtualenv(cache) {
-            Ok(venv) => venv,
-            Err(uv_interpreter::Error::VenvNotFound) => {
-                PythonEnvironment::from_default_python(cache)?
-            }
-            Err(err) => return Err(err.into()),
-        }
+        SystemPython::Allowed
     };
+    let venv = PythonEnvironment::find(python, system, cache)?;
 
     debug!(
         "Using Python {} environment at {}",

@@ -16,7 +16,6 @@ pub enum ImplementationName {
 }
 
 impl ImplementationName {
-    #[allow(dead_code)]
     pub(crate) fn iter() -> impl Iterator<Item = &'static ImplementationName> {
         static NAMES: &[ImplementationName] = &[ImplementationName::Cpython];
         NAMES.iter()

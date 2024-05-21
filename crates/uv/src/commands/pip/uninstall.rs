@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
-use uv_interpreter::{PythonEnvironment, Target};
+use uv_interpreter::{PythonEnvironment, SystemPython, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::commands::{elapsed, ExitStatus};
@@ -43,13 +43,13 @@ pub(crate) async fn pip_uninstall(
         RequirementsSpecification::from_simple_sources(sources, &client_builder, preview).await?;
 
     // Detect the current Python interpreter.
-    let venv = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, &cache)?
-    } else if system {
-        PythonEnvironment::from_default_python(&cache)?
+    let system = if system {
+        SystemPython::Required
     } else {
-        PythonEnvironment::from_virtualenv(&cache)?
+        SystemPython::Disallowed
     };
+    let venv = PythonEnvironment::find(python.as_deref(), system, &cache)?;
+
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),

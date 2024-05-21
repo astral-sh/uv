@@ -20,7 +20,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SatisfiesResult, SitePackages};
-use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
+use uv_interpreter::{find_default_interpreter, Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, ProjectWorkspace,
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
@@ -88,9 +88,12 @@ pub(crate) fn init(
     // TODO(charlie): If the environment isn't compatible with `--python`, recreate it.
     match PythonEnvironment::from_root(&venv, cache) {
         Ok(venv) => Ok(venv),
-        Err(uv_interpreter::Error::VenvDoesNotExist(_)) => {
+        Err(uv_interpreter::Error::NotFound(_)) => {
             // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
-            let interpreter = find_default_python(cache)?;
+            let interpreter = find_default_interpreter(cache)
+                .map_err(uv_interpreter::Error::from)?
+                .map_err(uv_interpreter::Error::from)?
+                .into_interpreter();
 
             writeln!(
                 printer.stderr(),

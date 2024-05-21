@@ -35,8 +35,11 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
-use uv_interpreter::PythonVersion;
-use uv_interpreter::{find_best_python, find_requested_python, PythonEnvironment};
+use uv_interpreter::{
+    find_best_interpreter, find_interpreter, InterpreterRequest, PythonEnvironment, SystemPython,
+    VersionRequest,
+};
+use uv_interpreter::{PythonVersion, SourceSelector};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
@@ -160,12 +163,26 @@ pub(crate) async fn pip_compile(
     }
 
     // Find an interpreter to use for building distributions
-    let interpreter = if let Some(python) = python.as_ref() {
-        find_requested_python(python, &cache)?
-            .ok_or_else(|| uv_interpreter::Error::RequestedPythonNotFound(python.to_string()))?
+    let system = if system {
+        SystemPython::Required
     } else {
-        find_best_python(python_version.as_ref(), system, &cache)?
+        SystemPython::Allowed
     };
+    let interpreter = if let Some(python) = python.as_ref() {
+        let request = InterpreterRequest::parse(python);
+        let sources = SourceSelector::from_env(system);
+        find_interpreter(&request, &sources, &cache)??
+    } else {
+        let request = if let Some(version) = python_version.as_ref() {
+            // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
+            InterpreterRequest::Version(VersionRequest::from(version))
+        } else {
+            InterpreterRequest::Version(VersionRequest::Default)
+        };
+        find_best_interpreter(&request, system, &cache)??
+    }
+    .into_interpreter();
+
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),

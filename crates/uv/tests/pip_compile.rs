@@ -8,7 +8,6 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use assert_fs::prelude::*;
-use assert_fs::TempDir;
 use indoc::indoc;
 use url::Url;
 
@@ -127,29 +126,42 @@ fn missing_requirements_in() {
 
 #[test]
 fn missing_venv() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let cache_dir = TempDir::new()?;
-    let venv = temp_dir.child(".venv");
+    let context = TestContext::new("3.12");
+    context.temp_dir.child("requirements.in").touch()?;
+    fs_err::remove_dir_all(context.temp_dir.child(".venv").path())?;
 
-    uv_snapshot!(Command::new(get_bin())
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.compile()
+                .arg("requirements.in"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: failed to read from file `requirements.in`
-      Caused by: No such file or directory (os error 2)
-    "###
-    );
+        ----- stderr -----
+        warning: Requirements file requirements.in does not contain any dependencies
+        error: failed to canonicalize path `[VENV]/Scripts/python.exe`
+          Caused by: The system cannot find the path specified. (os error 3)
+        "###
+        );
+    } else {
+        uv_snapshot!(context.filters(), context.compile()
+                .arg("requirements.in"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    venv.assert(predicates::path::missing());
+        ----- stderr -----
+        warning: Requirements file requirements.in does not contain any dependencies
+        error: failed to canonicalize path `[VENV]/bin/python`
+          Caused by: No such file or directory (os error 2)
+        "###
+        );
+    }
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicates::path::missing());
 
     Ok(())
 }

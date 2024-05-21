@@ -25,11 +25,13 @@ pub(crate) struct FetchPythonArgs {
 pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let start = Instant::now();
 
-    let bootstrap_dir = TOOLCHAIN_DIRECTORY
-        .as_ref()
-        .expect("The toolchain directory must exist for bootstrapping");
+    let bootstrap_dir = TOOLCHAIN_DIRECTORY.clone().unwrap_or_else(|| {
+        std::env::current_dir()
+            .expect("Use `UV_BOOTSTRAP_DIR` if the current directory is not usable.")
+            .join("bin")
+    });
 
-    fs_err::create_dir_all(bootstrap_dir)?;
+    fs_err::create_dir_all(&bootstrap_dir)?;
 
     let versions = if args.versions.is_empty() {
         info!("Reading versions from file...");
@@ -59,7 +61,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut tasks = futures::stream::iter(downloads.iter())
         .map(|download| {
             async {
-                let result = download.fetch(&client, bootstrap_dir).await;
+                let result = download.fetch(&client, &bootstrap_dir).await;
                 (download.python_version(), result)
             }
             .instrument(info_span!("download", key = %download))
@@ -130,6 +132,10 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     };
 
     info!("Installed {} versions", requests.len());
+    info!(
+        r#"To enable discovery: export UV_BOOTSTRAP_DIR="{}""#,
+        bootstrap_dir.display()
+    );
 
     Ok(())
 }

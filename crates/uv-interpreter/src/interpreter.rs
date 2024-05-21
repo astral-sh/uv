@@ -1,11 +1,13 @@
+use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 
 use configparser::ini::Ini;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use thiserror::Error;
+use tracing::{trace, warn};
 
 use cache_key::digest;
 use install_wheel_rs::Layout;
@@ -18,7 +20,7 @@ use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
 use crate::pointer_size::PointerSize;
-use crate::{Error, PythonVersion, Target, VirtualEnvironment};
+use crate::{PythonVersion, Target, VirtualEnvironment};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -407,6 +409,41 @@ impl ExternallyManaged {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("Failed to query Python interpreter at `{path}`")]
+    SpawnFailed {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Querying Python at `{}` did not return the expected data\n{err}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
+    UnexpectedResponse {
+        err: serde_json::Error,
+        stdout: String,
+        stderr: String,
+        path: PathBuf,
+    },
+
+    #[error("Querying Python at `{}` failed with exit status {code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
+    StatusCode {
+        code: ExitStatus,
+        stdout: String,
+        stderr: String,
+        path: PathBuf,
+    },
+    #[error("Can't use Python at `{path}`")]
+    QueryScript {
+        #[source]
+        err: InterpreterInfoError,
+        path: PathBuf,
+    },
+    #[error("Failed to write to cache")]
+    Encode(#[from] rmp_serde::encode::Error),
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "result", rename_all = "lowercase")]
 enum InterpreterInfoResult {
@@ -423,6 +460,8 @@ pub enum InterpreterInfoError {
     UnknownOperatingSystem { operating_system: String },
     #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
     UnsupportedPythonVersion { python_version: String },
+    #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
+    UnsupportedPython,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -460,41 +499,54 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(|err| Error::PythonSubcommandLaunch {
-                interpreter: interpreter.to_path_buf(),
+            .map_err(|err| Error::SpawnFailed {
+                path: interpreter.to_path_buf(),
                 err,
             })?;
 
         if !output.status.success() {
-            return Err(Error::PythonSubcommandOutput {
-                message: format!(
-                    "Querying Python at `{}` failed with status {}",
-                    interpreter.display(),
-                    output.status,
-                ),
-                exit_code: output.status,
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+            // If the Python version is too old, we may not even be able to invoke the query script
+            if stderr.contains("Unknown option: -I") {
+                return Err(Error::QueryScript {
+                    err: InterpreterInfoError::UnsupportedPython,
+                    path: interpreter.to_path_buf(),
+                });
+            }
+
+            return Err(Error::StatusCode {
+                code: output.status,
+                stderr,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                path: interpreter.to_path_buf(),
             });
         }
 
         let result: InterpreterInfoResult =
             serde_json::from_slice(&output.stdout).map_err(|err| {
-                Error::PythonSubcommandOutput {
-                    message: format!(
-                        "Querying Python at `{}` did not return the expected data: {err}",
-                        interpreter.display(),
-                    ),
-                    exit_code: output.status,
-                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+                // If the Python version is too old, we may not even be able to invoke the query script
+                if stderr.contains("Unknown option: -I") {
+                    Error::QueryScript {
+                        err: InterpreterInfoError::UnsupportedPython,
+                        path: interpreter.to_path_buf(),
+                    }
+                } else {
+                    Error::UnexpectedResponse {
+                        err,
+                        stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                        stderr,
+                        path: interpreter.to_path_buf(),
+                    }
                 }
             })?;
 
         match result {
             InterpreterInfoResult::Error(err) => Err(Error::QueryScript {
                 err,
-                interpreter: interpreter.to_path_buf(),
+                path: interpreter.to_path_buf(),
             }),
             InterpreterInfoResult::Success(data) => Ok(*data),
         }
@@ -557,7 +609,7 @@ impl InterpreterInfo {
                 match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
                     Ok(cached) => {
                         if cached.timestamp == modified {
-                            debug!(
+                            trace!(
                                 "Cached interpreter info for Python {}, skipping probing: {}",
                                 cached.data.markers.python_full_version(),
                                 executable.user_display()
@@ -565,14 +617,14 @@ impl InterpreterInfo {
                             return Ok(cached.data);
                         }
 
-                        debug!(
-                            "Ignoring stale cached markers for: {}",
+                        trace!(
+                            "Ignoring stale interpreter markers for: {}",
                             executable.user_display()
                         );
                     }
                     Err(err) => {
                         warn!(
-                            "Broken cache entry at {}, removing: {err}",
+                            "Broken interpreter cache entry at {}, removing: {err}",
                             cache_entry.path().user_display()
                         );
                         let _ = fs_err::remove_file(cache_entry.path());
@@ -582,10 +634,13 @@ impl InterpreterInfo {
         }
 
         // Otherwise, run the Python script.
-        debug!("Probing interpreter info for: {}", executable.display());
+        trace!(
+            "Querying interpreter executable at {}",
+            executable.display()
+        );
         let info = Self::query(executable, cache)?;
-        debug!(
-            "Found Python {} for: {}",
+        trace!(
+            "Found Python {} at {}",
             info.markers.python_full_version(),
             executable.display()
         );
@@ -687,6 +742,7 @@ mod tests {
             "##},
         )
         .unwrap();
+
         fs::set_permissions(
             &mocked_interpreter,
             std::os::unix::fs::PermissionsExt::from_mode(0o770),

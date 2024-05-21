@@ -19,7 +19,7 @@ use uv_configuration::{
     BuildKind, Concurrency, Constraints, NoBinary, NoBuild, Overrides, SetupPyStrategy,
 };
 use uv_distribution::DistributionDatabase;
-use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
+use uv_interpreter::{find_default_interpreter, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
     OptionsBuilder, PreReleaseMode, Preference, PythonRequirement, ResolutionGraph, ResolutionMode,
@@ -124,10 +124,13 @@ async fn resolve(
     tags: &Tags,
 ) -> Result<ResolutionGraph> {
     let cache = Cache::temp().unwrap().init().unwrap();
-    let real_interpreter = find_default_python(&cache).expect("Expected a python to be installed");
     let client = RegistryClientBuilder::new(cache).build();
     let flat_index = FlatIndex::default();
     let index = InMemoryIndex::default();
+    let real_interpreter = find_default_interpreter(&Cache::temp().unwrap())
+        .unwrap()
+        .expect("Python should be installed")
+        .into_interpreter();
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let python_requirement = PythonRequirement::from_marker_environment(&interpreter, markers);
     let cache = Cache::temp().unwrap().init().unwrap();
