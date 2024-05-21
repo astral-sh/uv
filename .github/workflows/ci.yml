@@ -1059,8 +1059,9 @@ jobs:
 
       - name: "Install requirements"
         run: |
-          cargo run --bin uv -- venv --cache-dir .cache
-          cargo run --bin uv -- pip install -r scripts/requirements/compiled/airflow.txt --cache-dir .cache
+          cargo run venv --cache-dir .cache
+          cargo run pip compile scripts/requirements/airflow.in --output-file airflow.txt
+          cargo run pip install -r airflow.txt --cache-dir .cache
 
       - name: "Build benchmarks"
         run: cargo codspeed build --features codspeed -p bench
