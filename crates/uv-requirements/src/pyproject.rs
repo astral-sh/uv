@@ -59,6 +59,8 @@ pub enum LoweringError {
     InvalidEntry,
     #[error(transparent)]
     InvalidUrl(#[from] url::ParseError),
+    #[error(transparent)]
+    InvalidVerbatimUrl(#[from] pep508_rs::VerbatimUrlError),
     #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
     ConflictingUrls,
     #[error("Could not normalize path: `{0}`")]
@@ -551,7 +553,7 @@ fn path_source(
     project_dir: &Path,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
-    let url = VerbatimUrl::parse_path(&path, project_dir).with_given(path.clone());
+    let url = VerbatimUrl::parse_path(&path, project_dir)?.with_given(path.clone());
     let path_buf = PathBuf::from(&path);
     let path_buf = path_buf
         .absolutize_from(project_dir)

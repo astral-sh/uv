@@ -297,10 +297,15 @@ impl EditableRequirement {
             VerbatimUrl::parse_path(expanded.as_ref(), working_dir.as_ref())
         };
 
+        let url = url.map_err(|err| RequirementsTxtParserError::VerbatimUrl {
+            source: err,
+            url: expanded.to_string(),
+        })?;
+
         // Create a `PathBuf`.
         let path = url
             .to_file_path()
-            .map_err(|()| RequirementsTxtParserError::InvalidEditablePath(expanded.to_string()))?;
+            .map_err(|()| RequirementsTxtParserError::UrlConversion(expanded.to_string()))?;
 
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
         let url = url.with_given(requirement.to_string());
@@ -1034,7 +1039,11 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
-    InvalidEditablePath(String),
+    VerbatimUrl {
+        source: pep508_rs::VerbatimUrlError,
+        url: String,
+    },
+    UrlConversion(String),
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
     NoBinary {
@@ -1091,7 +1100,7 @@ impl RequirementsTxtParserError {
     fn with_offset(self, offset: usize) -> Self {
         match self {
             Self::IO(err) => Self::IO(err),
-            Self::InvalidEditablePath(given) => Self::InvalidEditablePath(given),
+            Self::UrlConversion(given) => Self::UrlConversion(given),
             Self::Url {
                 source,
                 url,
@@ -1103,6 +1112,7 @@ impl RequirementsTxtParserError {
                 start: start + offset,
                 end: end + offset,
             },
+            Self::VerbatimUrl { source, url } => Self::VerbatimUrl { source, url },
             Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
             Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
             Self::NoBinary {
@@ -1171,11 +1181,14 @@ impl Display for RequirementsTxtParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::IO(err) => err.fmt(f),
-            Self::InvalidEditablePath(given) => {
-                write!(f, "Invalid editable path: {given}")
-            }
             Self::Url { url, start, .. } => {
                 write!(f, "Invalid URL at position {start}: `{url}`")
+            }
+            Self::VerbatimUrl { source, url } => {
+                write!(f, "Invalid URL: `{url}`: {source}")
+            }
+            Self::UrlConversion(given) => {
+                write!(f, "Unable to convert URL to path: {given}")
             }
             Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
@@ -1231,7 +1244,8 @@ impl std::error::Error for RequirementsTxtParserError {
         match &self {
             Self::IO(err) => err.source(),
             Self::Url { source, .. } => Some(source),
-            Self::InvalidEditablePath(_) => None,
+            Self::VerbatimUrl { source, .. } => Some(source),
+            Self::UrlConversion(_) => None,
             Self::UnsupportedUrl(_) => None,
             Self::MissingRequirementPrefix(_) => None,
             Self::NoBinary { source, .. } => Some(source),
@@ -1260,10 +1274,13 @@ impl Display for RequirementsTxtFileError {
                     self.file.user_display(),
                 )
             }
-            RequirementsTxtParserError::InvalidEditablePath(given) => {
+            RequirementsTxtParserError::VerbatimUrl { url, .. } => {
+                write!(f, "Invalid URL in `{}`: `{url}`", self.file.user_display())
+            }
+            RequirementsTxtParserError::UrlConversion(given) => {
                 write!(
                     f,
-                    "Invalid editable path in `{}`: {given}",
+                    "Unable to convert URL to path `{}`: {given}",
                     self.file.user_display()
                 )
             }
