@@ -67,7 +67,7 @@ This is due to a small stack size limit on Windows that we encounter when runnin
 builds do not have this problem. We [added a `UV_STACK_SIZE` variable](https://github.com/astral-sh/uv/pull/941) to
 bypass this problem during testing. We recommend bumping the stack size from the default of 1MB to 2MB, for example:
 
-```powershel
+```powershell
 $Env:UV_STACK_SIZE = '2000000'
 ```
 
