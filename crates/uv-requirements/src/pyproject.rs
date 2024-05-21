@@ -1,4 +1,4 @@
-//! Reads the following fields from from `pyproject.toml`:
+//! Reads the following fields from `pyproject.toml`:
 //!
 //! * `project.{dependencies,optional-dependencies}`
 //! * `tool.uv.sources`
@@ -6,7 +6,7 @@
 //!
 //! Then lowers them into a dependency specification.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -110,7 +110,7 @@ pub struct Tool {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
-    pub sources: Option<HashMap<PackageName, Source>>,
+    pub sources: Option<BTreeMap<PackageName, Source>>,
     pub workspace: Option<ToolUvWorkspace>,
 }
 
@@ -238,8 +238,8 @@ impl Pep621Metadata {
         extras: &ExtrasSpecification,
         pyproject_path: &Path,
         project_dir: &Path,
-        workspace_sources: &HashMap<PackageName, Source>,
-        workspace_packages: &HashMap<PackageName, String>,
+        workspace_sources: &BTreeMap<PackageName, Source>,
+        workspace_packages: &BTreeMap<PackageName, String>,
         preview: PreviewMode,
     ) -> Result<Option<Self>, Pep621Error> {
         let project_sources = pyproject
@@ -323,9 +323,9 @@ pub(crate) fn lower_requirements(
     pyproject_path: &Path,
     project_name: &PackageName,
     project_dir: &Path,
-    project_sources: &HashMap<PackageName, Source>,
-    workspace_sources: &HashMap<PackageName, Source>,
-    workspace_packages: &HashMap<PackageName, String>,
+    project_sources: &BTreeMap<PackageName, Source>,
+    workspace_sources: &BTreeMap<PackageName, Source>,
+    workspace_packages: &BTreeMap<PackageName, String>,
     preview: PreviewMode,
 ) -> Result<Requirements, Pep621Error> {
     let dependencies = dependencies
@@ -386,9 +386,9 @@ pub(crate) fn lower_requirement(
     requirement: pep508_rs::Requirement,
     project_name: &PackageName,
     project_dir: &Path,
-    project_sources: &HashMap<PackageName, Source>,
-    workspace_sources: &HashMap<PackageName, Source>,
-    workspace_packages: &HashMap<PackageName, String>,
+    project_sources: &BTreeMap<PackageName, Source>,
+    workspace_sources: &BTreeMap<PackageName, Source>,
+    workspace_packages: &BTreeMap<PackageName, String>,
     preview: PreviewMode,
 ) -> Result<Requirement, LoweringError> {
     let source = project_sources

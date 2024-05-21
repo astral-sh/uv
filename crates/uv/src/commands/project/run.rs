@@ -10,10 +10,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_interpreter::PythonEnvironment;
-use uv_requirements::RequirementsSource;
+use uv_requirements::{ProjectWorkspace, RequirementsSource};
 use uv_warnings::warn_user;
 
-use crate::commands::project::discovery::Project;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 
@@ -55,11 +54,7 @@ pub(crate) async fn run(
     } else {
         debug!("Syncing project environment.");
 
-        let Some(project) = Project::find(std::env::current_dir()?)? else {
-            return Err(anyhow::anyhow!(
-                "Unable to find `pyproject.toml` for project."
-            ));
-        };
+        let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
 
         let venv = project::init(&project, cache, printer)?;
 

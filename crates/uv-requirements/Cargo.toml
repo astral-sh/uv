@@ -50,7 +50,8 @@ schemars = ["dep:schemars"]
 
 [dev-dependencies]
 indoc = "2.0.5"
-insta = "1.38.0"
+insta = { version = "1.38.0", features = ["filters", "redactions", "json"] }
+regex = { workspace = true }
 
 [lints]
 workspace = true

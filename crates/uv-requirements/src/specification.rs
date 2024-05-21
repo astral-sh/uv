@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -165,8 +165,8 @@ impl RequirementsSpecification {
             .parent()
             .context("`pyproject.toml` has no parent directory")?;
 
-        let workspace_sources = HashMap::default();
-        let workspace_packages = HashMap::default();
+        let workspace_sources = BTreeMap::default();
+        let workspace_packages = BTreeMap::default();
         match Pep621Metadata::try_from(
             pyproject,
             extras,
