@@ -10,7 +10,7 @@ use distribution_types::DistributionMetadata;
 use pep440_rs::Version;
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
-use crate::pubgrub::PubGrubPackage;
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::Request;
 use crate::{InMemoryIndex, ResolveError, VersionsResponse};
 
@@ -53,12 +53,12 @@ impl BatchPrefetcher {
         index: &InMemoryIndex,
         selector: &CandidateSelector,
     ) -> anyhow::Result<(), ResolveError> {
-        let PubGrubPackage::Package {
+        let PubGrubPackageInner::Package {
             name,
             extra: None,
             marker: None,
             url: None,
-        } = &next
+        } = &**next
         else {
             return Ok(());
         };
@@ -163,7 +163,10 @@ impl BatchPrefetcher {
     /// Each time we tried a version for a package, we register that here.
     pub(crate) fn version_tried(&mut self, package: PubGrubPackage) {
         // Only track base packages, no virtual packages from extras.
-        if matches!(package, PubGrubPackage::Package { extra: Some(_), .. }) {
+        if matches!(
+            &*package,
+            PubGrubPackageInner::Package { extra: Some(_), .. }
+        ) {
             return;
         }
         *self.tried_versions.entry(package).or_default() += 1;

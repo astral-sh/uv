@@ -43,8 +43,8 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
-    PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubPython,
-    PubGrubRequirement, PubGrubSpecifier,
+    PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPackageInner,
+    PubGrubPriorities, PubGrubPython, PubGrubRequirement, PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
@@ -401,7 +401,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         visited: &mut FxHashSet<PackageName>,
         request_sink: Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
-        let root = PubGrubPackage::Root(self.project.clone());
+        let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let mut prefetcher = BatchPrefetcher::default();
         let mut state = SolveState {
             pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
@@ -480,7 +480,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .expect("a package was chosen but we don't have a term.");
 
                     // Check if the decision was due to the package being unavailable
-                    if let PubGrubPackage::Package { ref name, .. } = state.next {
+                    if let PubGrubPackageInner::Package { ref name, .. } = &*state.next {
                         if let Some(entry) = self.unavailable_packages.get(name) {
                             state
                                 .pubgrub
@@ -530,7 +530,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .add_incompatibility(Incompatibility::from_dependency(
                                     package.clone(),
                                     Range::singleton(version.clone()),
-                                    (PubGrubPackage::Python(kind), python_version.clone()),
+                                    (
+                                        PubGrubPackage::from(PubGrubPackageInner::Python(kind)),
+                                        python_version.clone(),
+                                    ),
                                 ));
                         }
                         state
@@ -633,11 +636,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
-        match package {
-            PubGrubPackage::Root(_) => {}
-            PubGrubPackage::Python(_) => {}
-            PubGrubPackage::Extra { .. } => {}
-            PubGrubPackage::Package {
+        match &**package {
+            PubGrubPackageInner::Root(_) => {}
+            PubGrubPackageInner::Python(_) => {}
+            PubGrubPackageInner::Extra { .. } => {}
+            PubGrubPackageInner::Package {
                 name, url: None, ..
             } => {
                 // Verify that the package is allowed under the hash-checking policy.
@@ -650,7 +653,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     request_sink.blocking_send(Request::Package(name.clone()))?;
                 }
             }
-            PubGrubPackage::Package {
+            PubGrubPackageInner::Package {
                 name,
                 url: Some(url),
                 ..
@@ -684,12 +687,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package {
+            let PubGrubPackageInner::Package {
                 name,
                 extra: None,
                 marker: None,
                 url: None,
-            } = package
+            } = &**package
             else {
                 continue;
             };
@@ -711,10 +714,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
-        match package {
-            PubGrubPackage::Root(_) => Ok(Some(ResolverVersion::Available(MIN_VERSION.clone()))),
+        match &**package {
+            PubGrubPackageInner::Root(_) => {
+                Ok(Some(ResolverVersion::Available(MIN_VERSION.clone())))
+            }
 
-            PubGrubPackage::Python(PubGrubPython::Installed) => {
+            PubGrubPackageInner::Python(PubGrubPython::Installed) => {
                 let version = self.python_requirement.installed();
                 if range.contains(version) {
                     Ok(Some(ResolverVersion::Available(version.deref().clone())))
@@ -723,7 +728,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            PubGrubPackage::Python(PubGrubPython::Target) => {
+            PubGrubPackageInner::Python(PubGrubPython::Target) => {
                 let version = self.python_requirement.target();
                 if range.contains(version) {
                     Ok(Some(ResolverVersion::Available(version.deref().clone())))
@@ -732,12 +737,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            PubGrubPackage::Extra {
+            PubGrubPackageInner::Extra {
                 name,
                 url: Some(url),
                 ..
             }
-            | PubGrubPackage::Package {
+            | PubGrubPackageInner::Package {
                 name,
                 url: Some(url),
                 ..
@@ -833,10 +838,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
-            PubGrubPackage::Extra {
+            PubGrubPackageInner::Extra {
                 name, url: None, ..
             }
-            | PubGrubPackage::Package {
+            | PubGrubPackageInner::Package {
                 name, url: None, ..
             } => {
                 // Wait for the metadata to be available.
@@ -916,7 +921,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if matches!(package, PubGrubPackage::Package { .. }) {
+                if matches!(&**package, PubGrubPackageInner::Package { .. }) {
                     if self.index.distributions().register(candidate.version_id()) {
                         let request = Request::from(dist.for_resolution());
                         request_sink.blocking_send(request)?;
@@ -937,8 +942,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
     ) -> Result<Dependencies, ResolveError> {
-        match package {
-            PubGrubPackage::Root(_) => {
+        match &**package {
+            PubGrubPackageInner::Root(_) => {
                 // Add the root requirements.
                 let dependencies = PubGrubDependencies::from_requirements(
                     &self.requirements,
@@ -1021,9 +1026,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(Dependencies::Available(dependencies.into()))
             }
 
-            PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
+            PubGrubPackageInner::Python(_) => Ok(Dependencies::Available(Vec::default())),
 
-            PubGrubPackage::Package {
+            PubGrubPackageInner::Package {
                 name,
                 extra,
                 marker: _marker,
@@ -1192,28 +1197,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Add a dependency on both the extra and base package.
-            PubGrubPackage::Extra {
+            PubGrubPackageInner::Extra {
                 name,
                 extra,
                 marker: _marker,
                 url,
             } => Ok(Dependencies::Available(vec![
                 (
-                    PubGrubPackage::Package {
+                    PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: name.clone(),
                         extra: None,
                         marker: None,
                         url: url.clone(),
-                    },
+                    }),
                     Range::singleton(version.clone()),
                 ),
                 (
-                    PubGrubPackage::Package {
+                    PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: name.clone(),
                         extra: Some(extra.clone()),
                         marker: None,
                         url: url.clone(),
-                    },
+                    }),
                     Range::singleton(version.clone()),
                 ),
             ])),
@@ -1438,18 +1443,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
         if let Some(reporter) = self.reporter.as_ref() {
-            match package {
-                PubGrubPackage::Root(_) => {}
-                PubGrubPackage::Python(_) => {}
-                PubGrubPackage::Extra { .. } => {}
-                PubGrubPackage::Package {
+            match &**package {
+                PubGrubPackageInner::Root(_) => {}
+                PubGrubPackageInner::Python(_) => {}
+                PubGrubPackageInner::Extra { .. } => {}
+                PubGrubPackageInner::Package {
                     name,
                     url: Some(url),
                     ..
                 } => {
                     reporter.on_progress(name, &VersionOrUrlRef::Url(&url.verbatim));
                 }
-                PubGrubPackage::Package {
+                PubGrubPackageInner::Package {
                     name, url: None, ..
                 } => {
                     reporter.on_progress(name, &VersionOrUrlRef::Version(version));
