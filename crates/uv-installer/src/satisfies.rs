@@ -163,11 +163,10 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 };
 
-                if requested_editable.unwrap_or_default() != installed_editable.unwrap_or_default()
-                {
+                if *requested_editable != installed_editable.unwrap_or_default() {
                     trace!(
                         "Editable mismatch: {:?} vs. {:?}",
-                        requested_editable.unwrap_or_default(),
+                        *requested_editable,
                         installed_editable.unwrap_or_default()
                     );
                     return Ok(Self::Mismatch);

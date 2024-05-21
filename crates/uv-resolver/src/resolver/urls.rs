@@ -89,7 +89,7 @@ impl Urls {
                         parsed_url: ParsedUrl::Path(ParsedPathUrl {
                             url: url.to_url(),
                             path: path.clone(),
-                            editable: (*editable).unwrap_or_default(),
+                            editable: *editable,
                         }),
                         verbatim: url.clone(),
                     };

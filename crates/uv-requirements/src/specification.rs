@@ -184,7 +184,7 @@ impl RequirementsSpecification {
                     .partition_map(|requirement| {
                         if let RequirementSource::Path {
                             path,
-                            editable: Some(true),
+                            editable: true,
                             url,
                         } = requirement.source
                         {

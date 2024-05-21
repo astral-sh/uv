@@ -94,7 +94,7 @@ impl From<&ResolvedDist> for Requirement {
                 Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
                     path: wheel.path.clone(),
                     url: wheel.url.clone(),
-                    editable: None,
+                    editable: false,
                 },
                 Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
                     specifier: pep440_rs::VersionSpecifiers::from(
@@ -121,12 +121,12 @@ impl From<&ResolvedDist> for Requirement {
                 Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
                     path: sdist.path.clone(),
                     url: sdist.url.clone(),
-                    editable: None,
+                    editable: false,
                 },
                 Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Path {
                     path: sdist.path.clone(),
                     url: sdist.url.clone(),
-                    editable: Some(sdist.editable),
+                    editable: sdist.editable,
                 },
             },
             ResolvedDist::Installed(dist) => RequirementSource::Registry {
