@@ -408,7 +408,6 @@ dependencies = [
  "uv-interpreter",
  "uv-resolver",
  "uv-types",
- "uv-virtualenv",
 ]
 
 [[package]]

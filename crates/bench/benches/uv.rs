@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use bench::criterion::black_box;
 use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
 use distribution_types::Requirement;
@@ -13,6 +15,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
+    let venv = PythonEnvironment::from_root(Path::new(".venv"), cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
         Requirement::from_pep508("jupyter".parse().unwrap()).unwrap()
@@ -24,7 +27,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
                 black_box(manifest.clone()),
                 black_box(cache.clone()),
                 black_box(client),
-                None,
+                &venv,
             ))
             .unwrap();
     };
@@ -33,13 +36,13 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
 }
 
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
-    let runtime = &tokio::runtime::Builder::new_multi_thread()
+    let runtime = &tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
 
     let cache = &Cache::from_path(".cache").unwrap().init().unwrap();
-    let venv = PythonEnvironment::from_default_python(cache).unwrap();
+    let venv = PythonEnvironment::from_root(Path::new(".venv"), cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
         Requirement::from_pep508("apache-airflow[all]".parse().unwrap()).unwrap(),
@@ -51,23 +54,13 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
         .unwrap(),
     ]);
 
-    // install source distributions
-    runtime
-        .block_on(resolver::resolve(
-            black_box(manifest.clone()),
-            black_box(cache.clone()),
-            black_box(client),
-            Some(&venv),
-        ))
-        .unwrap();
-
     let run = || {
         runtime
             .block_on(resolver::resolve(
                 black_box(manifest.clone()),
                 black_box(cache.clone()),
                 black_box(client),
-                Some(&venv),
+                &venv,
             ))
             .unwrap();
     };
@@ -128,23 +121,19 @@ mod resolver {
         manifest: Manifest,
         cache: Cache,
         client: &RegistryClient,
-        venv: Option<&PythonEnvironment>,
+        venv: &PythonEnvironment,
     ) -> Result<ResolutionGraph> {
-        let interpreter = venv
-            .as_ref()
-            .map(|venv| venv.interpreter().clone())
-            .unwrap_or_else(|| Interpreter::artificial(PLATFORM.clone(), MARKERS.clone()));
-
         let flat_index = FlatIndex::default();
         let index = InMemoryIndex::default();
         let hashes = HashStrategy::None;
         let index_locations = IndexLocations::default();
         let in_flight = InFlight::default();
         let installed_packages = EmptyInstalledPackages;
+        let interpreter = Interpreter::artificial(PLATFORM.clone(), MARKERS.clone());
         let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &MARKERS);
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
-        let build_isolation = BuildIsolation::Isolated;
+        let build_isolation = BuildIsolation::Shared(venv);
 
         let build_context = BuildDispatch::new(
             client,
