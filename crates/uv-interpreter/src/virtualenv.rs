@@ -94,7 +94,7 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
 }
 
 /// Returns the path to the `python` executable inside a virtual environment.
-pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
+pub fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
     let venv = venv.as_ref();
     if cfg!(windows) {
         // Search for `python.exe` in the `Scripts` directory.

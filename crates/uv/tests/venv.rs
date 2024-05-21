@@ -9,7 +9,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err::PathExt;
 use uv_fs::Simplified;
-use uv_interpreter::PythonVersion;
+use uv_interpreter::{virtualenv_python_executable, PythonVersion};
 
 use crate::common::{get_bin, python_path_with_versions, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
@@ -71,8 +71,10 @@ impl VenvTestContext {
             filters.push((venv_full, ".venv".to_string()));
         }
 
+        // Only capture paths that start with `/` to retain display of things
+        // that are relative to the temporary directory
         filters.push((
-            r"interpreter at: .+".to_string(),
+            r"interpreter at: /.+".to_string(),
             "interpreter at: [PATH]".to_string(),
         ));
         filters.push((
@@ -277,6 +279,79 @@ fn create_venv_python_patch() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_ignores_python_in_venv() -> Result<()> {
+    let context = VenvTestContext::new(&["3.12"]);
+
+    // Create a virtual environment at `.venv`.
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+    let executable_path = virtualenv_python_executable(context.venv.as_os_str());
+    let expected_path = executable_path.canonicalize()?;
+
+    // Request the same Python version — we shouldn't use the venv interpreter
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+    assert_eq!(executable_path.canonicalize()?, expected_path);
+
+    // Create again without a version request — we shouldn't use the venv interpreter
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+    assert_eq!(executable_path.canonicalize()?, expected_path);
+
+    // Create again with the environment active — we shouldn't use the venv interpreter
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
+        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+    assert_eq!(executable_path.canonicalize()?, expected_path);
+
+    Ok(())
 }
 
 #[test]
