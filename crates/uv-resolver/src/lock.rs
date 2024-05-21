@@ -277,6 +277,9 @@ impl Distribution {
                 SourceKind::Directory => {
                     unreachable!("Wheels cannot come from directory sources")
                 }
+                SourceKind::Editable => {
+                    unreachable!("Wheels cannot come from editable sources")
+                }
             };
         }
 
@@ -297,6 +300,16 @@ impl Distribution {
                         url: VerbatimUrl::from_url(self.id.source.url.clone()),
                         path: self.id.source.url.to_file_path().unwrap(),
                         editable: false,
+                    };
+                    let source_dist = distribution_types::SourceDist::Directory(dir_dist);
+                    Dist::Source(source_dist)
+                }
+                SourceKind::Editable => {
+                    let dir_dist = DirectorySourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
+                        path: self.id.source.url.to_file_path().unwrap(),
+                        editable: true,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
                     Dist::Source(source_dist)
@@ -513,7 +526,11 @@ impl Source {
 
     fn from_directory_source_dist(directory_dist: &DirectorySourceDist) -> Source {
         Source {
-            kind: SourceKind::Directory,
+            kind: if directory_dist.editable {
+                SourceKind::Editable
+            } else {
+                SourceKind::Directory
+            },
             url: directory_dist.url.to_url(),
         }
     }
@@ -583,6 +600,10 @@ impl std::str::FromStr for Source {
                 kind: SourceKind::Directory,
                 url,
             }),
+            "editable" => Ok(Source {
+                kind: SourceKind::Editable,
+                url,
+            }),
             name => Err(SourceParseError::unrecognized_source_name(s, name)),
         }
     }
@@ -624,6 +645,7 @@ pub(crate) enum SourceKind {
     Direct(DirectSource),
     Path,
     Directory,
+    Editable,
 }
 
 impl SourceKind {
@@ -634,6 +656,7 @@ impl SourceKind {
             SourceKind::Direct(_) => "direct",
             SourceKind::Path => "path",
             SourceKind::Directory => "directory",
+            SourceKind::Editable => "editable",
         }
     }
 
@@ -644,7 +667,7 @@ impl SourceKind {
     fn requires_hash(&self) -> bool {
         match *self {
             SourceKind::Registry | SourceKind::Direct(_) | SourceKind::Path => true,
-            SourceKind::Git(_) | SourceKind::Directory => false,
+            SourceKind::Git(_) | SourceKind::Directory | SourceKind::Editable => false,
         }
     }
 }
