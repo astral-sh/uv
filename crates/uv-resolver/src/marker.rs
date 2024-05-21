@@ -27,16 +27,18 @@ pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
         }
     };
 
-    match expr1 {
-        MarkerExpression::Version { .. } | MarkerExpression::VersionInverted { .. } => {
+    match (expr1, expr2) {
+        // `Arbitrary` expressions always evaluate to `false`, and are thus always disjoint.
+        (MarkerExpression::Arbitrary { .. }, _) | (_, MarkerExpression::Arbitrary { .. }) => true,
+        (MarkerExpression::Version { .. } | MarkerExpression::VersionInverted { .. }, expr2) => {
             version_is_disjoint(expr1, expr2)
         }
-        MarkerExpression::String { .. } | MarkerExpression::StringInverted { .. } => {
+        (MarkerExpression::String { .. } | MarkerExpression::StringInverted { .. }, expr2) => {
             string_is_disjoint(expr1, expr2)
         }
-        MarkerExpression::Extra { operator, name } => extra_is_disjoint(operator, name, expr2),
-        // `Arbitrary` expressions always evaluate to `false`, and are thus always disjoint.
-        MarkerExpression::Arbitrary { .. } => true,
+        (MarkerExpression::Extra { operator, name }, expr2) => {
+            extra_is_disjoint(operator, name, expr2)
+        }
     }
 }
 
@@ -241,8 +243,8 @@ mod tests {
     }
 
     #[test]
-    fn invalid() {
-        assert!(!is_disjoint(
+    fn arbitrary() {
+        assert!(is_disjoint(
             "python_version == 'Linux'",
             "python_version == '3.7.1'"
         ));
