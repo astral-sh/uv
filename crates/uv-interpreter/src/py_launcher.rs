@@ -14,6 +14,7 @@ pub(crate) struct PyListPath {
     pub(crate) executable_path: PathBuf,
 }
 
+/// An error was encountered when using the `py` launcher on Windows.
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
@@ -90,37 +91,4 @@ pub(crate) fn py_list_paths() -> Result<Vec<PyListPath>, Error> {
             }
         })
         .collect())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fmt::Debug;
-
-    use insta::assert_snapshot;
-    use itertools::Itertools;
-
-    use uv_cache::Cache;
-
-    use crate::{find_requested_python, Error};
-
-    fn format_err<T: Debug>(err: Result<T, Error>) -> String {
-        anyhow::Error::new(err.unwrap_err())
-            .chain()
-            .join("\n  Caused by: ")
-    }
-
-    #[test]
-    #[cfg_attr(not(windows), ignore)]
-    fn no_such_python_path() {
-        let cache = Cache::temp().unwrap().init().unwrap();
-        let result = find_requested_python(r"C:\does\not\exists\python3.12", &cache)
-            .unwrap()
-            .ok_or(Error::RequestedPythonNotFound(
-                r"C:\does\not\exists\python3.12".to_string(),
-            ));
-        assert_snapshot!(
-            format_err(result),
-            @"Failed to locate Python interpreter at: `C:\\does\\not\\exists\\python3.12`"
-        );
-    }
 }

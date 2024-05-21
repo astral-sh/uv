@@ -9,7 +9,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
-use uv_interpreter::PythonEnvironment;
+use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_requirements::{ProjectWorkspace, RequirementsSource};
 use uv_warnings::warn_user;
 
@@ -76,7 +76,8 @@ pub(crate) async fn run(
         let interpreter = if let Some(project_env) = &project_env {
             project_env.interpreter().clone()
         } else if let Some(python) = python.as_ref() {
-            PythonEnvironment::from_requested_python(python, cache)?.into_interpreter()
+            PythonEnvironment::from_requested_python(python, SystemPython::Allowed, cache)?
+                .into_interpreter()
         } else {
             PythonEnvironment::from_default_python(cache)?.into_interpreter()
         };

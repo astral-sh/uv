@@ -102,14 +102,27 @@ fn missing_venv() -> Result<()> {
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), command(&context).arg("requirements.txt"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), command(&context).arg("requirements.txt"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: Virtualenv does not exist at: `[VENV]/`
-    "###);
+        ----- stderr -----
+        error: failed to canonicalize path `[VENV]/Scripts/python.exe`
+          Caused by: The system cannot find the path specified. (os error 3)
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), command(&context).arg("requirements.txt"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: failed to canonicalize path `[VENV]/bin/python`
+          Caused by: No such file or directory (os error 2)
+        "###);
+    }
 
     assert!(predicates::path::missing().eval(&context.venv));
 

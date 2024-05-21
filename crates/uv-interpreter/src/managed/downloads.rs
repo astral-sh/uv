@@ -46,6 +46,8 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error("failed to parse toolchain directory name: {0}")]
+    NameError(String),
 }
 
 #[derive(Debug, PartialEq)]

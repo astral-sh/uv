@@ -144,6 +144,7 @@ jobs:
 
       - name: "Cargo test"
         run: |
+          export UV_BOOTSTRAP_DIR="$(pwd)/bin"
           cargo nextest run \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow

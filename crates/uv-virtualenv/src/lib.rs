@@ -14,8 +14,10 @@ mod bare;
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    #[error("Failed to determine python interpreter to use")]
-    InterpreterError(#[from] uv_interpreter::Error),
+    #[error("Failed to determine Python interpreter to use")]
+    Discovery(#[from] uv_interpreter::DiscoveryError),
+    #[error("Failed to determine Python interpreter to use")]
+    InterpreterNotFound(#[from] uv_interpreter::InterpreterNotFound),
     #[error(transparent)]
     Platform(#[from] PlatformError),
     #[error("Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}")]
