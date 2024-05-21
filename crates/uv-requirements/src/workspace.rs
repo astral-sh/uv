@@ -24,7 +24,7 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
-    Toml(PathBuf, #[source] toml::de::Error),
+    Toml(PathBuf, #[source] Box<toml::de::Error>),
     #[error("No `project` section found in: `{}`", _0.simplified_display())]
     MissingProject(PathBuf),
 }
@@ -219,7 +219,7 @@ impl ProjectWorkspace {
         // Read the `pyproject.toml`.
         let contents = fs_err::read_to_string(&pyproject_path)?;
         let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), err))?;
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Extract the `[project]` metadata.
         let Some(project) = pyproject_toml.project.clone() else {
@@ -280,7 +280,7 @@ impl ProjectWorkspace {
             let pyproject_path = workspace_root.join("pyproject.toml");
             let contents = fs_err::read_to_string(&pyproject_path)?;
             let pyproject_toml = toml::from_str(&contents)
-                .map_err(|err| WorkspaceError::Toml(pyproject_path, err))?;
+                .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
 
             if let Some(project) = &project_in_workspace_root.project {
                 workspace_members.insert(
@@ -307,7 +307,7 @@ impl ProjectWorkspace {
                 let pyproject_path = member_root.join("pyproject.toml");
                 let contents = fs_err::read_to_string(&pyproject_path)?;
                 let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_path, err))?;
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
 
                 // Extract the package name.
                 let Some(project) = pyproject_toml.project.clone() else {
@@ -317,7 +317,7 @@ impl ProjectWorkspace {
                 let pyproject_toml = workspace_root.join("pyproject.toml");
                 let contents = fs_err::read_to_string(&pyproject_toml)?;
                 let pyproject_toml = toml::from_str(&contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_toml, err))?;
+                    .map_err(|err| WorkspaceError::Toml(pyproject_toml, Box::new(err)))?;
                 let member = WorkspaceMember {
                     root: member_root.clone(),
                     pyproject_toml,
@@ -364,7 +364,7 @@ fn find_workspace(
         // Read the `pyproject.toml`.
         let contents = fs_err::read_to_string(&pyproject_path)?;
         let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), err))?;
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         return if let Some(workspace) = pyproject_toml
             .tool
