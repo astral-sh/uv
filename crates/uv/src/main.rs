@@ -7,12 +7,11 @@ use anstream::eprintln;
 use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
-use cli::{ToolCommand, ToolNamespace};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
+use cli::{ToolCommand, ToolNamespace};
 use uv_cache::Cache;
-use uv_client::Connectivity;
 use uv_requirements::RequirementsSource;
 use uv_workspace::Combine;
 
@@ -227,7 +226,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.keyring_provider,
                 args.shared.setup_py,
                 args.shared.config_setting,
-                args.shared.connectivity,
+                globals.connectivity,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
                 args.shared.python_version,
@@ -277,7 +276,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.index_strategy,
                 args.shared.keyring_provider,
                 args.shared.setup_py,
-                args.shared.connectivity,
+                globals.connectivity,
                 &args.shared.config_setting,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
@@ -350,7 +349,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.compile_bytecode,
                 args.shared.require_hashes,
                 args.shared.setup_py,
-                args.shared.connectivity,
+                globals.connectivity,
                 &args.shared.config_setting,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
@@ -399,7 +398,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.break_system_packages,
                 args.shared.target,
                 cache,
-                args.shared.connectivity,
+                globals.connectivity,
                 globals.native_tls,
                 globals.preview,
                 args.shared.keyring_provider,
@@ -522,7 +521,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
-                args.shared.connectivity,
+                globals.connectivity,
                 args.seed,
                 args.allow_existing,
                 args.shared.exclude_newer,
@@ -566,7 +565,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 globals.isolated,
                 globals.preview,
-                args.connectivity,
+                globals.connectivity,
                 &cache,
                 printer,
             )
@@ -605,18 +604,13 @@ async fn run() -> Result<ExitStatus> {
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Run(args),
         }) => {
-            let connectivity = if args.offline {
-                Connectivity::Offline
-            } else {
-                Connectivity::Online
-            };
             commands::run_tool(
                 args.target,
                 args.args,
                 args.python,
                 globals.isolated,
                 globals.preview,
-                connectivity,
+                globals.connectivity,
                 &cache,
                 printer,
             )

@@ -34,6 +34,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
     pub(crate) native_tls: bool,
+    pub(crate) connectivity: Connectivity,
     pub(crate) isolated: bool,
     pub(crate) preview: PreviewMode,
 }
@@ -52,6 +53,14 @@ impl GlobalSettings {
             native_tls: flag(args.native_tls, args.no_native_tls)
                 .combine(workspace.and_then(|workspace| workspace.options.native_tls))
                 .unwrap_or(false),
+            connectivity: if flag(args.offline, args.no_offline)
+                .combine(workspace.and_then(|workspace| workspace.options.offline))
+                .unwrap_or(false)
+            {
+                Connectivity::Offline
+            } else {
+                Connectivity::Online
+            },
             isolated: args.isolated,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
@@ -94,10 +103,6 @@ pub(crate) struct RunSettings {
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
-
-    // Shared settings.
-    // TODO(zanieb): should be moved to a global setting
-    pub(crate) connectivity: Connectivity,
 }
 
 impl RunSettings {
@@ -109,8 +114,6 @@ impl RunSettings {
             args,
             with,
             python,
-            offline,
-            no_offline,
         } = args;
 
         Self {
@@ -119,16 +122,6 @@ impl RunSettings {
             args,
             with,
             python,
-            // Shared settings
-            connectivity: flag(offline, no_offline)
-                .map(|offline| {
-                    if offline {
-                        Connectivity::Offline
-                    } else {
-                        Connectivity::Online
-                    }
-                })
-                .unwrap_or_default(),
         }
     }
 }
@@ -215,8 +208,7 @@ impl PipCompileSettings {
             header,
             annotation_style,
             custom_compile_command,
-            offline,
-            no_offline,
+
             refresh,
             no_refresh,
             refresh_package,
@@ -277,7 +269,7 @@ impl PipCompileSettings {
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-                    offline: flag(offline, no_offline),
+
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -353,9 +345,7 @@ impl PipSyncSettings {
             reinstall,
             no_reinstall,
             reinstall_package,
-            offline,
             refresh,
-            no_offline,
             no_refresh,
             refresh_package,
             link_mode,
@@ -404,7 +394,7 @@ impl PipSyncSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-                    offline: flag(offline, no_offline),
+
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -478,9 +468,7 @@ impl PipInstallSettings {
             reinstall,
             no_reinstall,
             reinstall_package,
-            offline,
             refresh,
-            no_offline,
             no_refresh,
             refresh_package,
             no_deps,
@@ -547,7 +535,7 @@ impl PipInstallSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-                    offline: flag(offline, no_offline),
+
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -618,8 +606,6 @@ impl PipUninstallSettings {
             break_system_packages,
             no_break_system_packages,
             target,
-            offline,
-            no_offline,
         } = args;
 
         Self {
@@ -634,7 +620,7 @@ impl PipUninstallSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-                    offline: flag(offline, no_offline),
+
                     keyring_provider,
                     ..PipOptions::default()
                 },
@@ -842,8 +828,7 @@ impl VenvSettings {
             no_index,
             index_strategy,
             keyring_provider,
-            offline,
-            no_offline,
+
             exclude_newer,
             compat_args: _,
         } = args;
@@ -861,7 +846,7 @@ impl VenvSettings {
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-                    offline: flag(offline, no_offline),
+
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -894,7 +879,6 @@ pub(crate) struct PipSharedSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
-    pub(crate) connectivity: Connectivity,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) no_binary: NoBinary,
@@ -935,7 +919,6 @@ impl PipSharedSettings {
             system,
             break_system_packages,
             target,
-            offline,
             index_url,
             extra_index_url,
             no_index,
@@ -1011,11 +994,6 @@ impl PipSharedSettings {
                 .annotation_style
                 .combine(annotation_style)
                 .unwrap_or_default(),
-            connectivity: if args.offline.combine(offline).unwrap_or_default() {
-                Connectivity::Offline
-            } else {
-                Connectivity::Online
-            },
             index_strategy: args
                 .index_strategy
                 .combine(index_strategy)
