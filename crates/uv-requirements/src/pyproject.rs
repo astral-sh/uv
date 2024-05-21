@@ -496,7 +496,7 @@ pub(crate) fn lower_requirement(
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                 return Err(LoweringError::ConflictingUrls);
             }
-            path_source(path, project_dir, editable)?
+            path_source(path, project_dir, editable.unwrap_or(false))?
         }
         Source::Registry { index } => match requirement.version_or_url {
             None => {
@@ -529,7 +529,7 @@ pub(crate) fn lower_requirement(
                 .get(&requirement.name)
                 .ok_or(LoweringError::UndeclaredWorkspacePackage)?
                 .clone();
-            path_source(path, project_dir, editable)?
+            path_source(path, project_dir, editable.unwrap_or(true))?
         }
         Source::CatchAll { .. } => {
             // Emit a dedicated error message, which is an improvement over Serde's default error.
@@ -549,7 +549,7 @@ pub(crate) fn lower_requirement(
 fn path_source(
     path: String,
     project_dir: &Path,
-    editable: Option<bool>,
+    editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let url = VerbatimUrl::parse_path(&path, project_dir).with_given(path.clone());
     let path_buf = PathBuf::from(&path);
