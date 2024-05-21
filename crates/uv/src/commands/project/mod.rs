@@ -22,8 +22,8 @@ use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_requirements::{
-    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, ProjectWorkspace,
+    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, OptionsBuilder, PythonRequirement,
@@ -31,13 +31,11 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight, InstalledPackagesProvider};
 
-use crate::commands::project::discovery::Project;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
-mod discovery;
 pub(crate) mod lock;
 pub(crate) mod run;
 pub(crate) mod sync;
@@ -80,11 +78,11 @@ pub(crate) enum Error {
 
 /// Initialize a virtual environment for the current project.
 pub(crate) fn init(
-    project: &Project,
+    project: &ProjectWorkspace,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, Error> {
-    let venv = project.root().join(".venv");
+    let venv = project.workspace().root().join(".venv");
 
     // Discover or create the virtual environment.
     // TODO(charlie): If the environment isn't compatible with `--python`, recreate it.
@@ -165,7 +163,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let requirements = {
         // Convert from unnamed to named requirements.
         let mut requirements = NamedRequirementsResolver::new(
-            requirements,
+            requirements.clone(),
             hasher,
             index,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -178,7 +176,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             requirements.extend(
                 SourceTreeResolver::new(
-                    source_trees,
+                    source_trees.clone(),
                     &ExtrasSpecification::None,
                     hasher,
                     index,
@@ -214,7 +212,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         constraints,
         overrides,
         preferences,
-        project,
+        project.clone(),
         editable_metadata,
         exclusions,
         lookaheads,

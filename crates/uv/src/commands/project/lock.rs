@@ -9,12 +9,11 @@ use uv_configuration::{
     Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_requirements::{ExtrasSpecification, RequirementsSpecification};
+use uv_requirements::{ExtrasSpecification, ProjectWorkspace, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::project::discovery::Project;
 use crate::commands::project::Error;
 use crate::commands::{project, ExitStatus};
 use crate::editables::ResolvedEditables;
@@ -32,11 +31,7 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let Some(project) = Project::find(std::env::current_dir()?)? else {
-        return Err(anyhow::anyhow!(
-            "Unable to find `pyproject.toml` for project."
-        ));
-    };
+    let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
 
     // Discover or create the virtual environment.
     let venv = project::init(&project, cache, printer)?;
@@ -111,7 +106,8 @@ pub(crate) async fn lock(
         .build();
 
     // Build all editable distributions. The editables are shared between resolution and
-    // installation, and should live for the duration of the command.
+    // installation, and should live for the duration of the command. If an editable is already
+    // installed in the environment, we'll still re-build it here.
     let editables = ResolvedEditables::resolve(
         spec.editables.clone(),
         &EmptyInstalledPackages,
@@ -159,7 +155,11 @@ pub(crate) async fn lock(
     // Write the lockfile to disk.
     let lock = resolution.lock()?;
     let encoded = toml::to_string_pretty(&lock)?;
-    fs_err::tokio::write(project.root().join("uv.lock"), encoded.as_bytes()).await?;
+    fs_err::tokio::write(
+        project.workspace().root().join("uv.lock"),
+        encoded.as_bytes(),
+    )
+    .await?;
 
     Ok(ExitStatus::Success)
 }

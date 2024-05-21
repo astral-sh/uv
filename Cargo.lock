@@ -4955,6 +4955,7 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "pypi-types",
+ "regex",
  "requirements-txt",
  "rustc-hash",
  "schemars",

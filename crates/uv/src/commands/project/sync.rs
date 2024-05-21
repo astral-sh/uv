@@ -5,15 +5,15 @@ use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
-    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
+use uv_requirements::ProjectWorkspace;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::project::discovery::Project;
 use crate::commands::{project, ExitStatus};
 use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
@@ -30,11 +30,7 @@ pub(crate) async fn sync(
     }
 
     // Find the project requirements.
-    let Some(project) = Project::find(std::env::current_dir()?)? else {
-        return Err(anyhow::anyhow!(
-            "Unable to find `pyproject.toml` for project."
-        ));
-    };
+    let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
 
     // Discover or create the virtual environment.
     let venv = project::init(&project, cache, printer)?;
@@ -43,9 +39,10 @@ pub(crate) async fn sync(
 
     // Read the lockfile.
     let resolution = {
-        let encoded = fs_err::tokio::read_to_string(project.root().join("uv.lock")).await?;
+        let encoded =
+            fs_err::tokio::read_to_string(project.workspace().root().join("uv.lock")).await?;
         let lock: Lock = toml::from_str(&encoded)?;
-        lock.to_resolution(markers, tags, project.name())
+        lock.to_resolution(markers, tags, project.project_name())
     };
 
     // Initialize the registry client.
@@ -54,6 +51,8 @@ pub(crate) async fn sync(
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
+
+    let site_packages = SitePackages::from_executable(&venv)?;
 
     // TODO(charlie): Respect project configuration.
     let build_isolation = BuildIsolation::default();
@@ -68,6 +67,7 @@ pub(crate) async fn sync(
     let no_build = NoBuild::default();
     let setup_py = SetupPyStrategy::default();
     let concurrency = Concurrency::default();
+    let reinstall = Reinstall::None;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -87,8 +87,20 @@ pub(crate) async fn sync(
         concurrency,
     );
 
-    // TODO(konsti): Read editables from lockfile.
-    let editables = ResolvedEditables::default();
+    let editables = ResolvedEditables::resolve(
+        Vec::new(), // TODO(konsti): Read editables from lockfile
+        &site_packages,
+        &reinstall,
+        &hasher,
+        venv.interpreter(),
+        tags,
+        cache,
+        &client,
+        &build_dispatch,
+        concurrency,
+        printer,
+    )
+    .await?;
 
     let site_packages = SitePackages::from_executable(&venv)?;
 
