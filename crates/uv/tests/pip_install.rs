@@ -436,6 +436,46 @@ fn install_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Install a requirements file with pins that conflict
+///
+/// This is likely to occur in the real world when compiled on one platform then installed on another.
+#[test]
+fn install_requirements_txt_conflicting_pins() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+
+    // We pin `click` to a conflicting requirement
+    requirements_txt.write_str(
+        r"
+blinker==1.7.0
+click==7.0.0
+flask==3.0.2
+itsdangerous==2.1.2
+jinja2==3.1.3
+markupsafe==2.1.5
+werkzeug==3.0.1
+",
+    )?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask==3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask==3.0.2 are incompatible.
+          And because you require flask==3.0.2, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a `pyproject.toml` file with a `poetry` section.
 #[test]
 fn install_pyproject_toml_poetry() -> Result<()> {
