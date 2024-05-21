@@ -1,8 +1,7 @@
 use anyhow::Result;
 
-use distribution_types::{DirectorySourceDist, Dist, IndexLocations, ResolvedDist, SourceDist};
+use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
-use requirements_txt::EditableRequirement;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
@@ -89,47 +88,20 @@ pub(crate) async fn sync(
     let site_packages = SitePackages::from_executable(&venv)?;
 
     // Build any editables.
-    let editables = {
-        let editables = resolution
-            .distributions()
-            .filter_map(|dist| {
-                if let ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
-                    DirectorySourceDist {
-                        path,
-                        url,
-                        editable: true,
-                        ..
-                    },
-                ))) = dist
-                {
-                    Some(EditableRequirement {
-                        url: url.clone(),
-                        path: path.clone(),
-                        extras: vec![],
-                        marker: None,
-                        origin: None,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        ResolvedEditables::resolve(
-            editables,
-            &site_packages,
-            &reinstall,
-            &hasher,
-            venv.interpreter(),
-            tags,
-            cache,
-            &client,
-            &build_dispatch,
-            concurrency,
-            printer,
-        )
-        .await?
-    };
+    let editables = ResolvedEditables::resolve(
+        resolution.editables(),
+        &site_packages,
+        &reinstall,
+        &hasher,
+        venv.interpreter(),
+        tags,
+        cache,
+        &client,
+        &build_dispatch,
+        concurrency,
+        printer,
+    )
+    .await?;
 
     let site_packages = SitePackages::from_executable(&venv)?;
 

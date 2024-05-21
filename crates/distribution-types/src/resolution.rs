@@ -1,8 +1,12 @@
 use rustc_hash::FxHashMap;
 
+use pep508_rs::VerbatimUrl;
 use uv_normalize::PackageName;
 
-use crate::{BuiltDist, Dist, Name, Requirement, RequirementSource, ResolvedDist, SourceDist};
+use crate::{
+    BuiltDist, DirectorySourceDist, Dist, InstalledDirectUrlDist, InstalledDist, LocalEditable,
+    Name, Requirement, RequirementSource, ResolvedDist, SourceDist,
+};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
@@ -67,6 +71,35 @@ impl Resolution {
             .collect();
         requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
         requirements
+    }
+
+    /// Return an iterator over the [`LocalEditable`] entities in this resolution.
+    pub fn editables(&self) -> impl Iterator<Item = LocalEditable> + '_ {
+        self.0.values().filter_map(|dist| match dist {
+            ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
+                DirectorySourceDist {
+                    path,
+                    url,
+                    editable: true,
+                    ..
+                },
+            ))) => Some(LocalEditable {
+                url: url.clone(),
+                path: path.clone(),
+                extras: vec![],
+            }),
+            ResolvedDist::Installed(InstalledDist::Url(InstalledDirectUrlDist {
+                path,
+                url,
+                editable: true,
+                ..
+            })) => Some(LocalEditable {
+                url: VerbatimUrl::from_url(url.clone()),
+                path: path.clone(),
+                extras: vec![],
+            }),
+            _ => None,
+        })
     }
 }
 
