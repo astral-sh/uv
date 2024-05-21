@@ -5038,6 +5038,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-state"
+version = "0.0.1"
+dependencies = [
+ "directories",
+ "tempfile",
+]
+
+[[package]]
 name = "uv-types"
 version = "0.0.1"
 dependencies = [
