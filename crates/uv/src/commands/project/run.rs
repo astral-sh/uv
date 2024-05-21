@@ -8,6 +8,7 @@ use tokio::process::Command;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_requirements::{ProjectWorkspace, RequirementsSource};
@@ -25,6 +26,7 @@ pub(crate) async fn run(
     python: Option<String>,
     isolated: bool,
     preview: PreviewMode,
+    connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -60,8 +62,15 @@ pub(crate) async fn run(
 
         // Install the project requirements.
         Some(
-            project::update_environment(venv, &project.requirements(), preview, cache, printer)
-                .await?,
+            project::update_environment(
+                venv,
+                &project.requirements(),
+                preview,
+                connectivity,
+                cache,
+                printer,
+            )
+            .await?,
         )
     };
 
@@ -101,7 +110,10 @@ pub(crate) async fn run(
         )?;
 
         // Install the ephemeral requirements.
-        Some(project::update_environment(venv, &requirements, preview, cache, printer).await?)
+        Some(
+            project::update_environment(venv, &requirements, preview, connectivity, cache, printer)
+                .await?,
+        )
     };
 
     // Construct the command

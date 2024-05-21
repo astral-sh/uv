@@ -11,7 +11,7 @@ use platform_tags::Tags;
 use pypi_types::Yanked;
 use tracing::debug;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, Constraints, NoBinary, NoBuild, Overrides, PreviewMode, Reinstall,
     SetupPyStrategy,
@@ -468,11 +468,12 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
     preview: PreviewMode,
+    connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment> {
     // TODO(zanieb): Support client configuration
-    let client_builder = BaseClientBuilder::default();
+    let client_builder = BaseClientBuilder::default().connectivity(connectivity);
 
     // Read all requirements from the provided sources.
     // TODO(zanieb): Consider allowing constraints and extras
@@ -524,6 +525,7 @@ pub(crate) async fn update_environment(
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
