@@ -16,7 +16,7 @@ use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{
     FxOnceMap, IncompletePackage, UnavailablePackage, UnavailableReason, VersionsResponse,
@@ -114,7 +114,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
 }
 
 /// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
-/// wrap an [`PubGrubPackage::Extra`] package.
+/// wrap an [`PubGrubPackageInner::Extra`] package.
 fn collapse_extra_proxies(
     derivation_tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
@@ -126,22 +126,16 @@ fn collapse_extra_proxies(
                 Arc::make_mut(&mut derived.cause2),
             ) {
                 (
-                    DerivationTree::External(External::FromDependencyOf(
-                        PubGrubPackage::Extra { .. },
-                        ..,
-                    )),
+                    DerivationTree::External(External::FromDependencyOf(package, ..)),
                     ref mut cause,
-                ) => {
+                ) if matches!(&**package, PubGrubPackageInner::Extra { .. }) => {
                     collapse_extra_proxies(cause);
                     *derivation_tree = cause.clone();
                 }
                 (
                     ref mut cause,
-                    DerivationTree::External(External::FromDependencyOf(
-                        PubGrubPackage::Extra { .. },
-                        ..,
-                    )),
-                ) => {
+                    DerivationTree::External(External::FromDependencyOf(package, ..)),
+                ) if matches!(&**package, PubGrubPackageInner::Extra { .. }) => {
                     collapse_extra_proxies(cause);
                     *derivation_tree = cause.clone();
                 }
@@ -241,22 +235,22 @@ impl NoSolutionError {
     ) -> Self {
         let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {
-            match package {
-                PubGrubPackage::Root(_) => {}
-                PubGrubPackage::Python(PubGrubPython::Installed) => {
+            match &**package {
+                PubGrubPackageInner::Root(_) => {}
+                PubGrubPackageInner::Python(PubGrubPython::Installed) => {
                     available_versions.insert(
                         package.clone(),
                         BTreeSet::from([python_requirement.installed().deref().clone()]),
                     );
                 }
-                PubGrubPackage::Python(PubGrubPython::Target) => {
+                PubGrubPackageInner::Python(PubGrubPython::Target) => {
                     available_versions.insert(
                         package.clone(),
                         BTreeSet::from([python_requirement.target().deref().clone()]),
                     );
                 }
-                PubGrubPackage::Extra { .. } => {}
-                PubGrubPackage::Package { name, .. } => {
+                PubGrubPackageInner::Extra { .. } => {}
+                PubGrubPackageInner::Package { name, .. } => {
                     // Avoid including available versions for packages that exist in the derivation
                     // tree, but were never visited during resolution. We _may_ have metadata for
                     // these packages, but it's non-deterministic, and omitting them ensures that
@@ -304,7 +298,7 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package { name, .. } = package {
+            if let PubGrubPackageInner::Package { name, .. } = &**package {
                 if let Some(reason) = unavailable_packages.get(name) {
                     new.insert(name.clone(), reason.clone());
                 }
@@ -322,7 +316,7 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package { name, .. } = package {
+            if let PubGrubPackageInner::Package { name, .. } = &**package {
                 if let Some(versions) = incomplete_packages.get(name) {
                     for entry in versions.iter() {
                         let (version, reason) = entry.pair();

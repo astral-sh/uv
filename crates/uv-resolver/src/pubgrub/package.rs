@@ -1,8 +1,35 @@
 use distribution_types::VerbatimParsedUrl;
 use pep508_rs::MarkerTree;
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+use std::sync::Arc;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolver::Urls;
+
+/// [`Arc`] wrapper around [`PubGrubPackageInner`] to make cloning (inside PubGrub) cheap.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct PubGrubPackage(Arc<PubGrubPackageInner>);
+
+impl Deref for PubGrubPackage {
+    type Target = PubGrubPackageInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for PubGrubPackage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl From<PubGrubPackageInner> for PubGrubPackage {
+    fn from(package: PubGrubPackageInner) -> Self {
+        Self(Arc::new(package))
+    }
+}
 
 /// A PubGrub-compatible wrapper around a "Python package", with two notable characteristics:
 ///
@@ -12,7 +39,7 @@ use crate::resolver::Urls;
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum PubGrubPackage {
+pub enum PubGrubPackageInner {
     /// The root package, which is used to start the resolution process.
     Root(Option<PackageName>),
     /// A Python version.
@@ -91,19 +118,19 @@ impl PubGrubPackage {
     ) -> Self {
         let url = urls.get(&name).cloned();
         if let Some(extra) = extra {
-            Self::Extra {
+            Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
                 extra,
                 marker,
                 url,
-            }
+            }))
         } else {
-            Self::Package {
+            Self(Arc::new(PubGrubPackageInner::Package {
                 name,
                 extra,
                 marker,
                 url,
-            }
+            }))
         }
     }
 }
@@ -116,7 +143,7 @@ pub enum PubGrubPython {
     Target,
 }
 
-impl std::fmt::Display for PubGrubPackage {
+impl std::fmt::Display for PubGrubPackageInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Root(name) => {

@@ -18,7 +18,7 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
-use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
+use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::FxOnceMap;
@@ -55,8 +55,8 @@ impl ResolutionGraph {
         let mut extras = FxHashMap::default();
         let mut diagnostics = Vec::new();
         for (package, version) in selection {
-            match package {
-                PubGrubPackage::Package {
+            match &**package {
+                PubGrubPackageInner::Package {
                     name,
                     extra: Some(extra),
                     marker: None,
@@ -95,7 +95,7 @@ impl ResolutionGraph {
                         });
                     }
                 }
-                PubGrubPackage::Package {
+                PubGrubPackageInner::Package {
                     name,
                     extra: Some(extra),
                     marker: None,
@@ -159,8 +159,8 @@ impl ResolutionGraph {
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
 
         for (package, version) in selection {
-            match package {
-                PubGrubPackage::Package {
+            match &**package {
+                PubGrubPackageInner::Package {
                     name,
                     extra: None,
                     marker: None,
@@ -229,7 +229,7 @@ impl ResolutionGraph {
                     });
                     inverse.insert(name, index);
                 }
-                PubGrubPackage::Package {
+                PubGrubPackageInner::Package {
                     name,
                     extra: None,
                     marker: None,
@@ -328,16 +328,16 @@ impl ResolutionGraph {
                         continue;
                     }
 
-                    let PubGrubPackage::Package {
+                    let PubGrubPackageInner::Package {
                         name: self_name, ..
-                    } = self_package
+                    } = &**self_package
                     else {
                         continue;
                     };
-                    let PubGrubPackage::Package {
+                    let PubGrubPackageInner::Package {
                         name: dependency_name,
                         ..
-                    } = dependency_package
+                    } = &**dependency_package
                     else {
                         continue;
                     };
