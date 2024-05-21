@@ -292,7 +292,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 ("PATH", Some("")),
             ],
             || {
@@ -310,7 +310,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 ("PATH", None::<OsString>),
             ],
             || {
@@ -338,7 +338,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 ("PATH", Some(tempdir.path().as_os_str())),
             ],
             || {
@@ -371,7 +371,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 ("PATH", Some(tempdir.path().as_os_str())),
             ],
             || {
@@ -440,7 +440,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(env::join_paths(
@@ -485,7 +485,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 ("PATH", Some(tempdir.path().as_os_str())),
                 ("PWD", Some(pwd.path().as_os_str())),
             ],
@@ -531,7 +531,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(env::join_paths([
@@ -728,7 +728,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -780,7 +780,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -832,7 +832,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -874,7 +874,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -915,7 +915,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -965,7 +965,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -1007,7 +1007,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -1061,7 +1061,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.11.1", "3.12.3"])?),
@@ -1112,7 +1112,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1"])?),
@@ -1163,7 +1163,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.3"])?),
@@ -1215,7 +1215,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.11.2"])?),
@@ -1257,7 +1257,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.11.2", "3.10.0"])?),
@@ -1308,7 +1308,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
@@ -1409,7 +1409,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
@@ -1610,7 +1610,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
@@ -1633,7 +1633,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.12.2"])?),
@@ -1656,7 +1656,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.12.2"])?),
@@ -1685,7 +1685,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", None),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),

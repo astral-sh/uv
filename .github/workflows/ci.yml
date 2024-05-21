@@ -144,7 +144,6 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          export UV_BOOTSTRAP_DIR="$(pwd)/bin"
           cargo nextest run \
             --features python-patch \
             --workspace \

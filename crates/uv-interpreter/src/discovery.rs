@@ -8,7 +8,7 @@ use which::which;
 
 use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::interpreter::Error as InterpreterError;
-use crate::managed::toolchains_for_current_platform;
+use crate::managed::InstalledToolchains;
 use crate::py_launcher::py_list_paths;
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
@@ -238,17 +238,18 @@ fn python_executables<'a>(
     .chain(
         sources.contains(InterpreterSource::ManagedToolchain).then(move ||
             std::iter::once(
-                toolchains_for_current_platform()
-                .map(|toolchains|
+                InstalledToolchains::from_settings().map_err(Error::from).and_then(|installed_toolchains| {
+                    let toolchains = installed_toolchains.find_matching_current_platform()?;
                     // Check that the toolchain version satisfies the request to avoid unnecessary interpreter queries later
-                    toolchains.filter(move |toolchain|
-                        version.is_none() || version.is_some_and(|version|
-                            version.matches_version(toolchain.python_version())
+                    Ok(
+                        toolchains.into_iter().filter(move |toolchain|
+                            version.is_none() || version.is_some_and(|version|
+                                version.matches_version(toolchain.python_version())
+                            )
                         )
+                        .map(|toolchain| (InterpreterSource::ManagedToolchain, toolchain.executable()))
                     )
-                    .map(|toolchain| (InterpreterSource::ManagedToolchain, toolchain.executable()))
-                )
-                .map_err(Error::from)
+                })
             ).flatten_ok()
         ).into_iter().flatten()
     )

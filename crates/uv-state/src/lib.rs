@@ -1,11 +1,11 @@
 use std::{
-    fs,
     io::{self},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use directories::ProjectDirs;
+use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 
 /// The main state storage abstraction.
@@ -57,9 +57,12 @@ impl StateStore {
             ..self
         })
     }
-}
 
-impl StateStore {
+    /// The folder for a specific cache bucket
+    pub fn bucket(&self, state_bucket: StateBucket) -> PathBuf {
+        self.root.join(state_bucket.to_str())
+    }
+
     /// Prefer, in order:
     /// 1. The specific state directory specified by the user.
     /// 2. The system-appropriate user-level data directory.
@@ -73,6 +76,22 @@ impl StateStore {
             StateStore::from_path(project_dirs.data_dir())
         } else {
             StateStore::from_path(".uv")
+        }
+    }
+}
+
+/// The different kinds of data in the state store are stored in different bucket, which in our case
+/// are subdirectories of the state store root.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum StateBucket {
+    // Managed toolchain
+    Toolchains,
+}
+
+impl StateBucket {
+    fn to_str(self) -> &'static str {
+        match self {
+            Self::Toolchains => "toolchains",
         }
     }
 }
