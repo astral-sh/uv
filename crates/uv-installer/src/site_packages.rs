@@ -322,7 +322,7 @@ impl SitePackages {
                     }
 
                     // Does the editable have dynamic metadata?
-                    if is_dynamic(requirement) {
+                    if is_dynamic(&requirement.path) {
                         return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                     }
 

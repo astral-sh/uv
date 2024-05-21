@@ -342,7 +342,9 @@ pub(crate) async fn pip_install(
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command.
     let editables = ResolvedEditables::resolve(
-        editables,
+        editables
+            .into_iter()
+            .map(ResolvedEditables::from_requirement),
         &site_packages,
         &reinstall,
         &hasher,

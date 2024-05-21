@@ -297,7 +297,9 @@ pub(crate) async fn pip_sync(
 
     // Resolve any editables.
     let editables = ResolvedEditables::resolve(
-        editables,
+        editables
+            .into_iter()
+            .map(ResolvedEditables::from_requirement),
         &site_packages,
         reinstall,
         &hasher,
