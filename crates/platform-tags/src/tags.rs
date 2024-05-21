@@ -18,7 +18,7 @@ pub enum TagsError {
     #[error("Invalid priority: `{0}`")]
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
     #[error("Only CPython can be freethreading, not: {0}")]
-    GilIsACpythonProblem(String),
+    GilIsACPythonProblem(String),
 }
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone)]
@@ -355,7 +355,7 @@ impl Implementation {
 
     fn parse(name: &str, gil_disabled: bool) -> Result<Self, TagsError> {
         if gil_disabled && name != "cpython" {
-            return Err(TagsError::GilIsACpythonProblem(name.to_string()));
+            return Err(TagsError::GilIsACPythonProblem(name.to_string()));
         }
         match name {
             // Known and supported implementations.

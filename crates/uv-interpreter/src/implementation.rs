@@ -12,18 +12,18 @@ pub enum Error {
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ImplementationName {
-    Cpython,
+    CPython,
 }
 
 impl ImplementationName {
     pub(crate) fn iter() -> impl Iterator<Item = &'static ImplementationName> {
-        static NAMES: &[ImplementationName] = &[ImplementationName::Cpython];
+        static NAMES: &[ImplementationName] = &[ImplementationName::CPython];
         NAMES.iter()
     }
 
     pub fn as_str(&self) -> &str {
         match self {
-            Self::Cpython => "cpython",
+            Self::CPython => "cpython",
         }
     }
 }
@@ -33,7 +33,7 @@ impl FromStr for ImplementationName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "cpython" => Ok(Self::Cpython),
+            "cpython" => Ok(Self::CPython),
             _ => Err(Error::UnknownImplementation(s.to_string())),
         }
     }

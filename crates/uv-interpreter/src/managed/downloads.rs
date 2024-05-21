@@ -116,7 +116,7 @@ impl PythonDownloadRequest {
 
     pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
-            self.implementation = Some(ImplementationName::Cpython);
+            self.implementation = Some(ImplementationName::CPython);
         }
         if self.arch.is_none() {
             self.arch = Some(Arch::from_env()?);

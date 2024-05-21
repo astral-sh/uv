@@ -1176,12 +1176,12 @@ mod tests {
         );
         assert_eq!(
             InterpreterRequest::parse("cpython"),
-            InterpreterRequest::Implementation(ImplementationName::Cpython)
+            InterpreterRequest::Implementation(ImplementationName::CPython)
         );
         assert_eq!(
             InterpreterRequest::parse("cpython3.12.2"),
             InterpreterRequest::ImplementationVersion(
-                ImplementationName::Cpython,
+                ImplementationName::CPython,
                 VersionRequest::from_str("3.12.2").unwrap()
             )
         );
