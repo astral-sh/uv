@@ -236,6 +236,12 @@ fn preprocess_unnamed_url(
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
                     let url = VerbatimUrl::parse_path(path.as_ref(), working_dir)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::<VerbatimUrl>::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
                         .with_given(url.to_string());
                     return Ok((url, extras));
                 }
@@ -270,6 +276,12 @@ fn preprocess_unnamed_url(
             _ => {
                 if let Some(working_dir) = working_dir {
                     let url = VerbatimUrl::parse_path(expanded.as_ref(), working_dir)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::<VerbatimUrl>::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
                         .with_given(url.to_string());
                     return Ok((url, extras));
                 }
@@ -288,8 +300,14 @@ fn preprocess_unnamed_url(
     } else {
         // Ex) `../editable/`
         if let Some(working_dir) = working_dir {
-            let url =
-                VerbatimUrl::parse_path(expanded.as_ref(), working_dir).with_given(url.to_string());
+            let url = VerbatimUrl::parse_path(expanded.as_ref(), working_dir)
+                .map_err(|err| Pep508Error {
+                    message: Pep508ErrorSource::<VerbatimUrl>::UrlError(err),
+                    start,
+                    len,
+                    input: cursor.to_string(),
+                })?
+                .with_given(url.to_string());
             return Ok((url, extras));
         }
 

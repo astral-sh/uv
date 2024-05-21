@@ -105,7 +105,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
                     FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path).expect("path is absolute");
+                        let url = Url::from_file_path(path)
+                            .map_err(|()| Error::RelativePath(path.clone()))?;
                         return self
                             .archive(
                                 source,
@@ -262,7 +263,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
                     FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path).expect("path is absolute");
+                        let url = Url::from_file_path(path)
+                            .map_err(|()| Error::RelativePath(path.clone()))?;
                         return self
                             .archive_metadata(
                                 source,
