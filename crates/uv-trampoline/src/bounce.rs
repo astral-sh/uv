@@ -275,7 +275,26 @@ fn find_python_exe(executable_name: &CStr) -> CString {
         String::from("Failed to close file handle")
     });
 
-    path
+    if !path.as_bytes().starts_with(b"..") {
+        path
+    } else {
+        let parent_dir = match executable_name
+            .to_bytes()
+            .rsplitn(2, |c| *c == b'\\')
+            .last()
+        {
+            Some(parent_dir) => parent_dir,
+            None => {
+                eprintln!("Script path has unknown separator characters.");
+                exit_with_status(1)
+            }
+        };
+        let final_path = [parent_dir, b"\\", path.as_bytes()].concat();
+        CString::new(final_path).unwrap_or_else(|_| {
+            eprintln!("Could not construct the absolute path to the Python executable.");
+            exit_with_status(1)
+        })
+    }
 }
 
 fn push_arguments(output: &mut Vec<u8>) {
