@@ -12,6 +12,7 @@ use owo_colors::OwoColorize;
 use tracing::instrument;
 
 use uv_cache::Cache;
+use uv_client::Connectivity;
 use uv_requirements::RequirementsSource;
 use uv_workspace::Combine;
 
@@ -565,6 +566,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 globals.isolated,
                 globals.preview,
+                args.connectivity,
                 &cache,
                 printer,
             )
@@ -603,12 +605,18 @@ async fn run() -> Result<ExitStatus> {
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Run(args),
         }) => {
+            let connectivity = if args.offline {
+                Connectivity::Offline
+            } else {
+                Connectivity::Online
+            };
             commands::run_tool(
                 args.target,
                 args.args,
                 args.python,
                 globals.isolated,
                 globals.preview,
+                connectivity,
                 &cache,
                 printer,
             )

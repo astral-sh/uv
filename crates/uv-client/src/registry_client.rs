@@ -850,9 +850,10 @@ impl MediaType {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum Connectivity {
     /// Allow access to the network.
+    #[default]
     Online,
 
     /// Do not allow access to the network.
