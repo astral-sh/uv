@@ -6,7 +6,7 @@ use url::Url;
 
 use pep440_rs::VersionSpecifiers;
 use pypi_types::LenientVersionSpecifiers;
-use pypi_types::{BaseUrl, DistInfoMetadata, File, Hashes, Yanked};
+use pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -197,9 +197,9 @@ impl SimpleHtml {
             let dist_info_metadata = std::str::from_utf8(dist_info_metadata.as_bytes())?;
             let dist_info_metadata = html_escape::decode_html_entities(dist_info_metadata);
             match dist_info_metadata.as_ref() {
-                "true" => Some(DistInfoMetadata::Bool(true)),
-                "false" => Some(DistInfoMetadata::Bool(false)),
-                fragment => Some(DistInfoMetadata::Hashes(Self::parse_hash(fragment)?)),
+                "true" => Some(CoreMetadata::Bool(true)),
+                "false" => Some(CoreMetadata::Bool(false)),
+                fragment => Some(CoreMetadata::Hashes(Self::parse_hash(fragment)?)),
             }
         } else {
             None
