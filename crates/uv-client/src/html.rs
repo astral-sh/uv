@@ -212,7 +212,9 @@ impl SimpleHtml {
         };
 
         Ok(File {
-            dist_info_metadata,
+            core_metadata: dist_info_metadata,
+            dist_info_metadata: None,
+            data_dist_info_metadata: None,
             yanked,
             requires_python,
             hashes,
@@ -298,7 +300,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: None,
@@ -354,7 +358,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: Some(
@@ -413,7 +419,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: None,
@@ -469,7 +477,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2+233fca715f49-py3-none-any.whl",
                     hashes: Hashes {
                         md5: None,
@@ -525,7 +535,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: None,
@@ -581,7 +593,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "torchtext-0.17.0+cpu-cp39-cp39-win_amd64.whl",
                     hashes: Hashes {
                         md5: None,
@@ -635,7 +649,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: None,
@@ -723,7 +739,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: None,
@@ -777,7 +795,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: None,
@@ -866,7 +886,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
                     hashes: Hashes {
                         md5: None,
@@ -881,7 +903,9 @@ mod tests {
                     yanked: None,
                 },
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl",
                     hashes: Hashes {
                         md5: None,
@@ -945,7 +969,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Flask-0.1.tar.gz",
                     hashes: Hashes {
                         md5: None,
@@ -962,7 +988,9 @@ mod tests {
                     yanked: None,
                 },
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Flask-0.10.1.tar.gz",
                     hashes: Hashes {
                         md5: None,
@@ -979,7 +1007,9 @@ mod tests {
                     yanked: None,
                 },
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "flask-3.0.1.tar.gz",
                     hashes: Hashes {
                         md5: None,
@@ -1045,7 +1075,9 @@ mod tests {
             ),
             files: [
                 File {
+                    core_metadata: None,
                     dist_info_metadata: None,
+                    data_dist_info_metadata: None,
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: None,

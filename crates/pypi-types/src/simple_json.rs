@@ -37,14 +37,17 @@ fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct File {
-    // Non-PEP 691-compliant alias used by PyPI.
-    #[serde(alias = "data-dist-info-metadata")]
+    // PEP 714-renamed field, followed by PEP 691-compliant field, followed by non-PEP 691-compliant
+    // alias used by PyPI.
+    pub core_metadata: Option<DistInfoMetadata>,
     pub dist_info_metadata: Option<DistInfoMetadata>,
+    pub data_dist_info_metadata: Option<DistInfoMetadata>,
     pub filename: String,
     pub hashes: Hashes,
-    /// There are a number of invalid specifiers on pypi, so we first try to parse it into a [`VersionSpecifiers`]
-    /// according to spec (PEP 440), then a [`LenientVersionSpecifiers`] with fixup for some common problems and if this
-    /// still fails, we skip the file when creating a version map.
+    /// There are a number of invalid specifiers on PyPI, so we first try to parse it into a
+    /// [`VersionSpecifiers`] according to spec (PEP 440), then a [`LenientVersionSpecifiers`] with
+    /// fixup for some common problems and if this still fails, we skip the file when creating a
+    /// version map.
     #[serde(default, deserialize_with = "deserialize_version_specifiers_lenient")]
     pub requires_python: Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>,
     pub size: Option<u64>,

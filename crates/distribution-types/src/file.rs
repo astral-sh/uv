@@ -44,8 +44,10 @@ impl File {
     pub fn try_from(file: pypi_types::File, base: &Url) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file
-                .dist_info_metadata
+                .core_metadata
                 .as_ref()
+                .or(file.dist_info_metadata.as_ref())
+                .or(file.data_dist_info_metadata.as_ref())
                 .is_some_and(DistInfoMetadata::is_available),
             filename: file.filename,
             hashes: file.hashes.into_digests(),
