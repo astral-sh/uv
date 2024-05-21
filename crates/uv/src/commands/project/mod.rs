@@ -165,7 +165,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let requirements = {
         // Convert from unnamed to named requirements.
         let mut requirements = NamedRequirementsResolver::new(
-            requirements,
+            requirements.clone(),
             hasher,
             index,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -178,7 +178,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             requirements.extend(
                 SourceTreeResolver::new(
-                    source_trees,
+                    source_trees.clone(),
                     &ExtrasSpecification::None,
                     hasher,
                     index,
@@ -214,7 +214,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         constraints,
         overrides,
         preferences,
-        project,
+        project.clone(),
         editable_metadata,
         exclusions,
         lookaheads,
