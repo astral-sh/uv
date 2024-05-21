@@ -46,7 +46,7 @@ impl ResolvedEditables {
     /// Resolve the set of editables that need to be installed.
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn resolve(
-        editables: Vec<EditableRequirement>,
+        editables: impl IntoIterator<Item = LocalEditable>,
         installed_packages: &impl InstalledPackagesProvider,
         reinstall: &Reinstall,
         hasher: &HashStrategy,
@@ -59,8 +59,8 @@ impl ResolvedEditables {
         printer: Printer,
     ) -> Result<Self> {
         // Partition the editables into those that are already installed, and those that must be built.
-        let mut installed = Vec::with_capacity(editables.len());
-        let mut builds = Vec::with_capacity(editables.len());
+        let mut installed = Vec::new();
+        let mut builds = Vec::new();
         for editable in editables {
             match reinstall {
                 Reinstall::None => {
@@ -107,20 +107,7 @@ impl ResolvedEditables {
             )
             .with_reporter(DownloadReporter::from(printer).with_length(builds.len() as u64));
 
-            let editables = LocalEditables::from_editables(builds.iter().map(|editable| {
-                let EditableRequirement {
-                    url,
-                    path,
-                    extras,
-                    marker: _,
-                    origin: _,
-                } = editable;
-                LocalEditable {
-                    url: url.clone(),
-                    path: path.clone(),
-                    extras: extras.clone(),
-                }
-            }));
+            let editables = LocalEditables::from_editables(builds.into_iter());
 
             let temp_dir = tempfile::tempdir_in(cache.root())?;
 
@@ -193,21 +180,27 @@ impl ResolvedEditables {
             })
             .collect()
     }
+
+    /// Convert an [`EditableRequirement`] into a [`LocalEditable`].
+    pub(crate) fn from_requirement(editable: EditableRequirement) -> LocalEditable {
+        LocalEditable {
+            url: editable.url,
+            path: editable.path,
+            extras: editable.extras,
+        }
+    }
 }
 
 /// Returns the [`InstalledEditable`] if the installed distribution is up-to-date for the given
 /// requirement.
-fn up_to_date(
-    editable: &EditableRequirement,
-    dist: &InstalledDist,
-) -> Result<Option<InstalledEditable>> {
+fn up_to_date(editable: &LocalEditable, dist: &InstalledDist) -> Result<Option<InstalledEditable>> {
     // If the editable isn't up-to-date, don't reuse it.
     if !ArchiveTimestamp::up_to_date_with(&editable.path, ArchiveTarget::Install(dist))? {
         return Ok(None);
     };
 
     // If the editable is dynamic, don't reuse it.
-    if is_dynamic(editable) {
+    if is_dynamic(&editable.path) {
         return Ok(None);
     };
 
@@ -217,11 +210,7 @@ fn up_to_date(
     };
 
     Ok(Some(InstalledEditable {
-        editable: LocalEditable {
-            url: editable.url.clone(),
-            path: editable.path.clone(),
-            extras: editable.extras.clone(),
-        },
+        editable: editable.clone(),
         wheel: (*dist).clone(),
         metadata,
     }))

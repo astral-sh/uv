@@ -108,7 +108,10 @@ pub(crate) async fn lock(
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command.
     let editables = ResolvedEditables::resolve(
-        spec.editables.clone(),
+        spec.editables
+            .iter()
+            .cloned()
+            .map(ResolvedEditables::from_requirement),
         &EmptyInstalledPackages,
         &reinstall,
         &hasher,
