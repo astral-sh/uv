@@ -174,6 +174,7 @@ pub enum Error {
 /// [`find_interpreter`] instead.
 fn python_executables<'a>(
     version: Option<&'a VersionRequest>,
+    implementation: Option<&'a ImplementationName>,
     sources: &SourceSelector,
 ) -> impl Iterator<Item = Result<(InterpreterSource, PathBuf), Error>> + 'a {
     // Note we are careful to ensure the iterator chain is lazy to avoid unnecessary work
@@ -221,7 +222,7 @@ fn python_executables<'a>(
     // (4) The search path
     .chain(
         sources.contains(InterpreterSource::SearchPath).then(move ||
-            python_executables_from_search_path(version)
+            python_executables_from_search_path(version, implementation)
             .map(|path| Ok((InterpreterSource::SearchPath, path))),
         ).into_iter().flatten()
     )
@@ -248,21 +249,32 @@ fn python_executables<'a>(
 
 /// Lazily iterate over Python executables in the `PATH`.
 ///
-/// The [`VersionRequest`] is used to determine the possible Python interpreter names, e.g.
-/// if looking for Python 3.9 we will look for `python3.9` in addition to the default names.
+/// The [`VersionRequest`] and [`ImplementationName`] are used to determine the possible
+/// Python interpreter names, e.g. if looking for Python 3.9 we will look for `python3.9`
+/// or if looking for `PyPy` we will look for `pypy` in addition to the default names.
 ///
 /// Executables are returned in the search path order, then by specificity of the name, e.g.
-/// `python3.9` is preferred over `python3`.
+/// `python3.9` is preferred over `python3` and `pypy3.9` is preferred over `python3.9`.
 ///
 /// If a `version` is not provided, we will only look for default executable names e.g.
 /// `python3` and `python` — `python3.9` and similar will not be included.
-fn python_executables_from_search_path(
-    version: Option<&VersionRequest>,
-) -> impl Iterator<Item = PathBuf> + '_ {
+fn python_executables_from_search_path<'a>(
+    version: Option<&'a VersionRequest>,
+    implementation: Option<&'a ImplementationName>,
+) -> impl Iterator<Item = PathBuf> + 'a {
     // `UV_TEST_PYTHON_PATH` can be used to override `PATH` to limit Python executable availability in the test suite
     let search_path =
         env::var_os("UV_TEST_PYTHON_PATH").unwrap_or(env::var_os("PATH").unwrap_or_default());
-    let possible_names = version.unwrap_or(&VersionRequest::Default).possible_names();
+
+    let possible_names: Vec<_> = version
+        .unwrap_or(&VersionRequest::Default)
+        .possible_names(implementation)
+        .collect();
+
+    trace!(
+        "Searching PATH for executables: {}",
+        possible_names.join(", ")
+    );
 
     // Split and iterate over the paths instead of using `which_all` so we can
     // check multiple names per directory while respecting the search path order
@@ -280,7 +292,6 @@ fn python_executables_from_search_path(
             possible_names
                 .clone()
                 .into_iter()
-                .flatten()
                 .flat_map(move |name| {
                     // Since we're just working with a single directory at a time, we collect to simplify ownership
                     which::which_in_global(&*name, Some(&dir))
@@ -310,10 +321,11 @@ fn python_executables_from_search_path(
 ///See [`python_executables`] for more information on discovery.
 fn python_interpreters<'a>(
     version: Option<&'a VersionRequest>,
+    implementation: Option<&'a ImplementationName>,
     sources: &SourceSelector,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(InterpreterSource, Interpreter), Error>> + 'a {
-    python_executables(version, sources).map(|result| match result {
+    python_executables(version, implementation, sources).map(|result| match result {
         Ok((source, path)) => Interpreter::query(&path, cache)
             .map(|interpreter| (source, interpreter))
             .inspect(|(source, interpreter)| {
@@ -420,17 +432,18 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::Implementation(implementation) => {
-            let Some((source, interpreter)) = python_interpreters(None, sources, cache)
-                .find(|result| {
-                    match result {
-                        // Return the first critical error or matching interpreter
-                        Err(err) => should_stop_discovery(err),
-                        Ok((_source, interpreter)) => {
-                            interpreter.implementation_name() == implementation.as_str()
+            let Some((source, interpreter)) =
+                python_interpreters(None, Some(implementation), sources, cache)
+                    .find(|result| {
+                        match result {
+                            // Return the first critical error or matching interpreter
+                            Err(err) => should_stop_discovery(err),
+                            Ok((_source, interpreter)) => {
+                                interpreter.implementation_name() == implementation.as_str()
+                            }
                         }
-                    }
-                })
-                .transpose()?
+                    })
+                    .transpose()?
             else {
                 return Ok(InterpreterResult::Err(
                     InterpreterNotFound::NoMatchingImplementation(sources.clone(), *implementation),
@@ -442,18 +455,19 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::ImplementationVersion(implementation, version) => {
-            let Some((source, interpreter)) = python_interpreters(Some(version), sources, cache)
-                .find(|result| {
-                    match result {
-                        // Return the first critical error or matching interpreter
-                        Err(err) => should_stop_discovery(err),
-                        Ok((_source, interpreter)) => {
-                            version.matches_interpreter(interpreter)
-                                && interpreter.implementation_name() == implementation.as_str()
+            let Some((source, interpreter)) =
+                python_interpreters(Some(version), Some(implementation), sources, cache)
+                    .find(|result| {
+                        match result {
+                            // Return the first critical error or matching interpreter
+                            Err(err) => should_stop_discovery(err),
+                            Ok((_source, interpreter)) => {
+                                version.matches_interpreter(interpreter)
+                                    && interpreter.implementation_name() == implementation.as_str()
+                            }
                         }
-                    }
-                })
-                .transpose()?
+                    })
+                    .transpose()?
             else {
                 // TODO(zanieb): Peek if there are any interpreters with the requested implementation
                 //               to improve the error message e.g. using `NoMatchingImplementation` instead
@@ -471,15 +485,16 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::Version(version) => {
-            let Some((source, interpreter)) = python_interpreters(Some(version), sources, cache)
-                .find(|result| {
-                    match result {
-                        // Return the first critical error or matching interpreter
-                        Err(err) => should_stop_discovery(err),
-                        Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
-                    }
-                })
-                .transpose()?
+            let Some((source, interpreter)) =
+                python_interpreters(Some(version), None, sources, cache)
+                    .find(|result| {
+                        match result {
+                            // Return the first critical error or matching interpreter
+                            Err(err) => should_stop_discovery(err),
+                            Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
+                        }
+                    })
+                    .transpose()?
             else {
                 let err = if matches!(version, VersionRequest::Default) {
                     InterpreterNotFound::NoPythonInstallation(sources.clone(), Some(*version))
@@ -812,7 +827,7 @@ impl InterpreterRequest {
 }
 
 impl VersionRequest {
-    pub(crate) fn possible_names(self) -> [Option<Cow<'static, str>>; 4] {
+    pub(crate) fn default_names(self) -> [Option<Cow<'static, str>>; 4] {
         let (python, python3, extension) = if cfg!(windows) {
             (
                 Cow::Borrowed("python.exe"),
@@ -846,6 +861,52 @@ impl VersionRequest {
                 Some(python),
             ],
         }
+    }
+
+    pub(crate) fn possible_names<'a>(
+        &'a self,
+        implementation: Option<&'a ImplementationName>,
+    ) -> impl Iterator<Item = Cow<'static, str>> + 'a {
+        implementation
+            .into_iter()
+            .flat_map(move |implementation| {
+                let extension = std::env::consts::EXE_SUFFIX;
+                let name = implementation.as_str();
+                let (python, python3) = if extension.is_empty() {
+                    (Cow::Borrowed(name), Cow::Owned(format!("{name}3")))
+                } else {
+                    (
+                        Cow::Owned(format!("{name}{extension}")),
+                        Cow::Owned(format!("{name}3{extension}")),
+                    )
+                };
+
+                match self {
+                    Self::Default => [Some(python3), Some(python), None, None],
+                    Self::Major(major) => [
+                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
+                        Some(python),
+                        None,
+                        None,
+                    ],
+                    Self::MajorMinor(major, minor) => [
+                        Some(Cow::Owned(format!("{name}{major}.{minor}{extension}"))),
+                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
+                        Some(python),
+                        None,
+                    ],
+                    Self::MajorMinorPatch(major, minor, patch) => [
+                        Some(Cow::Owned(format!(
+                            "{name}{major}.{minor}.{patch}{extension}",
+                        ))),
+                        Some(Cow::Owned(format!("{name}{major}.{minor}{extension}"))),
+                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
+                        Some(python),
+                    ],
+                }
+            })
+            .chain(self.default_names())
+            .flatten()
     }
 
     /// Check if a interpreter matches the requested Python version.
@@ -1184,6 +1245,28 @@ mod tests {
                 ImplementationName::CPython,
                 VersionRequest::from_str("3.12.2").unwrap()
             )
+        );
+        assert_eq!(
+            InterpreterRequest::parse("pypy"),
+            InterpreterRequest::Implementation(ImplementationName::PyPy)
+        );
+        assert_eq!(
+            InterpreterRequest::parse("pypy3.10"),
+            InterpreterRequest::ImplementationVersion(
+                ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            InterpreterRequest::parse("pypy@3.10"),
+            InterpreterRequest::ImplementationVersion(
+                ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            InterpreterRequest::parse("pypy310"),
+            InterpreterRequest::ExecutableName("pypy310".to_string())
         );
 
         let tempdir = TempDir::new().unwrap();
