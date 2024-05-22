@@ -1940,6 +1940,12 @@ pub(crate) struct ToolRunArgs {
     #[arg(allow_hyphen_values = true)]
     pub(crate) args: Vec<OsString>,
 
+    /// Use the given package to provide the command.
+    ///
+    /// By default, the package name is assumed to match the command name.
+    #[arg(long)]
+    pub(crate) from: Option<String>,
+
     /// The Python interpreter to use to build the run environment.
     #[arg(
         long,

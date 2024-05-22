@@ -618,6 +618,7 @@ async fn run() -> Result<ExitStatus> {
                 args.target,
                 args.args,
                 args.python,
+                args.from,
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,
