@@ -37,7 +37,7 @@ pub enum InterpreterRequest {
     ExecutableName(String),
     /// A Python implementation without a version e.g. `pypy`
     Implementation(ImplementationName),
-    /// A Python implementation name and version e.g. `pypy3.8`
+    /// A Python implementation name and version e.g. `pypy3.8` or `pypy@3.8`
     ImplementationVersion(ImplementationName, VersionRequest),
 }
 
@@ -522,6 +522,7 @@ pub fn find_default_interpreter(cache: &Cache) -> Result<InterpreterResult, Erro
     let request = InterpreterRequest::Version(VersionRequest::Default);
     let sources = SourceSelector::from_sources([
         InterpreterSource::SearchPath,
+        #[cfg(windows)]
         InterpreterSource::PyLauncher,
     ]);
 
@@ -1051,6 +1052,7 @@ impl SourceSelector {
                     Self::from_sources([
                         InterpreterSource::ProvidedPath,
                         InterpreterSource::SearchPath,
+                        #[cfg(windows)]
                         InterpreterSource::PyLauncher,
                         InterpreterSource::ManagedToolchain,
                     ])
