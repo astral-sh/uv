@@ -293,6 +293,23 @@ the system Python. uv does not implement any such fallback.
 
 For more, see [#2077](https://github.com/astral-sh/uv/issues/2077).
 
+## `--only-binary` enforcement
+
+The `--only-binary` argument is used to restrict installation to pre-built binary distributions.
+When `--only-binary :all:` is provided, both pip and uv will refuse to build source distributions
+from PyPI and other registries.
+
+However, when a dependency is provided as a direct URL (e.g., `uv pip install https://...`), pip
+does _not_ enforce `--only-binary`, and will build source distributions for all such packages.
+
+uv, meanwhile, _does_ enforce `--only-binary` for direct URL dependencies, with one exception:
+given `uv pip install https://... --only-binary flask`, uv _will_ build the source distribution at
+the given URL if it cannot infer the package name ahead of time, since uv can't determine whether
+the package is "allowed" in such cases without building its metadata.
+
+Both pip and uv allow editables requirements to be built and installed even when `--only-binary` is
+provided. For example, `uv pip install -e . --only-binary :all:` is allowed.
+
 ## Strictness and spec enforcement
 
 uv tends to be stricter than `pip`, and will often reject packages that `pip` would install.
