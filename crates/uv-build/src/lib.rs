@@ -34,11 +34,23 @@ use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
-static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
+static MISSING_HEADER_RE_GCC: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: (.*\.(?:h|h..)): No such file or directory",
     )
     .unwrap()
+});
+
+/// e.g. `pygraphviz/graphviz_wrap.c:3023:10: fatal error: 'graphviz/cgraph.h' file not found`
+static MISSING_HEADER_RE_CLANG: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: '(.*\.(?:h|h..))' file not found")
+        .unwrap()
+});
+
+/// e.g. `pygraphviz/graphviz_wrap.c(3023): fatal error C1083: Cannot open include file: 'graphviz/cgraph.h': No such file or directory`
+static MISSING_HEADER_RE_MSVC: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r".*\.(?:c|c..|h|h..)\(\d+\): fatal error C1083: Cannot open include file: '(.*\.(?:h|h..))': No such file or directory")
+        .unwrap()
 });
 
 /// e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
@@ -161,8 +173,11 @@ impl Error {
 
         // In the cases i've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff
         let missing_library = stderr.lines().rev().take(10).find_map(|line| {
-            if let Some((_, [header])) =
-                MISSING_HEADER_RE.captures(line.trim()).map(|c| c.extract())
+            if let Some((_, [header])) = MISSING_HEADER_RE_GCC
+                .captures(line.trim())
+                .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
+                .or(MISSING_HEADER_RE_MSVC.captures(line.trim()))
+                .map(|c| c.extract())
             {
                 Some(MissingLibrary::Header(header.to_string()))
             } else if let Some((_, [library])) =
