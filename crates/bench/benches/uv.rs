@@ -42,7 +42,7 @@ mod resolver {
     use anyhow::Result;
     use once_cell::sync::Lazy;
 
-    use distribution_types::{IndexLocations, Requirement, Resolution, SourceDist};
+    use distribution_types::{CachedDist, IndexLocations, Requirement, Resolution, SourceDist};
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
@@ -166,7 +166,11 @@ mod resolver {
             panic!("benchmarks should not build source distributions")
         }
 
-        async fn install<'a>(&'a self, _: &'a Resolution, _: &'a PythonEnvironment) -> Result<()> {
+        async fn install<'a>(
+            &'a self,
+            _: &'a Resolution,
+            _: &'a PythonEnvironment,
+        ) -> Result<Vec<CachedDist>> {
             panic!("benchmarks should not build source distributions")
         }
 

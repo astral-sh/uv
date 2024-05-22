@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use url::Url;
 
-use distribution_types::{IndexLocations, InstalledDist, Requirement, Resolution, SourceDist};
+use distribution_types::{
+    CachedDist, IndexLocations, InstalledDist, Requirement, Resolution, SourceDist,
+};
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
@@ -88,7 +90,7 @@ pub trait BuildContext {
         &'a self,
         resolution: &'a Resolution,
         venv: &'a PythonEnvironment,
-    ) -> impl Future<Output = Result<()>> + 'a;
+    ) -> impl Future<Output = Result<Vec<CachedDist>>> + 'a;
 
     /// Setup a source distribution build by installing the required dependencies. A wrapper for
     /// `uv_build::SourceBuild::setup`.
