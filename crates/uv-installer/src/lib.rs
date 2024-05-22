@@ -3,7 +3,7 @@ pub use downloader::{Downloader, Reporter as DownloadReporter};
 pub use editable::{is_dynamic, BuiltEditable, InstalledEditable, ResolvedEditable};
 pub use installer::{Installer, Reporter as InstallReporter};
 pub use plan::{Plan, Planner};
-pub use site_packages::{Diagnostic, SatisfiesResult, SitePackages};
+pub use site_packages::{SatisfiesResult, SitePackages, SitePackagesDiagnostic};
 pub use uninstall::{uninstall, UninstallError};
 
 mod compile;

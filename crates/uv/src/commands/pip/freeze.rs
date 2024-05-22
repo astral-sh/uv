@@ -5,7 +5,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{InstalledDist, Name};
+use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;

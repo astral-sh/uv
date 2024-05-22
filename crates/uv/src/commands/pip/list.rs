@@ -8,7 +8,7 @@ use serde::Serialize;
 use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
-use distribution_types::{InstalledDist, Name};
+use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
