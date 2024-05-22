@@ -43,6 +43,7 @@ now prefer the `python` interpreter that was used to start uv instead of searchi
 - Add PEP 714 support for JSON API client ([#3698](https://github.com/astral-sh/uv/pull/3698))
 - Write relative paths with unnamed requirement syntax ([#3682](https://github.com/astral-sh/uv/pull/3682))
 - Allow relative Python executable paths in Windows trampoline ([#3717](https://github.com/astral-sh/uv/pull/3717))
+- Add support for clang and msvc in missing header error ([#3753](https://github.com/astral-sh/uv/pull/3753))
 
 ### CLI
 
