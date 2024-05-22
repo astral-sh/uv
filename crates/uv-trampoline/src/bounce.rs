@@ -66,7 +66,7 @@ fn make_child_cmdline() -> CString {
 
     child_cmdline.push(b'\0');
 
-    // Helpful when debugging trampline issues
+    // Helpful when debugging trampoline issues
     // eprintln!(
     //     "executable_name: '{}'\nnew_cmdline: {}",
     //     core::str::from_utf8(executable_name.to_bytes()).unwrap(),
@@ -183,7 +183,7 @@ fn find_python_exe(executable_name: &CStr) -> CString {
     let mut buffer: Vec<u8> = Vec::new();
     let mut bytes_to_read = 1024.min(u32::try_from(file_size).unwrap_or(u32::MAX));
 
-    let path = loop {
+    let path: CString = loop {
         // SAFETY: Casting to usize is safe because we only support 64bit systems where usize is guaranteed to be larger than u32.
         buffer.resize(bytes_to_read as usize, 0);
 
@@ -275,7 +275,7 @@ fn find_python_exe(executable_name: &CStr) -> CString {
         String::from("Failed to close file handle")
     });
 
-    if !path.as_bytes().starts_with(b"..") {
+    if is_absolute(&path) {
         path
     } else {
         let parent_dir = match executable_name
@@ -295,6 +295,15 @@ fn find_python_exe(executable_name: &CStr) -> CString {
             exit_with_status(1)
         })
     }
+}
+
+/// Returns `true` if the path is absolute.
+///
+/// In this context, as in the Rust standard library, c:\windows is absolute, while c:temp and
+/// \temp are not.
+fn is_absolute(path: &CStr) -> bool {
+    let path = path.to_bytes();
+    path.len() >= 3 && path[0].is_ascii_alphabetic() && path[1] == b':' && path[2] == b'\\'
 }
 
 fn push_arguments(output: &mut Vec<u8>) {
