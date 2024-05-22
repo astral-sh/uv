@@ -2,7 +2,7 @@
 // as we build out universal locking.
 #![allow(dead_code, unreachable_code, unused_variables)]
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -71,7 +71,7 @@ impl Lock {
         let mut queue: VecDeque<&Distribution> = VecDeque::new();
         queue.push_back(root);
 
-        let mut map = FxHashMap::default();
+        let mut map = BTreeMap::default();
         while let Some(dist) = queue.pop_front() {
             for dep in &dist.dependencies {
                 let dep_dist = self.find_by_id(&dep.id);

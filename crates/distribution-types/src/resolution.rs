@@ -1,4 +1,4 @@
-use rustc_hash::FxHashMap;
+use std::collections::BTreeMap;
 
 use pep508_rs::VerbatimUrl;
 use uv_normalize::PackageName;
@@ -10,17 +10,12 @@ use crate::{
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
-pub struct Resolution(FxHashMap<PackageName, ResolvedDist>);
+pub struct Resolution(BTreeMap<PackageName, ResolvedDist>);
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub fn new(packages: FxHashMap<PackageName, ResolvedDist>) -> Self {
+    pub fn new(packages: BTreeMap<PackageName, ResolvedDist>) -> Self {
         Self(packages)
-    }
-
-    /// Return the distribution for the given package name, if it exists.
-    pub fn get(&self, package_name: &PackageName) -> Option<&ResolvedDist> {
-        self.0.get(package_name)
     }
 
     /// Return the remote distribution for the given package name, if it exists.
@@ -44,11 +39,6 @@ impl Resolution {
         self.0.values()
     }
 
-    /// Iterate over the [`ResolvedDist`] entities in this resolution.
-    pub fn into_distributions(self) -> impl Iterator<Item = ResolvedDist> {
-        self.0.into_values()
-    }
-
     /// Return the number of distributions in this resolution.
     pub fn len(&self) -> usize {
         self.0.len()
@@ -60,10 +50,8 @@ impl Resolution {
     }
 
     /// Return the set of [`Requirement`]s that this resolution represents.
-    pub fn requirements(&self) -> Vec<Requirement> {
-        let mut requirements: Vec<_> = self.0.values().map(Requirement::from).collect();
-        requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
-        requirements
+    pub fn requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        self.0.values().map(Requirement::from)
     }
 
     /// Return an iterator over the [`LocalEditable`] entities in this resolution.

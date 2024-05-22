@@ -192,12 +192,14 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         // Determine the set of installed packages.
         let site_packages = SitePackages::from_executable(venv)?;
 
+        let requirements = resolution.requirements().collect::<Vec<_>>();
+
         let Plan {
             cached,
             remote,
             reinstalls,
             extraneous: _,
-        } = Planner::with_requirements(&resolution.requirements()).build(
+        } = Planner::with_requirements(&requirements).build(
             site_packages,
             &Reinstall::None,
             &NoBinary::None,

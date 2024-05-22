@@ -1111,7 +1111,6 @@ dependencies = [
  "platform-tags",
  "pypi-types",
  "rkyv",
- "rustc-hash",
  "schemars",
  "serde",
  "serde_json",
