@@ -22,6 +22,12 @@
         "null"
       ]
     },
+    "offline": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "pip": {
       "anyOf": [
         {
@@ -455,12 +461,6 @@
           ]
         },
         "no-strip-extras": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "offline": {
           "type": [
             "boolean",
             "null"

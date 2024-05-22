@@ -81,6 +81,13 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
     pub(crate) no_native_tls: bool,
 
+    /// Disable network access, relying only on locally cached data and locally available files.
+    #[arg(global = true, long, overrides_with("no_offline"))]
+    pub(crate) offline: bool,
+
+    #[arg(global = true, long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
+
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
     pub(crate) preview: bool,
@@ -366,23 +373,17 @@ pub(crate) struct PipCompileArgs {
     pub(crate) custom_compile_command: Option<String>,
 
     /// Run offline, i.e., without accessing the network.
-    #[arg(
-        global = true,
-        long,
-        conflicts_with = "refresh",
-        conflicts_with = "refresh_package",
-        overrides_with("no_offline")
-    )]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
-    #[arg(long, overrides_with("no_refresh"))]
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
 
-    #[arg(long, overrides_with("refresh"), hide = true)]
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
     pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
@@ -649,23 +650,16 @@ pub(crate) struct PipSyncArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
 
-    #[arg(
-        global = true,
-        long,
-        conflicts_with = "refresh",
-        conflicts_with = "refresh_package",
-        overrides_with("no_offline")
-    )]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
-
     /// Refresh all cached data.
-    #[arg(long, overrides_with("no_refresh"))]
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
 
-    #[arg(long, overrides_with("refresh"), hide = true)]
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
     pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
@@ -1013,23 +1007,16 @@ pub(crate) struct PipInstallArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
 
-    #[arg(
-        global = true,
-        long,
-        conflicts_with = "refresh",
-        conflicts_with = "refresh_package",
-        overrides_with("no_offline")
-    )]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
-
     /// Refresh all cached data.
-    #[arg(long, overrides_with("no_refresh"))]
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
 
-    #[arg(long, overrides_with("refresh"), hide = true)]
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
     pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
@@ -1430,13 +1417,6 @@ pub(crate) struct PipUninstallArgs {
     /// or system Python interpreter.
     #[arg(long)]
     pub(crate) target: Option<PathBuf>,
-
-    /// Run offline, i.e., without accessing the network.
-    #[arg(long, overrides_with("no_offline"))]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
 }
 
 #[derive(Args)]
@@ -1808,13 +1788,6 @@ pub(crate) struct VenvArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub(crate) keyring_provider: Option<KeyringProviderType>,
 
-    /// Run offline, i.e., without accessing the network.
-    #[arg(long, overrides_with("no_offline"))]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
-
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
@@ -1839,13 +1812,6 @@ pub(crate) struct RunArgs {
     /// Run with the given packages installed.
     #[arg(long)]
     pub(crate) with: Vec<String>,
-
-    /// Run offline, i.e., without accessing the network.
-    #[arg(global = true, long, overrides_with("no_offline"))]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1961,11 +1927,4 @@ pub(crate) struct ToolRunArgs {
         group = "discovery"
     )]
     pub(crate) python: Option<String>,
-
-    /// Run offline, i.e., without accessing the network.
-    #[arg(global = true, long, overrides_with("no_offline"))]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
 }

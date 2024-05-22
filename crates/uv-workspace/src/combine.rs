@@ -42,6 +42,7 @@ impl Combine for Options {
     fn combine(self, other: Options) -> Options {
         Options {
             native_tls: self.native_tls.combine(other.native_tls),
+            offline: self.offline.combine(other.offline),
             no_cache: self.no_cache.combine(other.no_cache),
             preview: self.preview.combine(other.preview),
             cache_dir: self.cache_dir.combine(other.cache_dir),
@@ -68,7 +69,6 @@ impl Combine for PipOptions {
                 .break_system_packages
                 .combine(other.break_system_packages),
             target: self.target.combine(other.target),
-            offline: self.offline.combine(other.offline),
             index_url: self.index_url.combine(other.index_url),
             extra_index_url: self.extra_index_url.combine(other.extra_index_url),
             no_index: self.no_index.combine(other.no_index),
