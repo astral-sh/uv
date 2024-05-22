@@ -297,221 +297,236 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let mut prefetcher = BatchPrefetcher::default();
-        let mut state = SolveState {
+        let state = SolveState {
             pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
             next: root,
             pins: FilePins::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
         };
+        let mut forked_states = vec![state];
+        let mut resolutions = vec![];
 
         debug!(
             "Solving with target Python version {}",
             self.python_requirement.target()
         );
 
-        loop {
-            // Run unit propagation.
-            state.pubgrub.unit_propagation(state.next)?;
+        'FORK: while let Some(mut state) = forked_states.pop() {
+            loop {
+                // Run unit propagation.
+                state.pubgrub.unit_propagation(state.next)?;
 
-            // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
-            // the dependency mode is direct, we only need to visit the root package.
-            if self.dependency_mode.is_transitive() {
-                Self::pre_visit(
-                    state.pubgrub.partial_solution.prioritized_packages(),
+                // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
+                // the dependency mode is direct, we only need to visit the root package.
+                if self.dependency_mode.is_transitive() {
+                    Self::pre_visit(
+                        state.pubgrub.partial_solution.prioritized_packages(),
+                        &request_sink,
+                    )?;
+                }
+
+                // Choose a package version.
+                let Some(highest_priority_pkg) = state
+                    .pubgrub
+                    .partial_solution
+                    .pick_highest_priority_pkg(|package, _range| state.priorities.get(package))
+                else {
+                    if enabled!(Level::DEBUG) {
+                        prefetcher.log_tried_versions();
+                    }
+                    let selection = state.pubgrub.partial_solution.extract_solution();
+                    resolutions.push(ResolutionGraph::from_state(
+                        &selection,
+                        &state.pins,
+                        self.index.packages(),
+                        self.index.distributions(),
+                        &state.pubgrub,
+                        &self.preferences,
+                    )?);
+                    continue 'FORK;
+                };
+                state.next = highest_priority_pkg;
+
+                prefetcher.version_tried(state.next.clone());
+
+                let term_intersection = state
+                    .pubgrub
+                    .partial_solution
+                    .term_intersection_for_package(&state.next)
+                    .ok_or_else(|| {
+                        PubGrubError::Failure(
+                            "a package was chosen but we don't have a term.".into(),
+                        )
+                    })?;
+                let decision = self.choose_version(
+                    &state.next,
+                    term_intersection.unwrap_positive(),
+                    &mut state.pins,
+                    visited,
                     &request_sink,
                 )?;
-            }
 
-            // Choose a package version.
-            let Some(highest_priority_pkg) = state
-                .pubgrub
-                .partial_solution
-                .pick_highest_priority_pkg(|package, _range| state.priorities.get(package))
-            else {
-                if enabled!(Level::DEBUG) {
-                    prefetcher.log_tried_versions();
-                }
-                let selection = state.pubgrub.partial_solution.extract_solution();
-                return ResolutionGraph::from_state(
-                    &selection,
-                    &state.pins,
-                    self.index.packages(),
-                    self.index.distributions(),
-                    &state.pubgrub,
-                    &self.preferences,
-                );
-            };
-            state.next = highest_priority_pkg;
+                // Pick the next compatible version.
+                let version = match decision {
+                    None => {
+                        debug!("No compatible version found for: {next}", next = state.next);
 
-            prefetcher.version_tried(state.next.clone());
-
-            let term_intersection = state
-                .pubgrub
-                .partial_solution
-                .term_intersection_for_package(&state.next)
-                .ok_or_else(|| {
-                    PubGrubError::Failure("a package was chosen but we don't have a term.".into())
-                })?;
-            let decision = self.choose_version(
-                &state.next,
-                term_intersection.unwrap_positive(),
-                &mut state.pins,
-                visited,
-                &request_sink,
-            )?;
-
-            // Pick the next compatible version.
-            let version = match decision {
-                None => {
-                    debug!("No compatible version found for: {next}", next = state.next);
-
-                    let term_intersection = state
-                        .pubgrub
-                        .partial_solution
-                        .term_intersection_for_package(&state.next)
-                        .expect("a package was chosen but we don't have a term.");
-
-                    // Check if the decision was due to the package being unavailable
-                    if let PubGrubPackageInner::Package { ref name, .. } = &*state.next {
-                        if let Some(entry) = self.unavailable_packages.get(name) {
-                            state
-                                .pubgrub
-                                .add_incompatibility(Incompatibility::custom_term(
-                                    state.next.clone(),
-                                    term_intersection.clone(),
-                                    UnavailableReason::Package(entry.clone()),
-                                ));
-                            continue;
-                        }
-                    }
-
-                    state
-                        .pubgrub
-                        .add_incompatibility(Incompatibility::no_versions(
-                            state.next.clone(),
-                            term_intersection.clone(),
-                        ));
-                    continue;
-                }
-                Some(version) => version,
-            };
-            let version = match version {
-                ResolverVersion::Available(version) => version,
-                ResolverVersion::Unavailable(version, reason) => {
-                    // Incompatible requires-python versions are special in that we track
-                    // them as incompatible dependencies instead of marking the package version
-                    // as unavailable directly
-                    if let UnavailableVersion::IncompatibleDist(
-                        IncompatibleDist::Source(IncompatibleSource::RequiresPython(
-                            requires_python,
-                        ))
-                        | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python)),
-                    ) = reason
-                    {
-                        let python_version = requires_python
-                            .iter()
-                            .map(PubGrubSpecifier::try_from)
-                            .fold_ok(Range::full(), |range, specifier| {
-                                range.intersection(&specifier.into())
-                            })?;
-
-                        let package = &state.next;
-                        for kind in [PubGrubPython::Installed, PubGrubPython::Target] {
-                            state
-                                .pubgrub
-                                .add_incompatibility(Incompatibility::from_dependency(
-                                    package.clone(),
-                                    Range::singleton(version.clone()),
-                                    (
-                                        PubGrubPackage::from(PubGrubPackageInner::Python(kind)),
-                                        python_version.clone(),
-                                    ),
-                                ));
-                        }
-                        state
+                        let term_intersection = state
                             .pubgrub
                             .partial_solution
-                            .add_decision(state.next.clone(), version);
+                            .term_intersection_for_package(&state.next)
+                            .expect("a package was chosen but we don't have a term.");
+
+                        // Check if the decision was due to the package being unavailable
+                        if let PubGrubPackageInner::Package { ref name, .. } = &*state.next {
+                            if let Some(entry) = self.unavailable_packages.get(name) {
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::custom_term(
+                                        state.next.clone(),
+                                        term_intersection.clone(),
+                                        UnavailableReason::Package(entry.clone()),
+                                    ));
+                                continue;
+                            }
+                        }
+
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::no_versions(
+                                state.next.clone(),
+                                term_intersection.clone(),
+                            ));
                         continue;
-                    };
-                    state
-                        .pubgrub
-                        .add_incompatibility(Incompatibility::custom_version(
-                            state.next.clone(),
-                            version.clone(),
-                            UnavailableReason::Version(reason),
-                        ));
-                    continue;
-                }
-            };
+                    }
+                    Some(version) => version,
+                };
+                let version = match version {
+                    ResolverVersion::Available(version) => version,
+                    ResolverVersion::Unavailable(version, reason) => {
+                        // Incompatible requires-python versions are special in that we track
+                        // them as incompatible dependencies instead of marking the package version
+                        // as unavailable directly
+                        if let UnavailableVersion::IncompatibleDist(
+                            IncompatibleDist::Source(IncompatibleSource::RequiresPython(
+                                requires_python,
+                            ))
+                            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+                                requires_python,
+                            )),
+                        ) = reason
+                        {
+                            let python_version = requires_python
+                                .iter()
+                                .map(PubGrubSpecifier::try_from)
+                                .fold_ok(Range::full(), |range, specifier| {
+                                    range.intersection(&specifier.into())
+                                })?;
 
-            prefetcher.prefetch_batches(
-                &state.next,
-                &version,
-                term_intersection.unwrap_positive(),
-                &request_sink,
-                &self.index,
-                &self.selector,
-            )?;
-
-            self.on_progress(&state.next, &version);
-
-            if state
-                .added_dependencies
-                .entry(state.next.clone())
-                .or_default()
-                .insert(version.clone())
-            {
-                // Retrieve that package dependencies.
-                let package = &state.next;
-                let dependencies = match self.get_dependencies(
-                    package,
-                    &version,
-                    &mut state.priorities,
-                    &request_sink,
-                )? {
-                    Dependencies::Unavailable(reason) => {
+                            let package = &state.next;
+                            for kind in [PubGrubPython::Installed, PubGrubPython::Target] {
+                                state.pubgrub.add_incompatibility(
+                                    Incompatibility::from_dependency(
+                                        package.clone(),
+                                        Range::singleton(version.clone()),
+                                        (
+                                            PubGrubPackage::from(PubGrubPackageInner::Python(kind)),
+                                            python_version.clone(),
+                                        ),
+                                    ),
+                                );
+                            }
+                            state
+                                .pubgrub
+                                .partial_solution
+                                .add_decision(state.next.clone(), version);
+                            continue;
+                        };
                         state
                             .pubgrub
                             .add_incompatibility(Incompatibility::custom_version(
-                                package.clone(),
+                                state.next.clone(),
                                 version.clone(),
                                 UnavailableReason::Version(reason),
                             ));
                         continue;
                     }
-                    Dependencies::Available(constraints)
-                        if constraints
-                            .iter()
-                            .any(|(dependency, _)| dependency == package) =>
-                    {
-                        if enabled!(Level::DEBUG) {
-                            prefetcher.log_tried_versions();
-                        }
-                        return Err(PubGrubError::SelfDependency {
-                            package: package.clone(),
-                            version: version.clone(),
-                        }
-                        .into());
-                    }
-                    Dependencies::Available(constraints) => constraints,
                 };
 
-                // Add that package and version if the dependencies are not problematic.
-                let dep_incompats = state.pubgrub.add_incompatibility_from_dependencies(
-                    package.clone(),
-                    version.clone(),
-                    dependencies,
-                );
+                prefetcher.prefetch_batches(
+                    &state.next,
+                    &version,
+                    term_intersection.unwrap_positive(),
+                    &request_sink,
+                    &self.index,
+                    &self.selector,
+                )?;
 
-                state.pubgrub.partial_solution.add_version(
-                    package.clone(),
-                    version,
-                    dep_incompats,
-                    &state.pubgrub.incompatibility_store,
-                );
-            } else {
+                self.on_progress(&state.next, &version);
+
+                if state
+                    .added_dependencies
+                    .entry(state.next.clone())
+                    .or_default()
+                    .insert(version.clone())
+                {
+                    // Retrieve that package dependencies.
+                    let package = &state.next;
+                    let forks = self.get_dependencies_forking(
+                        package,
+                        &version,
+                        &mut state.priorities,
+                        &request_sink,
+                    )?;
+                    for fork in forks {
+                        let mut state = state.clone();
+                        let dependencies = match fork {
+                            Dependencies::Unavailable(reason) => {
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::custom_version(
+                                        package.clone(),
+                                        version.clone(),
+                                        UnavailableReason::Version(reason),
+                                    ));
+                                forked_states.push(state);
+                                continue;
+                            }
+                            Dependencies::Available(constraints)
+                                if constraints
+                                    .iter()
+                                    .any(|(dependency, _)| dependency == package) =>
+                            {
+                                if enabled!(Level::DEBUG) {
+                                    prefetcher.log_tried_versions();
+                                }
+                                return Err(PubGrubError::SelfDependency {
+                                    package: package.clone(),
+                                    version: version.clone(),
+                                }
+                                .into());
+                            }
+                            Dependencies::Available(constraints) => constraints,
+                        };
+
+                        // Add that package and version if the dependencies are not problematic.
+                        let dep_incompats = state.pubgrub.add_incompatibility_from_dependencies(
+                            package.clone(),
+                            version.clone(),
+                            dependencies,
+                        );
+
+                        state.pubgrub.partial_solution.add_version(
+                            package.clone(),
+                            version.clone(),
+                            dep_incompats,
+                            &state.pubgrub.incompatibility_store,
+                        );
+                        forked_states.push(state);
+                    }
+                    continue 'FORK;
+                }
                 // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
                 // terms and can add the decision directly.
                 state
@@ -520,6 +535,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .add_decision(state.next.clone(), version);
             }
         }
+        // This unwrap is okay because every code path above leads to at least
+        // one resolution being pushed.
+        //
+        // TODO: Implement merging of resolutions.
+        Ok(resolutions.pop().unwrap())
     }
 
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
@@ -794,6 +814,67 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(Some(ResolverVersion::Available(version)))
             }
         }
+    }
+
+    /// Given a candidate package and version, return its dependencies.
+    #[instrument(skip_all, fields(%package, %version))]
+    fn get_dependencies_forking(
+        &self,
+        package: &PubGrubPackage,
+        version: &Version,
+        priorities: &mut PubGrubPriorities,
+        request_sink: &Sender<Request>,
+    ) -> Result<Vec<Dependencies>, ResolveError> {
+        type Dep = (PubGrubPackage, Range<Version>);
+
+        let result = self.get_dependencies(package, version, priorities, request_sink);
+        if self.markers.is_some() {
+            return result.map(|deps| vec![deps]);
+        }
+        let deps: Vec<Dep> = match result? {
+            Dependencies::Available(deps) => deps,
+            Dependencies::Unavailable(err) => return Ok(vec![Dependencies::Unavailable(err)]),
+        };
+
+        let mut by_grouping: FxHashMap<&PackageName, FxHashMap<&Range<Version>, Vec<&Dep>>> =
+            FxHashMap::default();
+        for dep in &deps {
+            let (ref pkg, ref range) = *dep;
+            let name = match &**pkg {
+                // A root can never be a dependency of another package, and a `Python` pubgrub
+                // package is never returned by `get_dependencies`. So these cases never occur.
+                PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => unreachable!(),
+                PubGrubPackageInner::Package { ref name, .. }
+                | PubGrubPackageInner::Extra { ref name, .. } => name,
+            };
+            by_grouping
+                .entry(name)
+                .or_default()
+                .entry(range)
+                .or_default()
+                .push(dep);
+        }
+        let mut forks: Vec<Vec<Dep>> = vec![vec![]];
+        for (_, groups) in by_grouping {
+            if groups.len() <= 1 {
+                for deps in groups.into_values() {
+                    for fork in &mut forks {
+                        fork.extend(deps.iter().map(|dep| (*dep).clone()));
+                    }
+                }
+            } else {
+                let mut new_forks: Vec<Vec<Dep>> = vec![];
+                for deps in groups.into_values() {
+                    let mut new_forks_for_group = forks.clone();
+                    for fork in &mut new_forks_for_group {
+                        fork.extend(deps.iter().map(|dep| (*dep).clone()));
+                    }
+                    new_forks.extend(new_forks_for_group);
+                }
+                forks = new_forks;
+            }
+        }
+        Ok(forks.into_iter().map(Dependencies::Available).collect())
     }
 
     /// Given a candidate package and version, return its dependencies.
