@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.2.0
+
+Starting with this release, uv will use the **minor** version tag to indicate breaking changes.
+
+### Breaking
+
+In this release, discovery of Python interpreters has changed. These changes should have a limited effect in most
+use-cases, however, it has been marked as a breaking change because the interpreter used by uv could change in
+some edge cases.
+
+When multiple Python interpreters are installed, uv makes an attempt to find the exact version you requested.
+Previously, uv would stop at the first Python interpreter it discovered — if the interpreter did not satisfy
+the requested version, uv would fail. Now, uv will query multiple Python interpreters until it finds the
+requested version, skipping interpreters that are broken or do not satisfy the request.
+
+Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
+the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
+
+In summary, the following Python interpreter requests are now allowed:
+
+- A Python version without an implementation name, e.g., `3.10`
+- A path to a directory containing a Python installation, e.g., `./foo/.venv`
+- A path to a Python executable, e.g., `~/bin/python`
+- A Python implementation without a version, e.g., `pypy` or `cpython`
+- A Python implementation name and version, e.g., `pypy3.8` or `pypy@3.8`
+- The name of a Python executable (for lookup in the `PATH`), e.g., `foopython3`
+
+Previously, interpreter requests that were not versions or paths were always treated as executable
+names.
+
+To align the user expecations, uv now respects the interpreter that starts it. For example, `python -m uv ...` will
+now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
+
+### Enhancements
+
+- Rewrite Python interpreter discovery ([#3266](https://github.com/astral-sh/uv/pull/3266))
+- Add support for requesting `pypy` interpreters by implementation name ([#3706](https://github.com/astral-sh/uv/pull/3706))
+- Discover and prefer the parent interpreter when invoked with `python -m uv` [#3736](https://github.com/astral-sh/uv/pull/3736)
+- Add PEP 714 support for HTML API client ([#3697](https://github.com/astral-sh/uv/pull/3697))
+- Add PEP 714 support for JSON API client ([#3698](https://github.com/astral-sh/uv/pull/3698))
+- Write relative paths with unnamed requirement syntax ([#3682](https://github.com/astral-sh/uv/pull/3682))
+- Allow relative Python executable paths in Windows trampoline ([#3717](https://github.com/astral-sh/uv/pull/3717))
+
+### CLI
+
+- Allow `--constraint` files in `pip sync` ([#3741](https://github.com/astral-sh/uv/pull/3741))
+- Allow `--config-file` to be passed before or after command name ([#3730](https://github.com/astral-sh/uv/pull/3730))
+- Make `--offline` a global argument ([#3729](https://github.com/astral-sh/uv/pull/3729))
+
+### Performance
+
+- Improve performance in complex resolutions by reducing cost of PubGrub package clones ([#3688](https://github.com/astral-sh/uv/pull/3688))
+
+### Bug fixes
+
+- Evaluate arbitrary markers to `false` ([#3681](https://github.com/astral-sh/uv/pull/3681))
+- Improve `DirWithoutEntrypoint` error message ([#3690](https://github.com/astral-sh/uv/pull/3690))
+- Improve display of root package in range errors ([#3711](https://github.com/astral-sh/uv/pull/3711))
+- Propagate URL errors in verbatim parsing ([#3720](https://github.com/astral-sh/uv/pull/3720))
+- Report yanked packages in `--dry-run` ([#3740](https://github.com/astral-sh/uv/pull/3740))
+
+### Release
+
+- Drop native `manylinux` wheel in favor of dual-tagged wheel ([#3685](https://github.com/astral-sh/uv/pull/3685))
+- The `python-patch` test feature is no longer on by default and must be manually enabled to test patch version behavior ([#3746](https://github.com/astral-sh/uv/pull/3746))
+
+### Documentation
+
+- Add `--prefix` link to compatibility guide ([#3734](https://github.com/astral-sh/uv/pull/3734))
+- Add `--only-binary` to compatibility guide ([#3735](https://github.com/astral-sh/uv/pull/3735))
+- Add instructions for building and updating `uv-trampolines` ([#3731](https://github.com/astral-sh/uv/pull/3731))
+- Add notes for testing on Windows ([#3658](https://github.com/astral-sh/uv/pull/3658))
+
 ## 0.1.45
 
 ### Enhancements
@@ -229,7 +303,7 @@ See: [Persistent Configuration](https://github.com/astral-sh/uv?tab=readme-ov-fi
 
 ### Configuration
 
-- Add `UV_CONSTRAINT` environment variable to provide value for `--constraint`  ([#3162](https://github.com/astral-sh/uv/pull/3162))
+- Add `UV_CONSTRAINT` environment variable to provide value for `--constraint` ([#3162](https://github.com/astral-sh/uv/pull/3162))
 
 ### Bug fixes
 
@@ -556,7 +630,7 @@ See [#2976](https://github.com/astral-sh/uv/pull/2976#discussion_r1566521453) fo
 - Allow direct file path requirements to include fragments ([#2502](https://github.com/astral-sh/uv/pull/2502))
 - Avoid panicking on cannot-be-a-base URLs ([#2461](https://github.com/astral-sh/uv/pull/2461))
 - Drop `macosx_10_0` from compatible wheel tags on `aarch64` ([#2496](https://github.com/astral-sh/uv/pull/2496))
-- Fix operating system detection on *BSD ([#2505](https://github.com/astral-sh/uv/pull/2505))
+- Fix operating system detection on \*BSD ([#2505](https://github.com/astral-sh/uv/pull/2505))
 - Fix priority of ABI tags ([#2489](https://github.com/astral-sh/uv/pull/2489))
 - Fix priority of platform tags for manylinux ([#2483](https://github.com/astral-sh/uv/pull/2483))
 - Make > operator exclude post and local releases ([#2471](https://github.com/astral-sh/uv/pull/2471))
@@ -806,6 +880,7 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Use full python version in `pyvenv.cfg` ([#1979](https://github.com/astral-sh/uv/pull/1979))
 
 ### Performance
+
 - fix `uv pip install` handling of gzip'd response and PEP 691 ([#1978](https://github.com/astral-sh/uv/pull/1978))
 - Remove `spawn_blocking` from version map ([#1966](https://github.com/astral-sh/uv/pull/1966))
 
@@ -1015,7 +1090,7 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Apply percent-decoding to filepaths in HTML find-links ([#1544](https://github.com/astral-sh/uv/pull/1544))
 - Avoid attempting rename in copy fallback path ([#1546](https://github.com/astral-sh/uv/pull/1546))
 - Fix list rendering in `venv --help` output ([#1459](https://github.com/astral-sh/uv/pull/1459))
-- Fix trailing commas on `Requires-Python` in HTML indexes  ([#1507](https://github.com/astral-sh/uv/pull/1507))
+- Fix trailing commas on `Requires-Python` in HTML indexes ([#1507](https://github.com/astral-sh/uv/pull/1507))
 - Read from `/bin/sh` if `/bin/ls` cannot be found when determining libc path ([#1433](https://github.com/astral-sh/uv/pull/1433))
 - Remove URL encoding when determining file name ([#1555](https://github.com/astral-sh/uv/pull/1555))
 - Support recursive extras ([#1435](https://github.com/astral-sh/uv/pull/1435))
