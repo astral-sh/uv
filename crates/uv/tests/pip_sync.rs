@@ -902,7 +902,7 @@ fn install_no_index_cached() -> Result<()> {
 }
 
 #[test]
-fn warn_on_yanked_version() -> Result<()> {
+fn warn_on_yanked() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // This version is yanked.
@@ -920,6 +920,34 @@ fn warn_on_yanked_version() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
+     + colorama==0.4.2
+    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install").
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn warn_on_yanked_dry_run() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // This version is yanked.
+    let requirements_in = context.temp_dir.child("requirements.txt");
+    requirements_in.write_str("colorama==0.4.2")?;
+
+    uv_snapshot!(context.filters(), windows_filters=false, command(&context)
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + colorama==0.4.2
     warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install").
     "###

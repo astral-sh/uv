@@ -7,7 +7,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::Requirement;
+use distribution_types::{Dist, Requirement};
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
     ParsedUrl, RequirementSource, Resolution,
@@ -514,32 +514,7 @@ pub(crate) async fn install(
         }
     }
 
-    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
-    // have been yanked, we currently don't show this message on the second run anymore
-    for dist in &remote {
-        let Some(file) = dist.file() else {
-            continue;
-        };
-        match &file.yanked {
-            None | Some(Yanked::Bool(false)) => {}
-            Some(Yanked::Bool(true)) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} {dist} is yanked.",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-            Some(Yanked::Reason(reason)) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} {dist} is yanked (reason: \"{reason}\").",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-        }
-    }
+    report_yanks(&remote, printer)?;
 
     Ok(())
 }
@@ -607,7 +582,7 @@ fn report_dry_run(
             )
             .dimmed()
         )?;
-        remote
+        remote.clone()
     };
 
     // Remove any upgraded or extraneous installations.
@@ -677,6 +652,40 @@ fn report_dry_run(
                     "-".red(),
                     event.name.as_ref().bold(),
                     event.version.dimmed()
+                )?;
+            }
+        }
+    }
+
+    report_yanks(&remote, printer)?;
+
+    Ok(())
+}
+
+/// Report on any yanked distributions in the resolution.
+pub(crate) fn report_yanks(remote: &[Dist], printer: Printer) -> Result<(), Error> {
+    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
+    // have been yanked, we currently don't show this message on the second run anymore
+    for dist in remote {
+        let Some(file) = dist.file() else {
+            continue;
+        };
+        match &file.yanked {
+            None | Some(Yanked::Bool(false)) => {}
+            Some(Yanked::Bool(true)) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}{} {dist} is yanked.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
+            Some(Yanked::Reason(reason)) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}{} {dist} is yanked (reason: \"{reason}\").",
+                    "warning".yellow().bold(),
+                    ":".bold(),
                 )?;
             }
         }
