@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+### Bug fixes
+
+- Re-added the dynamically-linked Linux binary ([#3762](https://github.com/astral-sh/uv/pull/3762))
+
 ## 0.2.0
 
 Starting with this release, uv will use the **minor** version tag to indicate breaking changes.
@@ -17,7 +23,7 @@ requested version, skipping interpreters that are broken or do not satisfy the r
 
 Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
 the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
-also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept *any* interpreter implementation.
 
 In summary, the following Python interpreter requests are now allowed:
 
