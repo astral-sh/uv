@@ -9,9 +9,9 @@ use tracing::{debug, instrument};
 use cache_key::CanonicalUrl;
 use distribution_types::{
     FlatIndexLocation, IndexUrl, Requirement, RequirementSource, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    UnresolvedRequirementSpecification, VerbatimParsedUrl,
 };
-use pep508_rs::{UnnamedRequirement, VerbatimUrl};
+use pep508_rs::{UnnamedRequirement, UnnamedRequirementUrl};
 use requirements_txt::{
     EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
 };
@@ -132,7 +132,7 @@ impl RequirementsSpecification {
                 project: None,
                 requirements: vec![UnresolvedRequirementSpecification {
                     requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                        url: VerbatimUrl::from_path(path)?,
+                        url: VerbatimParsedUrl::parse_absolute_path(path)?,
                         extras: vec![],
                         marker: None,
                         origin: None,

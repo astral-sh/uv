@@ -2,7 +2,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use distribution_types::ParsedUrlError;
+use distribution_types::VerbatimParsedUrl;
 use pep508_rs::{
     Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
 };
@@ -17,7 +17,7 @@ pub enum RequirementsTxtRequirement {
     /// `tool.uv.sources`.
     Named(pep508_rs::Requirement),
     /// A PEP 508-like, direct URL dependency specifier.
-    Unnamed(UnnamedRequirement),
+    Unnamed(UnnamedRequirement<VerbatimParsedUrl>),
 }
 
 impl RequirementsTxtRequirement {
@@ -34,7 +34,7 @@ impl RequirementsTxtRequirement {
 #[derive(Debug, Error)]
 pub enum RequirementsTxtRequirementError {
     #[error(transparent)]
-    ParsedUrl(#[from] Box<ParsedUrlError>),
+    ParsedUrl(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
     #[error(transparent)]
     Pep508(#[from] Pep508Error),
 }
@@ -51,11 +51,10 @@ impl RequirementsTxtRequirement {
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     // If that fails, attempt to parse as a direct URL requirement.
-                    Ok(Self::Unnamed(UnnamedRequirement::parse(
-                        input,
-                        &working_dir,
-                        &mut TracingReporter,
-                    )?))
+                    Ok(Self::Unnamed(
+                        UnnamedRequirement::parse(input, &working_dir, &mut TracingReporter)
+                            .map_err(Box::new)?,
+                    ))
                 }
                 _ => Err(RequirementsTxtRequirementError::Pep508(err)),
             },

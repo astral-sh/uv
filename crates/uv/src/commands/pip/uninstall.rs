@@ -5,7 +5,9 @@ use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{InstalledMetadata, Name, Requirement, UnresolvedRequirement};
+use distribution_types::{
+    InstalledMetadata, Name, Requirement, UnresolvedRequirement, VerbatimParsedUrl,
+};
 use pep508_rs::UnnamedRequirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -94,7 +96,7 @@ pub(crate) async fn pip_uninstall(
     let site_packages = uv_installer::SitePackages::from_executable(&venv)?;
 
     // Partition the requirements into named and unnamed requirements.
-    let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement>) = spec
+    let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement<VerbatimParsedUrl>>) = spec
         .requirements
         .into_iter()
         .partition_map(|entry| match entry.requirement {
@@ -118,7 +120,7 @@ pub(crate) async fn pip_uninstall(
     let urls = {
         let mut urls = unnamed
             .into_iter()
-            .map(|requirement| requirement.url.to_url())
+            .map(|requirement| requirement.url.verbatim.to_url())
             .collect::<Vec<_>>();
         urls.sort_unstable();
         urls.dedup();

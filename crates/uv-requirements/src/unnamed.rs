@@ -13,7 +13,7 @@ use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, ParsedGitUrl,
     PathSourceUrl, RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
-    UnresolvedRequirementSpecification, VersionId,
+    UnresolvedRequirementSpecification, VerbatimParsedUrl, VersionId,
 };
 use pep508_rs::{Scheme, UnnamedRequirement, VersionOrUrl};
 use pypi_types::Metadata10;
@@ -84,7 +84,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
     /// Infer the package name for a given "unnamed" requirement.
     async fn resolve_requirement(
-        requirement: UnnamedRequirement,
+        requirement: UnnamedRequirement<VerbatimParsedUrl>,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
@@ -92,15 +92,15 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
         // Ex) `anyio-4.3.0-py3-none-any.whl`
-        if Path::new(requirement.url.path())
+        if Path::new(requirement.url.verbatim.path())
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
-            let filename = WheelFilename::from_str(&requirement.url.filename()?)?;
+            let filename = WheelFilename::from_str(&requirement.url.verbatim.filename()?)?;
             return Ok(pep508_rs::Requirement {
                 name: filename.name,
                 extras: requirement.extras,
-                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
                 marker: requirement.marker,
                 origin: requirement.origin,
             });
@@ -112,6 +112,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         // Ex) `anyio-4.3.0.tar.gz`
         if let Some(filename) = requirement
             .url
+            .verbatim
             .filename()
             .ok()
             .and_then(|filename| SourceDistFilename::parsed_normalized_filename(&filename).ok())
@@ -119,16 +120,17 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             return Ok(pep508_rs::Requirement {
                 name: filename.name,
                 extras: requirement.extras,
-                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
                 marker: requirement.marker,
                 origin: requirement.origin,
             });
         }
 
-        let source = match Scheme::parse(requirement.url.scheme()) {
+        let source = match Scheme::parse(requirement.url.verbatim.scheme()) {
             Some(Scheme::File) => {
                 let path = requirement
                     .url
+                    .verbatim
                     .to_file_path()
                     .expect("URL to be a file path");
 
@@ -147,7 +149,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         return Ok(pep508_rs::Requirement {
                             name: metadata.name,
                             extras: requirement.extras,
-                            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                            version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
                             marker: requirement.marker,
                             origin: requirement.origin,
                         });
@@ -169,7 +171,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             return Ok(pep508_rs::Requirement {
                                 name: project.name,
                                 extras: requirement.extras,
-                                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                                version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
                                 marker: requirement.marker,
                                 origin: requirement.origin,
                             });
@@ -187,7 +189,9 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                     return Ok(pep508_rs::Requirement {
                                         name,
                                         extras: requirement.extras,
-                                        version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                                        version_or_url: Some(VersionOrUrl::Url(
+                                            requirement.url.verbatim,
+                                        )),
                                         marker: requirement.marker,
                                         origin: requirement.origin,
                                     });
@@ -216,7 +220,9 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                     return Ok(pep508_rs::Requirement {
                                         name,
                                         extras: requirement.extras,
-                                        version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                                        version_or_url: Some(VersionOrUrl::Url(
+                                            requirement.url.verbatim,
+                                        )),
                                         marker: requirement.marker,
                                         origin: requirement.origin,
                                     });
@@ -226,31 +232,31 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     }
 
                     SourceUrl::Directory(DirectorySourceUrl {
-                        url: &requirement.url,
+                        url: &requirement.url.verbatim,
                         path: Cow::Owned(path),
                     })
                 } else {
                     SourceUrl::Path(PathSourceUrl {
-                        url: &requirement.url,
+                        url: &requirement.url.verbatim,
                         path: Cow::Owned(path),
                     })
                 }
             }
             Some(Scheme::Http | Scheme::Https) => SourceUrl::Direct(DirectSourceUrl {
-                url: &requirement.url,
+                url: &requirement.url.verbatim,
             }),
             Some(Scheme::GitSsh | Scheme::GitHttps | Scheme::GitHttp) => {
-                let git = ParsedGitUrl::try_from(requirement.url.to_url())?;
+                let git = ParsedGitUrl::try_from(requirement.url.verbatim.to_url())?;
                 SourceUrl::Git(GitSourceUrl {
                     git: Cow::Owned(git.url),
                     subdirectory: git.subdirectory.map(Cow::Owned),
-                    url: &requirement.url,
+                    url: &requirement.url.verbatim,
                 })
             }
             _ => {
                 return Err(anyhow::anyhow!(
                     "Unsupported scheme for unnamed requirement: {}",
-                    requirement.url
+                    requirement.url.verbatim
                 ));
             }
         };
@@ -292,7 +298,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         Ok(pep508_rs::Requirement {
             name,
             extras: requirement.extras,
-            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+            version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
             marker: requirement.marker,
             origin: requirement.origin,
         })

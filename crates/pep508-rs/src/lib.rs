@@ -123,7 +123,7 @@ impl<T: Pep508Url> Display for Pep508Error<T> {
     }
 }
 
-/// We need this to allow e.g. anyhow's `.context()`
+/// We need this to allow anyhow's `.context()` and `AsDynError`.  
 impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<T> {}
 
 #[cfg(feature = "pyo3")]

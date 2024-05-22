@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use distribution_types::{ParsedUrlError, Requirement, RequirementSource};
+use distribution_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
 use pep440_rs::{Operator, Version};
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
 use pypi_types::{HashDigest, HashError};
@@ -14,7 +14,7 @@ use uv_normalize::PackageName;
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
     #[error("direct URL requirements without package names are not supported: `{0}`")]
-    Bare(UnnamedRequirement),
+    Bare(UnnamedRequirement<VerbatimParsedUrl>),
     #[error(transparent)]
     Hash(#[from] HashError),
     #[error(transparent)]

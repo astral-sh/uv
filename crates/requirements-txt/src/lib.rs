@@ -46,6 +46,7 @@ use url::Url;
 
 use distribution_types::{
     ParsedUrlError, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    VerbatimParsedUrl,
 };
 use pep508_rs::{
     expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
@@ -59,7 +60,8 @@ use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
 
-pub use crate::requirement::{RequirementsTxtRequirement, RequirementsTxtRequirementError};
+pub use crate::requirement::RequirementsTxtRequirement;
+use crate::requirement::RequirementsTxtRequirementError;
 
 mod requirement;
 
@@ -1078,7 +1080,7 @@ pub enum RequirementsTxtParserError {
         end: usize,
     },
     ParsedUrl {
-        source: Box<ParsedUrlError>,
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
         start: usize,
         end: usize,
     },

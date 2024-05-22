@@ -363,7 +363,9 @@ impl SitePackages {
         while let Some(entry) = stack.pop() {
             let installed = match &entry.requirement {
                 UnresolvedRequirement::Named(requirement) => self.get_packages(&requirement.name),
-                UnresolvedRequirement::Unnamed(requirement) => self.get_urls(requirement.url.raw()),
+                UnresolvedRequirement::Unnamed(requirement) => {
+                    self.get_urls(requirement.url.verbatim.raw())
+                }
             };
             match installed.as_slice() {
                 [] => {
@@ -373,7 +375,7 @@ impl SitePackages {
                 [distribution] => {
                     match RequirementSatisfaction::check(
                         distribution,
-                        entry.requirement.source()?.as_ref(),
+                        entry.requirement.source().as_ref(),
                     )? {
                         RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
                             return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))
