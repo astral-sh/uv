@@ -614,6 +614,9 @@ async fn run() -> Result<ExitStatus> {
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Run(args),
         }) => {
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::run_tool(
                 args.target,
                 args.args,
