@@ -4,22 +4,22 @@ use pep508_rs::VerbatimUrl;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::{
-    BuiltDist, DirectorySourceDist, Dist, InstalledDirectUrlDist, InstalledDist, LocalEditable,
-    Name, Requirement, RequirementSource, ResolvedDist, SourceDist,
+    BuiltDist, Diagnostic, DirectorySourceDist, Dist, InstalledDirectUrlDist, InstalledDist,
+    LocalEditable, Name, Requirement, RequirementSource, ResolvedDist, SourceDist,
 };
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
 pub struct Resolution {
     packages: BTreeMap<PackageName, ResolvedDist>,
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: Vec<ResolutionDiagnostic>,
 }
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
     pub fn new(
         packages: BTreeMap<PackageName, ResolvedDist>,
-        diagnostics: Vec<Diagnostic>,
+        diagnostics: Vec<ResolutionDiagnostic>,
     ) -> Self {
         Self {
             packages,
@@ -63,8 +63,8 @@ impl Resolution {
         self.packages.values().map(Requirement::from)
     }
 
-    /// Return the [`Diagnostic`]s that were produced during resolution.
-    pub fn diagnostics(&self) -> &[Diagnostic] {
+    /// Return the [`ResolutionDiagnostic`]s that were produced during resolution.
+    pub fn diagnostics(&self) -> &[ResolutionDiagnostic] {
         &self.diagnostics
     }
 
@@ -99,7 +99,7 @@ impl Resolution {
 }
 
 #[derive(Debug, Clone)]
-pub enum Diagnostic {
+pub enum ResolutionDiagnostic {
     MissingExtra {
         /// The distribution that was requested with a non-existent extra. For example,
         /// `black==23.10.0`.
@@ -115,9 +115,9 @@ pub enum Diagnostic {
     },
 }
 
-impl Diagnostic {
+impl Diagnostic for ResolutionDiagnostic {
     /// Convert the diagnostic into a user-facing message.
-    pub fn message(&self) -> String {
+    fn message(&self) -> String {
         match self {
             Self::MissingExtra { dist, extra } => {
                 format!("The package `{dist}` does not have an extra named `{extra}`.")
@@ -133,7 +133,7 @@ impl Diagnostic {
     }
 
     /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
-    pub fn includes(&self, name: &PackageName) -> bool {
+    fn includes(&self, name: &PackageName) -> bool {
         match self {
             Self::MissingExtra { dist, .. } => name == dist.name(),
             Self::YankedVersion { dist, .. } => name == dist.name(),

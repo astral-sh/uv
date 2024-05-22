@@ -9,7 +9,8 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, Requirement, UnresolvedRequirementSpecification,
+    CachedDist, Diagnostic, InstalledDist, Requirement, ResolutionDiagnostic,
+    UnresolvedRequirementSpecification,
 };
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
@@ -708,7 +709,7 @@ pub(crate) fn report_modifications(
 
 /// Report any diagnostics on resolved distributions.
 pub(crate) fn diagnose_resolution(
-    diagnostics: &[Diagnostic],
+    diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
 ) -> Result<(), Error> {
     for diagnostic in diagnostics {

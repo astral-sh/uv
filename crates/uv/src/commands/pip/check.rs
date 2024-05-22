@@ -5,10 +5,10 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::InstalledDist;
+use distribution_types::{Diagnostic, InstalledDist};
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_installer::{Diagnostic, SitePackages};
+use uv_installer::{SitePackages, SitePackagesDiagnostic};
 use uv_interpreter::{PythonEnvironment, SystemPython};
 
 use crate::commands::{elapsed, ExitStatus};
@@ -53,7 +53,8 @@ pub(crate) fn pip_check(
         .dimmed()
     )?;
 
-    let diagnostics: Vec<Diagnostic> = site_packages.diagnostics()?.into_iter().collect();
+    let diagnostics: Vec<SitePackagesDiagnostic> =
+        site_packages.diagnostics()?.into_iter().collect();
 
     if diagnostics.is_empty() {
         writeln!(

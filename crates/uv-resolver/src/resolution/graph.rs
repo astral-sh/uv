@@ -7,8 +7,8 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Diagnostic, Dist, DistributionMetadata, Name, ParsedUrlError, Requirement, ResolvedDist,
-    VersionId, VersionOrUrlRef,
+    Dist, DistributionMetadata, Name, ParsedUrlError, Requirement, ResolutionDiagnostic,
+    ResolvedDist, VersionId, VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::MarkerEnvironment;
@@ -37,7 +37,7 @@ pub struct ResolutionGraph {
     /// The set of editable requirements in this resolution.
     pub(crate) editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
-    pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
 }
 
 impl ResolutionGraph {
@@ -90,7 +90,7 @@ impl ResolutionGraph {
                             .unwrap_or_else(|| panic!("Every package should be pinned: {name:?}"))
                             .clone();
 
-                        diagnostics.push(Diagnostic::MissingExtra {
+                        diagnostics.push(ResolutionDiagnostic::MissingExtra {
                             dist,
                             extra: extra.clone(),
                         });
@@ -111,7 +111,7 @@ impl ResolutionGraph {
                         } else {
                             let dist = Dist::from_editable(name.clone(), editable.built.clone())?;
 
-                            diagnostics.push(Diagnostic::MissingExtra {
+                            diagnostics.push(ResolutionDiagnostic::MissingExtra {
                                 dist: dist.into(),
                                 extra: extra.clone(),
                             });
@@ -141,7 +141,7 @@ impl ResolutionGraph {
                         } else {
                             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
 
-                            diagnostics.push(Diagnostic::MissingExtra {
+                            diagnostics.push(ResolutionDiagnostic::MissingExtra {
                                 dist: dist.into(),
                                 extra: extra.clone(),
                             });
@@ -177,13 +177,13 @@ impl ResolutionGraph {
                     match dist.yanked() {
                         None | Some(Yanked::Bool(false)) => {}
                         Some(Yanked::Bool(true)) => {
-                            diagnostics.push(Diagnostic::YankedVersion {
+                            diagnostics.push(ResolutionDiagnostic::YankedVersion {
                                 dist: dist.clone(),
                                 reason: None,
                             });
                         }
                         Some(Yanked::Reason(reason)) => {
-                            diagnostics.push(Diagnostic::YankedVersion {
+                            diagnostics.push(ResolutionDiagnostic::YankedVersion {
                                 dist: dist.clone(),
                                 reason: Some(reason.clone()),
                             });
@@ -411,8 +411,8 @@ impl ResolutionGraph {
             .map(|node| node.weight.dist)
     }
 
-    /// Return the [`Diagnostic`]s that were encountered while building the graph.
-    pub fn diagnostics(&self) -> &[Diagnostic] {
+    /// Return the [`ResolutionDiagnostic`]s that were encountered while building the graph.
+    pub fn diagnostics(&self) -> &[ResolutionDiagnostic] {
         &self.diagnostics
     }
 
