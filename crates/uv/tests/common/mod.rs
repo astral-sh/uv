@@ -401,7 +401,14 @@ pub fn python_path_with_versions(
                         .expect("The test version request must be valid"),
                 );
                 let sources = SourceSelector::All;
-                if let Ok(found) = find_interpreter(&request, &sources, &cache).unwrap() {
+                if let Ok(found) = find_interpreter(
+                    &request,
+                    uv_interpreter::SystemPython::Allowed,
+                    &sources,
+                    &cache,
+                )
+                .unwrap()
+                {
                     vec![found
                         .into_interpreter()
                         .sys_executable()

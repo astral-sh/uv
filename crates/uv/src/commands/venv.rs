@@ -119,9 +119,10 @@ async fn venv_impl(
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
     let interpreter = if let Some(python) = python_request.as_ref() {
+        let system = uv_interpreter::SystemPython::Required;
         let request = InterpreterRequest::parse(python);
-        let sources = SourceSelector::from_env(uv_interpreter::SystemPython::Required);
-        find_interpreter(&request, &sources, cache)
+        let sources = SourceSelector::from_env(system);
+        find_interpreter(&request, system, &sources, cache)
     } else {
         find_default_interpreter(cache)
     }
