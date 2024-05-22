@@ -11,7 +11,8 @@ use crate::interpreter::Error as InterpreterError;
 use crate::managed::toolchains_for_current_platform;
 use crate::py_launcher::py_list_paths;
 use crate::virtualenv::{
-    virtualenv_from_env, virtualenv_from_working_dir, virtualenv_python_executable,
+    conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
+    virtualenv_python_executable,
 };
 use crate::{Interpreter, PythonVersion};
 use std::borrow::Cow;
@@ -125,6 +126,8 @@ pub enum InterpreterSource {
     ProvidedPath,
     /// An environment was active e.g. via `VIRTUAL_ENV`
     ActiveEnvironment,
+    /// A conda environment was active e.g. via `CONDA_PREFIX`
+    CondaPrefix,
     /// An environment was discovered e.g. via `.venv`
     DiscoveredEnvironment,
     /// An executable was found in the search path i.e. `PATH`
@@ -195,7 +198,7 @@ fn python_executables<'a>(
         .into_iter()
         .map(|path| Ok((InterpreterSource::ParentInterpreter, PathBuf::from(path))))
     ).into_iter().flatten()
-    // (2) The active environment
+    // (2) An active virtual environment
     .chain(
         sources.contains(InterpreterSource::ActiveEnvironment).then(||
             virtualenv_from_env()
@@ -204,7 +207,16 @@ fn python_executables<'a>(
             .map(|path| Ok((InterpreterSource::ActiveEnvironment, path)))
         ).into_iter().flatten()
     )
-    // (3) A discovered environment
+    // (3) An active conda environment
+    .chain(
+        sources.contains(InterpreterSource::CondaPrefix).then(||
+            conda_prefix_from_env()
+            .into_iter()
+            .map(virtualenv_python_executable)
+            .map(|path| Ok((InterpreterSource::CondaPrefix, path)))
+        ).into_iter().flatten()
+    )
+    // (4) A discovered environment
     .chain(
         sources.contains(InterpreterSource::DiscoveredEnvironment).then(||
             std::iter::once(
@@ -219,7 +231,7 @@ fn python_executables<'a>(
             ).flatten_ok()
         ).into_iter().flatten()
     )
-    // (4) Managed toolchains
+    // (5) Managed toolchains
     .chain(
         sources.contains(InterpreterSource::ManagedToolchain).then(move ||
             std::iter::once(
@@ -237,14 +249,14 @@ fn python_executables<'a>(
             ).flatten_ok()
         ).into_iter().flatten()
     )
-    // (5) The search path
+    // (6) The search path
     .chain(
         sources.contains(InterpreterSource::SearchPath).then(move ||
             python_executables_from_search_path(version, implementation)
             .map(|path| Ok((InterpreterSource::SearchPath, path))),
         ).into_iter().flatten()
     )
-    // (6) The `py` launcher (windows only)
+    // (7) The `py` launcher (windows only)
     // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
     .chain(
         (sources.contains(InterpreterSource::PyLauncher) && cfg!(windows)).then(||
@@ -362,7 +374,11 @@ fn python_interpreters<'a>(
         })
         .filter(move |result| match result {
             // Filter the returned interpreters to conform to the system request
-            Ok((source, interpreter)) => match (system, interpreter.is_virtualenv()) {
+            Ok((source, interpreter)) => match (
+                system,
+                // Conda environments are not conformant virtual environments but we should not treat them as system interpreters
+                interpreter.is_virtualenv() || matches!(source, InterpreterSource::CondaPrefix),
+            ) {
                 (SystemPython::Allowed, _) => true,
                 (SystemPython::Explicit, false) => {
                     if matches!(
@@ -1100,6 +1116,7 @@ impl SourceSelector {
             Self::VirtualEnv => [
                 InterpreterSource::DiscoveredEnvironment,
                 InterpreterSource::ActiveEnvironment,
+                InterpreterSource::CondaPrefix,
             ]
             .contains(&source),
             Self::Custom(sources) => sources.contains(&source),
@@ -1163,6 +1180,7 @@ impl fmt::Display for InterpreterSource {
         match self {
             Self::ProvidedPath => f.write_str("provided path"),
             Self::ActiveEnvironment => f.write_str("active virtual environment"),
+            Self::CondaPrefix => f.write_str("conda prefix"),
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
             Self::SearchPath => f.write_str("search path"),
             Self::PyLauncher => f.write_str("`py` launcher output"),

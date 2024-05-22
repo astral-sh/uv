@@ -50,13 +50,16 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
+    ///
+    /// Allows Conda environments (via `CONDA_PREFIX`) though they are not technically virtual environments.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
         let sources = SourceSelector::VirtualEnv;
         let request = InterpreterRequest::Version(VersionRequest::Default);
         let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
 
         debug_assert!(
-            found.interpreter().is_virtualenv(),
+            found.interpreter().is_virtualenv()
+                || matches!(found.source(), InterpreterSource::CondaPrefix),
             "Not a virtualenv (source: {}, prefix: {})",
             found.source(),
             found.interpreter().base_prefix().display()
