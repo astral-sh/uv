@@ -919,7 +919,7 @@ pub(crate) struct PipSyncArgs {
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
-    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub(crate) python_platform: Option<TargetTriple>,
@@ -931,6 +931,18 @@ pub(crate) struct PipSyncArgs {
 
     #[arg(long, overrides_with("strict"), hide = true)]
     pub(crate) no_strict: bool,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+
+    /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
+    /// print the resulting plan.
+    #[arg(long)]
+    pub(crate) dry_run: bool,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipSyncCompatArgs,
@@ -1301,7 +1313,7 @@ pub(crate) struct PipInstallArgs {
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
-    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub(crate) python_platform: Option<TargetTriple>,

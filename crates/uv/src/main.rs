@@ -284,6 +284,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.python_version,
                 args.shared.python_platform,
                 args.shared.strict,
+                args.shared.exclude_newer,
                 args.shared.python,
                 args.shared.system,
                 args.shared.break_system_packages,
@@ -292,6 +293,7 @@ async fn run() -> Result<ExitStatus> {
                 globals.native_tls,
                 globals.preview,
                 cache,
+                args.dry_run,
                 printer,
             )
             .await

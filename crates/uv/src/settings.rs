@@ -332,6 +332,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) reinstall: Reinstall,
     pub(crate) refresh: Refresh,
+    pub(crate) dry_run: bool,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -378,6 +379,8 @@ impl PipSyncSettings {
             python_platform,
             strict,
             no_strict,
+            exclude_newer,
+            dry_run,
             compat_args: _,
         } = args;
 
@@ -386,6 +389,7 @@ impl PipSyncSettings {
             src_file,
             reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
+            dry_run,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
@@ -417,6 +421,7 @@ impl PipSyncSettings {
                     }),
                     python_version,
                     python_platform,
+                    exclude_newer,
                     link_mode,
                     compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
@@ -446,6 +451,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) uv_lock: Option<String>,
+
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
 }
