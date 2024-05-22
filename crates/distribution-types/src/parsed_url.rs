@@ -1,10 +1,10 @@
-use std::path::PathBuf;
+use std::fmt::{Display, Formatter};
+use std::path::{Path, PathBuf};
 
-use anyhow::{Error, Result};
 use thiserror::Error;
-use url::Url;
+use url::{ParseError, Url};
 
-use pep508_rs::VerbatimUrl;
+use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
 use uv_git::{GitSha, GitUrl};
 
 #[derive(Debug, Error)]
@@ -20,13 +20,83 @@ pub enum ParsedUrlError {
     #[error("Failed to parse Git reference from URL: `{0}`")]
     GitShaParse(Url, #[source] git2::Error),
     #[error("Not a valid URL: `{0}`")]
-    UrlParse(String, #[source] url::ParseError),
+    UrlParse(String, #[source] ParseError),
+    #[error(transparent)]
+    VerbatimUrl(#[from] VerbatimUrlError),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
 pub struct VerbatimParsedUrl {
     pub parsed_url: ParsedUrl,
     pub verbatim: VerbatimUrl,
+}
+
+impl Pep508Url for VerbatimParsedUrl {
+    type Err = ParsedUrlError;
+
+    fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err> {
+        let verbatim_url = <VerbatimUrl as Pep508Url>::parse_url(url, working_dir)?;
+        Ok(Self {
+            parsed_url: ParsedUrl::try_from(verbatim_url.to_url())?,
+            verbatim: verbatim_url,
+        })
+    }
+}
+
+impl UnnamedRequirementUrl for VerbatimParsedUrl {
+    fn parse_path(
+        path: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
+    ) -> Result<Self, Self::Err> {
+        let verbatim = VerbatimUrl::parse_path(&path, &working_dir)?;
+        let parsed_path_url = ParsedPathUrl {
+            url: verbatim.to_url(),
+            path: working_dir.as_ref().join(path),
+            editable: false,
+        };
+        Ok(Self {
+            parsed_url: ParsedUrl::Path(parsed_path_url),
+            verbatim,
+        })
+    }
+
+    fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
+        let verbatim = VerbatimUrl::parse_absolute_path(&path)?;
+        let parsed_path_url = ParsedPathUrl {
+            url: verbatim.to_url(),
+            path: path.as_ref().to_path_buf(),
+            editable: false,
+        };
+        Ok(Self {
+            parsed_url: ParsedUrl::Path(parsed_path_url),
+            verbatim,
+        })
+    }
+
+    fn parse_unnamed_url(url: impl AsRef<str>) -> Result<Self, Self::Err> {
+        let verbatim = <VerbatimUrl as UnnamedRequirementUrl>::parse_unnamed_url(&url)?;
+        Ok(Self {
+            parsed_url: ParsedUrl::try_from(verbatim.to_url())?,
+            verbatim,
+        })
+    }
+
+    fn with_given(self, given: impl Into<String>) -> Self {
+        Self {
+            verbatim: self.verbatim.with_given(given),
+            ..self
+        }
+    }
+
+    fn given(&self) -> Option<&str> {
+        self.verbatim.given()
+    }
+}
+
+impl Display for VerbatimParsedUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.verbatim, f)
+    }
 }
 
 /// We support three types of URLs for distributions:
@@ -124,7 +194,7 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
 }
 
 /// Return the Git reference of the given URL, if it exists.
-pub fn git_reference(url: Url) -> Result<Option<GitSha>, Error> {
+pub fn git_reference(url: Url) -> Result<Option<GitSha>, Box<ParsedUrlError>> {
     let ParsedGitUrl { url, .. } = ParsedGitUrl::try_from(url)?;
     Ok(url.precise())
 }
@@ -173,9 +243,9 @@ impl TryFrom<Url> for ParsedUrl {
 }
 
 impl TryFrom<&ParsedUrl> for pypi_types::DirectUrl {
-    type Error = Error;
+    type Error = ParsedUrlError;
 
-    fn try_from(value: &ParsedUrl) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &ParsedUrl) -> Result<Self, Self::Error> {
         match value {
             ParsedUrl::Path(value) => Self::try_from(value),
             ParsedUrl::Git(value) => Self::try_from(value),
@@ -185,7 +255,7 @@ impl TryFrom<&ParsedUrl> for pypi_types::DirectUrl {
 }
 
 impl TryFrom<&ParsedPathUrl> for pypi_types::DirectUrl {
-    type Error = Error;
+    type Error = ParsedUrlError;
 
     fn try_from(value: &ParsedPathUrl) -> Result<Self, Self::Error> {
         Ok(Self::LocalDirectory {
@@ -198,7 +268,7 @@ impl TryFrom<&ParsedPathUrl> for pypi_types::DirectUrl {
 }
 
 impl TryFrom<&ParsedArchiveUrl> for pypi_types::DirectUrl {
-    type Error = Error;
+    type Error = ParsedUrlError;
 
     fn try_from(value: &ParsedArchiveUrl) -> Result<Self, Self::Error> {
         Ok(Self::ArchiveUrl {
@@ -213,7 +283,7 @@ impl TryFrom<&ParsedArchiveUrl> for pypi_types::DirectUrl {
 }
 
 impl TryFrom<&ParsedGitUrl> for pypi_types::DirectUrl {
-    type Error = Error;
+    type Error = ParsedUrlError;
 
     fn try_from(value: &ParsedGitUrl) -> Result<Self, Self::Error> {
         Ok(Self::VcsUrl {
