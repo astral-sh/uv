@@ -1025,7 +1025,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Resolve to a precise Git SHA.
         let url = if let Some(url) = resolve_precise(
-            &resource.git,
+            resource.git,
             self.build_context.cache(),
             self.reporter.as_ref(),
         )
@@ -1033,10 +1033,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             Cow::Owned(url)
         } else {
-            Cow::Borrowed(resource.git.as_ref())
+            Cow::Borrowed(resource.git)
         };
-
-        let subdirectory = resource.subdirectory.as_deref();
 
         // Fetch the Git repository.
         let fetch =
@@ -1061,7 +1059,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, fetch.path(), subdirectory, &cache_shard)
+            .build_distribution(source, fetch.path(), resource.subdirectory, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -1101,7 +1099,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Resolve to a precise Git SHA.
         let url = if let Some(url) = resolve_precise(
-            &resource.git,
+            resource.git,
             self.build_context.cache(),
             self.reporter.as_ref(),
         )
@@ -1109,10 +1107,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             Cow::Owned(url)
         } else {
-            Cow::Borrowed(resource.git.as_ref())
+            Cow::Borrowed(resource.git)
         };
-
-        let subdirectory = resource.subdirectory.as_deref();
 
         // Fetch the Git repository.
         let fetch =
@@ -1142,7 +1138,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, fetch.path(), subdirectory)
+            .build_metadata(source, fetch.path(), resource.subdirectory)
             .boxed_local()
             .await?
         {
@@ -1164,7 +1160,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, fetch.path(), subdirectory, &cache_shard)
+            .build_distribution(source, fetch.path(), resource.subdirectory, &cache_shard)
             .await?;
 
         if let Some(task) = task {
