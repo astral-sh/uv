@@ -121,7 +121,7 @@ async fn venv_impl(
     let interpreter = if let Some(python) = python_request.as_ref() {
         let system = uv_interpreter::SystemPython::Required;
         let request = InterpreterRequest::parse(python);
-        let sources = SourceSelector::from_env(system);
+        let sources = SourceSelector::from_settings(system);
         find_interpreter(&request, system, &sources, cache)
     } else {
         find_default_interpreter(cache)

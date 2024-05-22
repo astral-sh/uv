@@ -51,10 +51,7 @@ impl PythonEnvironment {
 
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
-        let sources = SourceSelector::from_sources([
-            InterpreterSource::DiscoveredEnvironment,
-            InterpreterSource::ActiveEnvironment,
-        ]);
+        let sources = SourceSelector::VirtualEnv;
         let request = InterpreterRequest::Version(VersionRequest::Default);
         let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
 
@@ -109,7 +106,7 @@ impl PythonEnvironment {
         system: SystemPython,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let sources = SourceSelector::from_env(system);
+        let sources = SourceSelector::from_settings(system);
         let request = InterpreterRequest::parse(request);
         let interpreter = find_interpreter(&request, system, &sources, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {

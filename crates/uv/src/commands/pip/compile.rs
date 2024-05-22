@@ -170,7 +170,7 @@ pub(crate) async fn pip_compile(
     };
     let interpreter = if let Some(python) = python.as_ref() {
         let request = InterpreterRequest::parse(python);
-        let sources = SourceSelector::from_env(system);
+        let sources = SourceSelector::from_settings(system);
         find_interpreter(&request, system, &sources, &cache)??
     } else {
         let request = if let Some(version) = python_version.as_ref() {

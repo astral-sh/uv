@@ -44,9 +44,15 @@ pub enum InterpreterRequest {
 /// The sources to consider when finding a Python interpreter.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SourceSelector {
+    // Consider all interpreter sources.
     #[default]
     All,
-    Some(HashSet<InterpreterSource>),
+    // Only consider system interpreter sources
+    System,
+    // Only consider virtual environment sources
+    VirtualEnv,
+    // Only consider a custom set of sources
+    Custom(HashSet<InterpreterSource>),
 }
 
 /// A Python interpreter version request.
@@ -578,11 +584,7 @@ pub fn find_interpreter(
 /// See [`find_interpreter`] for more details on interpreter discovery.
 pub fn find_default_interpreter(cache: &Cache) -> Result<InterpreterResult, Error> {
     let request = InterpreterRequest::Version(VersionRequest::Default);
-    let sources = SourceSelector::from_sources([
-        InterpreterSource::SearchPath,
-        #[cfg(windows)]
-        InterpreterSource::PyLauncher,
-    ]);
+    let sources = SourceSelector::System;
 
     let result = find_interpreter(&request, SystemPython::Required, &sources, cache)?;
     if let Ok(ref found) = result {
@@ -611,7 +613,7 @@ pub fn find_best_interpreter(
     debug!("Starting interpreter discovery for {}", request);
 
     // Determine if we should be allowed to look outside of virtual environments.
-    let sources = SourceSelector::from_env(system);
+    let sources = SourceSelector::from_settings(system);
 
     // First, check for an exact match (or the first available version if no Python versfion was provided)
     debug!("Looking for exact match for request {request}");
@@ -1078,19 +1080,33 @@ impl SourceSelector {
     pub(crate) fn from_sources(iter: impl IntoIterator<Item = InterpreterSource>) -> Self {
         let inner = HashSet::from_iter(iter);
         assert!(!inner.is_empty(), "Source selectors cannot be empty");
-        Self::Some(inner)
+        Self::Custom(inner)
     }
 
     /// Return true if this selector includes the given [`InterpreterSource`].
     fn contains(&self, source: InterpreterSource) -> bool {
         match self {
             Self::All => true,
-            Self::Some(sources) => sources.contains(&source),
+            Self::System => [
+                InterpreterSource::ProvidedPath,
+                InterpreterSource::SearchPath,
+                #[cfg(windows)]
+                InterpreterSource::PyLauncher,
+                InterpreterSource::ManagedToolchain,
+                InterpreterSource::ParentInterpreter,
+            ]
+            .contains(&source),
+            Self::VirtualEnv => [
+                InterpreterSource::DiscoveredEnvironment,
+                InterpreterSource::ActiveEnvironment,
+            ]
+            .contains(&source),
+            Self::Custom(sources) => sources.contains(&source),
         }
     }
 
-    /// Return the default [`SourceSelector`] based on environment variables.
-    pub fn from_env(system: SystemPython) -> Self {
+    /// Return a [`SourceSelector`] based the settings.
+    pub fn from_settings(system: SystemPython) -> Self {
         if env::var_os("UV_FORCE_MANAGED_PYTHON").is_some() {
             debug!("Only considering managed toolchains due to `UV_FORCE_MANAGED_PYTHON`");
             Self::from_sources([InterpreterSource::ManagedToolchain])
@@ -1105,18 +1121,8 @@ impl SourceSelector {
         } else {
             match system {
                 SystemPython::Allowed | SystemPython::Explicit => Self::All,
-                SystemPython::Required => Self::from_sources([
-                    InterpreterSource::ProvidedPath,
-                    InterpreterSource::SearchPath,
-                    #[cfg(windows)]
-                    InterpreterSource::PyLauncher,
-                    InterpreterSource::ManagedToolchain,
-                    InterpreterSource::ParentInterpreter,
-                ]),
-                SystemPython::Disallowed => Self::from_sources([
-                    InterpreterSource::DiscoveredEnvironment,
-                    InterpreterSource::ActiveEnvironment,
-                ]),
+                SystemPython::Required => Self::System,
+                SystemPython::Disallowed => Self::VirtualEnv,
             }
         }
     }
@@ -1231,7 +1237,21 @@ impl fmt::Display for SourceSelector {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::All => f.write_str("all sources"),
-            Self::Some(sources) => {
+            Self::VirtualEnv => f.write_str("virtual environments"),
+            Self::System => {
+                // TODO(zanieb): We intentionally omit managed toolchains for now since they are not public
+                if cfg!(windows) {
+                    write!(
+                        f,
+                        "{} or {}",
+                        InterpreterSource::SearchPath,
+                        InterpreterSource::PyLauncher
+                    )
+                } else {
+                    write!(f, "{}", InterpreterSource::SearchPath)
+                }
+            }
+            Self::Custom(sources) => {
                 let sources: Vec<_> = sources
                     .iter()
                     .sorted()
