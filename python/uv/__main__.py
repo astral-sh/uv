@@ -32,7 +32,7 @@ def _run() -> None:
         env.setdefault("VIRTUAL_ENV", venv)
 
     # Let `uv` know that it was spawned by this Python interpreter
-    env["UV__PARENT_INTERPRETER"] = sys.executable
+    env["UV_INTERNAL__PARENT_INTERPRETER"] = sys.executable
 
     if sys.platform == "win32":
         import subprocess

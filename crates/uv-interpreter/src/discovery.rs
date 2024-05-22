@@ -62,8 +62,10 @@ pub enum VersionRequest {
 /// The policy for discovery of "system" Python interpreters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SystemPython {
-    /// Do not allow a system Python
+    /// Only allow a system Python if passed directly i.e. via [`InterpreterSource::ProvidedPath`] or [`InterpreterSource::ParentInterpreter`]
     #[default]
+    Explicit,
+    /// Do not allow a system Python
     Disallowed,
     /// Allow a system Python to be used if no virtual environment is active.
     Allowed,
@@ -183,7 +185,7 @@ fn python_executables<'a>(
 
     // (1) The parent interpreter
     sources.contains(InterpreterSource::ParentInterpreter).then(||
-        std::env::var_os("UV__PARENT_INTERPRETER")
+        std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
         .into_iter()
         .map(|path| Ok((InterpreterSource::ParentInterpreter, PathBuf::from(path))))
     ).into_iter().flatten()
@@ -354,8 +356,27 @@ fn python_interpreters<'a>(
         })
         .filter(move |result| match result {
             // Filter the returned interpreters to conform to the system request
-            Ok((_, interpreter)) => match (system, interpreter.is_virtualenv()) {
+            Ok((source, interpreter)) => match (system, interpreter.is_virtualenv()) {
                 (SystemPython::Allowed, _) => true,
+                (SystemPython::Explicit, false) => {
+                    if matches!(
+                        source,
+                        InterpreterSource::ProvidedPath | InterpreterSource::ParentInterpreter
+                    ) {
+                        debug!(
+                            "Allowing system Python interpreter at `{}`",
+                            interpreter.sys_executable().display()
+                        );
+                        true
+                    } else {
+                        debug!(
+                            "Ignoring Python interpreter at `{}`: system intepreter not explicit",
+                            interpreter.sys_executable().display()
+                        );
+                        false
+                    }
+                }
+                (SystemPython::Explicit, true) => true,
                 (SystemPython::Disallowed, false) => {
                     debug!(
                         "Ignoring Python interpreter at `{}`: system intepreter not allowed",
@@ -1083,18 +1104,15 @@ impl SourceSelector {
             ])
         } else {
             match system {
-                SystemPython::Allowed => Self::All,
-                SystemPython::Required => {
-                    debug!("Excluding virtual environment Python due to system flag");
-                    Self::from_sources([
-                        InterpreterSource::ProvidedPath,
-                        InterpreterSource::SearchPath,
-                        #[cfg(windows)]
-                        InterpreterSource::PyLauncher,
-                        InterpreterSource::ManagedToolchain,
-                        InterpreterSource::ParentInterpreter,
-                    ])
-                }
+                SystemPython::Allowed | SystemPython::Explicit => Self::All,
+                SystemPython::Required => Self::from_sources([
+                    InterpreterSource::ProvidedPath,
+                    InterpreterSource::SearchPath,
+                    #[cfg(windows)]
+                    InterpreterSource::PyLauncher,
+                    InterpreterSource::ManagedToolchain,
+                    InterpreterSource::ParentInterpreter,
+                ]),
                 SystemPython::Disallowed => Self::from_sources([
                     InterpreterSource::DiscoveredEnvironment,
                     InterpreterSource::ActiveEnvironment,

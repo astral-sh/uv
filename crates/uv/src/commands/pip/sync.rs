@@ -121,7 +121,7 @@ pub(crate) async fn pip_sync(
     let system = if system {
         SystemPython::Required
     } else {
-        SystemPython::Disallowed
+        SystemPython::Explicit
     };
     let venv = PythonEnvironment::find(python.as_deref(), system, &cache)?;
 

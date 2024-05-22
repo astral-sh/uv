@@ -2,7 +2,6 @@ use itertools::Either;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::warn;
 
 use same_file::is_same_file;
 
@@ -35,15 +34,8 @@ impl PythonEnvironment {
             Self::from_default_python(cache)
         } else {
             // First check for a parent intepreter
-            match Self::from_parent_interpreter(cache) {
-                Ok(env) => {
-                    if !system.is_allowed()
-                        && env.interpreter().base_prefix() != env.interpreter().base_exec_prefix()
-                    {
-                        warn!("Allowing system interpreter without `--system` since uv was invoked from Python");
-                    }
-                    return Ok(env);
-                }
+            match Self::from_parent_interpreter(system, cache) {
+                Ok(env) => return Ok(env),
                 Err(Error::NotFound(_)) => {}
                 Err(err) => return Err(err),
             }
@@ -67,7 +59,7 @@ impl PythonEnvironment {
         let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
 
         debug_assert!(
-            found.interpreter().base_prefix() == found.interpreter().base_exec_prefix(),
+            found.interpreter().is_virtualenv(),
             "Not a virtualenv (source: {}, prefix: {})",
             found.source(),
             found.interpreter().base_prefix().display()
@@ -80,10 +72,10 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] for the parent interpreter i.e. the executable in `python -m uv ...`
-    pub fn from_parent_interpreter(cache: &Cache) -> Result<Self, Error> {
+    pub fn from_parent_interpreter(system: SystemPython, cache: &Cache) -> Result<Self, Error> {
         let sources = SourceSelector::from_sources([InterpreterSource::ParentInterpreter]);
         let request = InterpreterRequest::Version(VersionRequest::Default);
-        let found = find_interpreter(&request, &sources, cache)??;
+        let found = find_interpreter(&request, system, &sources, cache)??;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: found.interpreter().prefix().to_path_buf(),
