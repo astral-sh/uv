@@ -496,7 +496,7 @@ pub(crate) async fn pip_install(
 
     // Validate the environment.
     if strict {
-        operations::validate(&resolution, &venv, printer)?;
+        operations::report_diagnostics(&resolution, &venv, printer)?;
     }
 
     Ok(ExitStatus::Success)

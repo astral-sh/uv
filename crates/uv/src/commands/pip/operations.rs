@@ -7,7 +7,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{Dist, Requirement};
+use distribution_types::{CachedDist, Dist, InstalledDist, Requirement};
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
     ParsedUrl, RequirementSource, Resolution,
@@ -473,46 +473,7 @@ pub(crate) async fn install(
         compile_bytecode(venv, cache, printer).await?;
     }
 
-    for event in extraneous
-        .into_iter()
-        .chain(reinstalls.into_iter())
-        .map(|distribution| ChangeEvent {
-            dist: LocalDist::from(distribution),
-            kind: ChangeEventKind::Removed,
-        })
-        .chain(wheels.into_iter().map(|distribution| ChangeEvent {
-            dist: LocalDist::from(distribution),
-            kind: ChangeEventKind::Added,
-        }))
-        .sorted_unstable_by(|a, b| {
-            a.dist
-                .name()
-                .cmp(b.dist.name())
-                .then_with(|| a.kind.cmp(&b.kind))
-                .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
-        })
-    {
-        match event.kind {
-            ChangeEventKind::Added => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "+".green(),
-                    event.dist.name().as_ref().bold(),
-                    event.dist.installed_version().to_string().dimmed()
-                )?;
-            }
-            ChangeEventKind::Removed => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "-".red(),
-                    event.dist.name().as_ref().bold(),
-                    event.dist.installed_version().to_string().dimmed()
-                )?;
-            }
-        }
-    }
+    report_modifications(wheels, reinstalls, extraneous, printer)?;
 
     report_yanks(&remote, printer)?;
 
@@ -615,9 +576,9 @@ fn report_dry_run(
         )?;
     }
 
-    for event in extraneous
+    // TDOO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
+    for event in reinstalls
         .into_iter()
-        .chain(reinstalls.into_iter())
         .map(|distribution| DryRunEvent {
             name: distribution.name().clone(),
             version: distribution.installed_version().to_string(),
@@ -641,7 +602,7 @@ fn report_dry_run(
                     printer.stderr(),
                     " {} {}{}",
                     "+".green(),
-                    event.name.as_ref().bold(),
+                    event.name.bold(),
                     event.version.dimmed()
                 )?;
             }
@@ -650,7 +611,7 @@ fn report_dry_run(
                     printer.stderr(),
                     " {} {}{}",
                     "-".red(),
-                    event.name.as_ref().bold(),
+                    event.name.bold(),
                     event.version.dimmed()
                 )?;
             }
@@ -659,6 +620,56 @@ fn report_dry_run(
 
     report_yanks(&remote, printer)?;
 
+    Ok(())
+}
+
+/// Report on any modifications to the Python environment.
+pub(crate) fn report_modifications(
+    installed: Vec<CachedDist>,
+    reinstalled: Vec<InstalledDist>,
+    uninstalled: Vec<InstalledDist>,
+    printer: Printer,
+) -> Result<(), Error> {
+    for event in uninstalled
+        .into_iter()
+        .chain(reinstalled)
+        .map(|distribution| ChangeEvent {
+            dist: LocalDist::from(distribution),
+            kind: ChangeEventKind::Removed,
+        })
+        .chain(installed.into_iter().map(|distribution| ChangeEvent {
+            dist: LocalDist::from(distribution),
+            kind: ChangeEventKind::Added,
+        }))
+        .sorted_unstable_by(|a, b| {
+            a.dist
+                .name()
+                .cmp(b.dist.name())
+                .then_with(|| a.kind.cmp(&b.kind))
+                .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
+        })
+    {
+        match event.kind {
+            ChangeEventKind::Added => {
+                writeln!(
+                    printer.stderr(),
+                    " {} {}{}",
+                    "+".green(),
+                    event.dist.name().bold(),
+                    event.dist.installed_version().dimmed()
+                )?;
+            }
+            ChangeEventKind::Removed => {
+                writeln!(
+                    printer.stderr(),
+                    " {} {}{}",
+                    "-".red(),
+                    event.dist.name().bold(),
+                    event.dist.installed_version().dimmed()
+                )?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -690,12 +701,11 @@ pub(crate) fn report_yanks(remote: &[Dist], printer: Printer) -> Result<(), Erro
             }
         }
     }
-
     Ok(())
 }
 
-/// Validate the installed packages in the virtual environment.
-pub(crate) fn validate(
+/// Report any diagnostics on installed distributions in the Python environment.
+pub(crate) fn report_diagnostics(
     resolution: &Resolution,
     venv: &PythonEnvironment,
     printer: Printer,
