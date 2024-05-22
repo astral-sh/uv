@@ -44,9 +44,10 @@ impl Reinstall {
 }
 
 /// Whether to allow package upgrades.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum Upgrade {
     /// Prefer pinned versions from the existing lockfile, if possible.
+    #[default]
     None,
 
     /// Allow package upgrades for all packages, ignoring the existing lockfile.
