@@ -43,7 +43,7 @@ pub enum Error {
 
 /// Locate an active virtual environment by inspecting environment variables.
 ///
-/// Supports `VIRTUAL_ENV` and `CONDA_PREFIX`.
+/// Supports `VIRTUAL_ENV`.
 pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
     if let Some(dir) = env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()) {
         info!(
@@ -53,6 +53,13 @@ pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
         return Some(PathBuf::from(dir));
     }
 
+    None
+}
+
+/// Locate an active conda environment by inspecting environment variables.
+///
+/// Supports `CONDA_PREFIX`.
+pub(crate) fn conda_prefix_from_env() -> Option<PathBuf> {
     if let Some(dir) = env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()) {
         info!(
             "Found active virtual environment (via CONDA_PREFIX) at: {}",
