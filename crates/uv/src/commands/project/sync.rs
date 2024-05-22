@@ -14,7 +14,8 @@ use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::{project, ExitStatus};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::{pip, project, ExitStatus};
 use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
@@ -33,7 +34,7 @@ pub(crate) async fn sync(
     let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
 
     // Discover or create the virtual environment.
-    let venv = project::init(&project, cache, printer)?;
+    let venv = project::init_environment(&project, cache, printer)?;
     let markers = venv.interpreter().markers();
     let tags = venv.interpreter().tags()?;
 
@@ -54,7 +55,10 @@ pub(crate) async fn sync(
 
     // TODO(charlie): Respect project configuration.
     let build_isolation = BuildIsolation::default();
+    let compile = false;
+    let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
+    let dry_run = false;
     let flat_index = FlatIndex::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
@@ -63,9 +67,8 @@ pub(crate) async fn sync(
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
-    let setup_py = SetupPyStrategy::default();
-    let concurrency = Concurrency::default();
     let reinstall = Reinstall::default();
+    let setup_py = SetupPyStrategy::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -106,22 +109,26 @@ pub(crate) async fn sync(
     let site_packages = SitePackages::from_executable(&venv)?;
 
     // Sync the environment.
-    project::install(
+    pip::operations::install(
         &resolution,
-        editables,
+        &editables,
         site_packages,
+        Modifications::Sufficient,
+        &reinstall,
         &no_binary,
         link_mode,
+        compile,
         &index_locations,
         &hasher,
         tags,
         &client,
         &in_flight,
+        concurrency,
         &build_dispatch,
         cache,
         &venv,
+        dry_run,
         printer,
-        concurrency,
     )
     .await?;
 

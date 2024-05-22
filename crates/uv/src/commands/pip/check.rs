@@ -1,11 +1,11 @@
 use std::fmt::Write;
+use std::time::Instant;
 
 use anyhow::Result;
-use distribution_types::InstalledDist;
 use owo_colors::OwoColorize;
-use std::time::Instant;
 use tracing::debug;
 
+use distribution_types::InstalledDist;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::{Diagnostic, SitePackages};

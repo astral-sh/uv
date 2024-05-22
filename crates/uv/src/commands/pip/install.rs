@@ -19,15 +19,11 @@ use uv_configuration::{
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
 use uv_normalize::PackageName;
-use uv_requirements::{
-    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
-};
+use uv_requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode,
     ResolutionMode,
@@ -36,7 +32,6 @@ use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
-use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
@@ -354,53 +349,6 @@ pub(crate) async fn pip_install(
         let lock: Lock = toml::from_str(&encoded)?;
         lock.to_resolution(&markers, &tags, &root)
     } else {
-        // Resolve the requirements from the provided sources.
-        let requirements = {
-            // Convert from unnamed to named requirements.
-            let mut requirements = NamedRequirementsResolver::new(
-                requirements,
-                &hasher,
-                &index,
-                DistributionDatabase::new(&client, &resolve_dispatch, concurrency.downloads),
-            )
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve()
-            .await?;
-
-            // Resolve any source trees into requirements.
-            if !source_trees.is_empty() {
-                requirements.extend(
-                    SourceTreeResolver::new(
-                        source_trees,
-                        extras,
-                        &hasher,
-                        &index,
-                        DistributionDatabase::new(
-                            &client,
-                            &resolve_dispatch,
-                            concurrency.downloads,
-                        ),
-                    )
-                    .with_reporter(ResolverReporter::from(printer))
-                    .resolve()
-                    .await?,
-                );
-            }
-
-            requirements
-        };
-
-        // Resolve the overrides from the provided sources.
-        let overrides = NamedRequirementsResolver::new(
-            overrides,
-            &hasher,
-            &index,
-            DistributionDatabase::new(&client, &resolve_dispatch, concurrency.downloads),
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
-
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
             .prerelease_mode(prerelease_mode)
@@ -413,10 +361,12 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
+            source_trees,
             project,
+            extras,
             &editables,
-            &hasher,
             site_packages.clone(),
+            &hasher,
             &reinstall,
             &upgrade,
             &interpreter,

@@ -7,15 +7,15 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
+    Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_requirements::{ExtrasSpecification, ProjectWorkspace, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::project::Error;
-use crate::commands::{project, ExitStatus};
+use crate::commands::{pip, project, ExitStatus};
 use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
@@ -34,7 +34,7 @@ pub(crate) async fn lock(
     let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
 
     // Discover or create the virtual environment.
-    let venv = project::init(&project, cache, printer)?;
+    let venv = project::init_environment(&project, cache, printer)?;
 
     // TODO(zanieb): Support client configuration
     let client_builder = BaseClientBuilder::default();
@@ -66,7 +66,9 @@ pub(crate) async fn lock(
 
     // TODO(charlie): Respect project configuration.
     let build_isolation = BuildIsolation::default();
+    let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
+    let extras = ExtrasSpecification::default();
     let flat_index = FlatIndex::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
@@ -75,9 +77,10 @@ pub(crate) async fn lock(
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
+    let options = Options::default();
+    let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
-    let concurrency = Concurrency::default();
-    let reinstall = Reinstall::None;
+    let upgrade = Upgrade::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -96,14 +99,6 @@ pub(crate) async fn lock(
         &no_binary,
         concurrency,
     );
-
-    let options = OptionsBuilder::new()
-        // TODO(zanieb): Support resolver options
-        // .resolution_mode(resolution_mode)
-        // .prerelease_mode(prerelease_mode)
-        // .dependency_mode(dependency_mode)
-        // .exclude_newer(exclude_newer)
-        .build();
 
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command.
@@ -126,11 +121,18 @@ pub(crate) async fn lock(
     .await?;
 
     // Resolve the requirements.
-    let resolution = project::resolve(
-        spec,
-        EmptyInstalledPackages,
+    let resolution = pip::operations::resolve(
+        spec.requirements,
+        spec.constraints,
+        spec.overrides,
+        spec.source_trees,
+        spec.project,
+        &extras,
         &editables,
+        EmptyInstalledPackages,
         &hasher,
+        &reinstall,
+        &upgrade,
         &interpreter,
         tags,
         markers,
@@ -138,14 +140,14 @@ pub(crate) async fn lock(
         &flat_index,
         &index,
         &build_dispatch,
+        concurrency,
         options,
         printer,
-        concurrency,
     )
     .await;
 
     let resolution = match resolution {
-        Err(Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
+        Err(pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
             let report = miette::Report::msg(format!("{err}"))
                 .context("No solution found when resolving dependencies:");
             eprint!("{report:?}");
