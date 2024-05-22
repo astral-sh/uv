@@ -185,6 +185,7 @@ async fn run() -> Result<ExitStatus> {
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
+
             let requirements = args
                 .src_file
                 .into_iter()
@@ -260,14 +261,21 @@ async fn run() -> Result<ExitStatus> {
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
-            let sources = args
+
+            let requirements = args
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
+            let constraints = args
+                .constraint
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
 
             commands::pip_sync(
-                &sources,
+                &requirements,
+                &constraints,
                 &args.reinstall,
                 args.shared.link_mode,
                 args.shared.compile_bytecode,

@@ -42,7 +42,8 @@ use crate::printer::Printer;
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_sync(
-    sources: &[RequirementsSource],
+    requirements: &[RequirementsSource],
+    constraints: &[RequirementsSource],
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -77,7 +78,6 @@ pub(crate) async fn pip_sync(
         .keyring(keyring_provider);
 
     // Initialize a few defaults.
-    let constraints = &[];
     let overrides = &[];
     let extras = ExtrasSpecification::default();
     let upgrade = Upgrade::default();
@@ -101,7 +101,7 @@ pub(crate) async fn pip_sync(
         no_build: specified_no_build,
         extras: _,
     } = operations::read_requirements(
-        sources,
+        requirements,
         constraints,
         overrides,
         &ExtrasSpecification::default(),

@@ -2814,6 +2814,91 @@ fn offline() -> Result<()> {
     Ok(())
 }
 
+/// Include a `constraints.txt` file with a compatible constraint.
+#[test]
+fn compatible_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==3.7.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `constraints.txt` file with an incompatible constraint.
+#[test]
+fn incompatible_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==3.6.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require anyio==3.7.0 and anyio==3.6.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `constraints.txt` file with an irrelevant constraint.
+#[test]
+fn irrelevant_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("black==23.10.1")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==3.7.0
+    "###
+    );
+
+    Ok(())
+}
+
 /// Sync with a repeated `anyio` requirement.
 #[test]
 fn repeat_requirement_identical() -> Result<()> {
