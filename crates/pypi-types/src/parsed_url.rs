@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use url::{ParseError, Url};
 
+use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
 use uv_git::{GitSha, GitUrl};
 
@@ -96,6 +97,37 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
 impl Display for VerbatimParsedUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.verbatim, f)
+    }
+}
+
+impl TryFrom<VerbatimUrl> for VerbatimParsedUrl {
+    type Error = ParsedUrlError;
+
+    fn try_from(verbatim_url: VerbatimUrl) -> Result<Self, Self::Error> {
+        let parsed_url = ParsedUrl::try_from(verbatim_url.to_url())?;
+        Ok(Self {
+            parsed_url,
+            verbatim: verbatim_url,
+        })
+    }
+}
+
+impl serde::ser::Serialize for VerbatimParsedUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.verbatim.serialize(serializer)
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for VerbatimParsedUrl {
+    fn deserialize<D>(deserializer: D) -> Result<VerbatimParsedUrl, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let verbatim_url = VerbatimUrl::deserialize(deserializer)?;
+        Self::try_from(verbatim_url).map_err(serde::de::Error::custom)
     }
 }
 
@@ -242,7 +274,7 @@ impl TryFrom<Url> for ParsedUrl {
     }
 }
 
-impl TryFrom<&ParsedUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedUrl> for DirectUrl {
     type Error = ParsedUrlError;
 
     fn try_from(value: &ParsedUrl) -> Result<Self, Self::Error> {
@@ -254,26 +286,26 @@ impl TryFrom<&ParsedUrl> for pypi_types::DirectUrl {
     }
 }
 
-impl TryFrom<&ParsedPathUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedPathUrl> for DirectUrl {
     type Error = ParsedUrlError;
 
     fn try_from(value: &ParsedPathUrl) -> Result<Self, Self::Error> {
         Ok(Self::LocalDirectory {
             url: value.url.to_string(),
-            dir_info: pypi_types::DirInfo {
+            dir_info: DirInfo {
                 editable: value.editable.then_some(true),
             },
         })
     }
 }
 
-impl TryFrom<&ParsedArchiveUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedArchiveUrl> for DirectUrl {
     type Error = ParsedUrlError;
 
     fn try_from(value: &ParsedArchiveUrl) -> Result<Self, Self::Error> {
         Ok(Self::ArchiveUrl {
             url: value.url.to_string(),
-            archive_info: pypi_types::ArchiveInfo {
+            archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
             },
@@ -282,14 +314,14 @@ impl TryFrom<&ParsedArchiveUrl> for pypi_types::DirectUrl {
     }
 }
 
-impl TryFrom<&ParsedGitUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedGitUrl> for DirectUrl {
     type Error = ParsedUrlError;
 
     fn try_from(value: &ParsedGitUrl) -> Result<Self, Self::Error> {
         Ok(Self::VcsUrl {
             url: value.url.repository().to_string(),
-            vcs_info: pypi_types::VcsInfo {
-                vcs: pypi_types::VcsKind::Git,
+            vcs_info: VcsInfo {
+                vcs: VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),
                 requested_revision: value.url.reference().as_str().map(ToString::to_string),
             },

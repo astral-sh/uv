@@ -20,9 +20,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{ParsedUrlError, Requirement, RequirementSource, Requirements};
+use distribution_types::{Requirement, RequirementSource, Requirements};
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{RequirementOrigin, VerbatimUrl, VersionOrUrl};
+use pep508_rs::{Pep508Error, RequirementOrigin, VerbatimUrl, VersionOrUrl};
+use pypi_types::VerbatimParsedUrl;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_git::GitReference;
@@ -34,7 +35,7 @@ use crate::ExtrasSpecification;
 #[derive(Debug, Error)]
 pub enum Pep621Error {
     #[error(transparent)]
-    Pep508(#[from] pep508_rs::Pep508Error),
+    Pep508(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
     #[error("Must specify a `[project]` section alongside `[tool.uv.sources]`")]
     MissingProjectSection,
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
@@ -43,12 +44,16 @@ pub enum Pep621Error {
     LoweringError(PackageName, #[source] LoweringError),
 }
 
+impl From<Pep508Error<VerbatimParsedUrl>> for Pep621Error {
+    fn from(error: Pep508Error<VerbatimParsedUrl>) -> Self {
+        Self::Pep508(Box::new(error))
+    }
+}
+
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.
 #[derive(Debug, Error)]
 pub enum LoweringError {
-    #[error("Invalid URL structure")]
-    DirectUrl(#[from] Box<ParsedUrlError>),
     #[error("Unsupported path (can't convert to URL): `{}`", _0.user_display())]
     PathToUrl(PathBuf),
     #[error("Package is not included as workspace package in `tool.uv.workspace`")]
@@ -385,7 +390,7 @@ pub(crate) fn lower_requirements(
 
 /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
 pub(crate) fn lower_requirement(
-    requirement: pep508_rs::Requirement,
+    requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
     project_name: &PackageName,
     project_dir: &Path,
     project_sources: &BTreeMap<PackageName, Source>,
@@ -420,7 +425,7 @@ pub(crate) fn lower_requirement(
                 requirement.name
             );
         }
-        return Ok(Requirement::from_pep508(requirement)?);
+        return Ok(Requirement::from(requirement));
     };
 
     if preview.is_disabled() {

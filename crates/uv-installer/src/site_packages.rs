@@ -12,6 +12,7 @@ use distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use pep440_rs::{Version, VersionSpecifiers};
+use pypi_types::VerbatimParsedUrl;
 use requirements_txt::EditableRequirement;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
@@ -341,9 +342,9 @@ impl SitePackages {
                             &requirement.extras,
                         ) {
                             let dependency = UnresolvedRequirementSpecification {
-                                requirement: UnresolvedRequirement::Named(
-                                    Requirement::from_pep508(dependency)?,
-                                ),
+                                requirement: UnresolvedRequirement::Named(Requirement::from(
+                                    dependency,
+                                )),
                                 hashes: vec![],
                             };
                             if seen.insert(dependency.clone()) {
@@ -407,9 +408,9 @@ impl SitePackages {
                             entry.requirement.extras(),
                         ) {
                             let dependency = UnresolvedRequirementSpecification {
-                                requirement: UnresolvedRequirement::Named(
-                                    Requirement::from_pep508(dependency)?,
-                                ),
+                                requirement: UnresolvedRequirement::Named(Requirement::from(
+                                    dependency,
+                                )),
                                 hashes: vec![],
                             };
                             if seen.insert(dependency.clone()) {
@@ -473,7 +474,7 @@ pub enum SitePackagesDiagnostic {
         /// The package that is missing a dependency.
         package: PackageName,
         /// The dependency that is missing.
-        requirement: pep508_rs::Requirement,
+        requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
     },
     IncompatibleDependency {
         /// The package that has an incompatible dependency.
@@ -481,7 +482,7 @@ pub enum SitePackagesDiagnostic {
         /// The version of the package that is installed.
         version: Version,
         /// The dependency that is incompatible.
-        requirement: pep508_rs::Requirement,
+        requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
     },
     DuplicatePackage {
         /// The package that has multiple installed distributions.

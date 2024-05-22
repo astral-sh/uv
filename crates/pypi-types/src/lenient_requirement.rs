@@ -6,8 +6,9 @@ use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize};
 use tracing::warn;
 
+use crate::VerbatimParsedUrl;
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
-use pep508_rs::{Pep508Error, Pep508Url, Requirement, VerbatimUrl};
+use pep508_rs::{Pep508Error, Pep508Url, Requirement};
 
 /// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
@@ -114,7 +115,7 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
 
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct LenientRequirement<T: Pep508Url = VerbatimUrl>(Requirement<T>);
+pub struct LenientRequirement<T: Pep508Url = VerbatimParsedUrl>(Requirement<T>);
 
 impl<T: Pep508Url> FromStr for LenientRequirement<T> {
     type Err = Pep508Error<T>;

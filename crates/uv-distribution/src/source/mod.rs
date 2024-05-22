@@ -17,12 +17,11 @@ use zip::ZipArchive;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuildableSource, DirectorySourceDist, DirectorySourceUrl, Dist, FileLocation, GitSourceUrl,
-    HashPolicy, Hashed, LocalEditable, ParsedArchiveUrl, PathSourceUrl, RemoteSource, SourceDist,
-    SourceUrl,
+    HashPolicy, Hashed, LocalEditable, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata23};
+use pypi_types::{HashDigest, Metadata23, ParsedArchiveUrl};
 use uv_cache::{
     ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, Timestamp,
     WheelCache,

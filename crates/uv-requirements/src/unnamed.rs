@@ -11,12 +11,12 @@ use tracing::debug;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, ParsedGitUrl,
-    PathSourceUrl, RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
-    UnresolvedRequirementSpecification, VerbatimParsedUrl, VersionId,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
+    RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
+    UnresolvedRequirementSpecification, VersionId,
 };
 use pep508_rs::{Scheme, UnnamedRequirement, VersionOrUrl};
-use pypi_types::Metadata10;
+use pypi_types::{Metadata10, ParsedGitUrl, VerbatimParsedUrl};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
@@ -72,9 +72,9 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             .map(|entry| async {
                 match entry.requirement {
                     UnresolvedRequirement::Named(requirement) => Ok(requirement),
-                    UnresolvedRequirement::Unnamed(requirement) => Ok(Requirement::from_pep508(
+                    UnresolvedRequirement::Unnamed(requirement) => Ok(Requirement::from(
                         Self::resolve_requirement(requirement, hasher, index, &database).await?,
-                    )?),
+                    )),
                 }
             })
             .collect::<FuturesOrdered<_>>()
@@ -88,7 +88,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
-    ) -> Result<pep508_rs::Requirement> {
+    ) -> Result<pep508_rs::Requirement<VerbatimParsedUrl>> {
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
         // Ex) `anyio-4.3.0-py3-none-any.whl`
@@ -100,7 +100,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             return Ok(pep508_rs::Requirement {
                 name: filename.name,
                 extras: requirement.extras,
-                version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
+                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                 marker: requirement.marker,
                 origin: requirement.origin,
             });
@@ -120,7 +120,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             return Ok(pep508_rs::Requirement {
                 name: filename.name,
                 extras: requirement.extras,
-                version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
+                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                 marker: requirement.marker,
                 origin: requirement.origin,
             });
@@ -149,7 +149,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         return Ok(pep508_rs::Requirement {
                             name: metadata.name,
                             extras: requirement.extras,
-                            version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
+                            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                             marker: requirement.marker,
                             origin: requirement.origin,
                         });
@@ -171,7 +171,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             return Ok(pep508_rs::Requirement {
                                 name: project.name,
                                 extras: requirement.extras,
-                                version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
+                                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                 marker: requirement.marker,
                                 origin: requirement.origin,
                             });
@@ -189,9 +189,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                     return Ok(pep508_rs::Requirement {
                                         name,
                                         extras: requirement.extras,
-                                        version_or_url: Some(VersionOrUrl::Url(
-                                            requirement.url.verbatim,
-                                        )),
+                                        version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
                                         origin: requirement.origin,
                                     });
@@ -220,9 +218,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                                     return Ok(pep508_rs::Requirement {
                                         name,
                                         extras: requirement.extras,
-                                        version_or_url: Some(VersionOrUrl::Url(
-                                            requirement.url.verbatim,
-                                        )),
+                                        version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
                                         origin: requirement.origin,
                                     });
@@ -298,7 +294,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         Ok(pep508_rs::Requirement {
             name,
             extras: requirement.extras,
-            version_or_url: Some(VersionOrUrl::Url(requirement.url.verbatim)),
+            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
             marker: requirement.marker,
             origin: requirement.origin,
         })

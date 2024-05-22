@@ -1102,7 +1102,6 @@ dependencies = [
  "cache-key",
  "distribution-filename",
  "fs-err",
- "git2",
  "indexmap",
  "itertools 0.13.0",
  "once_cell",
@@ -2858,7 +2857,9 @@ dependencies = [
 name = "pypi-types"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "chrono",
+ "git2",
  "indexmap",
  "mailparse",
  "once_cell",
@@ -2871,6 +2872,7 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+ "uv-git",
  "uv-normalize",
 ]
 
@@ -3074,12 +3076,12 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "pep508_rs",
+ "pypi-types",
  "regex",
  "reqwest",
  "reqwest-middleware",
  "tempfile",
  "test-case",
- "thiserror",
  "tokio",
  "tracing",
  "unscanny",
@@ -4503,6 +4505,7 @@ dependencies = [
  "pep508_rs",
  "platform-tags",
  "predicates",
+ "pypi-types",
  "rayon",
  "regex",
  "requirements-txt",
@@ -4577,6 +4580,7 @@ dependencies = [
  "once_cell",
  "pep440_rs",
  "pep508_rs",
+ "pypi-types",
  "regex",
  "rustc-hash",
  "serde",
@@ -4702,6 +4706,7 @@ dependencies = [
  "pep508_rs",
  "poloto",
  "pretty_assertions",
+ "pypi-types",
  "resvg",
  "rustc-hash",
  "schemars",

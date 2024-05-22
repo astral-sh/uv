@@ -5,10 +5,9 @@ use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{
-    InstalledMetadata, Name, Requirement, UnresolvedRequirement, VerbatimParsedUrl,
-};
+use distribution_types::{InstalledMetadata, Name, Requirement, UnresolvedRequirement};
 use pep508_rs::UnnamedRequirement;
+use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};

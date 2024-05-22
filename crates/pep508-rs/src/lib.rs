@@ -123,7 +123,7 @@ impl<T: Pep508Url> Display for Pep508Error<T> {
     }
 }
 
-/// We need this to allow anyhow's `.context()` and `AsDynError`.  
+/// We need this to allow anyhow's `.context()` and `AsDynError`.
 impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<T> {}
 
 #[cfg(feature = "pyo3")]
@@ -153,17 +153,6 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     pub marker: Option<MarkerTree>,
     /// The source file containing the requirement.
     pub origin: Option<RequirementOrigin>,
-}
-
-impl Requirement {
-    /// Set the source file containing the requirement.
-    #[must_use]
-    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
-        Self {
-            origin: Some(origin),
-            ..self
-        }
-    }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
@@ -450,6 +439,15 @@ impl<T: Pep508Url> Requirement<T> {
         };
         Self {
             marker: Some(marker),
+            ..self
+        }
+    }
+
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
+        Self {
+            origin: Some(origin),
             ..self
         }
     }

@@ -1,5 +1,6 @@
 //! Common operations shared across the `pip` API and subcommands.
 
+use pypi_types::{ParsedUrl, ParsedUrlError};
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -14,7 +15,7 @@ use distribution_types::{
 };
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
-    ParsedUrl, RequirementSource, Resolution,
+    RequirementSource, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
@@ -177,7 +178,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
 
     // Map the editables to their metadata.
-    let editables = editables.as_metadata().map_err(Error::ParsedUrl)?;
+    let editables = editables.as_metadata();
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -770,11 +771,8 @@ pub(crate) enum Error {
     Lookahead(#[from] uv_requirements::LookaheadError),
 
     #[error(transparent)]
-    ParsedUrl(Box<distribution_types::ParsedUrlError>),
-
-    #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 
     #[error("Installed distribution has unsupported type")]
-    UnsupportedInstalledDist(#[source] Box<distribution_types::ParsedUrlError>),
+    UnsupportedInstalledDist(#[source] Box<ParsedUrlError>),
 }

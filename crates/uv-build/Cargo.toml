@@ -17,6 +17,7 @@ workspace = true
 distribution-types = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
+pypi-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-types = { workspace = true }

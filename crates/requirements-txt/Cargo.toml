@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 distribution-types = { workspace = true }
 pep508_rs = { workspace = true }
+pypi-types = { workspace = true }
 uv-client = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
@@ -25,7 +26,6 @@ fs-err = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
 url = { workspace = true }

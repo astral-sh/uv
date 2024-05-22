@@ -4,10 +4,10 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use distribution_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
+use distribution_types::{Requirement, RequirementSource};
 use pep440_rs::{Operator, Version};
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
-use pypi_types::{HashDigest, HashError};
+use pypi_types::{HashDigest, HashError, VerbatimParsedUrl};
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_normalize::PackageName;
 
@@ -17,8 +17,6 @@ pub enum PreferenceError {
     Bare(UnnamedRequirement<VerbatimParsedUrl>),
     #[error(transparent)]
     Hash(#[from] HashError),
-    #[error(transparent)]
-    ParsedUrl(#[from] Box<ParsedUrlError>),
 }
 
 /// A pinned requirement, as extracted from a `requirements.txt` file.
@@ -33,9 +31,7 @@ impl Preference {
     pub fn from_entry(entry: RequirementEntry) -> Result<Self, PreferenceError> {
         Ok(Self {
             requirement: match entry.requirement {
-                RequirementsTxtRequirement::Named(requirement) => {
-                    Requirement::from_pep508(requirement)?
-                }
+                RequirementsTxtRequirement::Named(requirement) => Requirement::from(requirement),
                 RequirementsTxtRequirement::Unnamed(requirement) => {
                     return Err(PreferenceError::Bare(requirement));
                 }

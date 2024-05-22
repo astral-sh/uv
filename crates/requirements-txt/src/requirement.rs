@@ -1,11 +1,9 @@
 use std::path::Path;
 
-use thiserror::Error;
-
-use distribution_types::VerbatimParsedUrl;
 use pep508_rs::{
     Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
 };
+use pypi_types::VerbatimParsedUrl;
 
 /// A requirement specifier in a `requirements.txt` file.
 ///
@@ -15,7 +13,7 @@ use pep508_rs::{
 pub enum RequirementsTxtRequirement {
     /// The uv-specific superset over PEP 508 requirements specifier incorporating
     /// `tool.uv.sources`.
-    Named(pep508_rs::Requirement),
+    Named(pep508_rs::Requirement<VerbatimParsedUrl>),
     /// A PEP 508-like, direct URL dependency specifier.
     Unnamed(UnnamedRequirement<VerbatimParsedUrl>),
 }
@@ -31,33 +29,27 @@ impl RequirementsTxtRequirement {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum RequirementsTxtRequirementError {
-    #[error(transparent)]
-    ParsedUrl(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
-    #[error(transparent)]
-    Pep508(#[from] Pep508Error),
-}
-
 impl RequirementsTxtRequirement {
     /// Parse a requirement as seen in a `requirements.txt` file.
     pub fn parse(
         input: &str,
         working_dir: impl AsRef<Path>,
-    ) -> Result<Self, RequirementsTxtRequirementError> {
+    ) -> Result<Self, Box<Pep508Error<VerbatimParsedUrl>>> {
         // Attempt to parse as a PEP 508-compliant requirement.
         match pep508_rs::Requirement::parse(input, &working_dir) {
             Ok(requirement) => Ok(Self::Named(requirement)),
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     // If that fails, attempt to parse as a direct URL requirement.
-                    Ok(Self::Unnamed(
-                        UnnamedRequirement::parse(input, &working_dir, &mut TracingReporter)
-                            .map_err(Box::new)?,
-                    ))
+                    Ok(Self::Unnamed(UnnamedRequirement::parse(
+                        input,
+                        &working_dir,
+                        &mut TracingReporter,
+                    )?))
                 }
-                _ => Err(RequirementsTxtRequirementError::Pep508(err)),
+                _ => Err(err),
             },
         }
+        .map_err(Box::new)
     }
 }

@@ -44,14 +44,12 @@ use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use distribution_types::{
-    ParsedUrlError, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
-    VerbatimParsedUrl,
-};
+use distribution_types::{Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep508_rs::{
     expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
     RequirementOrigin, Scheme, VerbatimUrl,
 };
+use pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
@@ -61,7 +59,6 @@ use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
 
 pub use crate::requirement::RequirementsTxtRequirement;
-use crate::requirement::RequirementsTxtRequirementError;
 
 mod requirement;
 
@@ -205,7 +202,7 @@ impl EditableRequirement {
     ) -> Result<Self, RequirementsTxtParserError> {
         // Identify the markers.
         let (given, marker) = if let Some((requirement, marker)) = Self::split_markers(given) {
-            let marker = MarkerTree::from_str(marker).map_err(|err| {
+            let marker = MarkerTree::parse_str(marker).map_err(|err| {
                 // Map from error on the markers to error on the whole requirement.
                 let err = Pep508Error {
                     message: err.message,
@@ -218,14 +215,14 @@ impl EditableRequirement {
                         RequirementsTxtParserError::Pep508 {
                             start: err.start,
                             end: err.start + err.len,
-                            source: err,
+                            source: Box::new(err),
                         }
                     }
                     Pep508ErrorSource::UnsupportedRequirement(_) => {
                         RequirementsTxtParserError::UnsupportedRequirement {
                             start: err.start,
                             end: err.start + err.len,
-                            source: err,
+                            source: Box::new(err),
                         }
                     }
                 }
@@ -250,14 +247,14 @@ impl EditableRequirement {
                         RequirementsTxtParserError::Pep508 {
                             start: err.start,
                             end: err.start + err.len,
-                            source: err,
+                            source: Box::new(err),
                         }
                     }
                     Pep508ErrorSource::UnsupportedRequirement(_) => {
                         RequirementsTxtParserError::UnsupportedRequirement {
                             start: err.start,
                             end: err.start + err.len,
-                            source: err,
+                            source: Box::new(err),
                         }
                     }
                 }
@@ -405,21 +402,19 @@ pub struct RequirementEntry {
 // We place the impl here instead of next to `UnresolvedRequirementSpecification` because
 // `UnresolvedRequirementSpecification` is defined in `distribution-types` and `requirements-txt`
 // depends on `distribution-types`.
-impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
-    type Error = Box<ParsedUrlError>;
-
-    fn try_from(value: RequirementEntry) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<RequirementEntry> for UnresolvedRequirementSpecification {
+    fn from(value: RequirementEntry) -> Self {
+        Self {
             requirement: match value.requirement {
                 RequirementsTxtRequirement::Named(named) => {
-                    UnresolvedRequirement::Named(Requirement::from_pep508(named)?)
+                    UnresolvedRequirement::Named(Requirement::from(named))
                 }
                 RequirementsTxtRequirement::Unnamed(unnamed) => {
                     UnresolvedRequirement::Unnamed(unnamed)
                 }
             },
             hashes: value.hashes,
-        })
+        }
     }
 }
 
@@ -429,7 +424,7 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<pep508_rs::Requirement>,
+    pub constraints: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
@@ -916,30 +911,10 @@ fn parse_requirement_and_hashes(
                 requirement
             }
         })
-        .map_err(|err| match err {
-            RequirementsTxtRequirementError::ParsedUrl(err) => {
-                RequirementsTxtParserError::ParsedUrl {
-                    source: err,
-                    start,
-                    end,
-                }
-            }
-            RequirementsTxtRequirementError::Pep508(err) => match err.message {
-                Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                    RequirementsTxtParserError::Pep508 {
-                        source: err,
-                        start,
-                        end,
-                    }
-                }
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    RequirementsTxtParserError::UnsupportedRequirement {
-                        source: err,
-                        start,
-                        end,
-                    }
-                }
-            },
+        .map_err(|err| RequirementsTxtParserError::Pep508 {
+            source: err,
+            start,
+            end,
         })?;
 
     let hashes = if has_hashes {
@@ -1070,12 +1045,12 @@ pub enum RequirementsTxtParserError {
         column: usize,
     },
     UnsupportedRequirement {
-        source: Pep508Error,
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
         start: usize,
         end: usize,
     },
     Pep508 {
-        source: Pep508Error,
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
         start: usize,
         end: usize,
     },

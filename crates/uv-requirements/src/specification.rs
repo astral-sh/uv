@@ -9,9 +9,10 @@ use tracing::{debug, instrument};
 use cache_key::CanonicalUrl;
 use distribution_types::{
     FlatIndexLocation, IndexUrl, Requirement, RequirementSource, UnresolvedRequirement,
-    UnresolvedRequirementSpecification, VerbatimParsedUrl,
+    UnresolvedRequirementSpecification,
 };
 use pep508_rs::{UnnamedRequirement, UnnamedRequirementUrl};
+use pypi_types::VerbatimParsedUrl;
 use requirements_txt::{
     EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
 };
@@ -67,12 +68,12 @@ impl RequirementsSpecification {
                 let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
-                    requirements: vec![UnresolvedRequirementSpecification::try_from(
+                    requirements: vec![UnresolvedRequirementSpecification::from(
                         RequirementEntry {
                             requirement,
                             hashes: vec![],
                         },
-                    )?],
+                    )],
                     ..Self::default()
                 }
             }
@@ -96,8 +97,8 @@ impl RequirementsSpecification {
                     constraints: requirements_txt
                         .constraints
                         .into_iter()
-                        .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()?,
+                        .map(Requirement::from)
+                        .collect(),
                     editables: requirements_txt.editables,
                     index_url: requirements_txt.index_url.map(IndexUrl::from),
                     extra_index_urls: requirements_txt
