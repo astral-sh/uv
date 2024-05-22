@@ -296,7 +296,6 @@ pub(crate) async fn install(
     // despite not being explicitly requested.
     let requirements = resolution
         .requirements()
-        .into_iter()
         .filter(|requirement| {
             if requirement.source.is_editable() {
                 !editables

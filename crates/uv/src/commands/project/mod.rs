@@ -285,7 +285,7 @@ pub(crate) async fn install(
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
-    let requirements = resolution.requirements();
+    let requirements = resolution.requirements().collect::<Vec<_>>();
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
