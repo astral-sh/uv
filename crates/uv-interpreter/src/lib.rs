@@ -1361,6 +1361,88 @@ mod tests {
     }
 
     #[test]
+    fn find_environment_from_parent_interpreter() -> Result<()> {
+        let tempdir = TempDir::new()?;
+        let cache = Cache::temp()?;
+        let pwd = tempdir.child("pwd");
+        pwd.create_dir_all()?;
+        let venv = mock_venv(&tempdir, "3.12.0")?;
+        let python = tempdir.child("python").to_path_buf();
+        create_mock_interpreter(
+            &python,
+            &PythonVersion::from_str("3.12.1").unwrap(),
+            ImplementationName::CPython,
+        )?;
+
+        with_vars(
+            [
+                ("UV_TEST_PYTHON_PATH", None),
+                ("UV_BOOTSTRAP_DIR", None),
+                (
+                    "PATH",
+                    Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
+                ),
+                ("UV__PARENT_INTERPRETER", Some(python.into())),
+                ("VIRTUAL_ENV", Some(venv.into())),
+                ("PWD", Some(pwd.path().into())),
+            ],
+            || {
+                let environment =
+                    PythonEnvironment::find(None, crate::SystemPython::Allowed, &cache)
+                        .expect("An environment is found");
+                assert_eq!(
+                    environment.interpreter().python_full_version().to_string(),
+                    "3.12.1",
+                    "We should prefer parent interpreter"
+                );
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_environment_from_parent_interpreter_system_not_allowed() -> Result<()> {
+        let tempdir = TempDir::new()?;
+        let cache = Cache::temp()?;
+        let pwd = tempdir.child("pwd");
+        pwd.create_dir_all()?;
+        let venv = mock_venv(&tempdir, "3.12.0")?;
+        let python = tempdir.child("python").to_path_buf();
+        create_mock_interpreter(
+            &python,
+            &PythonVersion::from_str("3.12.1").unwrap(),
+            ImplementationName::CPython,
+        )?;
+
+        with_vars(
+            [
+                ("UV_TEST_PYTHON_PATH", None),
+                ("UV_BOOTSTRAP_DIR", None),
+                (
+                    "PATH",
+                    Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
+                ),
+                ("UV__PARENT_INTERPRETER", Some(python.into())),
+                ("VIRTUAL_ENV", Some(venv.into())),
+                ("PWD", Some(pwd.path().into())),
+            ],
+            || {
+                let environment =
+                    PythonEnvironment::find(None, crate::SystemPython::Disallowed, &cache)
+                        .expect("An environment is found");
+                assert_eq!(
+                    environment.interpreter().python_full_version().to_string(),
+                    "3.12.1",
+                    "We should prefer parent interpreter"
+                );
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn find_environment_active_environment_skipped_if_system_required() -> Result<()> {
         let tempdir = TempDir::new()?;
         let cache = Cache::temp()?;

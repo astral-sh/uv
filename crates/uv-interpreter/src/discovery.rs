@@ -125,8 +125,9 @@ pub enum InterpreterSource {
     PyLauncher,
     /// The interpreter was found in the uv toolchain directory
     ManagedToolchain,
+    /// The interpreter invoked uv i.e. via `python -m uv ...`
+    ParentInterpreter,
     // TODO(zanieb): Add support for fetching the interpreter from a remote source
-    // TODO(zanieb): Add variant for: The interpreter path was inherited from the parent process
 }
 
 #[derive(Error, Debug)]
@@ -158,6 +159,7 @@ pub enum Error {
 ///
 /// In order, we look in:
 ///
+/// - The spawning interpreter
 /// - The active environment
 /// - A discovered environment (e.g. `.venv`)
 /// - Installed managed toolchains
@@ -179,14 +181,22 @@ fn python_executables<'a>(
 ) -> impl Iterator<Item = Result<(InterpreterSource, PathBuf), Error>> + 'a {
     // Note we are careful to ensure the iterator chain is lazy to avoid unnecessary work
 
-    // (1) The active environment
-    sources.contains(InterpreterSource::ActiveEnvironment).then(||
-        virtualenv_from_env()
+    // (1) The parent interpreter
+    sources.contains(InterpreterSource::ParentInterpreter).then(||
+        std::env::var_os("UV__PARENT_INTERPRETER")
         .into_iter()
-        .map(virtualenv_python_executable)
-        .map(|path| Ok((InterpreterSource::ActiveEnvironment, path)))
+        .map(|path| Ok((InterpreterSource::ParentInterpreter, PathBuf::from(path))))
     ).into_iter().flatten()
-    // (2) A discovered environment
+    // (2) The active environment
+    .chain(
+        sources.contains(InterpreterSource::ActiveEnvironment).then(||
+            virtualenv_from_env()
+            .into_iter()
+            .map(virtualenv_python_executable)
+            .map(|path| Ok((InterpreterSource::ActiveEnvironment, path)))
+        ).into_iter().flatten()
+    )
+    // (3) A discovered environment
     .chain(
         sources.contains(InterpreterSource::DiscoveredEnvironment).then(||
             std::iter::once(
@@ -201,7 +211,7 @@ fn python_executables<'a>(
             ).flatten_ok()
         ).into_iter().flatten()
     )
-    // (3) Managed toolchains
+    // (4) Managed toolchains
     .chain(
         sources.contains(InterpreterSource::ManagedToolchain).then(move ||
             std::iter::once(
@@ -219,14 +229,14 @@ fn python_executables<'a>(
             ).flatten_ok()
         ).into_iter().flatten()
     )
-    // (4) The search path
+    // (5) The search path
     .chain(
         sources.contains(InterpreterSource::SearchPath).then(move ||
             python_executables_from_search_path(version, implementation)
             .map(|path| Ok((InterpreterSource::SearchPath, path))),
         ).into_iter().flatten()
     )
-    // (5) The `py` launcher (windows only)
+    // (6) The `py` launcher (windows only)
     // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
     .chain(
         (sources.contains(InterpreterSource::PyLauncher) && cfg!(windows)).then(||
@@ -1082,21 +1092,15 @@ impl SourceSelector {
                         #[cfg(windows)]
                         InterpreterSource::PyLauncher,
                         InterpreterSource::ManagedToolchain,
+                        InterpreterSource::ParentInterpreter,
                     ])
                 }
-                SystemPython::Disallowed => {
-                    debug!("Only considering virtual environment Python interpreters");
-                    Self::virtualenvs()
-                }
+                SystemPython::Disallowed => Self::from_sources([
+                    InterpreterSource::DiscoveredEnvironment,
+                    InterpreterSource::ActiveEnvironment,
+                ]),
             }
         }
-    }
-
-    pub fn virtualenvs() -> Self {
-        Self::from_sources([
-            InterpreterSource::DiscoveredEnvironment,
-            InterpreterSource::ActiveEnvironment,
-        ])
     }
 }
 
@@ -1138,6 +1142,7 @@ impl fmt::Display for InterpreterSource {
             Self::SearchPath => f.write_str("search path"),
             Self::PyLauncher => f.write_str("`py` launcher output"),
             Self::ManagedToolchain => f.write_str("managed toolchains"),
+            Self::ParentInterpreter => f.write_str("parent interpreter"),
         }
     }
 }

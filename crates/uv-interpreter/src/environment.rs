@@ -2,6 +2,7 @@ use itertools::Either;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tracing::warn;
 
 use same_file::is_same_file;
 
@@ -10,7 +11,9 @@ use uv_fs::{LockedFile, Simplified};
 
 use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython, VersionRequest};
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
-use crate::{find_default_interpreter, find_interpreter, Error, Interpreter, Target};
+use crate::{
+    find_default_interpreter, find_interpreter, Error, Interpreter, InterpreterSource, Target,
+};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone)]
@@ -31,6 +34,21 @@ impl PythonEnvironment {
         } else if system.is_preferred() {
             Self::from_default_python(cache)
         } else {
+            // First check for a parent intepreter
+            match Self::from_parent_interpreter(cache) {
+                Ok(env) => {
+                    if !system.is_allowed()
+                        && env.interpreter().base_prefix() != env.interpreter().base_exec_prefix()
+                    {
+                        warn!("Allowing system interpreter without `--system` since uv was invoked from Python");
+                    }
+                    return Ok(env);
+                }
+                Err(Error::NotFound(_)) => {}
+                Err(err) => return Err(err),
+            }
+
+            // Then a virtual environment
             match Self::from_virtualenv(cache) {
                 Ok(venv) => Ok(venv),
                 Err(Error::NotFound(_)) if system.is_allowed() => Self::from_default_python(cache),
@@ -41,7 +59,10 @@ impl PythonEnvironment {
 
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
-        let sources = SourceSelector::virtualenvs();
+        let sources = SourceSelector::from_sources([
+            InterpreterSource::DiscoveredEnvironment,
+            InterpreterSource::ActiveEnvironment,
+        ]);
         let request = InterpreterRequest::Version(VersionRequest::Default);
         let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
 
@@ -51,6 +72,18 @@ impl PythonEnvironment {
             found.source(),
             found.interpreter().base_prefix().display()
         );
+
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            root: found.interpreter().prefix().to_path_buf(),
+            interpreter: found.into_interpreter(),
+        })))
+    }
+
+    /// Create a [`PythonEnvironment`] for the parent interpreter i.e. the executable in `python -m uv ...`
+    pub fn from_parent_interpreter(cache: &Cache) -> Result<Self, Error> {
+        let sources = SourceSelector::from_sources([InterpreterSource::ParentInterpreter]);
+        let request = InterpreterRequest::Version(VersionRequest::Default);
+        let found = find_interpreter(&request, &sources, cache)??;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: found.interpreter().prefix().to_path_buf(),
