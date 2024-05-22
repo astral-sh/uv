@@ -19,7 +19,9 @@ use uv_configuration::{Concurrency, KeyringProviderType};
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_interpreter::{find_default_python, find_requested_python, Error};
+use uv_interpreter::{
+    find_default_interpreter, find_interpreter, InterpreterRequest, SourceSelector,
+};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
@@ -116,14 +118,16 @@ async fn venv_impl(
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
-    let interpreter = if let Some(python_request) = python_request {
-        find_requested_python(python_request, cache)
-            .into_diagnostic()?
-            .ok_or(Error::NoSuchPython(python_request.to_string()))
-            .into_diagnostic()?
+    let interpreter = if let Some(python) = python_request.as_ref() {
+        let request = InterpreterRequest::parse(python);
+        let sources = SourceSelector::from_env(uv_interpreter::SystemPython::Allowed);
+        find_interpreter(&request, &sources, cache)
     } else {
-        find_default_python(cache).into_diagnostic()?
-    };
+        find_default_interpreter(cache)
+    }
+    .into_diagnostic()?
+    .into_diagnostic()?
+    .into_interpreter();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {

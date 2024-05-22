@@ -33,10 +33,19 @@ except ImportError:
     exit(1)
 
 
+def prepare_name(name: str) -> str:
+    match name:
+        case "cpython":
+            return "CPython"
+        case _:
+            raise ValueError(f"Unknown implementation name: {name}")
+
+
 def prepare_value(value: dict) -> dict:
     # Convert fields from snake case to camel case for enums
-    for key in ["arch", "os", "libc", "name"]:
+    for key in ["arch", "os", "libc"]:
         value[key] = value[key].title()
+    value["name"] = prepare_name(value["name"])
     return value
 
 

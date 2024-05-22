@@ -796,7 +796,13 @@ impl PackageRange<'_> {
 
 impl std::fmt::Display for PackageRange<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let package = fmt_package(self.package);
+        // Exit early for the root package — the range is not meaningful
+        let package = match &**self.package {
+            PubGrubPackageInner::Root(Some(name)) => return write!(f, "{name}"),
+            PubGrubPackageInner::Root(None) => return write!(f, "your requirements"),
+            _ => self.package,
+        };
+
         if self.range.is_empty() {
             return write!(f, "{package} ∅");
         }
@@ -973,13 +979,5 @@ impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
         }
 
         write!(f, "{result}")
-    }
-}
-
-fn fmt_package(package: &PubGrubPackage) -> String {
-    match &**package {
-        PubGrubPackageInner::Root(Some(name)) => name.to_string(),
-        PubGrubPackageInner::Root(None) => "you require".to_string(),
-        _ => format!("{package}"),
     }
 }

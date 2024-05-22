@@ -4,7 +4,6 @@
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
-
 use assert_fs::fixture::PathChild;
 use regex::Regex;
 use std::borrow::BorrowMut;
@@ -13,10 +12,13 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
+
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_interpreter::managed::toolchains_for_version;
-use uv_interpreter::{find_requested_python, PythonVersion};
+use uv_interpreter::{
+    find_interpreter, InterpreterRequest, PythonVersion, SourceSelector, VersionRequest,
+};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -394,8 +396,14 @@ pub fn python_path_with_versions(
             .collect::<Vec<_>>();
             if inner.is_empty() {
                 // Fallback to a system lookup if we failed to find one in the toolchain directory
-                if let Some(interpreter) = find_requested_python(python_version, &cache).unwrap() {
-                    vec![interpreter
+                let request = InterpreterRequest::Version(
+                    VersionRequest::from_str(python_version)
+                        .expect("The test version request must be valid"),
+                );
+                let sources = SourceSelector::All;
+                if let Ok(found) = find_interpreter(&request, &sources, &cache).unwrap() {
+                    vec![found
+                        .into_interpreter()
                         .sys_executable()
                         .parent()
                         .expect("Python executable should always be in a directory")
@@ -408,6 +416,11 @@ pub fn python_path_with_versions(
             }
         })
         .collect::<Vec<_>>();
+
+    assert!(
+        python_versions.is_empty() || !selected_pythons.is_empty(),
+        "Failed to fulfill requested test Python versions: {selected_pythons:?}"
+    );
 
     Ok(env::join_paths(selected_pythons)?)
 }

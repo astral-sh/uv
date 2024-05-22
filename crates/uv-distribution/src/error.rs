@@ -21,6 +21,8 @@ pub enum Error {
     // Network error
     #[error("Failed to parse URL: {0}")]
     Url(String, #[source] url::ParseError),
+    #[error("Expected an absolute path, but received: {}", _0.user_display())]
+    RelativePath(PathBuf),
     #[error(transparent)]
     JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
     #[error("Git operation failed")]

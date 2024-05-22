@@ -8,8 +8,9 @@ use same_file::is_same_file;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
-use crate::virtualenv::{detect_virtualenv, virtualenv_python_executable, PyVenvConfiguration};
-use crate::{find_default_python, find_requested_python, Error, Interpreter, Target};
+use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython, VersionRequest};
+use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
+use crate::{find_default_interpreter, find_interpreter, Error, Interpreter, Target};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone)]
@@ -22,13 +23,39 @@ struct PythonEnvironmentShared {
 }
 
 impl PythonEnvironment {
-    /// Create a [`PythonEnvironment`] for an existing virtual environment, detected from the
-    /// environment variables and filesystem.
+    /// Create a [`PythonEnvironment`] from a user request.
+    pub fn find(python: Option<&str>, system: SystemPython, cache: &Cache) -> Result<Self, Error> {
+        // Detect the current Python interpreter.
+        if let Some(python) = python {
+            Self::from_requested_python(python, system, cache)
+        } else if system.is_preferred() {
+            Self::from_default_python(cache)
+        } else {
+            match Self::from_virtualenv(cache) {
+                Ok(venv) => Ok(venv),
+                Err(Error::NotFound(_)) if system.is_allowed() => Self::from_default_python(cache),
+                Err(err) => Err(err),
+            }
+        }
+    }
+
+    /// Create a [`PythonEnvironment`] for an existing virtual environment.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
-        let Some(venv) = detect_virtualenv()? else {
-            return Err(Error::VenvNotFound);
-        };
-        Self::from_root(&venv, cache)
+        let sources = SourceSelector::virtualenvs();
+        let request = InterpreterRequest::Version(VersionRequest::Default);
+        let found = find_interpreter(&request, &sources, cache)??;
+
+        debug_assert!(
+            found.interpreter().base_prefix() == found.interpreter().base_exec_prefix(),
+            "Not a virtualenv (source: {}, prefix: {})",
+            found.source(),
+            found.interpreter().base_prefix().display()
+        );
+
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            root: found.interpreter().prefix().to_path_buf(),
+            interpreter: found.into_interpreter(),
+        })))
     }
 
     /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
@@ -36,31 +63,30 @@ impl PythonEnvironment {
         let venv = match fs_err::canonicalize(root) {
             Ok(venv) => venv,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::VenvDoesNotExist(root.to_path_buf()));
+                return Err(Error::NotFound(
+                    crate::InterpreterNotFound::DirectoryNotFound(root.to_path_buf()),
+                ));
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(Error::Discovery(err.into())),
         };
-        let executable = virtualenv_python_executable(&venv);
-        let interpreter = Interpreter::query(&executable, cache)?;
-
-        debug_assert!(
-            interpreter.base_prefix() == interpreter.base_exec_prefix(),
-            "Not a virtualenv (Python: {}, prefix: {})",
-            executable.display(),
-            interpreter.base_prefix().display()
-        );
+        let executable = virtualenv_python_executable(venv);
+        let interpreter = Interpreter::query(executable, cache)?;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: venv,
+            root: interpreter.prefix().to_path_buf(),
             interpreter,
         })))
     }
 
     /// Create a [`PythonEnvironment`] for a Python interpreter specifier (e.g., a path or a binary name).
-    pub fn from_requested_python(python: &str, cache: &Cache) -> Result<Self, Error> {
-        let Some(interpreter) = find_requested_python(python, cache)? else {
-            return Err(Error::RequestedPythonNotFound(python.to_string()));
-        };
+    pub fn from_requested_python(
+        request: &str,
+        system: SystemPython,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let sources = SourceSelector::from_env(system);
+        let request = InterpreterRequest::parse(request);
+        let interpreter = find_interpreter(&request, &sources, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
@@ -69,14 +95,14 @@ impl PythonEnvironment {
 
     /// Create a [`PythonEnvironment`] for the default Python interpreter.
     pub fn from_default_python(cache: &Cache) -> Result<Self, Error> {
-        let interpreter = find_default_python(cache)?;
+        let interpreter = find_default_interpreter(cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
         })))
     }
 
-    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and root directory.
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`].
     pub fn from_interpreter(interpreter: Interpreter) -> Self {
         Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.prefix().to_path_buf(),
@@ -100,11 +126,13 @@ impl PythonEnvironment {
     }
 
     /// Return the [`Interpreter`] for this virtual environment.
+    ///
+    /// See also [`PythonEnvironment::into_interpreter`].
     pub fn interpreter(&self) -> &Interpreter {
         &self.0.interpreter
     }
 
-    /// Return the [`PyVenvConfiguration`] for this virtual environment, as extracted from the
+    /// Return the [`PyVenvConfiguration`] for this environment, as extracted from the
     /// `pyvenv.cfg` file.
     pub fn cfg(&self) -> Result<PyVenvConfiguration, Error> {
         Ok(PyVenvConfiguration::parse(self.0.root.join("pyvenv.cfg"))?)
@@ -115,7 +143,7 @@ impl PythonEnvironment {
         self.0.interpreter.sys_executable()
     }
 
-    /// Returns an iterator over the `site-packages` directories inside a virtual environment.
+    /// Returns an iterator over the `site-packages` directories inside the environment.
     ///
     /// In most cases, `purelib` and `platlib` will be the same, and so the iterator will contain
     /// a single element; however, in some distributions, they may be different.
@@ -138,12 +166,12 @@ impl PythonEnvironment {
         }
     }
 
-    /// Returns the path to the `bin` directory inside a virtual environment.
+    /// Returns the path to the `bin` directory inside this environment.
     pub fn scripts(&self) -> &Path {
         self.0.interpreter.scripts()
     }
 
-    /// Grab a file lock for the virtual environment to prevent concurrent writes across processes.
+    /// Grab a file lock for the environment to prevent concurrent writes across processes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
         if let Some(target) = self.0.interpreter.target() {
             // If we're installing into a `--target`, use a target-specific lock file.
@@ -163,7 +191,9 @@ impl PythonEnvironment {
         }
     }
 
-    /// Return the [`Interpreter`] for this virtual environment.
+    /// Return the [`Interpreter`] for this environment.
+    ///
+    /// See also [`PythonEnvironment::interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         Arc::unwrap_or_clone(self.0).interpreter
     }

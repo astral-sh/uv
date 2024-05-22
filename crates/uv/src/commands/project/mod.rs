@@ -11,7 +11,7 @@ use platform_tags::Tags;
 use pypi_types::Yanked;
 use tracing::debug;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, Constraints, NoBinary, NoBuild, Overrides, PreviewMode, Reinstall,
     SetupPyStrategy,
@@ -20,7 +20,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SatisfiesResult, SitePackages};
-use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
+use uv_interpreter::{find_default_interpreter, Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, ProjectWorkspace,
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
@@ -88,9 +88,12 @@ pub(crate) fn init(
     // TODO(charlie): If the environment isn't compatible with `--python`, recreate it.
     match PythonEnvironment::from_root(&venv, cache) {
         Ok(venv) => Ok(venv),
-        Err(uv_interpreter::Error::VenvDoesNotExist(_)) => {
+        Err(uv_interpreter::Error::NotFound(_)) => {
             // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
-            let interpreter = find_default_python(cache)?;
+            let interpreter = find_default_interpreter(cache)
+                .map_err(uv_interpreter::Error::from)?
+                .map_err(uv_interpreter::Error::from)?
+                .into_interpreter();
 
             writeln!(
                 printer.stderr(),
@@ -163,7 +166,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let requirements = {
         // Convert from unnamed to named requirements.
         let mut requirements = NamedRequirementsResolver::new(
-            requirements.clone(),
+            requirements,
             hasher,
             index,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -176,7 +179,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             requirements.extend(
                 SourceTreeResolver::new(
-                    source_trees.clone(),
+                    source_trees,
                     &ExtrasSpecification::None,
                     hasher,
                     index,
@@ -212,7 +215,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         constraints,
         overrides,
         preferences,
-        project.clone(),
+        project,
         editable_metadata,
         exclusions,
         lookaheads,
@@ -461,15 +464,16 @@ pub(crate) async fn install(
 }
 
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
-async fn update_environment(
+pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
     preview: PreviewMode,
+    connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment> {
     // TODO(zanieb): Support client configuration
-    let client_builder = BaseClientBuilder::default();
+    let client_builder = BaseClientBuilder::default().connectivity(connectivity);
 
     // Read all requirements from the provided sources.
     // TODO(zanieb): Consider allowing constraints and extras
@@ -521,6 +525,7 @@ async fn update_environment(
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
@@ -569,7 +574,10 @@ async fn update_environment(
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command.
     let editables = ResolvedEditables::resolve(
-        spec.editables.clone(),
+        spec.editables
+            .iter()
+            .cloned()
+            .map(ResolvedEditables::from_requirement),
         &site_packages,
         &reinstall,
         &hasher,

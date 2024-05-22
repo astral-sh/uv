@@ -3822,6 +3822,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f227968ec00f0e5322f9b8173c7a0cbcff6181a0a5b28e9892491c286277231"
 
 [[package]]
+name = "temp-env"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96374855068f47402c3121c6eed88d29cb1de8f3ab27090e273e420bdabcf050"
+dependencies = [
+ "parking_lot 0.12.2",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4889,12 +4898,12 @@ name = "uv-interpreter"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "assert_fs",
  "cache-key",
  "configparser",
  "fs-err",
  "futures",
  "indoc",
- "insta",
  "install-wheel-rs",
  "itertools 0.13.0",
  "once_cell",
@@ -4910,7 +4919,9 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "temp-env",
  "tempfile",
+ "test-log",
  "thiserror",
  "tokio-util",
  "tracing",

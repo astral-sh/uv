@@ -10,21 +10,24 @@ pub enum Error {
     UnknownImplementation(String),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub enum ImplementationName {
-    Cpython,
+    #[default]
+    CPython,
+    PyPy,
 }
 
 impl ImplementationName {
-    #[allow(dead_code)]
     pub(crate) fn iter() -> impl Iterator<Item = &'static ImplementationName> {
-        static NAMES: &[ImplementationName] = &[ImplementationName::Cpython];
+        static NAMES: &[ImplementationName] =
+            &[ImplementationName::CPython, ImplementationName::PyPy];
         NAMES.iter()
     }
 
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(self) -> &'static str {
         match self {
-            Self::Cpython => "cpython",
+            Self::CPython => "cpython",
+            Self::PyPy => "pypy",
         }
     }
 }
@@ -34,7 +37,8 @@ impl FromStr for ImplementationName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "cpython" => Ok(Self::Cpython),
+            "cpython" => Ok(Self::CPython),
+            "pypy" => Ok(Self::PyPy),
             _ => Err(Error::UnknownImplementation(s.to_string())),
         }
     }

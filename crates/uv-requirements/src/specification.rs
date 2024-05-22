@@ -132,7 +132,7 @@ impl RequirementsSpecification {
                 project: None,
                 requirements: vec![UnresolvedRequirementSpecification {
                     requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                        url: VerbatimUrl::from_path(path),
+                        url: VerbatimUrl::from_path(path)?,
                         extras: vec![],
                         marker: None,
                         origin: None,
