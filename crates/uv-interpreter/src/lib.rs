@@ -700,12 +700,7 @@ mod tests {
     fn find_interpreter_version_minor() -> Result<()> {
         let tempdir = TempDir::new()?;
         let cache = Cache::temp()?;
-        let sources = SourceSelector::from_sources([
-            InterpreterSource::ProvidedPath,
-            InterpreterSource::ActiveEnvironment,
-            InterpreterSource::DiscoveredEnvironment,
-            InterpreterSource::SearchPath,
-        ]);
+        let sources = SourceSelector::All;
 
         with_vars(
             [
@@ -757,12 +752,7 @@ mod tests {
     fn find_interpreter_version_patch() -> Result<()> {
         let tempdir = TempDir::new()?;
         let cache = Cache::temp()?;
-        let sources = SourceSelector::from_sources([
-            InterpreterSource::ProvidedPath,
-            InterpreterSource::ActiveEnvironment,
-            InterpreterSource::DiscoveredEnvironment,
-            InterpreterSource::SearchPath,
-        ]);
+        let sources = SourceSelector::All;
 
         with_vars(
             [
@@ -814,12 +804,7 @@ mod tests {
     fn find_interpreter_version_minor_no_match() -> Result<()> {
         let tempdir = TempDir::new()?;
         let cache = Cache::temp()?;
-        let sources = SourceSelector::from_sources([
-            InterpreterSource::ProvidedPath,
-            InterpreterSource::ActiveEnvironment,
-            InterpreterSource::DiscoveredEnvironment,
-            InterpreterSource::SearchPath,
-        ]);
+        let sources = SourceSelector::All;
 
         with_vars(
             [
@@ -861,12 +846,7 @@ mod tests {
     fn find_interpreter_version_patch_no_match() -> Result<()> {
         let tempdir = TempDir::new()?;
         let cache = Cache::temp()?;
-        let sources = SourceSelector::from_sources([
-            InterpreterSource::ProvidedPath,
-            InterpreterSource::ActiveEnvironment,
-            InterpreterSource::DiscoveredEnvironment,
-            InterpreterSource::SearchPath,
-        ]);
+        let sources = SourceSelector::All;
 
         with_vars(
             [

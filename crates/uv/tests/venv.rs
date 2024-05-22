@@ -218,20 +218,33 @@ fn create_venv_unknown_python_minor() {
     let mut command = context.venv_command();
     command
         .arg(context.venv.as_os_str())
+        // Request a version we know we'll never see
         .arg("--python")
-        .arg("3.15");
+        .arg("3.100")
+        // Unset this variable to force what the user would see
+        .env_remove("UV_TEST_PYTHON_PATH");
 
-    // Note the `py` launcher is not included in the search in Windows due to
-    // `UV_TEST_PYTHON_PATH` being set
-    uv_snapshot!(&mut command, @r###"
-    success: false
-    exit_code: 1
-    ----- stdout -----
+    if cfg!(windows) {
+        uv_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
 
-    ----- stderr -----
-      × No interpreter found for Python 3.15 in active virtual environment or search path
-    "###
-    );
+        ----- stderr -----
+          × No interpreter found for Python 3.100 in search path or `py` launcher output
+        "###
+        );
+    } else {
+        uv_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No interpreter found for Python 3.100 in search path
+        "###
+        );
+    }
 
     context.venv.assert(predicates::path::missing());
 }
@@ -240,18 +253,36 @@ fn create_venv_unknown_python_minor() {
 fn create_venv_unknown_python_patch() {
     let context = VenvTestContext::new(&["3.12"]);
 
-    uv_snapshot!(context.filters(), context.venv_command()
+    let mut command = context.venv_command();
+    command
         .arg(context.venv.as_os_str())
+        // Request a version we know we'll never see
         .arg("--python")
-        .arg("3.8.0"), @r###"
-    success: false
-    exit_code: 1
-    ----- stdout -----
+        .arg("3.12.100")
+        // Unset this variable to force what the user would see
+        .env_remove("UV_TEST_PYTHON_PATH");
 
-    ----- stderr -----
-      × No interpreter found for Python 3.8.0 in active virtual environment or search path
-    "###
-    );
+    if cfg!(windows) {
+        uv_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No interpreter found for Python 3.12.100 in search path or `py` launcher output
+        "###
+        );
+    } else {
+        uv_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No interpreter found for Python 3.12.100 in search path
+        "###
+        );
+    }
 
     context.venv.assert(predicates::path::missing());
 }
