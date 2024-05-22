@@ -262,6 +262,29 @@ mod tests {
         Ok(venv.to_path_buf())
     }
 
+    /// Create a mock conda prefix in the given directory.
+    ///
+    /// These are like virtual environments but they look like system interpreters because `prefix` and `base_prefix` are equal.
+    ///
+    /// Returns the path to the environment.
+    fn mock_conda_prefix(tempdir: &TempDir, version: &'static str) -> Result<PathBuf> {
+        let env = tempdir.child("conda");
+        let executable = virtualenv_python_executable(&env);
+        fs_err::create_dir_all(
+            executable
+                .parent()
+                .expect("A Python executable path should always have a parent"),
+        )?;
+        create_mock_interpreter(
+            &executable,
+            &PythonVersion::from_str(version).expect("A valid Python version is used for tests"),
+            ImplementationName::default(),
+            true,
+        )?;
+        env.child("pyvenv.cfg").touch()?;
+        Ok(env.to_path_buf())
+    }
+
     #[test]
     fn find_default_interpreter_empty_path() -> Result<()> {
         let cache = Cache::temp()?;
@@ -1296,6 +1319,74 @@ mod tests {
             || {
                 let environment =
                     PythonEnvironment::find(None, crate::SystemPython::Allowed, &cache)
+                        .expect("An environment is found");
+                assert_eq!(
+                    environment.interpreter().python_full_version().to_string(),
+                    "3.12.0",
+                    "We should prefer the active environment"
+                );
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_environment_from_conda_prefix() -> Result<()> {
+        let tempdir = TempDir::new()?;
+        let cache = Cache::temp()?;
+        let conda_prefix = mock_conda_prefix(&tempdir, "3.12.0")?;
+
+        with_vars(
+            [
+                ("UV_TEST_PYTHON_PATH", None),
+                ("UV_BOOTSTRAP_DIR", None),
+                (
+                    "PATH",
+                    Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
+                ),
+                ("CONDA_PREFIX", Some(conda_prefix.into())),
+                ("PWD", Some(tempdir.path().into())),
+            ],
+            || {
+                let environment =
+                    // Note this environment is not treated as a system interpreter
+                    PythonEnvironment::find(None, SystemPython::Disallowed, &cache)
+                        .expect("An environment is found");
+                assert_eq!(
+                    environment.interpreter().python_full_version().to_string(),
+                    "3.12.0",
+                    "We should allow the conda environment"
+                );
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_environment_from_conda_prefix_and_virtualenv() -> Result<()> {
+        let tempdir = TempDir::new()?;
+        let cache = Cache::temp()?;
+        let generic = mock_venv(&tempdir, "3.12.0")?;
+        let conda = mock_conda_prefix(&tempdir, "3.12.1")?;
+
+        with_vars(
+            [
+                ("UV_TEST_PYTHON_PATH", None),
+                ("UV_BOOTSTRAP_DIR", None),
+                (
+                    "PATH",
+                    Some(simple_mock_interpreters(&tempdir, &["3.10.2", "3.11.3"])?),
+                ),
+                ("CONDA_PREFIX", Some(conda.into())),
+                ("VIRTUAL_ENV", Some(generic.into())),
+                ("PWD", Some(tempdir.path().into())),
+            ],
+            || {
+                let environment =
+                    // Note this environment is not treated as a system interpreter
+                    PythonEnvironment::find(None, SystemPython::Disallowed, &cache)
                         .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
