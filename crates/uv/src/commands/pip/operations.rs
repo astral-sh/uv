@@ -9,7 +9,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{
-    CachedDist, Dist, InstalledDist, Requirement, UnresolvedRequirementSpecification,
+    CachedDist, Diagnostic, InstalledDist, Requirement, UnresolvedRequirementSpecification,
 };
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
@@ -19,7 +19,6 @@ use install_wheel_rs::linker::LinkMode;
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::Tags;
-use pypi_types::Yanked;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
@@ -286,17 +285,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         .dimmed()
     )?;
 
-    // Notify the user of any diagnostics.
-    for diagnostic in resolution.diagnostics() {
-        writeln!(
-            printer.stderr(),
-            "{}{} {}",
-            "warning".yellow().bold(),
-            ":".bold(),
-            diagnostic.message().bold()
-        )?;
-    }
-
     Ok(resolution)
 }
 
@@ -521,9 +509,8 @@ pub(crate) async fn install(
         compile_bytecode(venv, cache, printer).await?;
     }
 
+    // Notify the user of any environment modifications.
     report_modifications(wheels, reinstalls, extraneous, printer)?;
-
-    report_yanks(&remote, printer)?;
 
     Ok(())
 }
@@ -666,8 +653,6 @@ fn report_dry_run(
         }
     }
 
-    report_yanks(&remote, printer)?;
-
     Ok(())
 }
 
@@ -721,39 +706,25 @@ pub(crate) fn report_modifications(
     Ok(())
 }
 
-/// Report on any yanked distributions in the resolution.
-pub(crate) fn report_yanks(remote: &[Dist], printer: Printer) -> Result<(), Error> {
-    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
-    // have been yanked, we currently don't show this message on the second run anymore
-    for dist in remote {
-        let Some(file) = dist.file() else {
-            continue;
-        };
-        match &file.yanked {
-            None | Some(Yanked::Bool(false)) => {}
-            Some(Yanked::Bool(true)) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} {dist} is yanked.",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-            Some(Yanked::Reason(reason)) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} {dist} is yanked (reason: \"{reason}\").",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-        }
+/// Report any diagnostics on resolved distributions.
+pub(crate) fn diagnose_resolution(
+    diagnostics: &[Diagnostic],
+    printer: Printer,
+) -> Result<(), Error> {
+    for diagnostic in diagnostics {
+        writeln!(
+            printer.stderr(),
+            "{}{} {}",
+            "warning".yellow().bold(),
+            ":".bold(),
+            diagnostic.message().bold()
+        )?;
     }
     Ok(())
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
-pub(crate) fn report_diagnostics(
+pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,
     printer: Printer,

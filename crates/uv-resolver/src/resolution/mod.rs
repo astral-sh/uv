@@ -10,7 +10,7 @@ use pypi_types::{HashDigest, Metadata23};
 use uv_normalize::{ExtraName, PackageName};
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
-pub use crate::resolution::graph::{Diagnostic, ResolutionGraph};
+pub use crate::resolution::graph::ResolutionGraph;
 
 mod display;
 mod graph;

@@ -81,7 +81,8 @@ impl Lock {
             let resolved_dist = ResolvedDist::Installable(dist.to_dist(marker_env, tags));
             map.insert(name, resolved_dist);
         }
-        Resolution::new(map)
+        let diagnostics = vec![];
+        Resolution::new(map, diagnostics)
     }
 
     /// Returns the distribution with the given name. If there are multiple

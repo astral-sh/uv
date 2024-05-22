@@ -53,6 +53,7 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::operations;
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -589,17 +590,6 @@ pub(crate) async fn pip_compile(
         .dimmed()
     )?;
 
-    // Notify the user of any diagnostics.
-    for diagnostic in resolution.diagnostics() {
-        writeln!(
-            printer.stderr(),
-            "{}{} {}",
-            "warning".yellow().bold(),
-            ":".bold(),
-            diagnostic.message().bold()
-        )?;
-    }
-
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file)?;
 
@@ -699,6 +689,9 @@ pub(crate) async fn pip_compile(
             writeln!(writer, "# {package}")?;
         }
     }
+
+    // Notify the user of any resolution diagnostics.
+    operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     Ok(ExitStatus::Success)
 }

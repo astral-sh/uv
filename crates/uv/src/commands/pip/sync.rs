@@ -389,9 +389,12 @@ pub(crate) async fn pip_sync(
     )
     .await?;
 
-    // Validate the environment.
-    if strict {
-        operations::report_diagnostics(&resolution, &venv, printer)?;
+    // Notify the user of any resolution diagnostics.
+    operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+
+    // Notify the user of any environment diagnostics.
+    if strict && !dry_run {
+        operations::diagnose_environment(&resolution, &venv, printer)?;
     }
 
     Ok(ExitStatus::Success)

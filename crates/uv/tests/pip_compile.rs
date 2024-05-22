@@ -2805,6 +2805,7 @@ fn compile_yanked_version_direct() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    warning: `attrs==21.1.0` is yanked (reason: "Installable but not importable on Python 3.4.").
     "###
     );
 

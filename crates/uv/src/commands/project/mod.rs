@@ -5,6 +5,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use crate::commands::pip;
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
@@ -23,7 +24,6 @@ use uv_requirements::{
 use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
-use crate::commands::pip;
 use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
@@ -291,6 +291,9 @@ pub(crate) async fn update_environment(
         printer,
     )
     .await?;
+
+    // Notify the user of any resolution diagnostics.
+    pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     Ok(venv)
 }
