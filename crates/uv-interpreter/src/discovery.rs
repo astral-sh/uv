@@ -1193,11 +1193,11 @@ impl fmt::Display for InterpreterSource {
 impl fmt::Display for InterpreterNotFound {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NoPythonInstallation(sources, Some(version)) => {
-                write!(f, "No Python {version} installation found in {sources}")
+            Self::NoPythonInstallation(sources, None | Some(VersionRequest::Default)) => {
+                write!(f, "No Python interpreters found in {sources}")
             }
-            Self::NoPythonInstallation(sources, None) => {
-                write!(f, "No Python installation found in {sources}")
+            Self::NoPythonInstallation(sources, Some(version)) => {
+                write!(f, "No Python {version} interpreters found in {sources}")
             }
             Self::NoMatchingVersion(sources, VersionRequest::Default) => {
                 write!(f, "No Python interpreter found in {sources}")
