@@ -80,7 +80,7 @@ mod tests {
         implementation::ImplementationName,
         virtualenv::virtualenv_python_executable,
         Error, InterpreterNotFound, InterpreterSource, PythonEnvironment, PythonVersion,
-        SourceSelector,
+        SourceSelector, SystemPython,
     };
 
     /// Create a fake Python interpreter executable which returns fixed metadata mocking our interpreter
@@ -89,6 +89,7 @@ mod tests {
         path: &Path,
         version: &PythonVersion,
         implementation: ImplementationName,
+        system: bool,
     ) -> Result<()> {
         let json = indoc! {r##"
             {
@@ -116,7 +117,7 @@ mod tests {
                 },
                 "base_exec_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
                 "base_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                "prefix": "/home/ferris/projects/uv/.venv",
+                "prefix": "{PREFIX}",
                 "sys_executable": "{PATH}",
                 "sys_path": [
                     "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/lib/python{VERSION}",
@@ -140,11 +141,22 @@ mod tests {
                 "pointer_size": "64",
                 "gil_disabled": true
             }
-        "##}
-        .replace("{PATH}", path.to_str().expect("Path can be represented as string"))
-        .replace("{FULL_VERSION}", &version.to_string())
-        .replace("{VERSION}", &version.without_patch().to_string())
-        .replace("{IMPLEMENTATION}", implementation.as_str());
+        "##};
+
+        let json = if system {
+            json.replace("{PREFIX}", "/home/ferris/.pyenv/versions/{FULL_VERSION}")
+        } else {
+            json.replace("{PREFIX}", "/home/ferris/projects/uv/.venv")
+        };
+
+        let json = json
+            .replace(
+                "{PATH}",
+                path.to_str().expect("Path can be represented as string"),
+            )
+            .replace("{FULL_VERSION}", &version.to_string())
+            .replace("{VERSION}", &version.without_patch().to_string())
+            .replace("{IMPLEMENTATION}", implementation.as_str());
 
         fs_err::write(
             path,
@@ -199,7 +211,7 @@ mod tests {
     fn simple_mock_interpreters(tempdir: &TempDir, versions: &[&'static str]) -> Result<OsString> {
         let kinds: Vec<_> = versions
             .iter()
-            .map(|version| (ImplementationName::default(), "python", *version))
+            .map(|version| (true, ImplementationName::default(), "python", *version))
             .collect();
         mock_interpreters(tempdir, kinds.as_slice())
     }
@@ -209,18 +221,21 @@ mod tests {
     /// Returns a search path for the mock interpreters.
     fn mock_interpreters(
         tempdir: &TempDir,
-        kinds: &[(ImplementationName, &'static str, &'static str)],
+        kinds: &[(bool, ImplementationName, &'static str, &'static str)],
     ) -> Result<OsString> {
         let names: Vec<OsString> = (0..kinds.len())
             .map(|i| OsString::from(i.to_string()))
             .collect();
         let paths = create_children(tempdir, names.as_slice())?;
-        for (path, (implementation, executable, version)) in itertools::zip_eq(&paths, kinds) {
+        for (path, (system, implementation, executable, version)) in
+            itertools::zip_eq(&paths, kinds)
+        {
             let python = format!("{executable}{}", std::env::consts::EXE_SUFFIX);
             create_mock_interpreter(
                 &path.join(python),
                 &PythonVersion::from_str(version).unwrap(),
                 *implementation,
+                *system,
             )?;
         }
         Ok(env::join_paths(paths)?)
@@ -241,6 +256,7 @@ mod tests {
             &executable,
             &PythonVersion::from_str(version).expect("A valid Python version is used for tests"),
             ImplementationName::default(),
+            false,
         )?;
         venv.child("pyvenv.cfg").touch()?;
         Ok(venv.to_path_buf())
@@ -326,6 +342,7 @@ mod tests {
             &python,
             &PythonVersion::from_str("3.12.1").unwrap(),
             ImplementationName::default(),
+            true,
         )?;
 
         with_vars(
@@ -394,6 +411,7 @@ mod tests {
             &python,
             &PythonVersion::from_str("3.12.1").unwrap(),
             ImplementationName::default(),
+            true,
         )?;
 
         with_vars(
@@ -484,6 +502,7 @@ mod tests {
             &python3,
             &PythonVersion::from_str("3.12.1").unwrap(),
             ImplementationName::default(),
+            true,
         )?;
 
         with_vars(
@@ -522,6 +541,162 @@ mod tests {
     }
 
     #[test]
+    fn find_interpreter_system_python_allowed() -> Result<()> {
+        let tempdir = TempDir::new()?;
+        let cache = Cache::temp()?;
+
+        with_vars(
+            [
+                ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_BOOTSTRAP_DIR", None),
+                (
+                    "PATH",
+                    Some(mock_interpreters(
+                        &tempdir,
+                        &[
+                            (false, ImplementationName::CPython, "python", "3.10.0"),
+                            (true, ImplementationName::CPython, "python", "3.10.1"),
+                        ],
+                    )?),
+                ),
+                ("PWD", Some(tempdir.path().into())),
+            ],
+            || {
+                let result = find_interpreter(
+                    &InterpreterRequest::Version(VersionRequest::Default),
+                    SystemPython::Allowed,
+                    &SourceSelector::All,
+                    &cache,
+                )
+                .unwrap()
+                .unwrap();
+                assert_eq!(
+                    result.interpreter().python_full_version().to_string(),
+                    "3.10.0",
+                    "Should find the first interpreter regardless of system"
+                );
+            },
+        );
+
+        // Reverse the order of the virtual environment and system
+        with_vars(
+            [
+                ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_BOOTSTRAP_DIR", None),
+                (
+                    "PATH",
+                    Some(mock_interpreters(
+                        &tempdir,
+                        &[
+                            (true, ImplementationName::CPython, "python", "3.10.0"),
+                            (false, ImplementationName::CPython, "python", "3.10.1"),
+                        ],
+                    )?),
+                ),
+                ("PWD", Some(tempdir.path().into())),
+            ],
+            || {
+                let result = find_interpreter(
+                    &InterpreterRequest::Version(VersionRequest::Default),
+                    SystemPython::Allowed,
+                    &SourceSelector::All,
+                    &cache,
+                )
+                .unwrap()
+                .unwrap();
+                assert_eq!(
+                    result.interpreter().python_full_version().to_string(),
+                    "3.10.0",
+                    "Should find the first interpreter regardless of system"
+                );
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_interpreter_system_python_required() -> Result<()> {
+        let tempdir = TempDir::new()?;
+        let cache = Cache::temp()?;
+
+        with_vars(
+            [
+                ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_BOOTSTRAP_DIR", None),
+                (
+                    "PATH",
+                    Some(mock_interpreters(
+                        &tempdir,
+                        &[
+                            (false, ImplementationName::CPython, "python", "3.10.0"),
+                            (true, ImplementationName::CPython, "python", "3.10.1"),
+                        ],
+                    )?),
+                ),
+                ("PWD", Some(tempdir.path().into())),
+            ],
+            || {
+                let result = find_interpreter(
+                    &InterpreterRequest::Version(VersionRequest::Default),
+                    SystemPython::Required,
+                    &SourceSelector::All,
+                    &cache,
+                )
+                .unwrap()
+                .unwrap();
+                assert_eq!(
+                    result.interpreter().python_full_version().to_string(),
+                    "3.10.1",
+                    "Should skip the virtual environment"
+                );
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_interpreter_system_python_disallowed() -> Result<()> {
+        let tempdir = TempDir::new()?;
+        let cache = Cache::temp()?;
+
+        with_vars(
+            [
+                ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                (
+                    "PATH",
+                    Some(mock_interpreters(
+                        &tempdir,
+                        &[
+                            (true, ImplementationName::CPython, "python", "3.10.0"),
+                            (false, ImplementationName::CPython, "python", "3.10.1"),
+                        ],
+                    )?),
+                ),
+                ("PWD", Some(tempdir.path().into())),
+            ],
+            || {
+                let result = find_interpreter(
+                    &InterpreterRequest::Version(VersionRequest::Default),
+                    SystemPython::Disallowed,
+                    &SourceSelector::All,
+                    &cache,
+                )
+                .unwrap()
+                .unwrap();
+                assert_eq!(
+                    result.interpreter().python_full_version().to_string(),
+                    "3.10.1",
+                    "Should skip the system Python"
+                );
+            },
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn find_interpreter_version_minor() -> Result<()> {
         let tempdir = TempDir::new()?;
         let cache = Cache::temp()?;
@@ -546,7 +721,12 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let result = find_interpreter(&InterpreterRequest::parse("3.11"), &sources, &cache);
+                let result = find_interpreter(
+                    &InterpreterRequest::parse("3.11"),
+                    SystemPython::Allowed,
+                    &sources,
+                    &cache,
+                );
                 assert!(
                     matches!(
                         result,
@@ -598,8 +778,12 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let result =
-                    find_interpreter(&InterpreterRequest::parse("3.11.2"), &sources, &cache);
+                let result = find_interpreter(
+                    &InterpreterRequest::parse("3.11.2"),
+                    SystemPython::Allowed,
+                    &sources,
+                    &cache,
+                );
                 assert!(
                     matches!(
                         result,
@@ -651,7 +835,12 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let result = find_interpreter(&InterpreterRequest::parse("3.9"), &sources, &cache);
+                let result = find_interpreter(
+                    &InterpreterRequest::parse("3.9"),
+                    SystemPython::Allowed,
+                    &sources,
+                    &cache,
+                );
                 assert!(
                     matches!(
                         result,
@@ -693,8 +882,12 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let result =
-                    find_interpreter(&InterpreterRequest::parse("3.11.9"), &sources, &cache);
+                let result = find_interpreter(
+                    &InterpreterRequest::parse("3.11.9"),
+                    SystemPython::Allowed,
+                    &sources,
+                    &cache,
+                );
                 assert!(
                     matches!(
                         result,
@@ -1281,6 +1474,7 @@ mod tests {
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
+            true,
         )?;
 
         with_vars(
@@ -1314,6 +1508,7 @@ mod tests {
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
+            true,
         )?;
 
         with_vars(
@@ -1350,6 +1545,7 @@ mod tests {
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
+            true,
         )?;
 
         with_vars(
@@ -1418,6 +1614,7 @@ mod tests {
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
+            true,
         )?;
 
         with_vars(
@@ -1491,6 +1688,7 @@ mod tests {
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
+            true,
         )?;
 
         with_vars(
@@ -1526,7 +1724,7 @@ mod tests {
                     "PATH",
                     Some(mock_interpreters(
                         &tempdir,
-                        &[(ImplementationName::PyPy, "pypy", "3.10.1")],
+                        &[(true, ImplementationName::PyPy, "pypy", "3.10.1")],
                     )?),
                 ),
                 ("PWD", Some(tempdir.path().into())),
@@ -1559,8 +1757,8 @@ mod tests {
                     Some(mock_interpreters(
                         &tempdir,
                         &[
-                            (ImplementationName::CPython, "python", "3.10.0"),
-                            (ImplementationName::PyPy, "pypy", "3.10.1"),
+                            (true, ImplementationName::CPython, "python", "3.10.0"),
+                            (true, ImplementationName::PyPy, "pypy", "3.10.1"),
                         ],
                     )?),
                 ),
@@ -1595,8 +1793,8 @@ mod tests {
                     Some(mock_interpreters(
                         &tempdir,
                         &[
-                            (ImplementationName::PyPy, "pypy", "3.9"),
-                            (ImplementationName::PyPy, "pypy", "3.10.1"),
+                            (true, ImplementationName::PyPy, "pypy", "3.9"),
+                            (true, ImplementationName::PyPy, "pypy", "3.10.1"),
                         ],
                     )?),
                 ),
@@ -1631,9 +1829,9 @@ mod tests {
                     Some(mock_interpreters(
                         &tempdir,
                         &[
-                            (ImplementationName::PyPy, "pypy3.9", "3.10.0"), // We don't consider this one because of the executable name
-                            (ImplementationName::PyPy, "pypy3.10", "3.10.1"),
-                            (ImplementationName::PyPy, "pypy", "3.10.2"),
+                            (true, ImplementationName::PyPy, "pypy3.9", "3.10.0"), // We don't consider this one because of the executable name
+                            (true, ImplementationName::PyPy, "pypy3.10", "3.10.1"),
+                            (true, ImplementationName::PyPy, "pypy", "3.10.2"),
                         ],
                     )?),
                 ),
@@ -1667,11 +1865,13 @@ mod tests {
             &tempdir.path().join("python"),
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::PyPy,
+            true,
         )?;
         create_mock_interpreter(
             &tempdir.path().join("pypy"),
             &PythonVersion::from_str("3.10.1").unwrap(),
             ImplementationName::PyPy,
+            true,
         )?;
         with_vars(
             [
@@ -1703,8 +1903,8 @@ mod tests {
                     Some(mock_interpreters(
                         &tempdir,
                         &[
-                            (ImplementationName::PyPy, "python", "3.10.0"),
-                            (ImplementationName::PyPy, "pypy", "3.10.1"),
+                            (true, ImplementationName::PyPy, "python", "3.10.0"),
+                            (true, ImplementationName::PyPy, "pypy", "3.10.1"),
                         ],
                     )?),
                 ),
@@ -1737,11 +1937,13 @@ mod tests {
             &tempdir.path().join("pypy3.10"),
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::PyPy,
+            true,
         )?;
         create_mock_interpreter(
             &tempdir.path().join("pypy"),
             &PythonVersion::from_str("3.10.1").unwrap(),
             ImplementationName::PyPy,
+            true,
         )?;
         with_vars(
             [
@@ -1769,11 +1971,13 @@ mod tests {
             &tempdir.path().join("python3.10"),
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::PyPy,
+            true,
         )?;
         create_mock_interpreter(
             &tempdir.path().join("pypy"),
             &PythonVersion::from_str("3.10.1").unwrap(),
             ImplementationName::PyPy,
+            true,
         )?;
         with_vars(
             [

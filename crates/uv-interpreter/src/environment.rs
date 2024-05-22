@@ -43,7 +43,7 @@ impl PythonEnvironment {
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
         let sources = SourceSelector::virtualenvs();
         let request = InterpreterRequest::Version(VersionRequest::Default);
-        let found = find_interpreter(&request, &sources, cache)??;
+        let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
 
         debug_assert!(
             found.interpreter().base_prefix() == found.interpreter().base_exec_prefix(),
@@ -86,7 +86,7 @@ impl PythonEnvironment {
     ) -> Result<Self, Error> {
         let sources = SourceSelector::from_env(system);
         let request = InterpreterRequest::parse(request);
-        let interpreter = find_interpreter(&request, &sources, cache)??.into_interpreter();
+        let interpreter = find_interpreter(&request, system, &sources, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.prefix().to_path_buf(),
             interpreter,

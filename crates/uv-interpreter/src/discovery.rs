@@ -322,24 +322,50 @@ fn python_executables_from_search_path<'a>(
 fn python_interpreters<'a>(
     version: Option<&'a VersionRequest>,
     implementation: Option<&'a ImplementationName>,
+    system: SystemPython,
     sources: &SourceSelector,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(InterpreterSource, Interpreter), Error>> + 'a {
-    python_executables(version, implementation, sources).map(|result| match result {
-        Ok((source, path)) => Interpreter::query(&path, cache)
-            .map(|interpreter| (source, interpreter))
-            .inspect(|(source, interpreter)| {
-                trace!(
-                    "Found Python interpreter {} {} at {} from {source}",
-                    interpreter.implementation_name(),
-                    interpreter.python_full_version(),
-                    path.display()
-                );
-            })
-            .map_err(Error::from)
-            .inspect_err(|err| trace!("{err}")),
-        Err(err) => Err(err),
-    })
+    python_executables(version, implementation, sources)
+        .map(|result| match result {
+            Ok((source, path)) => Interpreter::query(&path, cache)
+                .map(|interpreter| (source, interpreter))
+                .inspect(|(source, interpreter)| {
+                    trace!(
+                        "Found Python interpreter {} {} at {} from {source}",
+                        interpreter.implementation_name(),
+                        interpreter.python_full_version(),
+                        path.display()
+                    );
+                })
+                .map_err(Error::from)
+                .inspect_err(|err| trace!("{err}")),
+            Err(err) => Err(err),
+        })
+        .filter(move |result| match result {
+            // Filter the returned interpreters to conform to the system request
+            Ok((_, interpreter)) => match (system, interpreter.is_virtualenv()) {
+                (SystemPython::Allowed, _) => true,
+                (SystemPython::Disallowed, false) => {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: system intepreter not allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+                (SystemPython::Disallowed, true) => true,
+                (SystemPython::Required, true) => {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: system intepreter required",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+                (SystemPython::Required, false) => true,
+            },
+            // Do not drop any errors
+            Err(_) => true,
+        })
 }
 
 /// Check if an encountered error should stop discovery.
@@ -370,6 +396,7 @@ fn should_stop_discovery(err: &Error) -> bool {
 /// the error will raised instead of attempting further candidates.
 pub fn find_interpreter(
     request: &InterpreterRequest,
+    system: SystemPython,
     sources: &SourceSelector,
     cache: &Cache,
 ) -> Result<InterpreterResult, Error> {
@@ -433,7 +460,7 @@ pub fn find_interpreter(
         }
         InterpreterRequest::Implementation(implementation) => {
             let Some((source, interpreter)) =
-                python_interpreters(None, Some(implementation), sources, cache)
+                python_interpreters(None, Some(implementation), system, sources, cache)
                     .find(|result| {
                         match result {
                             // Return the first critical error or matching interpreter
@@ -456,7 +483,7 @@ pub fn find_interpreter(
         }
         InterpreterRequest::ImplementationVersion(implementation, version) => {
             let Some((source, interpreter)) =
-                python_interpreters(Some(version), Some(implementation), sources, cache)
+                python_interpreters(Some(version), Some(implementation), system, sources, cache)
                     .find(|result| {
                         match result {
                             // Return the first critical error or matching interpreter
@@ -486,7 +513,7 @@ pub fn find_interpreter(
         }
         InterpreterRequest::Version(version) => {
             let Some((source, interpreter)) =
-                python_interpreters(Some(version), None, sources, cache)
+                python_interpreters(Some(version), None, system, sources, cache)
                     .find(|result| {
                         match result {
                             // Return the first critical error or matching interpreter
@@ -526,7 +553,7 @@ pub fn find_default_interpreter(cache: &Cache) -> Result<InterpreterResult, Erro
         InterpreterSource::PyLauncher,
     ]);
 
-    let result = find_interpreter(&request, &sources, cache)?;
+    let result = find_interpreter(&request, SystemPython::Required, &sources, cache)?;
     if let Ok(ref found) = result {
         warn_on_unsupported_python(found.interpreter());
     }
@@ -557,7 +584,7 @@ pub fn find_best_interpreter(
 
     // First, check for an exact match (or the first available version if no Python versfion was provided)
     debug!("Looking for exact match for request {request}");
-    let result = find_interpreter(request, &sources, cache)?;
+    let result = find_interpreter(request, system, &sources, cache)?;
     if let Ok(ref found) = result {
         warn_on_unsupported_python(found.interpreter());
         return Ok(result);
@@ -579,7 +606,7 @@ pub fn find_best_interpreter(
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
-        let result = find_interpreter(&request, &sources, cache)?;
+        let result = find_interpreter(&request, system, &sources, cache)?;
         if let Ok(ref found) = result {
             warn_on_unsupported_python(found.interpreter());
             return Ok(result);
@@ -591,7 +618,7 @@ pub fn find_best_interpreter(
     let request = InterpreterRequest::Version(VersionRequest::Default);
     Ok(find_interpreter(
         // TODO(zanieb): Add a dedicated `Default` variant to `InterpreterRequest`
-        &request, &sources, cache,
+        &request, system, &sources, cache,
     )?
     .map_err(|err| {
         // Use a more general error in this case since we looked for multiple versions
