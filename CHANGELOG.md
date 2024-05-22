@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+### Enhancements
+
+- Report yanks for cached and resolved packages ([#3772](https://github.com/astral-sh/uv/pull/3772))
+- Improve error message when default Python is not found ([#3770](https://github.com/astral-sh/uv/pull/3770))
+
+### Bug fixes
+
+- Do not treat interpereters discovered via `CONDA_PREFIX` as system interpreters ([#3771](https://github.com/astral-sh/uv/pull/3771))
+
 ## 0.2.1
 
 ### Bug fixes
@@ -23,7 +34,7 @@ requested version, skipping interpreters that are broken or do not satisfy the r
 
 Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
 the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
-also include a version, e.g., `--python pypy@3.10`. By default, uv will accept *any* interpreter implementation.
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
 
 In summary, the following Python interpreter requests are now allowed:
 
@@ -39,6 +50,10 @@ names.
 
 To align the user expecations, uv now respects the interpreter that starts it. For example, `python -m uv ...` will
 now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
+
+We now check if discovered intepreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
+installation directory that is _not_ a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
+to request the interpreter.
 
 ### Enhancements
 
