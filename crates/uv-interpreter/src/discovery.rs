@@ -431,6 +431,7 @@ pub fn find_interpreter(
     sources: &SourceSelector,
     cache: &Cache,
 ) -> Result<InterpreterResult, Error> {
+    debug!("Searching for interpreter that fulfills {request}");
     let result = match request {
         InterpreterRequest::File(path) => {
             if !sources.contains(InterpreterSource::ProvidedPath) {
@@ -1137,15 +1138,15 @@ impl SystemPython {
 impl fmt::Display for InterpreterRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Version(version) => write!(f, "python@{version}"),
+            Self::Version(version) => write!(f, "Python @ {version}"),
             Self::Directory(path) => write!(f, "directory {}", path.user_display()),
             Self::File(path) => write!(f, "file {}", path.user_display()),
-            Self::ExecutableName(name) => write!(f, "executable `{name}`"),
+            Self::ExecutableName(name) => write!(f, "executable name `{name}`"),
             Self::Implementation(implementation) => {
                 write!(f, "{implementation}")
             }
             Self::ImplementationVersion(implementation, version) => {
-                write!(f, "{implementation}@{version}")
+                write!(f, "{implementation} @ {version}")
             }
         }
     }
