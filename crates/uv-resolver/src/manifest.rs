@@ -139,7 +139,7 @@ impl Manifest {
 
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
-                self.overrides.apply(&   self.requirements)
+                self.overrides.apply(&self.requirements)
                 .chain(self.constraints.requirements())
                 .chain(self.overrides.requirements())
                 .filter(move |requirement| requirement.evaluate_markers(markers, &[]))),
@@ -209,5 +209,10 @@ impl Manifest {
         requirements: impl IntoIterator<Item = &'a Requirement>,
     ) -> impl Iterator<Item = &Requirement> {
         self.constraints.apply(self.overrides.apply(requirements))
+    }
+
+    /// Returns the number of input requirements.
+    pub fn num_requirements(&self) -> usize {
+        self.requirements.len() + self.editables.len()
     }
 }

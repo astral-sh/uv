@@ -294,6 +294,7 @@ fn noop() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -345,6 +346,7 @@ fn link() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###
@@ -422,7 +424,7 @@ fn install_sequential() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1
@@ -703,6 +705,7 @@ fn install_url_then_install_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -738,6 +741,7 @@ fn install_url_then_install_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -917,7 +921,7 @@ fn warn_on_yanked_version() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + colorama==0.4.2
-    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install"). Refresh your lockfile to pin an un-yanked version.
+    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install").
     "###
     );
 
@@ -971,6 +975,7 @@ fn install_local_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
@@ -1263,6 +1268,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
     "###
@@ -1352,6 +1358,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
     "###
@@ -1448,6 +1455,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + future==0.18.3
     "###
@@ -1558,6 +1566,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
     "###
@@ -1661,6 +1670,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
@@ -1769,6 +1779,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
     "###
@@ -1830,12 +1841,12 @@ fn duplicate_package_overlap() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to determine installation plan
-      Caused by: Detected duplicate package in requirements: markupsafe
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require markupsafe==2.1.3 and markupsafe==2.1.2, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -1905,6 +1916,7 @@ fn reinstall() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - markupsafe==2.1.3
@@ -1958,6 +1970,7 @@ fn reinstall_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tomli==2.0.1
@@ -2008,6 +2021,7 @@ fn reinstall_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
@@ -2121,7 +2135,7 @@ fn refresh_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
@@ -2166,7 +2180,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 3 packages in [TIME]
      + boltons==23.1.1
@@ -2186,6 +2200,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
@@ -2233,6 +2248,7 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 3 packages in [TIME]
     Audited 3 packages in [TIME]
     "###
     );
@@ -2295,6 +2311,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.1.0
@@ -2317,6 +2334,7 @@ fn sync_editable_and_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -2380,6 +2398,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "###
@@ -2423,6 +2442,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
@@ -2450,8 +2470,9 @@ fn incompatible_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: foo-1.2.3-not-compatible-wheel.whl
+    error: Failed to read `foo @ file://[TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl`
+      Caused by: Failed to unzip wheel: foo-1.2.3-not-compatible-wheel.whl
+      Caused by: unable to locate the end of central directory record
     "###
     );
 
@@ -2673,6 +2694,7 @@ fn find_links_wheel_cache() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tqdm==1000.0.0
@@ -2722,6 +2744,7 @@ fn find_links_source_cache() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tqdm==999.0.0
@@ -2782,6 +2805,7 @@ fn offline() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==23.10.1
     "###
@@ -2790,9 +2814,9 @@ fn offline() -> Result<()> {
     Ok(())
 }
 
-/// Sync with a repeated `anyio` requirement. The second requirement should be ignored.
+/// Sync with a repeated `anyio` requirement.
 #[test]
-fn repeat_requirement() -> Result<()> {
+fn repeat_requirement_identical() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio\nanyio")?;
@@ -2813,23 +2837,45 @@ fn repeat_requirement() -> Result<()> {
     Ok(())
 }
 
-/// Sync with a repeated, but conflicting `anyio` requirement. The second requirement should cause
-/// an error.
+/// Sync with a repeated `anyio` requirement, with compatible versions.
 #[test]
-fn conflicting_requirement() -> Result<()> {
+fn repeat_requirement_compatible() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio\nanyio==4.0.0")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.in"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to determine installation plan
-      Caused by: Detected duplicate package in requirements: anyio
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###);
+
+    Ok(())
+}
+
+/// Sync with a repeated, but conflicting `anyio` requirement.
+#[test]
+fn repeat_requirement_incompatible() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio<4.0.0\nanyio==4.0.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require anyio<4.0.0 and anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -2950,6 +2996,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
@@ -2963,6 +3010,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -2988,6 +3036,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -3564,6 +3613,7 @@ fn require_hashes_source_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0 (from https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz)
@@ -3664,6 +3714,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
@@ -3713,7 +3764,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
@@ -3875,6 +3926,7 @@ fn require_hashes_re_download() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4074,6 +4126,7 @@ fn require_hashes_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -4276,6 +4329,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4297,6 +4351,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4531,6 +4586,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###
@@ -4731,6 +4787,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###

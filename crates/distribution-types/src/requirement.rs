@@ -205,4 +205,9 @@ impl RequirementSource {
             },
         }
     }
+
+    /// Returns `true` if the source is editable.
+    pub fn is_editable(&self) -> bool {
+        matches!(self, Self::Path { editable: true, .. })
+    }
 }

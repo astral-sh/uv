@@ -35,6 +35,7 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip::operations;
+use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::editables::ResolvedEditables;
@@ -474,6 +475,7 @@ pub(crate) async fn pip_install(
         &resolution,
         &editables,
         site_packages,
+        Modifications::Sufficient,
         &reinstall,
         &no_binary,
         link_mode,

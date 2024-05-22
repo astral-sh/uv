@@ -198,21 +198,32 @@ pub(crate) async fn resolve(
     );
 
     // Resolve the dependencies.
-    let resolver = Resolver::new(
-        manifest,
-        options,
-        &python_requirement,
-        Some(markers),
-        tags,
-        flat_index,
-        index,
-        hasher,
-        build_dispatch,
-        site_packages,
-        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
-    )?
-    .with_reporter(ResolverReporter::from(printer));
-    let resolution = resolver.resolve().await?;
+    let resolution = {
+        // If possible, create a bound on the progress bar.
+        let reporter = match options.dependency_mode {
+            DependencyMode::Transitive => ResolverReporter::from(printer),
+            DependencyMode::Direct => {
+                ResolverReporter::from(printer).with_length(manifest.num_requirements() as u64)
+            }
+        };
+
+        let resolver = Resolver::new(
+            manifest,
+            options,
+            &python_requirement,
+            Some(markers),
+            tags,
+            flat_index,
+            index,
+            hasher,
+            build_dispatch,
+            site_packages,
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+        )?
+        .with_reporter(reporter);
+
+        resolver.resolve().await?
+    };
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
@@ -240,12 +251,28 @@ pub(crate) async fn resolve(
     Ok(resolution)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Modifications {
+    /// Use `pip install` semantics, whereby existing installations are left as-is, unless they are
+    /// marked for re-installation or upgrade.
+    ///
+    /// Ensures that the resulting environment is sufficient to meet the requirements, but without
+    /// any unnecessary changes.
+    Sufficient,
+    /// Use `pip sync` semantics, whereby any existing, extraneous installations are removed.
+    ///
+    /// Ensures that the resulting environment is an exact match for the requirements, but may
+    /// result in more changes than necessary.
+    Exact,
+}
+
 /// Install a set of requirements into the current environment.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     resolution: &Resolution,
     editables: &[ResolvedEditable],
     site_packages: SitePackages,
+    modifications: Modifications,
     reinstall: &Reinstall,
     no_binary: &NoBinary,
     link_mode: LinkMode,
@@ -264,7 +291,22 @@ pub(crate) async fn install(
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
-    let requirements = resolution.requirements();
+    // Extract the requirements from the resolution, filtering out any editables that were already
+    // required. If a package is already installed as editable, it may appear in the resolution
+    // despite not being explicitly requested.
+    let requirements = resolution
+        .requirements()
+        .into_iter()
+        .filter(|requirement| {
+            if requirement.source.is_editable() {
+                !editables
+                    .iter()
+                    .any(|editable| requirement.name == *editable.name())
+            } else {
+                true
+            }
+        })
+        .collect::<Vec<_>>();
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
@@ -283,18 +325,24 @@ pub(crate) async fn install(
         .context("Failed to determine installation plan")?;
 
     if dry_run {
-        return report_dry_run(resolution, plan, start, printer);
+        return report_dry_run(resolution, plan, modifications, start, printer);
     }
 
     let Plan {
         cached,
         remote,
         reinstalls,
-        extraneous: _,
+        extraneous,
     } = plan;
 
+    // If we're in `install` mode, ignore any extraneous distributions.
+    let extraneous = match modifications {
+        Modifications::Sufficient => vec![],
+        Modifications::Exact => extraneous,
+    };
+
     // Nothing to do.
-    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
+    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
@@ -354,9 +402,11 @@ pub(crate) async fn install(
         wheels
     };
 
-    // Remove any existing installations.
-    if !reinstalls.is_empty() {
-        for dist_info in &reinstalls {
+    // Remove any upgraded or extraneous installations.
+    if !extraneous.is_empty() || !reinstalls.is_empty() {
+        let start = std::time::Instant::now();
+
+        for dist_info in extraneous.iter().chain(reinstalls.iter()) {
             match uv_installer::uninstall(dist_info).await {
                 Ok(summary) => {
                     debug!(
@@ -379,6 +429,22 @@ pub(crate) async fn install(
                 Err(err) => return Err(err.into()),
             }
         }
+
+        let s = if extraneous.len() + reinstalls.len() == 1 {
+            ""
+        } else {
+            "s"
+        };
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Uninstalled {} in {}",
+                format!("{} package{}", extraneous.len() + reinstalls.len(), s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
     }
 
     // Install the resolved distributions.
@@ -407,8 +473,9 @@ pub(crate) async fn install(
         compile_bytecode(venv, cache, printer).await?;
     }
 
-    for event in reinstalls
+    for event in extraneous
         .into_iter()
+        .chain(reinstalls.into_iter())
         .map(|distribution| ChangeEvent {
             dist: LocalDist::from(distribution),
             kind: ChangeEventKind::Removed,
@@ -481,6 +548,7 @@ pub(crate) async fn install(
 fn report_dry_run(
     resolution: &Resolution,
     plan: Plan,
+    modifications: Modifications,
     start: std::time::Instant,
     printer: Printer,
 ) -> Result<(), Error> {
@@ -488,11 +556,17 @@ fn report_dry_run(
         cached,
         remote,
         reinstalls,
-        extraneous: _,
+        extraneous,
     } = plan;
 
+    // If we're in `install` mode, ignore any extraneous distributions.
+    let extraneous = match modifications {
+        Modifications::Sufficient => vec![],
+        Modifications::Exact => extraneous,
+    };
+
     // Nothing to do.
-    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
+    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
@@ -536,15 +610,19 @@ fn report_dry_run(
         remote
     };
 
-    // Remove any existing installations.
-    if !reinstalls.is_empty() {
-        let s = if reinstalls.len() == 1 { "" } else { "s" };
+    // Remove any upgraded or extraneous installations.
+    if !extraneous.is_empty() || !reinstalls.is_empty() {
+        let s = if extraneous.len() + reinstalls.len() == 1 {
+            ""
+        } else {
+            "s"
+        };
         writeln!(
             printer.stderr(),
             "{}",
             format!(
                 "Would uninstall {}",
-                format!("{} package{}", reinstalls.len(), s).bold(),
+                format!("{} package{}", extraneous.len() + reinstalls.len(), s).bold(),
             )
             .dimmed()
         )?;
@@ -562,8 +640,9 @@ fn report_dry_run(
         )?;
     }
 
-    for event in reinstalls
+    for event in extraneous
         .into_iter()
+        .chain(reinstalls.into_iter())
         .map(|distribution| DryRunEvent {
             name: distribution.name().clone(),
             version: distribution.installed_version().to_string(),
@@ -613,8 +692,7 @@ pub(crate) fn validate(
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_executable(venv)?;
-    let diagnostics = site_packages.diagnostics()?;
-    for diagnostic in diagnostics {
+    for diagnostic in site_packages.diagnostics()? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .packages()
@@ -639,12 +717,6 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Uninstall(#[from] uv_installer::UninstallError),
-
-    #[error(transparent)]
-    Client(#[from] uv_client::Error),
-
-    #[error(transparent)]
-    Platform(#[from] platform_tags::PlatformError),
 
     #[error(transparent)]
     Hash(#[from] uv_types::HashStrategyError),
