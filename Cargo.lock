@@ -4503,7 +4503,6 @@ dependencies = [
  "pep508_rs",
  "platform-tags",
  "predicates",
- "pypi-types",
  "rayon",
  "regex",
  "requirements-txt",

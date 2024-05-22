@@ -921,7 +921,7 @@ fn warn_on_yanked() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + colorama==0.4.2
-    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install").
+    warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install").
     "###
     );
 
@@ -949,7 +949,7 @@ fn warn_on_yanked_dry_run() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + colorama==0.4.2
-    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install").
+    warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install").
     "###
     );
 

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use pep508_rs::VerbatimUrl;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::{
     BuiltDist, DirectorySourceDist, Dist, InstalledDirectUrlDist, InstalledDist, LocalEditable,
@@ -10,17 +10,26 @@ use crate::{
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
-pub struct Resolution(BTreeMap<PackageName, ResolvedDist>);
+pub struct Resolution {
+    packages: BTreeMap<PackageName, ResolvedDist>,
+    diagnostics: Vec<Diagnostic>,
+}
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub fn new(packages: BTreeMap<PackageName, ResolvedDist>) -> Self {
-        Self(packages)
+    pub fn new(
+        packages: BTreeMap<PackageName, ResolvedDist>,
+        diagnostics: Vec<Diagnostic>,
+    ) -> Self {
+        Self {
+            packages,
+            diagnostics,
+        }
     }
 
     /// Return the remote distribution for the given package name, if it exists.
     pub fn get_remote(&self, package_name: &PackageName) -> Option<&Dist> {
-        match self.0.get(package_name) {
+        match self.packages.get(package_name) {
             Some(dist) => match dist {
                 ResolvedDist::Installable(dist) => Some(dist),
                 ResolvedDist::Installed(_) => None,
@@ -31,32 +40,37 @@ impl Resolution {
 
     /// Iterate over the [`PackageName`] entities in this resolution.
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
-        self.0.keys()
+        self.packages.keys()
     }
 
     /// Iterate over the [`ResolvedDist`] entities in this resolution.
     pub fn distributions(&self) -> impl Iterator<Item = &ResolvedDist> {
-        self.0.values()
+        self.packages.values()
     }
 
     /// Return the number of distributions in this resolution.
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.packages.len()
     }
 
     /// Return `true` if there are no pinned packages in this resolution.
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.packages.is_empty()
     }
 
     /// Return the set of [`Requirement`]s that this resolution represents.
     pub fn requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.0.values().map(Requirement::from)
+        self.packages.values().map(Requirement::from)
+    }
+
+    /// Return the [`Diagnostic`]s that were produced during resolution.
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
     }
 
     /// Return an iterator over the [`LocalEditable`] entities in this resolution.
     pub fn editables(&self) -> impl Iterator<Item = LocalEditable> + '_ {
-        self.0.values().filter_map(|dist| match dist {
+        self.packages.values().filter_map(|dist| match dist {
             ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
                 DirectorySourceDist {
                     path,
@@ -81,6 +95,49 @@ impl Resolution {
             }),
             _ => None,
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Diagnostic {
+    MissingExtra {
+        /// The distribution that was requested with a non-existent extra. For example,
+        /// `black==23.10.0`.
+        dist: ResolvedDist,
+        /// The extra that was requested. For example, `colorama` in `black[colorama]`.
+        extra: ExtraName,
+    },
+    YankedVersion {
+        /// The package that was requested with a yanked version. For example, `black==23.10.0`.
+        dist: ResolvedDist,
+        /// The reason that the version was yanked, if any.
+        reason: Option<String>,
+    },
+}
+
+impl Diagnostic {
+    /// Convert the diagnostic into a user-facing message.
+    pub fn message(&self) -> String {
+        match self {
+            Self::MissingExtra { dist, extra } => {
+                format!("The package `{dist}` does not have an extra named `{extra}`.")
+            }
+            Self::YankedVersion { dist, reason } => {
+                if let Some(reason) = reason {
+                    format!("`{dist}` is yanked (reason: \"{reason}\").")
+                } else {
+                    format!("`{dist}` is yanked.")
+                }
+            }
+        }
+    }
+
+    /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
+    pub fn includes(&self, name: &PackageName) -> bool {
+        match self {
+            Self::MissingExtra { dist, .. } => name == dist.name(),
+            Self::YankedVersion { dist, .. } => name == dist.name(),
+        }
     }
 }
 

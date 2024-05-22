@@ -132,5 +132,8 @@ pub(crate) async fn sync(
     )
     .await?;
 
+    // Notify the user of any resolution diagnostics.
+    pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+
     Ok(ExitStatus::Success)
 }

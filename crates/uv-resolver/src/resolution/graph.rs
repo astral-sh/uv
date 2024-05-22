@@ -7,12 +7,13 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, Name, ParsedUrlError, Requirement, ResolvedDist, VersionId,
-    VersionOrUrlRef,
+    Diagnostic, Dist, DistributionMetadata, Name, ParsedUrlError, Requirement, ResolvedDist,
+    VersionId, VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::MarkerEnvironment;
-use uv_normalize::{ExtraName, PackageName};
+use pypi_types::Yanked;
+use uv_normalize::PackageName;
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
@@ -171,6 +172,23 @@ impl ResolutionGraph {
                         .get(name, version)
                         .expect("Every package should be pinned")
                         .clone();
+
+                    // Track yanks for any registry distributions.
+                    match dist.yanked() {
+                        None | Some(Yanked::Bool(false)) => {}
+                        Some(Yanked::Bool(true)) => {
+                            diagnostics.push(Diagnostic::YankedVersion {
+                                dist: dist.clone(),
+                                reason: None,
+                            });
+                        }
+                        Some(Yanked::Reason(reason)) => {
+                            diagnostics.push(Diagnostic::YankedVersion {
+                                dist: dist.clone(),
+                                reason: Some(reason.clone()),
+                            });
+                        }
+                    }
 
                     // Extract the hashes, preserving those that were already present in the
                     // lockfile if necessary.
@@ -573,35 +591,7 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
                     )
                 })
                 .collect(),
+            graph.diagnostics,
         )
-    }
-}
-
-#[derive(Debug)]
-pub enum Diagnostic {
-    MissingExtra {
-        /// The distribution that was requested with an non-existent extra. For example,
-        /// `black==23.10.0`.
-        dist: ResolvedDist,
-        /// The extra that was requested. For example, `colorama` in `black[colorama]`.
-        extra: ExtraName,
-    },
-}
-
-impl Diagnostic {
-    /// Convert the diagnostic into a user-facing message.
-    pub fn message(&self) -> String {
-        match self {
-            Self::MissingExtra { dist, extra } => {
-                format!("The package `{dist}` does not have an extra named `{extra}`.")
-            }
-        }
-    }
-
-    /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
-    pub fn includes(&self, name: &PackageName) -> bool {
-        match self {
-            Self::MissingExtra { dist, .. } => name == dist.name(),
-        }
     }
 }
