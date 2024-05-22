@@ -1,13 +1,16 @@
 //! Common operations shared across the `pip` API and subcommands.
 
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{CachedDist, Dist, InstalledDist, Requirement};
+use distribution_types::{
+    CachedDist, Dist, InstalledDist, Requirement, UnresolvedRequirementSpecification,
+};
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
     ParsedUrl, RequirementSource, Resolution,
@@ -29,13 +32,14 @@ use uv_installer::{Downloader, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
-    ExtrasSpecification, LookaheadResolver, RequirementsSource, RequirementsSpecification,
+    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     PythonRequirement, ResolutionGraph, Resolver,
 };
-use uv_types::{HashStrategy, InFlight};
+use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -99,14 +103,16 @@ pub(crate) async fn read_requirements(
 
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn resolve(
-    requirements: Vec<Requirement>,
+pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
+    requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<Requirement>,
-    overrides: Vec<Requirement>,
+    overrides: Vec<UnresolvedRequirementSpecification>,
+    source_trees: Vec<PathBuf>,
     project: Option<PackageName>,
+    extras: &ExtrasSpecification,
     editables: &ResolvedEditables,
+    installed_packages: InstalledPackages,
     hasher: &HashStrategy,
-    site_packages: SitePackages,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     interpreter: &Interpreter,
@@ -122,11 +128,81 @@ pub(crate) async fn resolve(
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
+    // Resolve the requirements from the provided sources.
+    let requirements = {
+        // Convert from unnamed to named requirements.
+        let mut requirements = NamedRequirementsResolver::new(
+            requirements,
+            hasher,
+            index,
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
+
+        // Resolve any source trees into requirements.
+        if !source_trees.is_empty() {
+            requirements.extend(
+                SourceTreeResolver::new(
+                    source_trees,
+                    extras,
+                    hasher,
+                    index,
+                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
+            );
+        }
+
+        requirements
+    };
+
+    // Resolve the overrides from the provided sources.
+    let overrides = NamedRequirementsResolver::new(
+        overrides,
+        hasher,
+        index,
+        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+    )
+    .with_reporter(ResolverReporter::from(printer))
+    .resolve()
+    .await?;
+
+    // Collect constraints and overrides.
+    let constraints = Constraints::from_requirements(constraints);
+    let overrides = Overrides::from_requirements(overrides);
+    let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
+
+    // Map the editables to their metadata.
+    let editables = editables.as_metadata().map_err(Error::ParsedUrl)?;
+
+    // Determine any lookahead requirements.
+    let lookaheads = match options.dependency_mode {
+        DependencyMode::Transitive => {
+            LookaheadResolver::new(
+                &requirements,
+                &constraints,
+                &overrides,
+                &editables,
+                hasher,
+                index,
+                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve(Some(markers))
+            .await?
+        }
+        DependencyMode::Direct => Vec::new(),
+    };
+
     // TODO(zanieb): Consider consuming these instead of cloning
     let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
 
     // Prefer current site packages; filter out packages that are marked for reinstall or upgrade
-    let preferences = site_packages
+    let preferences = installed_packages
         .iter()
         .filter(|dist| !exclusions.contains(dist.name()))
         .map(|dist| {
@@ -157,33 +233,6 @@ pub(crate) async fn resolve(
         })
         .collect::<Result<_, _>>()
         .map_err(Error::UnsupportedInstalledDist)?;
-
-    // Collect constraints and overrides.
-    let constraints = Constraints::from_requirements(constraints);
-    let overrides = Overrides::from_requirements(overrides);
-    let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
-
-    // Map the editables to their metadata.
-    let editables = editables.as_metadata().map_err(Error::ParsedUrl)?;
-
-    // Determine any lookahead requirements.
-    let lookaheads = match options.dependency_mode {
-        DependencyMode::Transitive => {
-            LookaheadResolver::new(
-                &requirements,
-                &constraints,
-                &overrides,
-                &editables,
-                hasher,
-                index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
-            )
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve(Some(markers))
-            .await?
-        }
-        DependencyMode::Direct => Vec::new(),
-    };
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
@@ -217,7 +266,7 @@ pub(crate) async fn resolve(
             index,
             hasher,
             build_dispatch,
-            site_packages,
+            installed_packages,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )?
         .with_reporter(reporter);
