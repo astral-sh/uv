@@ -3,9 +3,10 @@ use pep508_rs::PackageName;
 use rustc_hash::FxHashSet;
 
 /// Whether to reinstall packages.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum Reinstall {
     /// Don't reinstall any packages; respect the existing installation.
+    #[default]
     None,
 
     /// Reinstall all packages in the plan.

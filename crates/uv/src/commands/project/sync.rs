@@ -5,7 +5,7 @@ use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
-    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
@@ -65,6 +65,7 @@ pub(crate) async fn sync(
     let no_build = NoBuild::default();
     let setup_py = SetupPyStrategy::default();
     let concurrency = Concurrency::default();
+    let reinstall = Reinstall::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -84,8 +85,23 @@ pub(crate) async fn sync(
         concurrency,
     );
 
-    // TODO(konsti): Read editables from lockfile.
-    let editables = ResolvedEditables::default();
+    let site_packages = SitePackages::from_executable(&venv)?;
+
+    // Build any editables.
+    let editables = ResolvedEditables::resolve(
+        resolution.editables(),
+        &site_packages,
+        &reinstall,
+        &hasher,
+        venv.interpreter(),
+        tags,
+        cache,
+        &client,
+        &build_dispatch,
+        concurrency,
+        printer,
+    )
+    .await?;
 
     let site_packages = SitePackages::from_executable(&venv)?;
 
