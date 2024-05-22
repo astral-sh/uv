@@ -438,6 +438,38 @@ jobs:
           ./uv venv
           ./${{ matrix.command }}
 
+  integration-test-github-actions:
+    needs: build-binary-linux
+    name: "integration test | github actions"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Configure fake virtual environment"
+        run: |
+          echo "VIRTUAL_ENV=${Python_ROOT_DIR}" >> $GITHUB_ENV
+
+      - name: "Display environment"
+        run: |
+          echo "$VIRTUAL_ENV"
+
+      - name: "Install with `--system`"
+        run: |
+          ./uv pip install anyio --system
+
+      - name: "Install with implicit virtual environment"
+        run: |
+          ./uv pip install anyio
+
   cache-test-ubuntu:
     needs: build-binary-linux
     name: "check cache | ubuntu"
