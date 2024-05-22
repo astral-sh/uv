@@ -46,6 +46,9 @@ impl FromStr for ImplementationName {
 
 impl Display for ImplementationName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
+        match self {
+            Self::CPython => f.write_str("CPython"),
+            Self::PyPy => f.write_str("PyPy"),
+        }
     }
 }
