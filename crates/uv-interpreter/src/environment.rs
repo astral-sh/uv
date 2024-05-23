@@ -8,7 +8,7 @@ use same_file::is_same_file;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
-use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython, VersionRequest};
+use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython};
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
 use crate::{
     find_default_interpreter, find_interpreter, Error, Interpreter, InterpreterSource, Target,
@@ -54,7 +54,7 @@ impl PythonEnvironment {
     /// Allows Conda environments (via `CONDA_PREFIX`) though they are not technically virtual environments.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
         let sources = SourceSelector::VirtualEnv;
-        let request = InterpreterRequest::Version(VersionRequest::Default);
+        let request = InterpreterRequest::Any;
         let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
 
         debug_assert!(
@@ -74,7 +74,7 @@ impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] for the parent interpreter i.e. the executable in `python -m uv ...`
     pub fn from_parent_interpreter(system: SystemPython, cache: &Cache) -> Result<Self, Error> {
         let sources = SourceSelector::from_sources([InterpreterSource::ParentInterpreter]);
-        let request = InterpreterRequest::Version(VersionRequest::Default);
+        let request = InterpreterRequest::Any;
         let found = find_interpreter(&request, system, &sources, cache)??;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
