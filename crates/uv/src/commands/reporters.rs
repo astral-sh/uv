@@ -93,7 +93,7 @@ impl ProgressReporter {
             );
             progress.set_message(name.to_string());
         } else {
-            progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} n/a [....]").unwrap());
+            progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} ....").unwrap());
             progress.set_message(name.to_string());
             progress.finish();
         }
