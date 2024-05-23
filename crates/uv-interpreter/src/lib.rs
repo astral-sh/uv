@@ -586,7 +586,7 @@ mod tests {
             ],
             || {
                 let result = find_interpreter(
-                    &InterpreterRequest::Version(VersionRequest::Default),
+                    &InterpreterRequest::Any,
                     SystemPython::Allowed,
                     &SourceSelector::All,
                     &cache,
@@ -620,7 +620,7 @@ mod tests {
             ],
             || {
                 let result = find_interpreter(
-                    &InterpreterRequest::Version(VersionRequest::Default),
+                    &InterpreterRequest::Any,
                     SystemPython::Allowed,
                     &SourceSelector::All,
                     &cache,
@@ -661,7 +661,7 @@ mod tests {
             ],
             || {
                 let result = find_interpreter(
-                    &InterpreterRequest::Version(VersionRequest::Default),
+                    &InterpreterRequest::Any,
                     SystemPython::Required,
                     &SourceSelector::All,
                     &cache,
@@ -701,7 +701,7 @@ mod tests {
             ],
             || {
                 let result = find_interpreter(
-                    &InterpreterRequest::Version(VersionRequest::Default),
+                    &InterpreterRequest::Any,
                     SystemPython::Disallowed,
                     &SourceSelector::All,
                     &cache,

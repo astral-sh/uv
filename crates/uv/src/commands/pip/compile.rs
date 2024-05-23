@@ -178,7 +178,7 @@ pub(crate) async fn pip_compile(
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
             InterpreterRequest::Version(VersionRequest::from(version))
         } else {
-            InterpreterRequest::Version(VersionRequest::Default)
+            InterpreterRequest::default()
         };
         find_best_interpreter(&request, system, &cache)??
     }
