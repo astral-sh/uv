@@ -115,8 +115,19 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
         // If none of these exist, return the standard location
         default_executable
     } else {
-        // Search for `python` in the `bin` directory.
-        venv.join("bin").join("python")
+        // Check for both `python3` over `python`, preferring the more specific one
+        let default_executable = venv.join("bin").join("python3");
+        if default_executable.exists() {
+            return default_executable;
+        }
+
+        let executable = venv.join("bin").join("python");
+        if executable.exists() {
+            return executable;
+        }
+
+        // If none of these exist, return the standard location
+        default_executable
     }
 }
 

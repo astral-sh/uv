@@ -152,7 +152,7 @@ fn missing_venv() -> Result<()> {
 
         ----- stderr -----
         warning: Requirements file requirements.in does not contain any dependencies
-        error: failed to canonicalize path `[VENV]/bin/python`
+        error: failed to canonicalize path `[VENV]/bin/python3`
           Caused by: No such file or directory (os error 2)
         "###
         );

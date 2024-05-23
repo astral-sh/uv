@@ -119,7 +119,7 @@ fn missing_venv() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: failed to canonicalize path `[VENV]/bin/python`
+        error: failed to canonicalize path `[VENV]/bin/python3`
           Caused by: No such file or directory (os error 2)
         "###);
     }
