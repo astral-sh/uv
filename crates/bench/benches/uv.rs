@@ -35,6 +35,8 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
 
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     let runtime = &tokio::runtime::Builder::new_multi_thread()
+        // CodSpeed limits the total number of threads to 500
+        .max_blocking_threads(256)
         .enable_all()
         .build()
         .unwrap();
