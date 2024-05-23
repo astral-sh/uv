@@ -3086,6 +3086,7 @@ dependencies = [
  "pep508_rs",
  "pypi-types",
  "regex",
+ "relative-path",
  "reqwest",
  "reqwest-middleware",
  "tempfile",

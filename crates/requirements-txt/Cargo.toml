@@ -24,6 +24,7 @@ uv-warnings = { workspace = true }
 
 fs-err = { workspace = true }
 regex = { workspace = true }
+relative-path = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }
 tracing = { workspace = true }

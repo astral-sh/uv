@@ -40,14 +40,15 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use relative_path::RelativePath;
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
 use distribution_types::{Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
-    RequirementOrigin, Scheme, VerbatimUrl,
+    expand_env_vars, Extras, MarkerTree, Pep508Error, Pep508ErrorSource, RequirementOrigin, Scheme,
+    split_scheme, strip_host, VerbatimUrl,
 };
 use pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
@@ -542,7 +543,7 @@ impl RequirementsTxt {
                         if filename.starts_with("http://") || filename.starts_with("https://") {
                             PathBuf::from(filename.as_ref())
                         } else {
-                            requirements_dir.join(filename.as_ref())
+                            RelativePath::new(filename.as_ref()).to_path(requirements_dir)
                         };
                     let sub_requirements =
                         Box::pin(Self::parse(&sub_file, working_dir, client_builder))
@@ -581,7 +582,7 @@ impl RequirementsTxt {
                         if filename.starts_with("http://") || filename.starts_with("https://") {
                             PathBuf::from(filename.as_ref())
                         } else {
-                            requirements_dir.join(filename.as_ref())
+                            RelativePath::new(filename.as_ref()).to_path(requirements_dir)
                         };
                     let sub_constraints =
                         Box::pin(Self::parse(&sub_file, working_dir, client_builder))
