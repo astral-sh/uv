@@ -365,7 +365,7 @@ impl Deref for StringVersion {
 #[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 pub struct MarkerEnvironment {
     #[serde(flatten)]
-    inner: Arc<MarkerEnvironmentInner>,
+    pub inner: Arc<MarkerEnvironmentInner>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
