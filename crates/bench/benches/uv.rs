@@ -76,7 +76,7 @@ mod resolver {
     use install_wheel_rs::linker::LinkMode;
     use once_cell::sync::Lazy;
 
-    use distribution_types::{CachedDist, IndexLocations, Requirement, Resolution, SourceDist};
+    use distribution_types::IndexLocations;
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
