@@ -159,7 +159,7 @@ pub(crate) async fn pip_install(
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;
 
-    // Check if the current environment satisfies the requirements
+    // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none()
