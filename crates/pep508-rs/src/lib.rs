@@ -34,7 +34,7 @@ use pyo3::{
     create_exception, exceptions::PyNotImplementedError, pyclass, pyclass::CompareOp, pymethods,
     pymodule, types::PyModule, IntoPy, PyObject, PyResult, Python,
 };
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use url::Url;
@@ -135,7 +135,7 @@ create_exception!(
 );
 
 /// A PEP 508 dependency specifier.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
@@ -150,8 +150,13 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// The markers such as `python_version > "3.8"` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
+    #[serde(
+        serialize_with = "serialize_option_marker_tree",
+        deserialize_with = "deserialize_option_marker_tree"
+    )]
     pub marker: Option<MarkerTree>,
     /// The source file containing the requirement.
+    #[serde(skip)]
     pub origin: Option<RequirementOrigin>,
 }
 
@@ -200,25 +205,27 @@ impl<T: Pep508Url + Display> Display for Requirement<T> {
     }
 }
 
-/// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
-impl<'de, T: Pep508Url + Deserialize<'de>> Deserialize<'de> for Requirement<T> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+fn serialize_option_marker_tree<S>(
+    value: &Option<MarkerTree>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(marker_tree) => serializer.serialize_some(&marker_tree.to_string()),
+        None => serializer.serialize_none(),
     }
 }
 
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-impl<T: Pep508Url> Serialize for Requirement<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.collect_str(self)
-    }
+fn deserialize_option_marker_tree<'de, D>(deserializer: D) -> Result<Option<MarkerTree>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let marker_string: Option<String> = Option::deserialize(deserializer)?;
+    marker_string
+        .map(|s: String| s.parse().map_err(serde::de::Error::custom))
+        .transpose()
 }
 
 type MarkerWarning = (MarkerWarningKind, String);
@@ -576,7 +583,7 @@ impl Extras {
 }
 
 /// The actual version specifier or URL to install.
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),

@@ -18,7 +18,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_hash::FxHashMap;
 use serde::de::{value, SeqAccess, Visitor};
-use serde::{de, Deserialize, Deserializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
@@ -981,8 +981,7 @@ async fn create_pep517_build_environment(
         )
     })?;
 
-    // Deserialize the requirements from the output file.
-    let extra_requires: Vec<pep508_rs::Requirement> = serde_json::from_slice::<Vec<pep508_rs::Requirement>>(&contents).map_err(|err| {
+    let extra_requires = deserialize_requirements(&contents).map_err(|err| {
         Error::from_command_output(
             format!(
                 "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
@@ -1024,6 +1023,39 @@ async fn create_pep517_build_environment(
     }
 
     Ok(())
+}
+
+/// Usually, we serialize requirements by part to preserve the verbatim url, but from python we
+/// get a string.
+fn deserialize_requirements(contents: &[u8]) -> serde_json::Result<Vec<pep508_rs::Requirement>> {
+    struct RequirementStringWire(pep508_rs::Requirement);
+
+    /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
+    impl<'de> Deserialize<'de> for RequirementStringWire {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let requirement = String::deserialize(deserializer)?;
+            Ok(Self(
+                pep508_rs::Requirement::from_str(&requirement).map_err(de::Error::custom)?,
+            ))
+        }
+    }
+
+    /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
+    impl Serialize for RequirementStringWire {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            serializer.collect_str(&self.0)
+        }
+    }
+
+    // Deserialize the requirements from the output file.
+    let requirements: Vec<RequirementStringWire> = serde_json::from_slice(contents)?;
+    Ok(requirements.into_iter().map(|req| req.0).collect())
 }
 
 /// A runner that manages the execution of external python processes with a

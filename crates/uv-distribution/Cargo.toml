@@ -13,6 +13,8 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+serde_json = "1"
+
 cache-key = { workspace = true }
 distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
