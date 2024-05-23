@@ -105,9 +105,9 @@ impl std::fmt::Display for DirectSourceUrl<'_> {
 pub struct GitSourceUrl<'a> {
     /// The URL with the revision and subdirectory fragment.
     pub url: &'a VerbatimUrl,
+    pub git: &'a GitUrl,
     /// The URL without the revision and subdirectory fragment.
-    pub git: Cow<'a, GitUrl>,
-    pub subdirectory: Option<Cow<'a, Path>>,
+    pub subdirectory: Option<&'a Path>,
 }
 
 impl std::fmt::Display for GitSourceUrl<'_> {
@@ -120,8 +120,8 @@ impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
     fn from(dist: &'a GitSourceDist) -> Self {
         Self {
             url: &dist.url,
-            git: Cow::Borrowed(&dist.git),
-            subdirectory: dist.subdirectory.as_deref().map(Cow::Borrowed),
+            git: &dist.git,
+            subdirectory: dist.subdirectory.as_deref(),
         }
     }
 }

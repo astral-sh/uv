@@ -12,14 +12,13 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
-    GitSourceDist, IndexUrl, ParsedArchiveUrl, ParsedGitUrl, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution,
-    ResolvedDist, ToUrlError,
+    GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
-use pypi_types::HashDigest;
+use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
 use uv_git::{GitReference, GitSha};
 use uv_normalize::PackageName;
 

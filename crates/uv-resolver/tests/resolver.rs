@@ -167,10 +167,9 @@ macro_rules! assert_snapshot {
 
 #[tokio::test]
 async fn black() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("black<=23.9.1").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
         .build();
@@ -196,10 +195,9 @@ async fn black() -> Result<()> {
 
 #[tokio::test]
 async fn black_colorama() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("black[colorama]<=23.9.1").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
         .build();
@@ -228,10 +226,9 @@ async fn black_colorama() -> Result<()> {
 /// Resolve Black with an invalid extra. The resolver should ignore the extra.
 #[tokio::test]
 async fn black_tensorboard() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("black[tensorboard]<=23.9.1").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
         .build();
@@ -257,10 +254,9 @@ async fn black_tensorboard() -> Result<()> {
 
 #[tokio::test]
 async fn black_python_310() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("black<=23.9.1").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
         .build();
@@ -293,14 +289,12 @@ async fn black_python_310() -> Result<()> {
 #[tokio::test]
 async fn black_mypy_extensions() -> Result<()> {
     let manifest = Manifest::new(
-        vec![
-            Requirement::from_pep508(pep508_rs::Requirement::from_str("black<=23.9.1").unwrap())
-                .unwrap(),
-        ],
-        Constraints::from_requirements(vec![Requirement::from_pep508(
+        vec![Requirement::from(
+            pep508_rs::Requirement::from_str("black<=23.9.1").unwrap(),
+        )],
+        Constraints::from_requirements(vec![Requirement::from(
             pep508_rs::Requirement::from_str("mypy-extensions<0.4.4").unwrap(),
-        )
-        .unwrap()]),
+        )]),
         Overrides::default(),
         vec![],
         None,
@@ -336,14 +330,12 @@ async fn black_mypy_extensions() -> Result<()> {
 #[tokio::test]
 async fn black_mypy_extensions_extra() -> Result<()> {
     let manifest = Manifest::new(
-        vec![
-            Requirement::from_pep508(pep508_rs::Requirement::from_str("black<=23.9.1").unwrap())
-                .unwrap(),
-        ],
-        Constraints::from_requirements(vec![Requirement::from_pep508(
+        vec![Requirement::from(
+            pep508_rs::Requirement::from_str("black<=23.9.1").unwrap(),
+        )],
+        Constraints::from_requirements(vec![Requirement::from(
             pep508_rs::Requirement::from_str("mypy-extensions[extra]<0.4.4").unwrap(),
-        )
-        .unwrap()]),
+        )]),
         Overrides::default(),
         vec![],
         None,
@@ -379,14 +371,12 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 #[tokio::test]
 async fn black_flake8() -> Result<()> {
     let manifest = Manifest::new(
-        vec![
-            Requirement::from_pep508(pep508_rs::Requirement::from_str("black<=23.9.1").unwrap())
-                .unwrap(),
-        ],
-        Constraints::from_requirements(vec![Requirement::from_pep508(
+        vec![Requirement::from(
+            pep508_rs::Requirement::from_str("black<=23.9.1").unwrap(),
+        )],
+        Constraints::from_requirements(vec![Requirement::from(
             pep508_rs::Requirement::from_str("flake8<1").unwrap(),
-        )
-        .unwrap()]),
+        )]),
         Overrides::default(),
         vec![],
         None,
@@ -419,10 +409,9 @@ async fn black_flake8() -> Result<()> {
 
 #[tokio::test]
 async fn black_lowest() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("black>21").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .resolution_mode(ResolutionMode::Lowest)
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -449,10 +438,9 @@ async fn black_lowest() -> Result<()> {
 
 #[tokio::test]
 async fn black_lowest_direct() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("black>21").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .resolution_mode(ResolutionMode::LowestDirect)
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -480,12 +468,14 @@ async fn black_lowest_direct() -> Result<()> {
 #[tokio::test]
 async fn black_respect_preference() -> Result<()> {
     let manifest = Manifest::new(
-        vec![Requirement::from_pep508(pep508_rs::Requirement::from_str("black<=23.9.1")?).unwrap()],
+        vec![Requirement::from(pep508_rs::Requirement::from_str(
+            "black<=23.9.1",
+        )?)],
         Constraints::default(),
         Overrides::default(),
-        vec![Preference::from_requirement(
-            Requirement::from_pep508(pep508_rs::Requirement::from_str("black==23.9.0")?).unwrap(),
-        )],
+        vec![Preference::from_requirement(Requirement::from(
+            pep508_rs::Requirement::from_str("black==23.9.0")?,
+        ))],
         None,
         vec![],
         Exclusions::default(),
@@ -518,12 +508,14 @@ async fn black_respect_preference() -> Result<()> {
 #[tokio::test]
 async fn black_ignore_preference() -> Result<()> {
     let manifest = Manifest::new(
-        vec![Requirement::from_pep508(pep508_rs::Requirement::from_str("black<=23.9.1")?).unwrap()],
+        vec![Requirement::from(pep508_rs::Requirement::from_str(
+            "black<=23.9.1",
+        )?)],
         Constraints::default(),
         Overrides::default(),
-        vec![Preference::from_requirement(
-            Requirement::from_pep508(pep508_rs::Requirement::from_str("black==23.9.2")?).unwrap(),
-        )],
+        vec![Preference::from_requirement(Requirement::from(
+            pep508_rs::Requirement::from_str("black==23.9.2")?,
+        ))],
         None,
         vec![],
         Exclusions::default(),
@@ -554,10 +546,9 @@ async fn black_ignore_preference() -> Result<()> {
 
 #[tokio::test]
 async fn black_disallow_prerelease() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("black<=20.0").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .prerelease_mode(PreReleaseMode::Disallow)
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -578,10 +569,9 @@ async fn black_disallow_prerelease() -> Result<()> {
 
 #[tokio::test]
 async fn black_allow_prerelease_if_necessary() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("black<=20.0").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .prerelease_mode(PreReleaseMode::IfNecessary)
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -602,10 +592,9 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
 
 #[tokio::test]
 async fn pylint_disallow_prerelease() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("pylint==2.3.0").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .prerelease_mode(PreReleaseMode::Disallow)
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -628,10 +617,9 @@ async fn pylint_disallow_prerelease() -> Result<()> {
 
 #[tokio::test]
 async fn pylint_allow_prerelease() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("pylint==2.3.0").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .prerelease_mode(PreReleaseMode::Allow)
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -655,10 +643,8 @@ async fn pylint_allow_prerelease() -> Result<()> {
 #[tokio::test]
 async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
     let manifest = Manifest::simple(vec![
-        Requirement::from_pep508(pep508_rs::Requirement::from_str("pylint==2.3.0").unwrap())
-            .unwrap(),
-        Requirement::from_pep508(pep508_rs::Requirement::from_str("isort>=5.0.0").unwrap())
-            .unwrap(),
+        Requirement::from(pep508_rs::Requirement::from_str("pylint==2.3.0").unwrap()),
+        Requirement::from(pep508_rs::Requirement::from_str("isort>=5.0.0").unwrap()),
     ]);
     let options = OptionsBuilder::new()
         .prerelease_mode(PreReleaseMode::Explicit)
@@ -683,10 +669,8 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 #[tokio::test]
 async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
     let manifest = Manifest::simple(vec![
-        Requirement::from_pep508(pep508_rs::Requirement::from_str("pylint==2.3.0").unwrap())
-            .unwrap(),
-        Requirement::from_pep508(pep508_rs::Requirement::from_str("isort>=5.0.0b").unwrap())
-            .unwrap(),
+        Requirement::from(pep508_rs::Requirement::from_str("pylint==2.3.0").unwrap()),
+        Requirement::from(pep508_rs::Requirement::from_str("isort>=5.0.0b").unwrap()),
     ]);
     let options = OptionsBuilder::new()
         .prerelease_mode(PreReleaseMode::Explicit)
@@ -712,10 +696,9 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
 /// fail with a pre-release-centric hint.
 #[tokio::test]
 async fn msgraph_sdk() -> Result<()> {
-    let manifest = Manifest::simple(vec![Requirement::from_pep508(
+    let manifest = Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("msgraph-sdk==1.0.0").unwrap(),
-    )
-    .unwrap()]);
+    )]);
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
         .build();

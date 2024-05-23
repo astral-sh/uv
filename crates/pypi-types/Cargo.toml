@@ -16,8 +16,11 @@ workspace = true
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 uv-normalize = { workspace = true }
+uv-git = { workspace = true }
 
+anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+git2 = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
 once_cell = { workspace = true }

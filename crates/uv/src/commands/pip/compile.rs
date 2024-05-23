@@ -16,8 +16,7 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, SourceAnnotation,
-    SourceAnnotations, Verbatim,
+    IndexLocations, LocalEditable, LocalEditables, SourceAnnotation, SourceAnnotations, Verbatim,
 };
 use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
@@ -472,17 +471,17 @@ pub(crate) async fn pip_compile(
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()?,
+                        .map(Requirement::from)
+                        .collect(),
                     optional_dependencies: IndexMap::default(),
                 };
-                Ok::<_, Box<ParsedUrlError>>(BuiltEditableMetadata {
+                BuiltEditableMetadata {
                     built: built_editable.editable,
                     metadata: built_editable.metadata,
                     requirements,
-                })
+                }
             })
-            .collect::<Result<_, _>>()?;
+            .collect();
 
         // Validate that the editables are compatible with the target Python version.
         for editable in &editables {

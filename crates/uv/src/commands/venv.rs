@@ -225,16 +225,14 @@ async fn venv_impl(
         let requirements = if interpreter.python_tuple() < (3, 12) {
             // Only include `setuptools` and `wheel` on Python <3.12
             vec![
-                Requirement::from_pep508(pep508_rs::Requirement::from_str("pip").unwrap()).unwrap(),
-                Requirement::from_pep508(pep508_rs::Requirement::from_str("setuptools").unwrap())
-                    .unwrap(),
-                Requirement::from_pep508(pep508_rs::Requirement::from_str("wheel").unwrap())
-                    .unwrap(),
+                Requirement::from(pep508_rs::Requirement::from_str("pip").unwrap()),
+                Requirement::from(pep508_rs::Requirement::from_str("setuptools").unwrap()),
+                Requirement::from(pep508_rs::Requirement::from_str("wheel").unwrap()),
             ]
         } else {
-            vec![
-                Requirement::from_pep508(pep508_rs::Requirement::from_str("pip").unwrap()).unwrap(),
-            ]
+            vec![Requirement::from(
+                pep508_rs::Requirement::from_str("pip").unwrap(),
+            )]
         };
 
         // Resolve and install the requirements.
