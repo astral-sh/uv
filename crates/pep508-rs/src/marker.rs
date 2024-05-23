@@ -1801,6 +1801,42 @@ impl MarkerTree {
             }
         }
     }
+
+    /// Combine this marker tree with the one given via a conjunction.
+    ///
+    /// This does some shallow flattening. That is, if `self` is a conjunction
+    /// already, then `tree` is added to it instead of creating a new
+    /// conjunction.
+    pub fn and(&mut self, tree: MarkerTree) {
+        match *self {
+            MarkerTree::Expression(_) | MarkerTree::Or(_) => {
+                let this = std::mem::replace(self, MarkerTree::And(vec![]));
+                *self = MarkerTree::And(vec![this]);
+            }
+            _ => {}
+        }
+        if let MarkerTree::And(ref mut exprs) = *self {
+            exprs.push(tree);
+        }
+    }
+
+    /// Combine this marker tree with the one given via a disjunction.
+    ///
+    /// This does some shallow flattening. That is, if `self` is a disjunction
+    /// already, then `tree` is added to it instead of creating a new
+    /// disjunction.
+    pub fn or(&mut self, tree: MarkerTree) {
+        match *self {
+            MarkerTree::Expression(_) | MarkerTree::And(_) => {
+                let this = std::mem::replace(self, MarkerTree::And(vec![]));
+                *self = MarkerTree::Or(vec![this]);
+            }
+            _ => {}
+        }
+        if let MarkerTree::Or(ref mut exprs) = *self {
+            exprs.push(tree);
+        }
+    }
 }
 
 impl Display for MarkerTree {
