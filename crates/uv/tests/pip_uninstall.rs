@@ -92,7 +92,7 @@ fn invalid_requirement() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `flask==1.0.x`
+    error: Failed to parse: `flask==1.0.x`
       Caused by: after parsing '1.0', found '.x', which is not part of a valid version
     flask==1.0.x
          ^^^^^^^

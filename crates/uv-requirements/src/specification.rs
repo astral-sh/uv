@@ -65,7 +65,7 @@ impl RequirementsSpecification {
         Ok(match source {
             RequirementsSource::Package(name) => {
                 let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                    .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
                     requirements: vec![UnresolvedRequirementSpecification::try_from(
                         RequirementEntry {
@@ -78,7 +78,7 @@ impl RequirementsSpecification {
             }
             RequirementsSource::Editable(name) => {
                 let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                    .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
                     editables: vec![requirement],
                     ..Self::default()
@@ -122,7 +122,7 @@ impl RequirementsSpecification {
             RequirementsSource::PyprojectToml(path) => {
                 let contents = uv_fs::read_to_string(&path).await?;
                 Self::parse_direct_pyproject_toml(&contents, extras, path.as_ref(), preview)
-                    .with_context(|| format!("Failed to parse `{}`", path.user_display()))?
+                    .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?
             }
             RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => Self {
                 source_trees: vec![path.clone()],
