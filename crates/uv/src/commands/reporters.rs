@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -17,7 +16,6 @@ use crate::printer::Printer;
 
 #[derive(Debug)]
 struct ProgressReporter {
-    id: AtomicUsize,
     printer: Printer,
     root: ProgressBar,
     multi_progress: MultiProgress,
@@ -32,17 +30,22 @@ struct BarState {
     sizes: Vec<u64>,
     // A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
+    // A monotonic counter for bar IDs.
+    id: usize,
+}
+
+impl BarState {
+    // Returns a unique ID for a new bar.
+    fn id(&mut self) -> usize {
+        self.id += 1;
+        self.id
+    }
 }
 
 impl ProgressReporter {
-    // Returns and unique ID for the bars map.
-    fn id(&self) -> usize {
-        self.id.fetch_add(1, Ordering::Relaxed)
-    }
-
     fn on_any_build_start(&self, color_string: &str) -> usize {
-        let id = self.id();
         let mut state = self.state.lock().unwrap();
+        let id = state.id();
 
         let progress = self.multi_progress.insert_before(
             &self.root,
@@ -95,7 +98,7 @@ impl ProgressReporter {
             progress.finish();
         }
 
-        let id = self.id();
+        let id = state.id();
         state.bars.insert(id, progress);
         id
     }
@@ -110,8 +113,8 @@ impl ProgressReporter {
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
-        let id = self.id();
         let mut state = self.state.lock().unwrap();
+        let id = state.id();
 
         let progress = self.multi_progress.insert_before(
             &self.root,
@@ -166,7 +169,6 @@ impl From<Printer> for DownloadReporter {
         progress.set_message("Fetching packages...");
 
         let reporter = ProgressReporter {
-            id: AtomicUsize::new(0),
             printer,
             multi_progress,
             root: progress,
@@ -261,7 +263,6 @@ impl From<Printer> for ResolverReporter {
         root.set_message("Resolving dependencies...");
 
         let reporter = ProgressReporter {
-            id: AtomicUsize::new(0),
             root,
             printer,
             multi_progress,
