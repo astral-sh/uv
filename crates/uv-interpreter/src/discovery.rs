@@ -364,8 +364,8 @@ fn python_interpreters<'a>(
             Ok((source, path)) => Interpreter::query(&path, cache)
                 .map(|interpreter| (source, interpreter))
                 .inspect(|(source, interpreter)| {
-                    trace!(
-                        "Found Python interpreter {} {} at {} from {source}",
+                    debug!(
+                        "Found {} {} at `{}` ({source})",
                         LenientImplementationName::from(interpreter.implementation_name()),
                         interpreter.python_full_version(),
                         path.display()
@@ -456,9 +456,9 @@ pub fn find_interpreter(
     sources: &SourceSelector,
     cache: &Cache,
 ) -> Result<InterpreterResult, Error> {
-    debug!("Searching for interpreter that fulfills {request}");
     let result = match request {
         InterpreterRequest::File(path) => {
+            debug!("Checking for Python interpreter at {request}");
             if !sources.contains(InterpreterSource::ProvidedPath) {
                 return Err(Error::SourceNotSelected(
                     request.clone(),
@@ -476,6 +476,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::Directory(path) => {
+            debug!("Checking for Python interpreter in {request}");
             if !sources.contains(InterpreterSource::ProvidedPath) {
                 return Err(Error::SourceNotSelected(
                     request.clone(),
@@ -499,6 +500,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::ExecutableName(name) => {
+            debug!("Searching for Python interpreter with {request}");
             if !sources.contains(InterpreterSource::SearchPath) {
                 return Err(Error::SourceNotSelected(
                     request.clone(),
@@ -516,6 +518,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::Implementation(implementation) => {
+            debug!("Searching for a {request} interpreter in {sources}");
             let Some((source, interpreter)) =
                 python_interpreters(None, Some(implementation), system, sources, cache)
                     .find(|result| {
@@ -539,6 +542,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::ImplementationVersion(implementation, version) => {
+            debug!("Searching for {request} in {sources}");
             let Some((source, interpreter)) =
                 python_interpreters(Some(version), Some(implementation), system, sources, cache)
                     .find(|result| {
@@ -569,6 +573,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::Any => {
+            debug!("Searching for Python interpreter in {sources}");
             let Some((source, interpreter)) =
                 python_interpreters(None, None, system, sources, cache)
                     .find(|result| {
@@ -590,6 +595,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::Version(version) => {
+            debug!("Searching for {request} in {sources}");
             let Some((source, interpreter)) =
                 python_interpreters(Some(version), None, system, sources, cache)
                     .find(|result| {
@@ -1186,15 +1192,15 @@ impl fmt::Display for InterpreterRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Any => write!(f, "any Python"),
-            Self::Version(version) => write!(f, "Python @ {version}"),
-            Self::Directory(path) => write!(f, "directory {}", path.user_display()),
-            Self::File(path) => write!(f, "file {}", path.user_display()),
+            Self::Version(version) => write!(f, "Python {version}"),
+            Self::Directory(path) => write!(f, "directory `{}`", path.user_display()),
+            Self::File(path) => write!(f, "path `{}`", path.user_display()),
             Self::ExecutableName(name) => write!(f, "executable name `{name}`"),
             Self::Implementation(implementation) => {
                 write!(f, "{implementation}")
             }
             Self::ImplementationVersion(implementation, version) => {
-                write!(f, "{implementation} @ {version}")
+                write!(f, "{implementation} {version}")
             }
         }
     }
