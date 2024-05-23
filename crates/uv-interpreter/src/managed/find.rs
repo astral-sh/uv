@@ -1,3 +1,4 @@
+use core::fmt;
 use fs_err as fs;
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
@@ -182,4 +183,17 @@ fn platform_key_from_env() -> Result<String, Error> {
     let arch = Arch::from_env()?;
     let libc = Libc::from_env();
     Ok(format!("{os}-{arch}-{libc}").to_lowercase())
+}
+
+impl fmt::Display for Toolchain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.path
+                .file_name()
+                .unwrap_or(self.path.as_os_str())
+                .to_string_lossy()
+        )
+    }
 }

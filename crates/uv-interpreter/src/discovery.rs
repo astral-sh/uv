@@ -239,6 +239,7 @@ fn python_executables<'a>(
         sources.contains(InterpreterSource::ManagedToolchain).then(move ||
             std::iter::once(
                 InstalledToolchains::from_settings().map_err(Error::from).and_then(|installed_toolchains| {
+                    debug!("Seaching for managed toolchains at `{}`", installed_toolchains.root().user_display());
                     let toolchains = installed_toolchains.find_matching_current_platform()?;
                     // Check that the toolchain version satisfies the request to avoid unnecessary interpreter queries later
                     Ok(
@@ -247,6 +248,7 @@ fn python_executables<'a>(
                                 version.matches_version(toolchain.python_version())
                             )
                         )
+                        .inspect(|toolchain| debug!("Found managed toolchain `{toolchain}`"))
                         .map(|toolchain| (InterpreterSource::ManagedToolchain, toolchain.executable()))
                     )
                 })
