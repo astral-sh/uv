@@ -78,6 +78,7 @@ mod tests {
         discovery::{self, DiscoveredInterpreter, InterpreterRequest, VersionRequest},
         find_best_interpreter, find_default_interpreter, find_interpreter,
         implementation::ImplementationName,
+        managed::InstalledToolchains,
         virtualenv::virtualenv_python_executable,
         Error, InterpreterNotFound, InterpreterSource, PythonEnvironment, PythonVersion,
         SourceSelector, SystemPython,
@@ -287,12 +288,16 @@ mod tests {
 
     #[test]
     fn find_default_interpreter_empty_path() -> Result<()> {
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                (
+                    "UV_TOOLCHAIN_DIR",
+                    Some(toolchains.root().to_str().unwrap()),
+                ),
                 ("PATH", Some("")),
             ],
             || {
@@ -310,7 +315,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", None::<OsString>),
             ],
             || {
@@ -332,13 +337,14 @@ mod tests {
     fn find_default_interpreter_invalid_executable() -> Result<()> {
         let cache = Cache::temp()?;
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let python = tempdir.child(format!("python{}", std::env::consts::EXE_SUFFIX));
         python.touch()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().as_os_str())),
                 ("PATH", Some(tempdir.path().as_os_str())),
             ],
             || {
@@ -359,6 +365,7 @@ mod tests {
     #[test]
     fn find_default_interpreter_valid_executable() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let python = tempdir.child(format!("python{}", std::env::consts::EXE_SUFFIX));
         create_mock_interpreter(
@@ -371,7 +378,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().as_os_str())),
                 ("PATH", Some(tempdir.path().as_os_str())),
             ],
             || {
@@ -395,6 +402,7 @@ mod tests {
     #[test]
     fn find_default_interpreter_valid_executable_after_invalid() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let children = create_children(
             &tempdir,
@@ -440,7 +448,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(env::join_paths(
@@ -476,6 +484,7 @@ mod tests {
     #[test]
     fn find_default_interpreter_only_python2_executable() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let pwd = tempdir.child("pwd");
         pwd.create_dir_all()?;
         let cache = Cache::temp()?;
@@ -485,7 +494,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().as_os_str())),
                 ("PATH", Some(tempdir.path().as_os_str())),
                 ("PWD", Some(pwd.path().as_os_str())),
             ],
@@ -508,6 +517,7 @@ mod tests {
     #[test]
     fn find_default_interpreter_skip_python2_executable() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         tempdir.child("bad").create_dir_all()?;
         tempdir.child("good").create_dir_all()?;
@@ -531,7 +541,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(env::join_paths([
@@ -566,12 +576,13 @@ mod tests {
     #[test]
     fn find_interpreter_system_python_allowed() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(mock_interpreters(
@@ -605,7 +616,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(mock_interpreters(
@@ -641,12 +652,13 @@ mod tests {
     #[test]
     fn find_interpreter_system_python_required() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(mock_interpreters(
@@ -682,11 +694,13 @@ mod tests {
     #[test]
     fn find_interpreter_system_python_disallowed() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(mock_interpreters(
@@ -722,13 +736,14 @@ mod tests {
     #[test]
     fn find_interpreter_version_minor() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let sources = SourceSelector::All;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -774,13 +789,14 @@ mod tests {
     #[test]
     fn find_interpreter_version_patch() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let sources = SourceSelector::All;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -826,13 +842,14 @@ mod tests {
     #[test]
     fn find_interpreter_version_minor_no_match() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let sources = SourceSelector::All;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -868,13 +885,14 @@ mod tests {
     #[test]
     fn find_interpreter_version_patch_no_match() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let sources = SourceSelector::All;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -910,12 +928,13 @@ mod tests {
     #[test]
     fn find_best_interpreter_version_patch_exact() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -960,12 +979,13 @@ mod tests {
     #[test]
     fn find_best_interpreter_version_patch_fallback() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -1007,7 +1027,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(
@@ -1052,6 +1072,7 @@ mod tests {
     #[test]
     fn find_best_interpreter_skips_broken_active_environment() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         let venv = mock_venv(&tempdir, "3.12.0")?;
@@ -1061,7 +1082,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.11.1", "3.12.3"])?),
@@ -1105,6 +1126,7 @@ mod tests {
     #[test]
     fn find_best_interpreter_skips_source_without_match() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         let venv = mock_venv(&tempdir, "3.12.0")?;
@@ -1112,7 +1134,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1"])?),
@@ -1156,6 +1178,7 @@ mod tests {
     #[test]
     fn find_best_interpreter_returns_to_earlier_source_on_fallback() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         let venv = mock_venv(&tempdir, "3.10.0")?;
@@ -1163,7 +1186,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.3"])?),
@@ -1207,6 +1230,7 @@ mod tests {
     #[test]
     fn find_best_interpreter_virtualenv_used_if_system_not_allowed() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         let venv = mock_venv(&tempdir, "3.11.1")?;
@@ -1215,7 +1239,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.11.2"])?),
@@ -1257,7 +1281,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.11.2", "3.10.0"])?),
@@ -1301,6 +1325,7 @@ mod tests {
     #[test]
     fn find_environment_from_active_environment() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         let venv = mock_venv(&tempdir, "3.12.0")?;
@@ -1308,7 +1333,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
@@ -1334,13 +1359,14 @@ mod tests {
     #[test]
     fn find_environment_from_conda_prefix() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let conda_prefix = mock_conda_prefix(&tempdir, "3.12.0")?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
@@ -1367,6 +1393,7 @@ mod tests {
     #[test]
     fn find_environment_from_conda_prefix_and_virtualenv() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let generic = mock_venv(&tempdir, "3.12.0")?;
         let conda = mock_conda_prefix(&tempdir, "3.12.1")?;
@@ -1374,7 +1401,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.2", "3.11.3"])?),
@@ -1402,6 +1429,7 @@ mod tests {
     #[test]
     fn find_environment_from_discovered_environment() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         let _venv = mock_venv(&tempdir, "3.12.0")?;
@@ -1409,7 +1437,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
@@ -1434,6 +1462,7 @@ mod tests {
     #[test]
     fn find_environment_from_parent_interpreter() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let pwd = tempdir.child("pwd");
         pwd.create_dir_all()?;
@@ -1449,7 +1478,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
@@ -1476,6 +1505,7 @@ mod tests {
     #[test]
     fn find_environment_from_parent_interpreter_system_explicit() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let pwd = tempdir.child("pwd");
         pwd.create_dir_all()?;
@@ -1491,7 +1521,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
@@ -1518,6 +1548,7 @@ mod tests {
     #[test]
     fn find_environment_from_parent_interpreter_system_disallowed() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let pwd = tempdir.child("pwd");
         pwd.create_dir_all()?;
@@ -1533,7 +1564,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
@@ -1560,6 +1591,7 @@ mod tests {
     #[test]
     fn find_environment_from_parent_interpreter_system_required() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let pwd = tempdir.child("pwd");
         pwd.create_dir_all()?;
@@ -1575,7 +1607,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
@@ -1602,6 +1634,7 @@ mod tests {
     #[test]
     fn find_environment_active_environment_skipped_if_system_required() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         let venv = mock_venv(&tempdir, "3.12.0")?;
@@ -1610,7 +1643,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
@@ -1633,7 +1666,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.12.2"])?),
@@ -1656,7 +1689,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.12.2"])?),
@@ -1680,12 +1713,13 @@ mod tests {
     #[test]
     fn find_environment_fails_if_no_virtualenv_and_system_not_allowed() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None),
-                ("UV_TOOLCHAIN_DIR", None),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
@@ -1707,6 +1741,7 @@ mod tests {
     #[test]
     fn find_environment_allows_name_in_working_directory() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         let python = tempdir.join("foobar");
         create_mock_interpreter(
@@ -1719,6 +1754,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", None),
                 ("PWD", Some(tempdir.path().into())),
             ],
@@ -1740,6 +1776,7 @@ mod tests {
     #[test]
     fn find_environment_allows_relative_file_path() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         tempdir.child("foo").create_dir_all()?;
         let python = tempdir.child("foo").join("bar");
@@ -1753,6 +1790,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", None),
                 ("PWD", Some(tempdir.path().into())),
             ],
@@ -1777,6 +1815,7 @@ mod tests {
     #[test]
     fn find_environment_allows_absolute_file_path() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         tempdir.child("foo").create_dir_all()?;
         let python = tempdir.child("foo").join("bar");
@@ -1790,6 +1829,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", None),
                 ("PWD", Some(tempdir.path().into())),
             ],
@@ -1814,6 +1854,7 @@ mod tests {
     #[test]
     fn find_environment_allows_venv_directory_path() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         // Create a separate pwd to avoid ancestor discovery of the venv
         let pwd = TempDir::new()?;
         let cache = Cache::temp()?;
@@ -1822,6 +1863,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", None),
                 ("PWD", Some(pwd.path().into())),
             ],
@@ -1846,6 +1888,7 @@ mod tests {
     #[test]
     fn find_environment_allows_file_path_with_system_explicit() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         tempdir.child("foo").create_dir_all()?;
         let python = tempdir.child("foo").join("bar");
@@ -1859,6 +1902,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", None),
                 ("PWD", Some(tempdir.path().into())),
             ],
@@ -1883,6 +1927,7 @@ mod tests {
     #[test]
     fn find_environment_does_not_allow_file_path_with_system_disallowed() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         tempdir.child("foo").create_dir_all()?;
         let python = tempdir.child("foo").join("bar");
@@ -1896,6 +1941,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", None),
                 ("PWD", Some(tempdir.path().into())),
             ],
@@ -1924,12 +1970,14 @@ mod tests {
     #[test]
     fn find_environment_treats_missing_file_path_as_file() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
         tempdir.child("foo").create_dir_all()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", None),
                 ("PWD", Some(tempdir.path().into())),
             ],
@@ -1956,6 +2004,7 @@ mod tests {
     #[test]
     fn find_environment_executable_name_in_search_path() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let pwd = tempdir.child("pwd");
         pwd.create_dir_all()?;
         let cache = Cache::temp()?;
@@ -1970,6 +2019,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", Some(tempdir.path().into())),
                 ("PWD", Some(pwd.path().into())),
             ],
@@ -1991,11 +2041,13 @@ mod tests {
     #[test]
     fn find_environment_pypy() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(mock_interpreters(
@@ -2023,11 +2075,13 @@ mod tests {
     #[test]
     fn find_environment_pypy_request_ignores_cpython() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(mock_interpreters(
@@ -2058,12 +2112,14 @@ mod tests {
     #[test]
     fn find_environment_pypy_request_skips_wrong_versions() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         // We should prefer the `pypy` executable with the requested version
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(mock_interpreters(
@@ -2094,12 +2150,14 @@ mod tests {
     #[test]
     fn find_environment_pypy_finds_executable_with_version_name() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         // We should find executables that include the version number
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 (
                     "PATH",
                     Some(mock_interpreters(
@@ -2134,6 +2192,7 @@ mod tests {
     #[test]
     fn find_environment_pypy_prefers_executable_with_implementation_name() -> Result<()> {
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
 
         // We should prefer `pypy` executables over `python` executables even if they are both pypy
@@ -2152,6 +2211,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", Some(tempdir.path().into())),
                 ("PWD", Some(tempdir.path().into())),
             ],
@@ -2209,6 +2269,7 @@ mod tests {
 
         // We should prefer executables with the version number over those with implementation names
         let tempdir = TempDir::new()?;
+        let toolchains = InstalledToolchains::temp()?;
         create_mock_interpreter(
             &tempdir.path().join("pypy3.10"),
             &PythonVersion::from_str("3.10.0").unwrap(),
@@ -2224,6 +2285,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", Some(tempdir.path().into())),
                 ("PWD", Some(tempdir.path().into())),
             ],
@@ -2258,6 +2320,7 @@ mod tests {
         with_vars(
             [
                 ("UV_TEST_PYTHON_PATH", None::<OsString>),
+                ("UV_TOOLCHAIN_DIR", Some(toolchains.root().into())),
                 ("PATH", Some(tempdir.path().into())),
                 ("PWD", Some(tempdir.path().into())),
             ],

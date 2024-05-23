@@ -37,6 +37,10 @@ impl InstalledToolchains {
         }
     }
 
+    pub fn temp() -> Result<Self, io::Error> {
+        Self::from_path(StateStore::temp()?.bucket(StateBucket::Toolchains))
+    }
+
     /// Initialize the installed toolchain directory.
     ///
     /// Ensures the directory is created.
