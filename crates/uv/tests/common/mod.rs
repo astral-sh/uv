@@ -403,7 +403,7 @@ pub fn python_path_with_versions(
                 let sources = SourceSelector::All;
                 if let Ok(found) = find_interpreter(
                     &request,
-                    // Without required, we could pick the curren venv here and the test fails
+                    // Without required, we could pick the current venv here and the test fails
                     // because the venv subcommand requires a system interpreter.
                     uv_interpreter::SystemPython::Required,
                     &sources,
