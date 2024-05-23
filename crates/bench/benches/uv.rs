@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use bench::criterion::black_box;
 use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
 use distribution_types::Requirement;
@@ -45,13 +47,10 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     let venv = PythonEnvironment::from_virtualenv(cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
-        Requirement::from_pep508("apache-airflow[all]".parse().unwrap()).unwrap(),
-        Requirement::from_pep508(
-            "apache-airflow-providers-apache-beam>3.0.0"
-                .parse()
-                .unwrap(),
-        )
-        .unwrap(),
+        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]").unwrap()),
+        Requirement::from(
+            pep508_rs::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
+        ),
     ]);
 
     let run = || {
@@ -73,10 +72,10 @@ criterion_main!(uv);
 
 mod resolver {
     use anyhow::Result;
-    use install_wheel_rs::linker::LinkMode;
     use once_cell::sync::Lazy;
 
     use distribution_types::IndexLocations;
+    use install_wheel_rs::linker::LinkMode;
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
