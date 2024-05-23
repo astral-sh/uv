@@ -651,7 +651,7 @@ pub fn find_default_interpreter(cache: &Cache) -> Result<InterpreterResult, Erro
 /// the first available version.
 ///
 /// See [`find_interpreter`] for more details on interpreter discovery.
-#[instrument(skip_all, fields(?request))]
+#[instrument(skip_all, fields(request))]
 pub fn find_best_interpreter(
     request: &InterpreterRequest,
     system: SystemPython,

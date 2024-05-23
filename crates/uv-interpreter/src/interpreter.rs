@@ -639,11 +639,6 @@ impl InterpreterInfo {
             executable.display()
         );
         let info = Self::query(executable, cache)?;
-        trace!(
-            "Found Python {} at {}",
-            info.markers.python_full_version(),
-            executable.display()
-        );
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
