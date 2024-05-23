@@ -1946,6 +1946,10 @@ pub(crate) struct ToolRunArgs {
     #[arg(long)]
     pub(crate) from: Option<String>,
 
+    /// Include the following extra requirements.
+    #[arg(long)]
+    pub(crate) with: Vec<String>,
+
     /// The Python interpreter to use to build the run environment.
     #[arg(
         long,
