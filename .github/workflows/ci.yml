@@ -135,7 +135,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run -p uv-dev -- fetch-python
+          cargo run --profile ci -p uv-dev -- fetch-python
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -146,6 +146,7 @@ jobs:
         run: |
           export UV_BOOTSTRAP_DIR="$(pwd)/bin"
           cargo nextest run \
+            --cargo-profile ci \
             --features python-patch \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
@@ -224,7 +225,7 @@ jobs:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: |
-          cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+          cargo nextest run --cargo-profile ci --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
         working-directory: ${{ env.DEV_DRIVE }}/uv
@@ -1060,8 +1061,8 @@ jobs:
       - name: "Install requirements and prime cache"
         run: |
           sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
-          cargo run --bin uv -- venv --cache-dir .cache
-          cargo run --bin uv -- pip compile scripts/requirements/airflow.in --cache-dir .cache
+          cargo run --profile ci --bin uv -- venv --cache-dir .cache
+          cargo run --profile ci --bin uv -- pip compile scripts/requirements/airflow.in --cache-dir .cache
 
       - name: "Build benchmarks"
         run: cargo codspeed build --features codspeed -p bench

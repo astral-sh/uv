@@ -190,6 +190,11 @@ rest_pat_in_fully_bound_structs = "warn"
 inherits = "release"
 debug = true
 
+[profile.ci]
+inherits = "dev"
+incremental = false
+opt-level = 1
+
 [profile.fast-build]
 inherits = "dev"
 debug = 0
