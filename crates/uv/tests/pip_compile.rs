@@ -765,7 +765,7 @@ dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 5, column 8
       |
     5 | name = "!project"
