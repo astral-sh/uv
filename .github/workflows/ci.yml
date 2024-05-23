@@ -1057,6 +1057,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: "Install requirements and prime cache"
+        run: |
+          sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
+          cargo run --bin uv -- venv --cache-dir .cache
+          cargo run --bin uv -- pip compile scripts/requirements/airflow.in --cache-dir .cache
+
       - name: "Build benchmarks"
         run: cargo codspeed build --features codspeed -p bench
 

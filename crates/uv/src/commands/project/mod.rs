@@ -114,10 +114,9 @@ pub(crate) async fn update_environment(
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_executable(&venv)?;
-
-    // If the requirements are already satisfied, we're done.
     if spec.source_trees.is_empty() {
         match site_packages.satisfies(&spec.requirements, &spec.editables, &spec.constraints)? {
+            // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
             } => {
@@ -129,10 +128,12 @@ pub(crate) async fn update_environment(
                         .sorted()
                         .join(" | ")
                 );
-                debug!(
-                    "All editables satisfied: {}",
-                    spec.editables.iter().map(ToString::to_string).join(", ")
-                );
+                if !spec.editables.is_empty() {
+                    debug!(
+                        "All editables satisfied: {}",
+                        spec.editables.iter().map(ToString::to_string).join(", ")
+                    );
+                }
                 return Ok(venv);
             }
             SatisfiesResult::Unsatisfied(requirement) => {

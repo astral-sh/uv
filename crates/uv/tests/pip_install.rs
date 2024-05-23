@@ -144,7 +144,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
@@ -171,7 +171,7 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
       |
     1 | [project]
@@ -209,7 +209,7 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: after parsing '1.0', found '.x', which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
@@ -5014,7 +5014,7 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: Failed to parse entry for: `tqdm`
       Caused by: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
     "###

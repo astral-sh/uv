@@ -152,9 +152,9 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    #[error("Failed to parse `{0}`")]
+    #[error("Failed to parse: `{0}`")]
     PyprojectToml(String, #[source] toml::de::Error),
 
-    #[error("Failed to parse `{0}`")]
+    #[error("Failed to parse: `{0}`")]
     UvToml(String, #[source] toml::de::Error),
 }

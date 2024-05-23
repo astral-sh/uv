@@ -6,7 +6,6 @@ use std::{
 use fs_err as fs;
 use pypi_types::Scheme;
 use thiserror::Error;
-use tracing::{debug, info};
 
 /// The layout of a virtual environment.
 #[derive(Debug)]
@@ -46,10 +45,6 @@ pub enum Error {
 /// Supports `VIRTUAL_ENV`.
 pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
     if let Some(dir) = env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()) {
-        info!(
-            "Found active virtual environment (via VIRTUAL_ENV) at: {}",
-            Path::new(&dir).display()
-        );
         return Some(PathBuf::from(dir));
     }
 
@@ -61,10 +56,6 @@ pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
 /// Supports `CONDA_PREFIX`.
 pub(crate) fn conda_prefix_from_env() -> Option<PathBuf> {
     if let Some(dir) = env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()) {
-        info!(
-            "Found active virtual environment (via CONDA_PREFIX) at: {}",
-            Path::new(&dir).display()
-        );
         return Some(PathBuf::from(dir));
     }
 
@@ -82,7 +73,6 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
     for dir in current_dir.ancestors() {
         // If we're _within_ a virtualenv, return it.
         if dir.join("pyvenv.cfg").is_file() {
-            debug!("Found a virtual environment at: {}", dir.display());
             return Ok(Some(dir.to_path_buf()));
         }
 
@@ -92,7 +82,6 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
             if !dot_venv.join("pyvenv.cfg").is_file() {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
-            debug!("Found a virtual environment at: {}", dot_venv.display());
             return Ok(Some(dot_venv));
         }
     }

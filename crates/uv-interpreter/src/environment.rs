@@ -8,7 +8,7 @@ use same_file::is_same_file;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
-use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython, VersionRequest};
+use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython};
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
 use crate::{
     find_default_interpreter, find_interpreter, Error, Interpreter, InterpreterSource, Target,
@@ -34,10 +34,13 @@ impl PythonEnvironment {
             Self::from_default_python(cache)
         } else {
             // First check for a parent intepreter
-            match Self::from_parent_interpreter(system, cache) {
-                Ok(env) => return Ok(env),
-                Err(Error::NotFound(_)) => {}
-                Err(err) => return Err(err),
+            // We gate this check to avoid an extra log message when it is not set
+            if std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER").is_some() {
+                match Self::from_parent_interpreter(system, cache) {
+                    Ok(env) => return Ok(env),
+                    Err(Error::NotFound(_)) => {}
+                    Err(err) => return Err(err),
+                }
             }
 
             // Then a virtual environment
@@ -54,7 +57,7 @@ impl PythonEnvironment {
     /// Allows Conda environments (via `CONDA_PREFIX`) though they are not technically virtual environments.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
         let sources = SourceSelector::VirtualEnv;
-        let request = InterpreterRequest::Version(VersionRequest::Default);
+        let request = InterpreterRequest::Any;
         let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
 
         debug_assert!(
@@ -74,7 +77,7 @@ impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] for the parent interpreter i.e. the executable in `python -m uv ...`
     pub fn from_parent_interpreter(system: SystemPython, cache: &Cache) -> Result<Self, Error> {
         let sources = SourceSelector::from_sources([InterpreterSource::ParentInterpreter]);
-        let request = InterpreterRequest::Version(VersionRequest::Default);
+        let request = InterpreterRequest::Any;
         let found = find_interpreter(&request, system, &sources, cache)??;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
@@ -200,18 +203,15 @@ impl PythonEnvironment {
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
         if let Some(target) = self.0.interpreter.target() {
             // If we're installing into a `--target`, use a target-specific lock file.
-            LockedFile::acquire(
-                target.root().join(".lock"),
-                target.root().simplified_display(),
-            )
+            LockedFile::acquire(target.root().join(".lock"), target.root().user_display())
         } else if self.0.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.
-            LockedFile::acquire(self.0.root.join(".lock"), self.0.root.simplified_display())
+            LockedFile::acquire(self.0.root.join(".lock"), self.0.root.user_display())
         } else {
             // Otherwise, use a global lock file.
             LockedFile::acquire(
                 env::temp_dir().join(format!("uv-{}.lock", cache_key::digest(&self.0.root))),
-                self.0.root.simplified_display(),
+                self.0.root.user_display(),
             )
         }
     }

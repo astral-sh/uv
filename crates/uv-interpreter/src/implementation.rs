@@ -17,6 +17,12 @@ pub enum ImplementationName {
     PyPy,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub(crate) enum LenientImplementationName {
+    Known(ImplementationName),
+    Unknown(String),
+}
+
 impl ImplementationName {
     pub(crate) fn iter() -> impl Iterator<Item = &'static ImplementationName> {
         static NAMES: &[ImplementationName] =
@@ -49,6 +55,24 @@ impl Display for ImplementationName {
         match self {
             Self::CPython => f.write_str("CPython"),
             Self::PyPy => f.write_str("PyPy"),
+        }
+    }
+}
+
+impl From<&str> for LenientImplementationName {
+    fn from(s: &str) -> Self {
+        match ImplementationName::from_str(s) {
+            Ok(implementation) => Self::Known(implementation),
+            Err(_) => Self::Unknown(s.to_string()),
+        }
+    }
+}
+
+impl Display for LenientImplementationName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Known(implementation) => implementation.fmt(f),
+            Self::Unknown(name) => f.write_str(name),
         }
     }
 }

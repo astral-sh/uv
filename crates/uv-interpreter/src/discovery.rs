@@ -6,7 +6,7 @@ use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 use which::which;
 
-use crate::implementation::ImplementationName;
+use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::toolchains_for_current_platform;
 use crate::py_launcher::py_list_paths;
@@ -26,8 +26,11 @@ use std::{path::Path, path::PathBuf, str::FromStr};
 /// A request to find a Python interpreter.
 ///
 /// See [`InterpreterRequest::from_str`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum InterpreterRequest {
+    /// Use any discovered Python interpreter
+    #[default]
+    Any,
     /// A Python version without an implementation name e.g. `3.10`
     Version(VersionRequest),
     /// A path to a directory containing a Python installation, e.g. `.venv`
@@ -60,7 +63,7 @@ pub enum SourceSelector {
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum VersionRequest {
     #[default]
-    Default,
+    Any,
     Major(u8),
     MajorMinor(u8, u8),
     MajorMinorPatch(u8, u8, u8),
@@ -297,7 +300,7 @@ fn python_executables_from_search_path<'a>(
         env::var_os("UV_TEST_PYTHON_PATH").unwrap_or(env::var_os("PATH").unwrap_or_default());
 
     let possible_names: Vec<_> = version
-        .unwrap_or(&VersionRequest::Default)
+        .unwrap_or(&VersionRequest::Any)
         .possible_names(implementation)
         .collect();
 
@@ -361,9 +364,9 @@ fn python_interpreters<'a>(
             Ok((source, path)) => Interpreter::query(&path, cache)
                 .map(|interpreter| (source, interpreter))
                 .inspect(|(source, interpreter)| {
-                    trace!(
-                        "Found Python interpreter {} {} at {} from {source}",
-                        interpreter.implementation_name(),
+                    debug!(
+                        "Found {} {} at `{}` ({source})",
+                        LenientImplementationName::from(interpreter.implementation_name()),
                         interpreter.python_full_version(),
                         path.display()
                     );
@@ -392,7 +395,7 @@ fn python_interpreters<'a>(
                         true
                     } else {
                         debug!(
-                            "Ignoring Python interpreter at `{}`: system intepreter not explicit",
+                            "Ignoring Python interpreter at `{}`: system interpreter not explicit",
                             interpreter.sys_executable().display()
                         );
                         false
@@ -401,7 +404,7 @@ fn python_interpreters<'a>(
                 (SystemPython::Explicit, true) => true,
                 (SystemPython::Disallowed, false) => {
                     debug!(
-                        "Ignoring Python interpreter at `{}`: system intepreter not allowed",
+                        "Ignoring Python interpreter at `{}`: system interpreter not allowed",
                         interpreter.sys_executable().display()
                     );
                     false
@@ -409,7 +412,7 @@ fn python_interpreters<'a>(
                 (SystemPython::Disallowed, true) => true,
                 (SystemPython::Required, true) => {
                     debug!(
-                        "Ignoring Python interpreter at `{}`: system intepreter required",
+                        "Ignoring Python interpreter at `{}`: system interpreter required",
                         interpreter.sys_executable().display()
                     );
                     false
@@ -423,7 +426,7 @@ fn python_interpreters<'a>(
 
 /// Check if an encountered error should stop discovery.
 ///
-/// Returns false when an error could be due to a faulty intepreter and we should continue searching for a working one.
+/// Returns false when an error could be due to a faulty interpreter and we should continue searching for a working one.
 fn should_stop_discovery(err: &Error) -> bool {
     match err {
         // When querying the interpreter fails, we will only raise errors that demonstrate that something is broken
@@ -453,9 +456,9 @@ pub fn find_interpreter(
     sources: &SourceSelector,
     cache: &Cache,
 ) -> Result<InterpreterResult, Error> {
-    debug!("Searching for interpreter that fulfills {request}");
     let result = match request {
         InterpreterRequest::File(path) => {
+            debug!("Checking for Python interpreter at {request}");
             if !sources.contains(InterpreterSource::ProvidedPath) {
                 return Err(Error::SourceNotSelected(
                     request.clone(),
@@ -473,6 +476,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::Directory(path) => {
+            debug!("Checking for Python interpreter in {request}");
             if !sources.contains(InterpreterSource::ProvidedPath) {
                 return Err(Error::SourceNotSelected(
                     request.clone(),
@@ -496,6 +500,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::ExecutableName(name) => {
+            debug!("Searching for Python interpreter with {request}");
             if !sources.contains(InterpreterSource::SearchPath) {
                 return Err(Error::SourceNotSelected(
                     request.clone(),
@@ -513,6 +518,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::Implementation(implementation) => {
+            debug!("Searching for a {request} interpreter in {sources}");
             let Some((source, interpreter)) =
                 python_interpreters(None, Some(implementation), system, sources, cache)
                     .find(|result| {
@@ -536,6 +542,7 @@ pub fn find_interpreter(
             }
         }
         InterpreterRequest::ImplementationVersion(implementation, version) => {
+            debug!("Searching for {request} in {sources}");
             let Some((source, interpreter)) =
                 python_interpreters(Some(version), Some(implementation), system, sources, cache)
                     .find(|result| {
@@ -565,7 +572,30 @@ pub fn find_interpreter(
                 interpreter,
             }
         }
+        InterpreterRequest::Any => {
+            debug!("Searching for Python interpreter in {sources}");
+            let Some((source, interpreter)) =
+                python_interpreters(None, None, system, sources, cache)
+                    .find(|result| {
+                        match result {
+                            // Return the first critical error or interpreter
+                            Err(err) => should_stop_discovery(err),
+                            Ok(_) => true,
+                        }
+                    })
+                    .transpose()?
+            else {
+                return Ok(InterpreterResult::Err(
+                    InterpreterNotFound::NoPythonInstallation(sources.clone(), None),
+                ));
+            };
+            DiscoveredInterpreter {
+                source,
+                interpreter,
+            }
+        }
         InterpreterRequest::Version(version) => {
+            debug!("Searching for {request} in {sources}");
             let Some((source, interpreter)) =
                 python_interpreters(Some(version), None, system, sources, cache)
                     .find(|result| {
@@ -577,7 +607,7 @@ pub fn find_interpreter(
                     })
                     .transpose()?
             else {
-                let err = if matches!(version, VersionRequest::Default) {
+                let err = if matches!(version, VersionRequest::Any) {
                     InterpreterNotFound::NoPythonInstallation(sources.clone(), Some(*version))
                 } else {
                     InterpreterNotFound::NoMatchingVersion(sources.clone(), *version)
@@ -600,7 +630,7 @@ pub fn find_interpreter(
 ///
 /// See [`find_interpreter`] for more details on interpreter discovery.
 pub fn find_default_interpreter(cache: &Cache) -> Result<InterpreterResult, Error> {
-    let request = InterpreterRequest::Version(VersionRequest::Default);
+    let request = InterpreterRequest::default();
     let sources = SourceSelector::System;
 
     let result = find_interpreter(&request, SystemPython::Required, &sources, cache)?;
@@ -665,7 +695,7 @@ pub fn find_best_interpreter(
 
     // If a Python version was requested but cannot be fulfilled, just take any version
     debug!("Looking for Python interpreter with any version");
-    let request = InterpreterRequest::Version(VersionRequest::Default);
+    let request = InterpreterRequest::Any;
     Ok(find_interpreter(
         // TODO(zanieb): Add a dedicated `Default` variant to `InterpreterRequest`
         &request, system, &sources, cache,
@@ -917,7 +947,7 @@ impl VersionRequest {
         };
 
         match self {
-            Self::Default => [Some(python3), Some(python), None, None],
+            Self::Any => [Some(python3), Some(python), None, None],
             Self::Major(major) => [
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
@@ -960,7 +990,7 @@ impl VersionRequest {
                 };
 
                 match self {
-                    Self::Default => [Some(python3), Some(python), None, None],
+                    Self::Any => [Some(python3), Some(python), None, None],
                     Self::Major(major) => [
                         Some(Cow::Owned(format!("{name}{major}{extension}"))),
                         Some(python),
@@ -990,7 +1020,7 @@ impl VersionRequest {
     /// Check if a interpreter matches the requested Python version.
     fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
         match self {
-            Self::Default => true,
+            Self::Any => true,
             Self::Major(major) => interpreter.python_major() == major,
             Self::MajorMinor(major, minor) => {
                 (interpreter.python_major(), interpreter.python_minor()) == (major, minor)
@@ -1007,7 +1037,7 @@ impl VersionRequest {
 
     fn matches_version(self, version: &PythonVersion) -> bool {
         match self {
-            Self::Default => true,
+            Self::Any => true,
             Self::Major(major) => version.major() == major,
             Self::MajorMinor(major, minor) => (version.major(), version.minor()) == (major, minor),
             Self::MajorMinorPatch(major, minor, patch) => {
@@ -1018,7 +1048,7 @@ impl VersionRequest {
 
     fn matches_major_minor(self, major: u8, minor: u8) -> bool {
         match self {
-            Self::Default => true,
+            Self::Any => true,
             Self::Major(self_major) => self_major == major,
             Self::MajorMinor(self_major, self_minor) => (self_major, self_minor) == (major, minor),
             Self::MajorMinorPatch(self_major, self_minor, _) => {
@@ -1030,7 +1060,7 @@ impl VersionRequest {
     /// Return true if a patch version is present in the request.
     fn has_patch(self) -> bool {
         match self {
-            Self::Default => false,
+            Self::Any => false,
             Self::Major(..) => false,
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
@@ -1041,7 +1071,7 @@ impl VersionRequest {
     #[must_use]
     fn without_patch(self) -> Self {
         match self {
-            Self::Default => Self::Default,
+            Self::Any => Self::Any,
             Self::Major(major) => Self::Major(major),
             Self::MajorMinor(major, minor) => Self::MajorMinor(major, minor),
             Self::MajorMinorPatch(major, minor, _) => Self::MajorMinor(major, minor),
@@ -1082,7 +1112,7 @@ impl From<&PythonVersion> for VersionRequest {
 impl fmt::Display for VersionRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Default => f.write_str("default"),
+            Self::Any => f.write_str("default"),
             Self::Major(major) => write!(f, "{major}"),
             Self::MajorMinor(major, minor) => write!(f, "{major}.{minor}"),
             Self::MajorMinorPatch(major, minor, patch) => {
@@ -1161,15 +1191,16 @@ impl SystemPython {
 impl fmt::Display for InterpreterRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Version(version) => write!(f, "Python @ {version}"),
-            Self::Directory(path) => write!(f, "directory {}", path.user_display()),
-            Self::File(path) => write!(f, "file {}", path.user_display()),
+            Self::Any => write!(f, "any Python"),
+            Self::Version(version) => write!(f, "Python {version}"),
+            Self::Directory(path) => write!(f, "directory `{}`", path.user_display()),
+            Self::File(path) => write!(f, "path `{}`", path.user_display()),
             Self::ExecutableName(name) => write!(f, "executable name `{name}`"),
             Self::Implementation(implementation) => {
                 write!(f, "{implementation}")
             }
             Self::ImplementationVersion(implementation, version) => {
-                write!(f, "{implementation} @ {version}")
+                write!(f, "{implementation} {version}")
             }
         }
     }
@@ -1193,13 +1224,13 @@ impl fmt::Display for InterpreterSource {
 impl fmt::Display for InterpreterNotFound {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NoPythonInstallation(sources, None | Some(VersionRequest::Default)) => {
+            Self::NoPythonInstallation(sources, None | Some(VersionRequest::Any)) => {
                 write!(f, "No Python interpreters found in {sources}")
             }
             Self::NoPythonInstallation(sources, Some(version)) => {
                 write!(f, "No Python {version} interpreters found in {sources}")
             }
-            Self::NoMatchingVersion(sources, VersionRequest::Default) => {
+            Self::NoMatchingVersion(sources, VersionRequest::Any) => {
                 write!(f, "No Python interpreter found in {sources}")
             }
             Self::NoMatchingVersion(sources, version) => {
