@@ -1,9 +1,9 @@
-use itertools::Either;
+use either::Either;
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 
 use once_cell::sync::Lazy;
-use relative_path::RelativePath;
+use path_slash::PathExt;
 
 /// The current working directory.
 pub static CWD: Lazy<PathBuf> =
@@ -68,10 +68,9 @@ impl<T: AsRef<Path>> Simplified for T {
         });
 
         // Use a portable representation for relative paths.
-        match RelativePath::from_path(path) {
-            Ok(path) => Either::Left(path),
-            Err(_) => Either::Right(path.display()),
-        }
+        path.to_slash()
+            .map(Either::Left)
+            .unwrap_or_else(|| Either::Right(path.display()))
     }
 
     fn relative_display(&self, base: impl AsRef<Path>) -> impl std::fmt::Display {
@@ -87,10 +86,9 @@ impl<T: AsRef<Path>> Simplified for T {
         });
 
         // Use a portable representation for relative paths.
-        match RelativePath::from_path(path) {
-            Ok(path) => Either::Left(path),
-            Err(_) => Either::Right(path.display()),
-        }
+        path.to_slash()
+            .map(Either::Left)
+            .unwrap_or_else(|| Either::Right(path.display()))
     }
 }
 

@@ -73,7 +73,7 @@ derivative = { version = "2.2.0" }
 directories = { version = "5.0.1" }
 dirs-sys = { version = "0.4.1" }
 dunce = { version = "1.0.4" }
-either = { version = "1.9.0" }
+either = { version = "1.12.0" }
 encoding_rs_io = { version = "0.1.7" }
 flate2 = { version = "1.0.28", default-features = false }
 fs-err = { version = "2.11.0" }
@@ -98,6 +98,7 @@ nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
 owo-colors = { version = "4.0.0" }
 path-absolutize = { version = "3.1.1" }
+path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
@@ -108,7 +109,6 @@ rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
-relative-path = { version = "1.9.3" }
 reqwest = { version = "0.12.3", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
 reqwest-middleware = { version = "0.3.0" }
 reqwest-retry = { version = "0.5.0" }

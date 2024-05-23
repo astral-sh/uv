@@ -2488,6 +2488,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "path-slash"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e91099d4268b0e11973f036e885d652fb0b21fedcf69738c627f94db6a44f42"
+
+[[package]]
 name = "pathdiff"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3058,12 +3064,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adad44e29e4c806119491a7f06f03de4d1af22c3a680dd47f1e6e179439d1f56"
 
 [[package]]
-name = "relative-path"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
-
-[[package]]
 name = "rend"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3086,7 +3086,6 @@ dependencies = [
  "pep508_rs",
  "pypi-types",
  "regex",
- "relative-path",
  "reqwest",
  "reqwest-middleware",
  "tempfile",
@@ -4685,7 +4684,7 @@ dependencies = [
  "anyhow",
  "clap",
  "distribution-types",
- "itertools 0.13.0",
+ "either",
  "pep508_rs",
  "platform-tags",
  "rustc-hash",
@@ -4832,14 +4831,14 @@ dependencies = [
  "backoff",
  "cachedir",
  "dunce",
+ "either",
  "encoding_rs_io",
  "fs-err",
  "fs2",
- "itertools 0.13.0",
  "junction",
  "once_cell",
  "path-absolutize",
- "relative-path",
+ "path-slash",
  "tempfile",
  "tracing",
  "urlencoding",

@@ -21,7 +21,7 @@ uv-normalize = { workspace = true }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
-itertools = { workspace = true }
+either = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
