@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
@@ -106,7 +107,12 @@ pub trait BuildContext {
         version_id: &'a str,
         dist: Option<&'a SourceDist>,
         build_kind: BuildKind,
-    ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
+    ) -> impl Future<
+        Output = Result<
+            Self::SourceDistBuilder,
+            <Self::SourceDistBuilder as SourceBuildTrait>::Err,
+        >,
+    > + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
@@ -114,20 +120,26 @@ pub trait BuildContext {
 /// You can either call only `wheel()` to build the wheel directly, call only `metadata()` to get
 /// the metadata without performing the actual or first call `metadata()` and then `wheel()`.
 pub trait SourceBuildTrait {
+    type Err: std::error::Error + Display;
+
     /// A wrapper for `uv_build::SourceBuild::get_metadata_without_build`.
     ///
     /// For PEP 517 builds, this calls `prepare_metadata_for_build_wheel`
     ///
     /// Returns the metadata directory if we're having a PEP 517 build and the
     /// `prepare_metadata_for_build_wheel` hook exists
-    fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>>>;
+    fn metadata(&mut self)
+        -> impl Future<Output = std::result::Result<Option<PathBuf>, Self::Err>>;
 
     /// A wrapper for `uv_build::SourceBuild::build`.
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
-    fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> impl Future<Output = Result<String>> + 'a;
+    fn wheel<'a>(
+        &'a self,
+        wheel_dir: &'a Path,
+    ) -> impl Future<Output = std::result::Result<String, Self::Err>> + 'a;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]

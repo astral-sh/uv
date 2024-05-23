@@ -17,13 +17,13 @@ use distribution_types::{
 };
 use pep508_rs::{UnnamedRequirement, VersionOrUrl};
 use pypi_types::{Metadata10, ParsedUrl, VerbatimParsedUrl};
-use uv_distribution::{DistributionDatabase, Reporter};
+use uv_distribution::{BuildContextWithErr, DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::HashStrategy;
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
-pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
+pub struct NamedRequirementsResolver<'a, Context: BuildContextWithErr> {
     /// The requirements for the project.
     requirements: Vec<UnresolvedRequirementSpecification>,
     /// Whether to check hashes for distributions.
@@ -34,7 +34,7 @@ pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
     database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
+impl<'a, Context: BuildContextWithErr> NamedRequirementsResolver<'a, Context> {
     /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
     pub fn new(
         requirements: Vec<UnresolvedRequirementSpecification>,

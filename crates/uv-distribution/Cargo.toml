@@ -21,6 +21,7 @@ pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
+uv-build = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-extract = { workspace = true }
@@ -30,7 +31,6 @@ uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-configuration = { workspace = true }
 
-anyhow = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 nanoid = { workspace = true }
@@ -47,3 +47,6 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }

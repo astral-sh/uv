@@ -1,10 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
-
 use distribution_filename::WheelFilename;
 use pep508_rs::VerbatimUrl;
-use pypi_types::{HashDigest, ParsedPathUrl};
+use pypi_types::{HashDigest, ParsedPathUrl, ParsedUrlError};
 use uv_normalize::PackageName;
 
 use crate::{
@@ -110,7 +108,7 @@ impl CachedDist {
     }
 
     /// Return the [`ParsedUrl`] of the distribution, if it exists.
-    pub fn parsed_url(&self) -> Result<Option<ParsedUrl>> {
+    pub fn parsed_url(&self) -> Result<Option<ParsedUrl>, Box<ParsedUrlError>> {
         match self {
             Self::Registry(_) => Ok(None),
             Self::Url(dist) => {
@@ -118,10 +116,7 @@ impl CachedDist {
                     assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
                     Ok(Some(ParsedUrl::Path(ParsedPathUrl {
                         url: dist.url.raw().clone(),
-                        path: dist
-                            .url
-                            .to_file_path()
-                            .map_err(|()| anyhow!("Invalid path in file URL"))?,
+                        path: dist.path.clone(),
                         editable: dist.editable,
                     })))
                 } else {

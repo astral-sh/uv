@@ -59,6 +59,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+uv-build = { workspace = true }
 uv-interpreter = { workspace = true }
 
 once_cell = { version = "1.19.0" }

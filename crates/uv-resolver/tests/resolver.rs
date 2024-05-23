@@ -104,7 +104,7 @@ impl BuildContext for DummyContext {
         _: &'a str,
         _: Option<&'a SourceDist>,
         _: BuildKind,
-    ) -> Result<Self::SourceDistBuilder> {
+    ) -> Result<Self::SourceDistBuilder, uv_build::Error> {
         Ok(DummyBuilder)
     }
 }
@@ -112,11 +112,13 @@ impl BuildContext for DummyContext {
 struct DummyBuilder;
 
 impl SourceBuildTrait for DummyBuilder {
-    async fn metadata(&mut self) -> Result<Option<PathBuf>> {
+    type Err = uv_build::Error;
+
+    async fn metadata(&mut self) -> Result<Option<PathBuf>, Self::Err> {
         panic!("The test should not need to build source distributions")
     }
 
-    async fn wheel<'a>(&'a self, _: &'a Path) -> Result<String> {
+    async fn wheel<'a>(&'a self, _: &'a Path) -> Result<String, Self::Err> {
         panic!("The test should not need to build source distributions")
     }
 }

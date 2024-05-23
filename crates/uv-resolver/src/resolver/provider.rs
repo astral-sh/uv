@@ -5,9 +5,9 @@ use anyhow::Result;
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
 use uv_configuration::{NoBinary, NoBuild};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::{ArchiveMetadata, BuildContextWithErr, DistributionDatabase};
 use uv_normalize::PackageName;
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::HashStrategy;
 
 use crate::flat_index::FlatIndex;
 use crate::python_requirement::PythonRequirement;
@@ -71,7 +71,7 @@ pub trait ResolverProvider {
 
 /// The main IO backend for the resolver, which does cached requests network requests using the
 /// [`RegistryClient`] and [`DistributionDatabase`].
-pub struct DefaultResolverProvider<'a, Context: BuildContext> {
+pub struct DefaultResolverProvider<'a, Context: BuildContextWithErr> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
     /// These are the entries from `--find-links` that act as overrides for index responses.
@@ -85,7 +85,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     no_build: NoBuild,
 }
 
-impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
+impl<'a, Context: BuildContextWithErr> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -113,7 +113,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     }
 }
 
-impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a, Context> {
+impl<'a, Context: BuildContextWithErr> ResolverProvider for DefaultResolverProvider<'a, Context> {
     /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,

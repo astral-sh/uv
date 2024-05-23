@@ -884,12 +884,14 @@ impl SourceBuild {
 }
 
 impl SourceBuildTrait for SourceBuild {
-    async fn metadata(&mut self) -> anyhow::Result<Option<PathBuf>> {
-        Ok(self.get_metadata_without_build().await?)
+    type Err = Error;
+
+    async fn metadata(&mut self) -> Result<Option<PathBuf>, Self::Err> {
+        self.get_metadata_without_build().await
     }
 
-    async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
-        Ok(self.build_wheel(wheel_dir).await?)
+    async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> Result<String, Self::Err> {
+        self.build_wheel(wheel_dir).await
     }
 }
 

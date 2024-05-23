@@ -13,8 +13,8 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use uv_cache::Cache;
-use uv_distribution::{DistributionDatabase, LocalWheel};
-use uv_types::{BuildContext, HashStrategy, InFlight};
+use uv_distribution::{BuildContextWithErr, DistributionDatabase, LocalWheel};
+use uv_types::{HashStrategy, InFlight};
 
 use crate::editable::BuiltEditable;
 
@@ -36,7 +36,7 @@ pub enum Error {
 }
 
 /// Download, build, and unzip a set of distributions.
-pub struct Downloader<'a, Context: BuildContext> {
+pub struct Downloader<'a, Context: BuildContextWithErr> {
     tags: &'a Tags,
     cache: &'a Cache,
     hashes: &'a HashStrategy,
@@ -44,7 +44,7 @@ pub struct Downloader<'a, Context: BuildContext> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, Context: BuildContext> Downloader<'a, Context> {
+impl<'a, Context: BuildContextWithErr> Downloader<'a, Context> {
     pub fn new(
         cache: &'a Cache,
         tags: &'a Tags,

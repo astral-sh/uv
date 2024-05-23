@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
 use fs_err::tokio as fs;
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;

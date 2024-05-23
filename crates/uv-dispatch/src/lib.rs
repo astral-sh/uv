@@ -6,7 +6,7 @@ use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
@@ -22,7 +22,9 @@ use uv_distribution::DistributionDatabase;
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+use uv_types::{
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight, SourceBuildTrait,
+};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -293,7 +295,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         version_id: &'data str,
         dist: Option<&'data SourceDist>,
         build_kind: BuildKind,
-    ) -> Result<SourceBuild> {
+    ) -> Result<SourceBuild, <Self::SourceDistBuilder as SourceBuildTrait>::Err> {
         match self.no_build {
             NoBuild::All => debug_assert!(
                 matches!(build_kind, BuildKind::Editable),
@@ -304,12 +306,11 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 // We can only prevent builds by name for packages with names. For editable
                 // packages and unnamed requirements, we can't prevent the build.
                 if let Some(dist) = dist {
-                    if packages.contains(dist.name()) {
-                        bail!(
-                            "Building source distributions for {} is disabled",
-                            dist.name()
-                        );
-                    }
+                    assert!(
+                        !packages.contains(dist.name()),
+                        "Building source distributions for {} is disabled",
+                        dist.name()
+                    );
                 }
             }
         }

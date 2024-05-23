@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::Result;
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::Response;
@@ -59,7 +58,9 @@ pub(crate) const LOCAL_REVISION: &str = "revision.rev";
 /// The name of the file that contains the cached distribution metadata, encoded via `MsgPack`.
 pub(crate) const METADATA: &str = "metadata.msgpack";
 
-impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
+impl<'a, U: SourceBuildTrait<Err = uv_build::Error>, T: BuildContext<SourceDistBuilder = U>>
+    SourceDistributionBuilder<'a, T>
+{
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
     pub fn new(build_context: &'a T) -> Self {
         Self {

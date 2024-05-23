@@ -31,9 +31,9 @@ use platform_tags::Tags;
 use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::{ArchiveMetadata, BuildContextWithErr, DistributionDatabase};
 use uv_normalize::PackageName;
-use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
+use uv_types::{HashStrategy, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
@@ -206,7 +206,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
+impl<'a, Context: BuildContextWithErr, InstalledPackages: InstalledPackagesProvider>
     Resolver<DefaultResolverProvider<'a, Context>, InstalledPackages>
 {
     /// Initialize a new resolver using the default backend doing real requests.

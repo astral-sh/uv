@@ -26,11 +26,12 @@ use uv_client::{
 use uv_configuration::{NoBinary, NoBuild};
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
-use uv_types::BuildContext;
 
 use crate::archive::Archive;
 use crate::locks::Locks;
-use crate::{ArchiveMetadata, Error, LocalWheel, Reporter, SourceDistributionBuilder};
+use crate::{
+    ArchiveMetadata, BuildContextWithErr, Error, LocalWheel, Reporter, SourceDistributionBuilder,
+};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -44,14 +45,14 @@ use crate::{ArchiveMetadata, Error, LocalWheel, Reporter, SourceDistributionBuil
 ///
 /// This struct also has the task of acquiring locks around source dist builds in general and git
 /// operation especially, as well as respecting concurrency limits.
-pub struct DistributionDatabase<'a, Context: BuildContext> {
+pub struct DistributionDatabase<'a, Context: BuildContextWithErr> {
     build_context: &'a Context,
     builder: SourceDistributionBuilder<'a, Context>,
     locks: Rc<Locks>,
     client: ManagedClient<'a>,
 }
 
-impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
+impl<'a, Context: BuildContextWithErr> DistributionDatabase<'a, Context> {
     pub fn new(
         client: &'a RegistryClient,
         build_context: &'a Context,

@@ -12,10 +12,10 @@ use distribution_types::{
 };
 use pep508_rs::RequirementOrigin;
 use pypi_types::VerbatimParsedUrl;
-use uv_distribution::{DistributionDatabase, Reporter};
+use uv_distribution::{BuildContextWithErr, DistributionDatabase, Reporter};
 use uv_fs::Simplified;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::HashStrategy;
 
 use crate::ExtrasSpecification;
 
@@ -23,7 +23,7 @@ use crate::ExtrasSpecification;
 ///
 /// Used, e.g., to determine the input requirements when a user specifies a `pyproject.toml`
 /// file, which may require running PEP 517 build hooks to extract metadata.
-pub struct SourceTreeResolver<'a, Context: BuildContext> {
+pub struct SourceTreeResolver<'a, Context: BuildContextWithErr> {
     /// The requirements for the project.
     source_trees: Vec<PathBuf>,
     /// The extras to include when resolving requirements.
@@ -36,7 +36,7 @@ pub struct SourceTreeResolver<'a, Context: BuildContext> {
     database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
+impl<'a, Context: BuildContextWithErr> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         source_trees: Vec<PathBuf>,

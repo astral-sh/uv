@@ -11,10 +11,10 @@ use distribution_types::{
 };
 use pep508_rs::MarkerEnvironment;
 use uv_configuration::{Constraints, Overrides};
-use uv_distribution::{DistributionDatabase, Reporter};
+use uv_distribution::{BuildContextWithErr, DistributionDatabase, Reporter};
 use uv_git::GitUrl;
 use uv_resolver::{BuiltEditableMetadata, InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
+use uv_types::{HashStrategy, RequestedRequirements};
 
 #[derive(Debug, Error)]
 pub enum LookaheadError {
@@ -42,7 +42,7 @@ pub enum LookaheadError {
 /// possible because a direct URL points to a _specific_ version of a package, and so we know that
 /// any correct resolution will _have_ to include it (unlike with PyPI dependencies, which may
 /// require a range of versions and backtracking).
-pub struct LookaheadResolver<'a, Context: BuildContext> {
+pub struct LookaheadResolver<'a, Context: BuildContextWithErr> {
     /// The direct requirements for the project.
     requirements: &'a [Requirement],
     /// The constraints for the project.
@@ -59,7 +59,7 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
+impl<'a, Context: BuildContextWithErr> LookaheadResolver<'a, Context> {
     /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
