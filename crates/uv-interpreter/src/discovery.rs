@@ -6,7 +6,7 @@ use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 use which::which;
 
-use crate::implementation::ImplementationName;
+use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::toolchains_for_current_platform;
 use crate::py_launcher::py_list_paths;
@@ -366,7 +366,7 @@ fn python_interpreters<'a>(
                 .inspect(|(source, interpreter)| {
                     trace!(
                         "Found Python interpreter {} {} at {} from {source}",
-                        interpreter.implementation_name(),
+                        LenientImplementationName::from(interpreter.implementation_name()),
                         interpreter.python_full_version(),
                         path.display()
                     );
