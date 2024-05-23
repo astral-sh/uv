@@ -1,7 +1,9 @@
+use itertools::Either;
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 
 use once_cell::sync::Lazy;
+use relative_path::RelativePath;
 
 /// The current working directory.
 pub static CWD: Lazy<PathBuf> =
@@ -33,7 +35,13 @@ pub trait Simplified {
     /// Render a [`Path`] for user-facing display.
     ///
     /// Like [`simplified_display`], but relativizes the path against the current working directory.
-    fn user_display(&self) -> std::path::Display;
+    fn user_display(&self) -> impl std::fmt::Display;
+
+    /// Render a [`Path`] for user-facing display, where the [`Path`] is relative to a base path.
+    ///
+    /// If the [`Path`] is not relative to the base path, will attempt to relativize the path
+    /// against the current working directory.
+    fn relative_display(&self, base: impl AsRef<Path>) -> impl std::fmt::Display;
 }
 
 impl<T: AsRef<Path>> Simplified for T {
@@ -49,17 +57,40 @@ impl<T: AsRef<Path>> Simplified for T {
         dunce::canonicalize(self.as_ref())
     }
 
-    fn user_display(&self) -> std::path::Display {
+    fn user_display(&self) -> impl std::fmt::Display {
         let path = dunce::simplified(self.as_ref());
 
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
-        path.strip_prefix(CWD.simplified())
-            .unwrap_or_else(|_| {
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
+            path.strip_prefix(CANONICAL_CWD.simplified())
+                .unwrap_or(path)
+        });
+
+        // Use a portable representation for relative paths.
+        match RelativePath::from_path(path) {
+            Ok(path) => Either::Left(path),
+            Err(_) => Either::Right(path.display()),
+        }
+    }
+
+    fn relative_display(&self, base: impl AsRef<Path>) -> impl std::fmt::Display {
+        let path = dunce::simplified(self.as_ref());
+
+        // Attempt to strip the base, then the current working directory, then the canonicalized
+        // current working directory, in case they differ.
+        let path = path.strip_prefix(base.as_ref()).unwrap_or_else(|_| {
+            path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
                 path.strip_prefix(CANONICAL_CWD.simplified())
                     .unwrap_or(path)
             })
-            .display()
+        });
+
+        // Use a portable representation for relative paths.
+        match RelativePath::from_path(path) {
+            Ok(path) => Either::Left(path),
+            Err(_) => Either::Right(path.display()),
+        }
     }
 }
 

@@ -1256,17 +1256,11 @@ impl fmt::Display for InterpreterNotFound {
                 path.user_display()
             ),
             Self::ExecutableNotFoundInDirectory(directory, executable) => {
-                let executable = if let Ok(relative_executable) = executable.strip_prefix(directory)
-                {
-                    relative_executable.display()
-                } else {
-                    executable.user_display()
-                };
                 write!(
                     f,
                     "Interpreter directory `{}` does not contain Python executable at `{}`",
                     directory.user_display(),
-                    executable
+                    executable.relative_display(directory)
                 )
             }
             Self::ExecutableNotFoundInSearchPath(name) => {

@@ -23,6 +23,8 @@ fs-err = { workspace = true }
 fs2 = { workspace = true }
 once_cell = { workspace = true }
 path-absolutize = { workspace = true }
+relative-path = { workspace = true }
+itertools = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
