@@ -161,7 +161,7 @@ pub(crate) fn setup_logging(
                         .with_ansi(ansi)
                         .with_filter(filter),
                 )
-                .init();
+                .try_init();
         }
         Level::ExtraVerbose => {
             // Regardless of the tracing level, include the uptime and target for each message.
@@ -174,7 +174,7 @@ pub(crate) fn setup_logging(
                         .with_writer(std::io::stderr)
                         .with_filter(filter),
                 )
-                .init();
+                .try_init();
         }
     }
 

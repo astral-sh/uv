@@ -51,8 +51,19 @@ mod settings;
 mod shell;
 mod version;
 
-#[instrument]
 async fn run() -> Result<ExitStatus> {
+    for _ in 0..std::env::var("RUNS")
+        .unwrap_or("0".to_string())
+        .parse::<usize>()
+        .unwrap()
+    {
+        run_().await;
+    }
+    run_().await
+}
+
+#[instrument]
+async fn run_() -> Result<ExitStatus> {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(mut err) => {
@@ -155,7 +166,7 @@ async fn run() -> Result<ExitStatus> {
 
     anstream::ColorChoice::write_global(globals.color.into());
 
-    miette::set_hook(Box::new(|_| {
+    let _ = miette::set_hook(Box::new(|_| {
         Box::new(
             miette::MietteHandlerOpts::new()
                 .break_words(false)
@@ -164,7 +175,7 @@ async fn run() -> Result<ExitStatus> {
                 .wrap_lines(env::var("UV_NO_WRAP").map(|_| false).unwrap_or(true))
                 .build(),
         )
-    }))?;
+    }));
 
     // Resolve the cache settings.
     let cache = CacheSettings::resolve(cli.cache_args, workspace.as_ref());
@@ -178,10 +189,9 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, workspace);
-            rayon::ThreadPoolBuilder::new()
+            let _ = rayon::ThreadPoolBuilder::new()
                 .num_threads(args.shared.concurrency.installs)
-                .build_global()
-                .expect("failed to initialize global rayon pool");
+                .build_global();
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);

@@ -132,7 +132,7 @@ async fn main() -> ExitCode {
         .with(filter_layer)
         .with(indicatif_compatible_writer_layer)
         .with(indicatif_layer)
-        .init();
+        .try_init();
 
     let start = Instant::now();
     let result = run().await;
