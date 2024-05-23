@@ -392,7 +392,7 @@ fn python_interpreters<'a>(
                         true
                     } else {
                         debug!(
-                            "Ignoring Python interpreter at `{}`: system intepreter not explicit",
+                            "Ignoring Python interpreter at `{}`: system interpreter not explicit",
                             interpreter.sys_executable().display()
                         );
                         false
@@ -401,7 +401,7 @@ fn python_interpreters<'a>(
                 (SystemPython::Explicit, true) => true,
                 (SystemPython::Disallowed, false) => {
                     debug!(
-                        "Ignoring Python interpreter at `{}`: system intepreter not allowed",
+                        "Ignoring Python interpreter at `{}`: system interpreter not allowed",
                         interpreter.sys_executable().display()
                     );
                     false
@@ -409,7 +409,7 @@ fn python_interpreters<'a>(
                 (SystemPython::Disallowed, true) => true,
                 (SystemPython::Required, true) => {
                     debug!(
-                        "Ignoring Python interpreter at `{}`: system intepreter required",
+                        "Ignoring Python interpreter at `{}`: system interpreter required",
                         interpreter.sys_executable().display()
                     );
                     false
@@ -423,7 +423,7 @@ fn python_interpreters<'a>(
 
 /// Check if an encountered error should stop discovery.
 ///
-/// Returns false when an error could be due to a faulty intepreter and we should continue searching for a working one.
+/// Returns false when an error could be due to a faulty interpreter and we should continue searching for a working one.
 fn should_stop_discovery(err: &Error) -> bool {
     match err {
         // When querying the interpreter fails, we will only raise errors that demonstrate that something is broken
