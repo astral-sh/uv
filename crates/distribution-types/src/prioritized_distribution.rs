@@ -1,3 +1,4 @@
+use distribution_filename::BuildTag;
 use std::fmt::{Display, Formatter};
 
 use pep440_rs::VersionSpecifiers;
@@ -134,7 +135,7 @@ impl Display for IncompatibleDist {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
-    Compatible(HashComparison, TagPriority),
+    Compatible(HashComparison, TagPriority, Option<BuildTag>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -245,7 +246,7 @@ impl PrioritizedDist {
             // source distribution with a matching hash over a wheel with a mismatched hash. When
             // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
             (
-                Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority))),
+                Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority, ..))),
                 Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
             ) => {
                 if sdist_hash > wheel_hash {
@@ -262,7 +263,7 @@ impl PrioritizedDist {
                 }
             }
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, WheelCompatibility::Compatible(_, tag_priority))), _) => {
+            (Some((wheel, WheelCompatibility::Compatible(_, tag_priority, ..))), _) => {
                 Some(CompatibleDist::CompatibleWheel {
                     wheel,
                     priority: *tag_priority,
@@ -309,7 +310,7 @@ impl PrioritizedDist {
             .best_wheel_index
             .map(|i| &self.0.wheels[i])
             .and_then(|(_, compatibility)| match compatibility {
-                WheelCompatibility::Compatible(_, _) => None,
+                WheelCompatibility::Compatible(_, _, _) => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
             })
     }
@@ -415,7 +416,7 @@ impl<'a> CompatibleDist<'a> {
 
 impl WheelCompatibility {
     pub fn is_compatible(&self) -> bool {
-        matches!(self, Self::Compatible(_, _))
+        matches!(self, Self::Compatible(_, _, _))
     }
 
     /// Return `true` if the current compatibility is more compatible than another.
@@ -424,12 +425,14 @@ impl WheelCompatibility {
     /// Compatible wheel ordering is determined by tag priority.
     pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible(_, _), Self::Incompatible(_)) => true,
+            (Self::Compatible(_, _, _), Self::Incompatible(_)) => true,
             (
-                Self::Compatible(hash, tag_priority),
-                Self::Compatible(other_hash, other_tag_priority),
-            ) => (hash, tag_priority) > (other_hash, other_tag_priority),
-            (Self::Incompatible(_), Self::Compatible(_, _)) => false,
+                Self::Compatible(hash, tag_priority, build_tag),
+                Self::Compatible(other_hash, other_tag_priority, other_build_tag),
+            ) => {
+                (hash, tag_priority, build_tag) > (other_hash, other_tag_priority, other_build_tag)
+            }
+            (Self::Incompatible(_), Self::Compatible(_, _, _)) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }

@@ -9,12 +9,15 @@ use pep440_rs::{Version, VersionParseError};
 use platform_tags::{TagCompatibility, Tags};
 use uv_normalize::{InvalidNameError, PackageName};
 
+use crate::{BuildTag, BuildTagError};
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
+    pub build_tag: Option<BuildTag>,
     pub python_tag: Vec<String>,
     pub abi_tag: Vec<String>,
     pub platform_tag: Vec<String>,
@@ -57,16 +60,6 @@ impl WheelFilename {
         compatible_tags.compatibility(&self.python_tag, &self.abi_tag, &self.platform_tag)
     }
 
-    /// Get the tag for this wheel.
-    pub fn get_tag(&self) -> String {
-        format!(
-            "{}-{}-{}",
-            self.python_tag.join("."),
-            self.abi_tag.join("."),
-            self.platform_tag.join(".")
-        )
-    }
-
     /// The wheel filename without the extension.
     pub fn stem(&self) -> String {
         format!(
@@ -80,6 +73,16 @@ impl WheelFilename {
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     pub fn from_stem(stem: &str) -> Result<Self, WheelFilenameError> {
         Self::parse(stem, stem)
+    }
+
+    /// Get the tag for this wheel.
+    fn get_tag(&self) -> String {
+        format!(
+            "{}-{}-{}",
+            self.python_tag.join("."),
+            self.abi_tag.join("."),
+            self.platform_tag.join(".")
+        )
     }
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
@@ -129,7 +132,7 @@ impl WheelFilename {
             ));
         };
 
-        let (name, version, python_tag, abi_tag, platform_tag) =
+        let (name, version, build_tag, python_tag, abi_tag, platform_tag) =
             if let Some(platform_tag) = parts.next() {
                 if parts.next().is_some() {
                     return Err(WheelFilenameError::InvalidWheelFileName(
@@ -140,6 +143,7 @@ impl WheelFilename {
                 (
                     name,
                     version,
+                    Some(build_tag_or_python_tag),
                     python_tag_or_abi_tag,
                     abi_tag_or_platform_tag,
                     platform_tag,
@@ -148,6 +152,7 @@ impl WheelFilename {
                 (
                     name,
                     version,
+                    None,
                     build_tag_or_python_tag,
                     python_tag_or_abi_tag,
                     abi_tag_or_platform_tag,
@@ -158,9 +163,16 @@ impl WheelFilename {
             .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
         let version = Version::from_str(version)
             .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
+        let build_tag = build_tag
+            .map(|build_tag| {
+                BuildTag::from_str(build_tag)
+                    .map_err(|err| WheelFilenameError::InvalidBuildTag(filename.to_string(), err))
+            })
+            .transpose()?;
         Ok(Self {
             name,
             version,
+            build_tag,
             python_tag: python_tag.split('.').map(String::from).collect(),
             abi_tag: abi_tag.split('.').map(String::from).collect(),
             platform_tag: platform_tag.split('.').map(String::from).collect(),
@@ -214,10 +226,12 @@ impl Serialize for WheelFilename {
 pub enum WheelFilenameError {
     #[error("The wheel filename \"{0}\" is invalid: {1}")]
     InvalidWheelFileName(String, String),
-    #[error("The wheel filename \"{0}\" has an invalid version part: {1}")]
+    #[error("The wheel filename \"{0}\" has an invalid version: {1}")]
     InvalidVersion(String, VersionParseError),
     #[error("The wheel filename \"{0}\" has an invalid package name")]
     InvalidPackageName(String, InvalidNameError),
+    #[error("The wheel filename \"{0}\" has an invalid build tag: {1}")]
+    InvalidBuildTag(String, BuildTagError),
 }
 
 #[cfg(test)]
@@ -276,7 +290,13 @@ mod tests {
     #[test]
     fn err_invalid_version() {
         let err = WheelFilename::from_str("foo-x.y.z-python-abi-platform.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version part: expected version to start with a number, but no leading ASCII digits were found"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version: expected version to start with a number, but no leading ASCII digits were found"###);
+    }
+
+    #[test]
+    fn err_invalid_build_tag() {
+        let err = WheelFilename::from_str("foo-1.2.3-tag-python-abi-platform.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo-1.2.3-tag-python-abi-platform.whl" has an invalid build tag: must start with a digit"###);
     }
 
     #[test]
@@ -294,7 +314,7 @@ mod tests {
     #[test]
     fn ok_build_tag() {
         insta::assert_debug_snapshot!(WheelFilename::from_str(
-            "foo-1.2.3-build-python-abi-platform.whl"
+            "foo-1.2.3-12-python-abi-platform.whl"
         ));
     }
 

@@ -56,6 +56,7 @@ Ok(
                                 "anyio",
                             ),
                             version: "4.3.0",
+                            build_tag: None,
                             python_tag: [
                                 "py3",
                             ],

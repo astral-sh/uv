@@ -8,6 +8,7 @@ Ok(
             "foo",
         ),
         version: "1.2.3",
+        build_tag: None,
         python_tag: [
             "ab",
             "cd",
