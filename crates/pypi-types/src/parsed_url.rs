@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
 use uv_git::{GitSha, GitUrl};
+
+use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {

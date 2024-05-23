@@ -16,7 +16,6 @@
 
 #![warn(missing_docs)]
 
-use cursor::Cursor;
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -39,6 +38,7 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use url::Url;
 
+use cursor::Cursor;
 pub use marker::{
     ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
     MarkerTree, MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
@@ -50,7 +50,6 @@ use pep440_rs::PyVersion;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "non-pep508-extensions")]
 pub use unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
-// Parity with the crates.io version of pep508_rs
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use verbatim_url::{
     expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,

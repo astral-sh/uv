@@ -6,9 +6,10 @@ use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize};
 use tracing::warn;
 
-use crate::VerbatimParsedUrl;
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Pep508Url, Requirement};
+
+use crate::VerbatimParsedUrl;
 
 /// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
