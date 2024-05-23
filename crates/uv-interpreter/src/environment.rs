@@ -34,10 +34,13 @@ impl PythonEnvironment {
             Self::from_default_python(cache)
         } else {
             // First check for a parent intepreter
-            match Self::from_parent_interpreter(system, cache) {
-                Ok(env) => return Ok(env),
-                Err(Error::NotFound(_)) => {}
-                Err(err) => return Err(err),
+            // We gate this check to avoid an extra log message when it is not set
+            if std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER").is_some() {
+                match Self::from_parent_interpreter(system, cache) {
+                    Ok(env) => return Ok(env),
+                    Err(Error::NotFound(_)) => {}
+                    Err(err) => return Err(err),
+                }
             }
 
             // Then a virtual environment
