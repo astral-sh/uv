@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use fs2::FileExt;
 use fs_err as fs;
 use tempfile::NamedTempFile;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, trace, warn};
 
 use uv_warnings::warn_user;
 
@@ -289,9 +289,12 @@ pub struct LockedFile(fs_err::File);
 impl LockedFile {
     pub fn acquire(path: impl AsRef<Path>, resource: impl Display) -> Result<Self, std::io::Error> {
         let file = fs_err::File::create(path.as_ref())?;
-        debug!("Trying to lock if free: {}", path.as_ref().user_display());
+        trace!("Checking lock for `{resource}`");
         match file.file().try_lock_exclusive() {
-            Ok(()) => Ok(Self(file)),
+            Ok(()) => {
+                debug!("Acquired lock for `{resource}`");
+                Ok(Self(file))
+            }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures
                 debug!("Try lock error, waiting for exclusive lock: {:?}", err);
