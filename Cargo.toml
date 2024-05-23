@@ -80,11 +80,8 @@ flate2 = { version = "1.0.28", default-features = false }
 fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
-git2 = { version = "0.18.1" }
 glob = { version = "0.3.1" }
 hex = { version = "0.4.3" }
-hmac = { version = "0.12.1" }
-home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "1.1.0" }
 indexmap = { version = "2.2.5" }
@@ -106,7 +103,6 @@ platform-info = { version = "2.0.2" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "0e684a874c9fb8f74738cd8875524c80e3d4820b" }
 pyo3 = { version = "0.21.0" }
 pyo3-log = { version = "0.10.0" }
-rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
@@ -122,7 +118,6 @@ schemars = { version = "0.8.16", features = ["url"] }
 seahash = { version = "4.1.0" }
 serde = { version = "1.0.197" }
 serde_json = { version = "1.0.114" }
-sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
 sys-info = { version = "0.9.1" }
 tempfile = { version = "3.9.0" }

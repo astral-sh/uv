@@ -2,14 +2,12 @@ use std::str::FromStr;
 use url::Url;
 
 pub use crate::git::GitReference;
-pub use crate::sha::GitSha;
+pub use crate::sha::{GitOid, GitSha, OidParseError};
 pub use crate::source::{Fetch, GitSource, Reporter};
 
 mod git;
-mod known_hosts;
 mod sha;
 mod source;
-mod util;
 
 /// A URL reference to a Git repository.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash, Ord)]
@@ -55,7 +53,7 @@ impl GitUrl {
 }
 
 impl TryFrom<Url> for GitUrl {
-    type Error = git2::Error;
+    type Error = OidParseError;
 
     /// Initialize a [`GitUrl`] source from a URL.
     fn try_from(mut url: Url) -> Result<Self, Self::Error> {
@@ -120,12 +118,4 @@ impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.repository)
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum FetchStrategy {
-    /// Fetch Git repositories using libgit2.
-    Libgit2,
-    /// Fetch Git repositories using the `git` CLI.
-    Cli,
 }
