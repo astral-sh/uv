@@ -1450,7 +1450,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("future==0.18.3")?;
+    requirements_txt.write_str("source_distribution==0.0.1")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -1463,11 +1463,13 @@ fn install_registry_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + future==0.18.3
+     + source-distribution==0.0.1
     "###
     );
 
-    context.assert_command("import future").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1485,11 +1487,13 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + future==0.18.3
+     + source-distribution==0.0.1
     "###
     );
 
-    context.assert_command("import future").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1498,20 +1502,20 @@ fn install_registry_source_dist_cached() -> Result<()> {
 
     let filters: Vec<(&str, &str)> = if cfg!(windows) {
         // On Windows, the number of files removed is different.
-        [("Removed 616 files", "Removed 617 files")]
+        [("Removed 13 files", "Removed 14 files")]
             .into_iter()
             .chain(context.filters())
             .collect()
     } else {
         // For some Linux distributions, like Gentoo, the number of files removed is different.
-        [("Removed 615 files", "Removed 617 files")]
+        [("Removed 12 files", "Removed 14 files")]
             .into_iter()
             .chain(context.filters())
             .collect()
     };
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
-        .arg("future")
+        .arg("source_distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
@@ -1521,7 +1525,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 617 files for future ([SIZE])
+    Removed 14 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1537,11 +1541,13 @@ fn install_registry_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + future==0.18.3
+     + source-distribution==0.0.1
     "###
     );
 
-    context.assert_command("import future").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
