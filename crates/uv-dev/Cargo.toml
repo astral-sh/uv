@@ -54,7 +54,6 @@ tagu = { version = "0.1.6" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
-tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
 walkdir = { workspace = true }
 

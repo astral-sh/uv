@@ -1,5 +1,4 @@
 use std::env;
-use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -11,7 +10,6 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 use tracing_durations_export::plot::PlotConfig;
 use tracing_durations_export::DurationsLayerBuilder;
-use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -116,11 +114,6 @@ async fn main() -> ExitCode {
         (None, None)
     };
 
-    let indicatif_layer = IndicatifLayer::new();
-    let indicatif_compatible_writer_layer = tracing_subscriber::fmt::layer()
-        .with_writer(indicatif_layer.get_stderr_writer())
-        .with_ansi(std::io::stderr().is_terminal())
-        .with_target(false);
     let filter_layer = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::builder()
             // Show only the important spans
@@ -130,8 +123,6 @@ async fn main() -> ExitCode {
     tracing_subscriber::registry()
         .with(duration_layer)
         .with(filter_layer)
-        .with(indicatif_compatible_writer_layer)
-        .with(indicatif_layer)
         .init();
 
     let start = Instant::now();
