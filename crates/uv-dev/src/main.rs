@@ -19,6 +19,7 @@ use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
 use crate::fetch_python::FetchPythonArgs;
 use crate::generate_json_schema::GenerateJsonSchemaArgs;
+#[cfg(feature = "render")]
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
 
@@ -54,8 +55,6 @@ enum Cli {
     Build(BuildArgs),
     /// Display the metadata for a `.whl` at a given URL.
     WheelMetadata(WheelMetadataArgs),
-    /// Render the benchmarks.
-    RenderBenchmarks(RenderBenchmarksArgs),
     /// Compile all `.py` to `.pyc` files in the tree.
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
@@ -64,6 +63,9 @@ enum Cli {
     FetchPython(FetchPythonArgs),
     /// Generate JSON schema for the TOML configuration file.
     GenerateJSONSchema(GenerateJsonSchemaArgs),
+    #[cfg(feature = "render")]
+    /// Render the benchmarks.
+    RenderBenchmarks(RenderBenchmarksArgs),
 }
 
 #[instrument] // Anchor span to check for overhead
@@ -75,11 +77,12 @@ async fn run() -> Result<()> {
             println!("Wheel built to {}", target.display());
         }
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
-        Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
         Cli::FetchPython(args) => fetch_python::fetch_python(args).await?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
+        #[cfg(feature = "render")]
+        Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
     }
     Ok(())
 }
