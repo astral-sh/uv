@@ -1,6 +1,5 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use pypi_types::{ParsedUrl, ParsedUrlError};
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -14,12 +13,10 @@ use distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, InstalledVersion, LocalDist, Name,
-    RequirementSource, Resolution,
+    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
-use pep440_rs::{VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{MarkerEnvironment, VerbatimUrl};
+use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
@@ -202,38 +199,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // TODO(zanieb): Consider consuming these instead of cloning
     let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
 
-    // Prefer current site packages; filter out packages that are marked for reinstall or upgrade
+    // Prefer current site packages; filter out packages that are marked for reinstall or upgrade.
     let preferences = installed_packages
         .iter()
         .filter(|dist| !exclusions.contains(dist.name()))
-        .map(|dist| {
-            let source = match dist.installed_version() {
-                InstalledVersion::Version(version) => RequirementSource::Registry {
-                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                        version.clone(),
-                    )),
-                    // TODO(konstin): track index
-                    index: None,
-                },
-                InstalledVersion::Url(url, _version) => {
-                    let parsed_url = ParsedUrl::try_from(url.clone())?;
-                    RequirementSource::from_parsed_url(
-                        parsed_url,
-                        VerbatimUrl::from_url(url.clone()),
-                    )
-                }
-            };
-            let requirement = Requirement {
-                name: dist.name().clone(),
-                extras: vec![],
-                marker: None,
-                source,
-                origin: None,
-            };
-            Ok(Preference::from_requirement(requirement))
-        })
-        .collect::<Result<_, _>>()
-        .map_err(Error::UnsupportedInstalledDist)?;
+        .map(Preference::from_installed)
+        .collect::<Vec<_>>();
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
@@ -772,7 +743,4 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
-
-    #[error("Installed distribution has unsupported type")]
-    UnsupportedInstalledDist(#[source] Box<ParsedUrlError>),
 }
