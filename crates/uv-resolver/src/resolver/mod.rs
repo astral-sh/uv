@@ -32,7 +32,7 @@ use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
@@ -315,7 +315,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         'FORK: while let Some(mut state) = forked_states.pop() {
             loop {
                 // Run unit propagation.
-                state.pubgrub.unit_propagation(state.next)?;
+                state.pubgrub.unit_propagation(state.next.clone())?;
 
                 // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
                 // the dependency mode is direct, we only need to visit the root package.
@@ -335,14 +335,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
                     }
-                    let selection = state.pubgrub.partial_solution.extract_solution();
-                    resolutions.push(ResolutionGraph::from_state(
-                        &self.index,
-                        &selection,
-                        &state.pins,
-                        &state.pubgrub,
-                        &self.preferences,
-                    )?);
+                    resolutions.push(state.into_resolution());
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
@@ -534,11 +527,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .add_decision(state.next.clone(), version);
             }
         }
-        // This unwrap is okay because every code path above leads to at least
-        // one resolution being pushed.
-        //
-        // TODO: Implement merging of resolutions.
-        Ok(resolutions.pop().unwrap())
+        let mut combined = Resolution::default();
+        for resolution in resolutions {
+            combined.union(resolution);
+        }
+        ResolutionGraph::from_state(&self.index, &self.preferences, combined)
     }
 
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
@@ -1363,6 +1356,142 @@ struct SolveState {
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
     added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
+}
+
+impl SolveState {
+    fn into_resolution(self) -> Resolution {
+        let packages = self.pubgrub.partial_solution.extract_solution();
+        let mut dependencies: FxHashMap<
+            ResolutionDependencyNames,
+            FxHashSet<ResolutionDependencyVersions>,
+        > = FxHashMap::default();
+        for (package, self_version) in &packages {
+            for id in &self.pubgrub.incompatibilities[package] {
+                let pubgrub::solver::Kind::FromDependencyOf(
+                    ref self_package,
+                    ref self_range,
+                    ref dependency_package,
+                    ref dependency_range,
+                ) = self.pubgrub.incompatibility_store[*id].kind
+                else {
+                    continue;
+                };
+                if package != self_package {
+                    continue;
+                }
+                if !self_range.contains(self_version) {
+                    continue;
+                }
+                let Some(dependency_version) = packages.get(dependency_package) else {
+                    continue;
+                };
+                if !dependency_range.contains(dependency_version) {
+                    continue;
+                }
+
+                let PubGrubPackageInner::Package {
+                    name: ref self_name,
+                    extra: ref self_extra,
+                    ..
+                } = &**self_package
+                else {
+                    continue;
+                };
+
+                match **dependency_package {
+                    PubGrubPackageInner::Package {
+                        name: ref dependency_name,
+                        extra: ref dependency_extra,
+                        ..
+                    } => {
+                        if self_name == dependency_name {
+                            continue;
+                        }
+                        let names = ResolutionDependencyNames {
+                            from: self_name.clone(),
+                            to: dependency_name.clone(),
+                        };
+                        let versions = ResolutionDependencyVersions {
+                            from_version: self_version.clone(),
+                            from_extra: self_extra.clone(),
+                            to_version: dependency_version.clone(),
+                            to_extra: dependency_extra.clone(),
+                        };
+                        dependencies.entry(names).or_default().insert(versions);
+                    }
+
+                    PubGrubPackageInner::Extra {
+                        name: ref dependency_name,
+                        extra: ref dependency_extra,
+                        ..
+                    } => {
+                        if self_name == dependency_name {
+                            continue;
+                        }
+                        let names = ResolutionDependencyNames {
+                            from: self_name.clone(),
+                            to: dependency_name.clone(),
+                        };
+                        let versions = ResolutionDependencyVersions {
+                            from_version: self_version.clone(),
+                            from_extra: self_extra.clone(),
+                            to_version: dependency_version.clone(),
+                            to_extra: Some(dependency_extra.clone()),
+                        };
+                        dependencies.entry(names).or_default().insert(versions);
+                    }
+
+                    _ => {}
+                }
+            }
+        }
+        let packages = packages
+            .into_iter()
+            .map(|(package, version)| (package, FxHashSet::from_iter([version])))
+            .collect();
+        Resolution {
+            packages,
+            dependencies,
+            pins: self.pins,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Resolution {
+    pub(crate) packages: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
+    pub(crate) dependencies:
+        FxHashMap<ResolutionDependencyNames, FxHashSet<ResolutionDependencyVersions>>,
+    pub(crate) pins: FilePins,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct ResolutionDependencyNames {
+    pub(crate) from: PackageName,
+    pub(crate) to: PackageName,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct ResolutionDependencyVersions {
+    pub(crate) from_version: Version,
+    pub(crate) from_extra: Option<ExtraName>,
+    pub(crate) to_version: Version,
+    pub(crate) to_extra: Option<ExtraName>,
+}
+
+impl Resolution {
+    fn union(&mut self, other: Resolution) {
+        for (other_package, other_versions) in other.packages {
+            self.packages
+                .entry(other_package)
+                .or_default()
+                .extend(other_versions);
+        }
+        for (names, versions) in other.dependencies {
+            self.dependencies.entry(names).or_default().extend(versions);
+        }
+        self.pins.union(other.pins);
+    }
 }
 
 /// Fetch the metadata for an item
