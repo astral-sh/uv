@@ -3190,7 +3190,7 @@ fn respect_http_env_var() -> Result<()> {
         # via flask
     click==8.1.7
         # via flask
-    ${URL}
+    flask @ ${URL}
         # via -r requirements.in
     itsdangerous==2.1.2
         # via flask
@@ -3231,7 +3231,7 @@ fn respect_unnamed_env_var() -> Result<()> {
         # via flask
     click==8.1.7
         # via flask
-    ${URL}
+    flask @ ${URL}
         # via -r requirements.in
     itsdangerous==2.1.2
         # via flask
