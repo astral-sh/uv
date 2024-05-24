@@ -1179,43 +1179,6 @@ fn install_local_source_distribution() -> Result<()> {
     Ok(())
 }
 
-/// The `ujson` package includes a `[build-system]`, but no `build-backend`. It lists some explicit
-/// build requirements, but _also_ depends on `wheel` and `setuptools`:
-/// ```toml
-/// [build-system]
-/// requires = ["setuptools>=42", "setuptools_scm[toml]>=3.4"]
-/// ```
-///
-/// Like `pip` and `build`, we should use PEP 517 here and respect the `requires`, but use the
-/// default build backend.
-#[test]
-#[cfg(unix)] // https://github.com/astral-sh/uv/issues/1238
-fn install_ujson() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz")?;
-
-    uv_snapshot!(command(&context)
-        .arg("requirements.txt")
-        .arg("--strict"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ujson==5.7.0 (from https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz)
-    "###
-    );
-
-    context.assert_command("import ujson").success();
-
-    Ok(())
-}
-
 /// This package includes a `[build-system]`, but no `build-backend`.
 ///
 /// It lists some explicit build requirements that are necessary to build the distribution:
