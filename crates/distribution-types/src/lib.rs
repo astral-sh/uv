@@ -427,6 +427,14 @@ impl Dist {
         }
     }
 
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::Source(dist) => dist.is_local(),
+            Self::Built(dist) => dist.is_local(),
+        }
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
@@ -452,6 +460,11 @@ impl Dist {
 }
 
 impl BuiltDist {
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Path(_))
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
@@ -508,6 +521,11 @@ impl SourceDist {
             Self::Directory(DirectorySourceDist { editable, .. }) => *editable,
             _ => false,
         }
+    }
+
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Directory(_) | Self::Path(_))
     }
 
     /// Returns the path to the source distribution, if it's a local distribution.

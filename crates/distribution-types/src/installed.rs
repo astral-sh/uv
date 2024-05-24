@@ -284,6 +284,16 @@ impl InstalledDist {
             Self::LegacyEditable(dist) => Some(&dist.target_url),
         }
     }
+
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::Registry(_) => false,
+            Self::Url(dist) => matches!(&*dist.direct_url, DirectUrl::LocalDirectory { .. }),
+            Self::EggInfo(_) => false,
+            Self::LegacyEditable(_) => true,
+        }
+    }
 }
 
 impl DistributionMetadata for InstalledDist {
