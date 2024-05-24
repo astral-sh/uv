@@ -608,7 +608,7 @@ fn install_sdist() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Werkzeug==0.9.6")?;
+    requirements_txt.write_str("source-distribution==0.0.1")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -621,11 +621,13 @@ fn install_sdist() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==0.9.6
+     + source-distribution==0.0.1
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
@@ -636,7 +638,7 @@ fn install_sdist_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Werkzeug @ https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz")?;
+    requirements_txt.write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -649,11 +651,13 @@ fn install_sdist_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==0.9.6 (from https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
@@ -1530,14 +1534,14 @@ fn install_path_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a source distribution.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
-    let archive = context.temp_dir.child("wheel-0.42.0.tar.gz");
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
+    let archive = context.temp_dir.child("source_distribution-0.0.1.tar.gz");
     let mut archive_file = fs_err::File::create(archive.path())?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
-        "wheel @ {}",
+        "source-distribution @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
@@ -1552,11 +1556,13 @@ fn install_path_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import wheel").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1574,28 +1580,22 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import wheel").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
     parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    let filters = if cfg!(windows) {
-        [("Removed 3 files", "Removed 4 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("clean")
-        .arg("wheel")
+        .arg("source-distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
@@ -1605,7 +1605,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 103 files for wheel ([SIZE])
+    Removed 13 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1621,11 +1621,13 @@ fn install_path_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import wheel").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
