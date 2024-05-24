@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -9,7 +8,7 @@ use tracing::debug;
 use url::Url;
 
 use cache_key::{CanonicalUrl, RepositoryUrl};
-use distribution_types::ParsedGitUrl;
+use pypi_types::ParsedGitUrl;
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::LockedFile;
 use uv_git::{Fetch, GitReference, GitSha, GitSource, GitUrl};
@@ -48,10 +47,10 @@ impl RepositoryReference {
 ///
 /// Assumes that the URL is a precise Git URL, with a full commit hash.
 pub(crate) async fn fetch_git_archive(
-    url: &Url,
+    url: &GitUrl,
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
-) -> Result<(Fetch, Option<PathBuf>), Error> {
+) -> Result<Fetch, Error> {
     debug!("Fetching source distribution from Git: {url}");
     let git_dir = cache.bucket(CacheBucket::Git);
 
@@ -60,15 +59,12 @@ pub(crate) async fn fetch_git_archive(
     fs::create_dir_all(&lock_dir)
         .await
         .map_err(Error::CacheWrite)?;
-    let repository_url = RepositoryUrl::new(url);
+    let repository_url = RepositoryUrl::new(url.repository());
     let _lock = LockedFile::acquire(
         lock_dir.join(cache_key::digest(&repository_url)),
         &repository_url,
     )
     .map_err(Error::CacheWrite)?;
-
-    let ParsedGitUrl { url, subdirectory } =
-        ParsedGitUrl::try_from(url.clone()).map_err(Box::new)?;
 
     // Fetch the Git repository.
     let source = if let Some(reporter) = reporter {
@@ -80,7 +76,7 @@ pub(crate) async fn fetch_git_archive(
         .await?
         .map_err(Error::Git)?;
 
-    Ok((fetch, subdirectory))
+    Ok(fetch)
 }
 
 /// Given a remote source distribution, return a precise variant, if possible.
@@ -92,13 +88,10 @@ pub(crate) async fn fetch_git_archive(
 /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
 /// prefix kinds.
 pub(crate) async fn resolve_precise(
-    url: &Url,
+    url: &GitUrl,
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
-) -> Result<Option<Url>, Error> {
-    let ParsedGitUrl { url, subdirectory } =
-        ParsedGitUrl::try_from(url.clone()).map_err(Box::new)?;
-
+) -> Result<Option<GitUrl>, Error> {
     // If the Git reference already contains a complete SHA, short-circuit.
     if url.precise().is_some() {
         return Ok(None);
@@ -107,12 +100,9 @@ pub(crate) async fn resolve_precise(
     // If the Git reference is in the in-memory cache, return it.
     {
         let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        let reference = RepositoryReference::new(&url);
+        let reference = RepositoryReference::new(url);
         if let Some(precise) = resolved_git_refs.get(&reference) {
-            return Ok(Some(Url::from(ParsedGitUrl {
-                url: url.with_precise(*precise),
-                subdirectory,
-            })));
+            return Ok(Some(url.clone().with_precise(*precise)));
         }
     }
 
@@ -133,15 +123,11 @@ pub(crate) async fn resolve_precise(
     // Insert the resolved URL into the in-memory cache.
     if let Some(precise) = git.precise() {
         let mut resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        let reference = RepositoryReference::new(&url);
+        let reference = RepositoryReference::new(url);
         resolved_git_refs.insert(reference, precise);
     }
 
-    // Re-encode as a URL.
-    Ok(Some(Url::from(ParsedGitUrl {
-        url: git,
-        subdirectory,
-    })))
+    Ok(Some(git))
 }
 
 /// Given a remote source distribution, return a precise variant, if possible.

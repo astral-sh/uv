@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -11,7 +11,8 @@ use distribution_types::{
     FlatIndexLocation, IndexUrl, Requirement, RequirementSource, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use pep508_rs::{UnnamedRequirement, VerbatimUrl};
+use pep508_rs::{UnnamedRequirement, UnnamedRequirementUrl};
+use pypi_types::VerbatimParsedUrl;
 use requirements_txt::{
     EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
 };
@@ -65,20 +66,20 @@ impl RequirementsSpecification {
         Ok(match source {
             RequirementsSource::Package(name) => {
                 let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                    .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
-                    requirements: vec![UnresolvedRequirementSpecification::try_from(
+                    requirements: vec![UnresolvedRequirementSpecification::from(
                         RequirementEntry {
                             requirement,
                             hashes: vec![],
                         },
-                    )?],
+                    )],
                     ..Self::default()
                 }
             }
             RequirementsSource::Editable(name) => {
                 let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                    .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
                     editables: vec![requirement],
                     ..Self::default()
@@ -96,8 +97,8 @@ impl RequirementsSpecification {
                     constraints: requirements_txt
                         .constraints
                         .into_iter()
-                        .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()?,
+                        .map(Requirement::from)
+                        .collect(),
                     editables: requirements_txt.editables,
                     index_url: requirements_txt.index_url.map(IndexUrl::from),
                     extra_index_urls: requirements_txt
@@ -122,7 +123,7 @@ impl RequirementsSpecification {
             RequirementsSource::PyprojectToml(path) => {
                 let contents = uv_fs::read_to_string(&path).await?;
                 Self::parse_direct_pyproject_toml(&contents, extras, path.as_ref(), preview)
-                    .with_context(|| format!("Failed to parse `{}`", path.user_display()))?
+                    .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?
             }
             RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => Self {
                 source_trees: vec![path.clone()],
@@ -132,7 +133,7 @@ impl RequirementsSpecification {
                 project: None,
                 requirements: vec![UnresolvedRequirementSpecification {
                     requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                        url: VerbatimUrl::from_path(path),
+                        url: VerbatimParsedUrl::parse_absolute_path(path)?,
                         extras: vec![],
                         marker: None,
                         origin: None,
@@ -165,8 +166,8 @@ impl RequirementsSpecification {
             .parent()
             .context("`pyproject.toml` has no parent directory")?;
 
-        let workspace_sources = HashMap::default();
-        let workspace_packages = HashMap::default();
+        let workspace_sources = BTreeMap::default();
+        let workspace_packages = BTreeMap::default();
         match Pep621Metadata::try_from(
             pyproject,
             extras,
@@ -184,7 +185,7 @@ impl RequirementsSpecification {
                     .partition_map(|requirement| {
                         if let RequirementSource::Path {
                             path,
-                            editable: Some(true),
+                            editable: true,
                             url,
                         } = requirement.source
                         {

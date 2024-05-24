@@ -1,11 +1,12 @@
-use distribution_types::{LocalEditable, Requirement, Requirements};
 use either::Either;
+
+use distribution_types::Requirement;
 use pep508_rs::MarkerEnvironment;
-use pypi_types::Metadata23;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
+use crate::editables::BuiltEditableMetadata;
 use crate::{preferences::Preference, DependencyMode, Exclusions};
 
 /// A manifest of requirements, constraints, and preferences.
@@ -34,7 +35,7 @@ pub struct Manifest {
     ///
     /// The requirements of the editables should be included in resolution as if they were
     /// direct requirements in their own right.
-    pub(crate) editables: Vec<(LocalEditable, Metadata23, Requirements)>,
+    pub(crate) editables: Vec<BuiltEditableMetadata>,
 
     /// The installed packages to exclude from consideration during resolution.
     ///
@@ -58,7 +59,7 @@ impl Manifest {
         overrides: Overrides,
         preferences: Vec<Preference>,
         project: Option<PackageName>,
-        editables: Vec<(LocalEditable, Metadata23, Requirements)>,
+        editables: Vec<BuiltEditableMetadata>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -112,11 +113,11 @@ impl Manifest {
                             requirement.evaluate_markers(markers, lookahead.extras())
                         })
                 })
-                .chain(self.editables.iter().flat_map(move |(editable, _metadata, requirements)| {
+                .chain(self.editables.iter().flat_map(move |editable| {
                     self.overrides
-                        .apply(&requirements.dependencies)
+                        .apply(&editable.requirements.dependencies)
                         .filter(move |requirement| {
-                            requirement.evaluate_markers(markers, &editable.extras)
+                            requirement.evaluate_markers(markers, &editable.built.extras)
                         })
                 }))
                 .chain(
@@ -138,7 +139,7 @@ impl Manifest {
 
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
-                self.overrides.apply(&   self.requirements)
+                self.overrides.apply(&self.requirements)
                 .chain(self.constraints.requirements())
                 .chain(self.overrides.requirements())
                 .filter(move |requirement| requirement.evaluate_markers(markers, &[]))),
@@ -174,15 +175,13 @@ impl Manifest {
                                 requirement.evaluate_markers(markers, lookahead.extras())
                             })
                     })
-                    .chain(self.editables.iter().flat_map(
-                        move |(editable, _metadata, uv_requirements)| {
-                            self.overrides.apply(&uv_requirements.dependencies).filter(
-                                move |requirement| {
-                                    requirement.evaluate_markers(markers, &editable.extras)
-                                },
-                            )
-                        },
-                    ))
+                    .chain(self.editables.iter().flat_map(move |editable| {
+                        self.overrides
+                            .apply(&editable.requirements.dependencies)
+                            .filter(move |requirement| {
+                                requirement.evaluate_markers(markers, &editable.built.extras)
+                            })
+                    }))
                     .chain(
                         self.overrides
                             .apply(&self.requirements)
@@ -210,5 +209,10 @@ impl Manifest {
         requirements: impl IntoIterator<Item = &'a Requirement>,
     ) -> impl Iterator<Item = &Requirement> {
         self.constraints.apply(self.overrides.apply(requirements))
+    }
+
+    /// Returns the number of input requirements.
+    pub fn num_requirements(&self) -> usize {
+        self.requirements.len() + self.editables.len()
     }
 }

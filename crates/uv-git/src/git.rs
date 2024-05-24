@@ -23,7 +23,7 @@ use crate::FetchStrategy;
 const CHECKOUT_READY_LOCK: &str = ".ok";
 
 /// A reference to commit or commit-ish.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum GitReference {
     /// A specific branch.
     Branch(String),
@@ -54,17 +54,17 @@ enum RefspecStrategy {
 impl GitReference {
     /// Creates a [`GitReference`] from an arbitrary revision string, which could represent a
     /// branch, tag, commit, or named ref.
-    pub fn from_rev(rev: &str) -> Self {
+    pub fn from_rev(rev: String) -> Self {
         if rev.starts_with("refs/") {
-            Self::NamedRef(rev.to_owned())
-        } else if looks_like_commit_hash(rev) {
+            Self::NamedRef(rev)
+        } else if looks_like_commit_hash(&rev) {
             if rev.len() == 40 {
-                Self::FullCommit(rev.to_owned())
+                Self::FullCommit(rev)
             } else {
-                Self::BranchOrTagOrCommit(rev.to_owned())
+                Self::BranchOrTagOrCommit(rev)
             }
         } else {
-            Self::BranchOrTag(rev.to_owned())
+            Self::BranchOrTag(rev)
         }
     }
 

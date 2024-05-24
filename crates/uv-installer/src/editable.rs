@@ -1,10 +1,10 @@
 use serde::Deserialize;
+use std::path::Path;
 
 use distribution_types::{
     CachedDist, InstalledDist, InstalledMetadata, InstalledVersion, LocalEditable, Name,
 };
 use pypi_types::Metadata23;
-use requirements_txt::EditableRequirement;
 
 use uv_normalize::PackageName;
 
@@ -112,10 +112,10 @@ impl std::fmt::Display for ResolvedEditable {
     }
 }
 
-/// Returns `true` if the [`EditableRequirement`] contains dynamic metadata.
-pub fn is_dynamic(editable: &EditableRequirement) -> bool {
+/// Returns `true` if the source tree at the given path contains dynamic metadata.
+pub fn is_dynamic(path: &Path) -> bool {
     // If there's no `pyproject.toml`, we assume it's dynamic.
-    let Ok(contents) = fs_err::read_to_string(editable.path.join("pyproject.toml")) else {
+    let Ok(contents) = fs_err::read_to_string(path.join("pyproject.toml")) else {
         return true;
     };
     let Ok(pyproject_toml) = toml::from_str::<PyProjectToml>(&contents) else {

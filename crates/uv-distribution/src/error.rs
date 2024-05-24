@@ -1,12 +1,13 @@
 use std::path::PathBuf;
+
 use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
-use distribution_types::ParsedUrlError;
 use pep440_rs::Version;
 use pypi_types::HashDigest;
 use uv_client::BetterReqwestError;
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
 #[derive(Debug, thiserror::Error)]
@@ -19,12 +20,12 @@ pub enum Error {
     // Network error
     #[error("Failed to parse URL: {0}")]
     Url(String, #[source] url::ParseError),
+    #[error("Expected an absolute path, but received: {}", _0.user_display())]
+    RelativePath(PathBuf),
     #[error(transparent)]
     JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
-    #[error(transparent)]
-    DirectUrl(#[from] Box<ParsedUrlError>),
     #[error(transparent)]
     Reqwest(#[from] BetterReqwestError),
     #[error(transparent)]
@@ -60,8 +61,8 @@ pub enum Error {
     DistInfo(#[from] install_wheel_rs::Error),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
-    #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py")]
-    DirWithoutEntrypoint,
+    #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py: `{}`", _0.user_display())]
+    DirWithoutEntrypoint(PathBuf),
     #[error("Failed to extract archive")]
     Extract(#[from] uv_extract::Error),
     #[error("Source distribution not found at: {0}")]

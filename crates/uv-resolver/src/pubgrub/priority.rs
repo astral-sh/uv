@@ -7,6 +7,7 @@ use pep440_rs::Version;
 use uv_normalize::PackageName;
 
 use crate::pubgrub::package::PubGrubPackage;
+use crate::pubgrub::PubGrubPackageInner;
 
 /// A prioritization map to guide the PubGrub resolution process.
 ///
@@ -24,11 +25,16 @@ impl PubGrubPriorities {
     /// Add a [`PubGrubPackage`] to the priority map.
     pub(crate) fn insert(&mut self, package: &PubGrubPackage, version: &Range<Version>) {
         let next = self.0.len();
-        match package {
-            PubGrubPackage::Root(_) => {}
-            PubGrubPackage::Python(_) => {}
+        match &**package {
+            PubGrubPackageInner::Root(_) => {}
+            PubGrubPackageInner::Python(_) => {}
 
-            PubGrubPackage::Extra(name, _, None) | PubGrubPackage::Package(name, _, None) => {
+            PubGrubPackageInner::Extra {
+                name, url: None, ..
+            }
+            | PubGrubPackageInner::Package {
+                name, url: None, ..
+            } => {
                 match self.0.entry(name.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
@@ -61,7 +67,12 @@ impl PubGrubPriorities {
                     }
                 }
             }
-            PubGrubPackage::Extra(name, _, Some(_)) | PubGrubPackage::Package(name, _, Some(_)) => {
+            PubGrubPackageInner::Extra {
+                name, url: Some(_), ..
+            }
+            | PubGrubPackageInner::Package {
+                name, url: Some(_), ..
+            } => {
                 match self.0.entry(name.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
@@ -91,11 +102,11 @@ impl PubGrubPriorities {
 
     /// Return the [`PubGrubPriority`] of the given package, if it exists.
     pub(crate) fn get(&self, package: &PubGrubPackage) -> Option<PubGrubPriority> {
-        match package {
-            PubGrubPackage::Root(_) => Some(PubGrubPriority::Root),
-            PubGrubPackage::Python(_) => Some(PubGrubPriority::Root),
-            PubGrubPackage::Extra(name, _, _) => self.0.get(name).copied(),
-            PubGrubPackage::Package(name, _, _) => self.0.get(name).copied(),
+        match &**package {
+            PubGrubPackageInner::Root(_) => Some(PubGrubPriority::Root),
+            PubGrubPackageInner::Python(_) => Some(PubGrubPriority::Root),
+            PubGrubPackageInner::Extra { name, .. } => self.0.get(name).copied(),
+            PubGrubPackageInner::Package { name, .. } => self.0.get(name).copied(),
         }
     }
 }

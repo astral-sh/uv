@@ -17,10 +17,18 @@ use crate::{Connectivity, Error, ErrorKind, RegistryClient};
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
     #[error("Failed to read `--find-links` directory: {0}")]
-    FindLinksDirectory(PathBuf, #[source] std::io::Error),
+    FindLinksDirectory(PathBuf, #[source] FindLinksDirectoryError),
 
     #[error("Failed to read `--find-links` URL: {0}")]
     FindLinksUrl(Url, #[source] Error),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum FindLinksDirectoryError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    VerbatimUrl(#[from] pep508_rs::VerbatimUrlError),
 }
 
 #[derive(Debug, Default, Clone)]
@@ -202,10 +210,10 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Read a flat remote index from a `--find-links` directory.
-    fn read_from_directory(path: &PathBuf) -> Result<FlatIndexEntries, std::io::Error> {
+    fn read_from_directory(path: &PathBuf) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
         // Absolute paths are required for the URL conversion.
         let path = fs_err::canonicalize(path)?;
-        let index_url = IndexUrl::Path(VerbatimUrl::from_path(&path));
+        let index_url = IndexUrl::Path(VerbatimUrl::from_path(&path)?);
 
         let mut dists = Vec::new();
         for entry in fs_err::read_dir(path)? {

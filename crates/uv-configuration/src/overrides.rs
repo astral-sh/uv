@@ -1,6 +1,6 @@
 use std::hash::BuildHasherDefault;
 
-use itertools::Either;
+use either::Either;
 use rustc_hash::FxHashMap;
 
 use distribution_types::Requirement;

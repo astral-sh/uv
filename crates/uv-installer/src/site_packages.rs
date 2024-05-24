@@ -8,9 +8,11 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
 
 use distribution_types::{
-    InstalledDist, Name, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Diagnostic, InstalledDist, Name, Requirement, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use pep440_rs::{Version, VersionSpecifiers};
+use pypi_types::VerbatimParsedUrl;
 use requirements_txt::EditableRequirement;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
@@ -23,9 +25,9 @@ use crate::satisfies::RequirementSatisfaction;
 /// An index over the packages installed in an environment.
 ///
 /// Packages are indexed by both name and (for editable installs) URL.
-#[derive(Debug)]
-pub struct SitePackages<'a> {
-    venv: &'a PythonEnvironment,
+#[derive(Debug, Clone)]
+pub struct SitePackages {
+    venv: PythonEnvironment,
     /// The vector of all installed distributions. The `by_name` and `by_url` indices index into
     /// this vector. The vector may contain `None` values, which represent distributions that were
     /// removed from the virtual environment.
@@ -38,9 +40,9 @@ pub struct SitePackages<'a> {
     by_url: FxHashMap<Url, Vec<usize>>,
 }
 
-impl<'a> SitePackages<'a> {
+impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
-    pub fn from_executable(venv: &'a PythonEnvironment) -> Result<SitePackages<'a>> {
+    pub fn from_executable(venv: &PythonEnvironment) -> Result<SitePackages> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
@@ -68,7 +70,7 @@ impl<'a> SitePackages<'a> {
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     return Ok(Self {
-                        venv,
+                        venv: venv.clone(),
                         distributions,
                         by_name,
                         by_url,
@@ -107,7 +109,7 @@ impl<'a> SitePackages<'a> {
         }
 
         Ok(Self {
-            venv,
+            venv: venv.clone(),
             distributions,
             by_name,
             by_url,
@@ -188,7 +190,7 @@ impl<'a> SitePackages<'a> {
     }
 
     /// Validate the installed packages in the virtual environment.
-    pub fn diagnostics(&self) -> Result<Vec<Diagnostic>> {
+    pub fn diagnostics(&self) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
         for (package, indexes) in &self.by_name {
@@ -201,7 +203,7 @@ impl<'a> SitePackages<'a> {
 
             if let Some(conflict) = distributions.next() {
                 // There are multiple installed distributions for the same package.
-                diagnostics.push(Diagnostic::DuplicatePackage {
+                diagnostics.push(SitePackagesDiagnostic::DuplicatePackage {
                     package: package.clone(),
                     paths: std::iter::once(distribution.path().to_owned())
                         .chain(std::iter::once(conflict.path().to_owned()))
@@ -218,7 +220,7 @@ impl<'a> SitePackages<'a> {
 
                 // Determine the dependencies for the given package.
                 let Ok(metadata) = distribution.metadata() else {
-                    diagnostics.push(Diagnostic::IncompletePackage {
+                    diagnostics.push(SitePackagesDiagnostic::IncompletePackage {
                         package: package.clone(),
                         path: distribution.path().to_owned(),
                     });
@@ -228,7 +230,7 @@ impl<'a> SitePackages<'a> {
                 // Verify that the package is compatible with the current Python version.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
                     if !requires_python.contains(self.venv.interpreter().python_version()) {
-                        diagnostics.push(Diagnostic::IncompatiblePythonVersion {
+                        diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
                             package: package.clone(),
                             version: self.venv.interpreter().python_version().clone(),
                             requires_python: requires_python.clone(),
@@ -246,7 +248,7 @@ impl<'a> SitePackages<'a> {
                     match installed.as_slice() {
                         [] => {
                             // No version installed.
-                            diagnostics.push(Diagnostic::MissingDependency {
+                            diagnostics.push(SitePackagesDiagnostic::MissingDependency {
                                 package: package.clone(),
                                 requirement: dependency.clone(),
                             });
@@ -261,11 +263,13 @@ impl<'a> SitePackages<'a> {
                                 )) => {
                                     // The installed version doesn't satisfy the requirement.
                                     if !version_specifier.contains(installed.version()) {
-                                        diagnostics.push(Diagnostic::IncompatibleDependency {
-                                            package: package.clone(),
-                                            version: installed.version().clone(),
-                                            requirement: dependency.clone(),
-                                        });
+                                        diagnostics.push(
+                                            SitePackagesDiagnostic::IncompatibleDependency {
+                                                package: package.clone(),
+                                                version: installed.version().clone(),
+                                                requirement: dependency.clone(),
+                                            },
+                                        );
                                     }
                                 }
                             }
@@ -322,7 +326,7 @@ impl<'a> SitePackages<'a> {
                     }
 
                     // Does the editable have dynamic metadata?
-                    if is_dynamic(requirement) {
+                    if is_dynamic(&requirement.path) {
                         return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                     }
 
@@ -338,9 +342,9 @@ impl<'a> SitePackages<'a> {
                             &requirement.extras,
                         ) {
                             let dependency = UnresolvedRequirementSpecification {
-                                requirement: UnresolvedRequirement::Named(
-                                    Requirement::from_pep508(dependency)?,
-                                ),
+                                requirement: UnresolvedRequirement::Named(Requirement::from(
+                                    dependency,
+                                )),
                                 hashes: vec![],
                             };
                             if seen.insert(dependency.clone()) {
@@ -360,7 +364,9 @@ impl<'a> SitePackages<'a> {
         while let Some(entry) = stack.pop() {
             let installed = match &entry.requirement {
                 UnresolvedRequirement::Named(requirement) => self.get_packages(&requirement.name),
-                UnresolvedRequirement::Unnamed(requirement) => self.get_urls(requirement.url.raw()),
+                UnresolvedRequirement::Unnamed(requirement) => {
+                    self.get_urls(requirement.url.verbatim.raw())
+                }
             };
             match installed.as_slice() {
                 [] => {
@@ -370,7 +376,7 @@ impl<'a> SitePackages<'a> {
                 [distribution] => {
                     match RequirementSatisfaction::check(
                         distribution,
-                        entry.requirement.source()?.as_ref(),
+                        entry.requirement.source().as_ref(),
                     )? {
                         RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
                             return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))
@@ -402,9 +408,9 @@ impl<'a> SitePackages<'a> {
                             entry.requirement.extras(),
                         ) {
                             let dependency = UnresolvedRequirementSpecification {
-                                requirement: UnresolvedRequirement::Named(
-                                    Requirement::from_pep508(dependency)?,
-                                ),
+                                requirement: UnresolvedRequirement::Named(Requirement::from(
+                                    dependency,
+                                )),
                                 hashes: vec![],
                             };
                             if seen.insert(dependency.clone()) {
@@ -439,7 +445,7 @@ pub enum SatisfiesResult {
     Unsatisfied(String),
 }
 
-impl IntoIterator for SitePackages<'_> {
+impl IntoIterator for SitePackages {
     type Item = InstalledDist;
     type IntoIter = Flatten<std::vec::IntoIter<Option<InstalledDist>>>;
 
@@ -449,7 +455,7 @@ impl IntoIterator for SitePackages<'_> {
 }
 
 #[derive(Debug)]
-pub enum Diagnostic {
+pub enum SitePackagesDiagnostic {
     IncompletePackage {
         /// The package that is missing metadata.
         package: PackageName,
@@ -468,7 +474,7 @@ pub enum Diagnostic {
         /// The package that is missing a dependency.
         package: PackageName,
         /// The dependency that is missing.
-        requirement: pep508_rs::Requirement,
+        requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
     },
     IncompatibleDependency {
         /// The package that has an incompatible dependency.
@@ -476,7 +482,7 @@ pub enum Diagnostic {
         /// The version of the package that is installed.
         version: Version,
         /// The dependency that is incompatible.
-        requirement: pep508_rs::Requirement,
+        requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
     },
     DuplicatePackage {
         /// The package that has multiple installed distributions.
@@ -486,9 +492,9 @@ pub enum Diagnostic {
     },
 }
 
-impl Diagnostic {
+impl Diagnostic for SitePackagesDiagnostic {
     /// Convert the diagnostic into a user-facing message.
-    pub fn message(&self) -> String {
+    fn message(&self) -> String {
         match self {
             Self::IncompletePackage { package, path } => format!(
                 "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.", path.display(),
@@ -525,7 +531,7 @@ impl Diagnostic {
     }
 
     /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
-    pub fn includes(&self, name: &PackageName) -> bool {
+    fn includes(&self, name: &PackageName) -> bool {
         match self {
             Self::IncompletePackage { package, .. } => name == package,
             Self::IncompatiblePythonVersion { package, .. } => name == package,
@@ -540,12 +546,16 @@ impl Diagnostic {
     }
 }
 
-impl InstalledPackagesProvider for SitePackages<'_> {
+impl InstalledPackagesProvider for SitePackages {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         self.iter()
     }
 
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
         self.get_packages(name)
+    }
+
+    fn get_editables(&self, url: &Url) -> Vec<&InstalledDist> {
+        self.get_editables(url)
     }
 }

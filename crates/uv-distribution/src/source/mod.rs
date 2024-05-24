@@ -17,12 +17,11 @@ use zip::ZipArchive;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuildableSource, DirectorySourceDist, DirectorySourceUrl, Dist, FileLocation, GitSourceUrl,
-    HashPolicy, Hashed, LocalEditable, ParsedArchiveUrl, PathSourceUrl, RemoteSource, SourceDist,
-    SourceUrl,
+    HashPolicy, Hashed, LocalEditable, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata23};
+use pypi_types::{HashDigest, Metadata23, ParsedArchiveUrl};
 use uv_cache::{
     ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, Timestamp,
     WheelCache,
@@ -93,8 +92,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&dist.index)
-                        .wheel_dir(dist.filename.name.as_ref())
-                        .join(dist.filename.version.to_string()),
+                        .wheel_dir(dist.name.as_ref())
+                        .join(dist.version.to_string()),
                 );
 
                 let url = match &dist.file.url {
@@ -105,7 +104,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
                     FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path).expect("path is absolute");
+                        let url = Url::from_file_path(path)
+                            .map_err(|()| Error::RelativePath(path.clone()))?;
                         return self
                             .archive(
                                 source,
@@ -250,8 +250,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&dist.index)
-                        .wheel_dir(dist.filename.name.as_ref())
-                        .join(dist.filename.version.to_string()),
+                        .wheel_dir(dist.name.as_ref())
+                        .join(dist.version.to_string()),
                 );
 
                 let url = match &dist.file.url {
@@ -262,7 +262,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
                     FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path).expect("path is absolute");
+                        let url = Url::from_file_path(path)
+                            .map_err(|()| Error::RelativePath(path.clone()))?;
                         return self
                             .archive_metadata(
                                 source,
@@ -978,7 +979,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let Some(modified) =
             ArchiveTimestamp::from_source_tree(&resource.path).map_err(Error::CacheRead)?
         else {
-            return Err(Error::DirWithoutEntrypoint);
+            return Err(Error::DirWithoutEntrypoint(resource.path.to_path_buf()));
         };
 
         // Read the existing metadata from the cache.
@@ -1024,7 +1025,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Resolve to a precise Git SHA.
         let url = if let Some(url) = resolve_precise(
-            resource.url,
+            resource.git,
             self.build_context.cache(),
             self.reporter.as_ref(),
         )
@@ -1032,17 +1033,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             Cow::Owned(url)
         } else {
-            Cow::Borrowed(resource.url)
+            Cow::Borrowed(resource.git)
         };
 
         // Fetch the Git repository.
-        let (fetch, subdirectory) =
+        let fetch =
             fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(&url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
 
         let _lock = lock_shard(&cache_shard).await?;
@@ -1058,7 +1059,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, fetch.path(), subdirectory.as_deref(), &cache_shard)
+            .build_distribution(source, fetch.path(), resource.subdirectory, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -1098,7 +1099,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Resolve to a precise Git SHA.
         let url = if let Some(url) = resolve_precise(
-            resource.url,
+            resource.git,
             self.build_context.cache(),
             self.reporter.as_ref(),
         )
@@ -1106,17 +1107,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             Cow::Owned(url)
         } else {
-            Cow::Borrowed(resource.url)
+            Cow::Borrowed(resource.git)
         };
 
         // Fetch the Git repository.
-        let (fetch, subdirectory) =
+        let fetch =
             fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(&url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
 
         let _lock = lock_shard(&cache_shard).await?;
@@ -1137,7 +1138,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, fetch.path(), subdirectory.as_deref())
+            .build_metadata(source, fetch.path(), resource.subdirectory)
             .boxed_local()
             .await?
         {
@@ -1159,7 +1160,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, fetch.path(), subdirectory.as_deref(), &cache_shard)
+            .build_distribution(source, fetch.path(), resource.subdirectory, &cache_shard)
             .await?;
 
         if let Some(task) = task {

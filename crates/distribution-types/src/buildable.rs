@@ -2,7 +2,9 @@ use std::borrow::Cow;
 use std::path::Path;
 
 use pep440_rs::Version;
+use pep508_rs::VerbatimUrl;
 use url::Url;
+use uv_git::GitUrl;
 
 use uv_normalize::PackageName;
 
@@ -32,7 +34,7 @@ impl BuildableSource<'_> {
     /// Return the [`Version`] of the source, if available.
     pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Dist(SourceDist::Registry(dist)) => Some(&dist.filename.version),
+            Self::Dist(SourceDist::Registry(dist)) => Some(&dist.version),
             Self::Dist(_) => None,
             Self::Url(_) => None,
         }
@@ -101,7 +103,11 @@ impl std::fmt::Display for DirectSourceUrl<'_> {
 
 #[derive(Debug, Clone)]
 pub struct GitSourceUrl<'a> {
-    pub url: &'a Url,
+    /// The URL with the revision and subdirectory fragment.
+    pub url: &'a VerbatimUrl,
+    pub git: &'a GitUrl,
+    /// The URL without the revision and subdirectory fragment.
+    pub subdirectory: Option<&'a Path>,
 }
 
 impl std::fmt::Display for GitSourceUrl<'_> {
@@ -112,7 +118,11 @@ impl std::fmt::Display for GitSourceUrl<'_> {
 
 impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
     fn from(dist: &'a GitSourceDist) -> Self {
-        Self { url: &dist.url }
+        Self {
+            url: &dist.url,
+            git: &dist.git,
+            subdirectory: dist.subdirectory.as_deref(),
+        }
     }
 }
 

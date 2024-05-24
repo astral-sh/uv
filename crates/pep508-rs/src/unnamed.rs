@@ -1,8 +1,7 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 use std::path::Path;
 use std::str::FromStr;
-
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use uv_fs::normalize_url_path;
 use uv_normalize::ExtraName;
@@ -10,9 +9,56 @@ use uv_normalize::ExtraName;
 use crate::marker::parse_markers_cursor;
 use crate::{
     expand_env_vars, parse_extras_cursor, split_extras, split_scheme, strip_host, Cursor,
-    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Reporter, RequirementOrigin,
-    Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError,
+    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
+    RequirementOrigin, Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError,
 };
+
+/// An extension over [`Pep508Url`] that also supports parsing unnamed requirements, namely paths.
+///
+/// The error type is fixed to the same as the [`Pep508Url`] impl error.
+pub trait UnnamedRequirementUrl: Pep508Url {
+    /// Parse a URL from a relative or absolute path.
+    fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>)
+        -> Result<Self, Self::Err>;
+
+    /// Parse a URL from an absolute path.
+    fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err>;
+
+    /// Parse a URL from a string.
+    fn parse_unnamed_url(given: impl AsRef<str>) -> Result<Self, Self::Err>;
+
+    /// Set the verbatim representation of the URL.
+    #[must_use]
+    fn with_given(self, given: impl Into<String>) -> Self;
+
+    /// Return the original string as given by the user, if available.
+    fn given(&self) -> Option<&str>;
+}
+
+impl UnnamedRequirementUrl for VerbatimUrl {
+    fn parse_path(
+        path: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
+    ) -> Result<Self, VerbatimUrlError> {
+        Self::parse_path(path, working_dir)
+    }
+
+    fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
+        Self::parse_absolute_path(path)
+    }
+
+    fn parse_unnamed_url(given: impl AsRef<str>) -> Result<Self, Self::Err> {
+        Ok(Self::parse_url(given)?)
+    }
+
+    fn with_given(self, given: impl Into<String>) -> Self {
+        self.with_given(given)
+    }
+
+    fn given(&self) -> Option<&str> {
+        self.given()
+    }
+}
 
 /// A PEP 508-like, direct URL dependency specifier without a package name.
 ///
@@ -20,9 +66,9 @@ use crate::{
 /// dependencies. This isn't compliant with PEP 508, but is common in `requirements.txt`, which
 /// is implementation-defined.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
-pub struct UnnamedRequirement {
+pub struct UnnamedRequirement<Url: UnnamedRequirementUrl = VerbatimUrl> {
     /// The direct URL that defines the version specifier.
-    pub url: VerbatimUrl,
+    pub url: Url,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     pub extras: Vec<ExtraName>,
@@ -34,7 +80,7 @@ pub struct UnnamedRequirement {
     pub origin: Option<RequirementOrigin>,
 }
 
-impl UnnamedRequirement {
+impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         self.evaluate_optional_environment(Some(env), extras)
@@ -61,9 +107,22 @@ impl UnnamedRequirement {
             ..self
         }
     }
+
+    /// Parse a PEP 508-like direct URL requirement without a package name.
+    pub fn parse(
+        input: &str,
+        working_dir: impl AsRef<Path>,
+        reporter: &mut impl Reporter,
+    ) -> Result<Self, Pep508Error<Url>> {
+        parse_unnamed_requirement(
+            &mut Cursor::new(input),
+            Some(working_dir.as_ref()),
+            reporter,
+        )
+    }
 }
 
-impl Display for UnnamedRequirement {
+impl<Url: UnnamedRequirementUrl> Display for UnnamedRequirement<Url> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.url)?;
         if !self.extras.is_empty() {
@@ -84,29 +143,8 @@ impl Display for UnnamedRequirement {
     }
 }
 
-/// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
-impl<'de> Deserialize<'de> for UnnamedRequirement {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
-    }
-}
-
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-impl Serialize for UnnamedRequirement {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.collect_str(self)
-    }
-}
-
-impl FromStr for UnnamedRequirement {
-    type Err = Pep508Error<VerbatimUrl>;
+impl<Url: UnnamedRequirementUrl> FromStr for UnnamedRequirement<Url> {
+    type Err = Pep508Error<Url>;
 
     /// Parse a PEP 508-like direct URL requirement without a package name.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
@@ -114,33 +152,18 @@ impl FromStr for UnnamedRequirement {
     }
 }
 
-impl UnnamedRequirement {
-    /// Parse a PEP 508-like direct URL requirement without a package name.
-    pub fn parse(
-        input: &str,
-        working_dir: impl AsRef<Path>,
-        reporter: &mut impl Reporter,
-    ) -> Result<Self, Pep508Error<VerbatimUrl>> {
-        parse_unnamed_requirement(
-            &mut Cursor::new(input),
-            Some(working_dir.as_ref()),
-            reporter,
-        )
-    }
-}
-
 /// Parse a PEP 508-like direct URL specifier without a package name.
 ///
 /// Unlike pip, we allow extras on URLs and paths.
-fn parse_unnamed_requirement(
+fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
     reporter: &mut impl Reporter,
-) -> Result<UnnamedRequirement, Pep508Error<VerbatimUrl>> {
+) -> Result<UnnamedRequirement<Url>, Pep508Error<Url>> {
     cursor.eat_whitespace();
 
     // Parse the URL itself, along with any extras.
-    let (url, extras) = parse_unnamed_url(cursor, working_dir)?;
+    let (url, extras) = parse_unnamed_url::<Url>(cursor, working_dir)?;
     let requirement_end = cursor.pos();
 
     // wsp*
@@ -191,13 +214,13 @@ fn parse_unnamed_requirement(
 
 /// Create a `VerbatimUrl` to represent the requirement, and extracts any extras at the end of the
 /// URL, to comply with the non-PEP 508 extensions.
-fn preprocess_unnamed_url(
+fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
     url: &str,
     #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused))] working_dir: Option<&Path>,
     cursor: &Cursor,
     start: usize,
     len: usize,
-) -> Result<(VerbatimUrl, Vec<ExtraName>), Pep508Error<VerbatimUrl>> {
+) -> Result<(Url, Vec<ExtraName>), Pep508Error<Url>> {
     // Split extras _before_ expanding the URL. We assume that the extras are not environment
     // variables. If we parsed the extras after expanding the URL, then the verbatim representation
     // of the URL itself would be ambiguous, since it would consist of the environment variable,
@@ -235,14 +258,20 @@ fn preprocess_unnamed_url(
 
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
-                    let url = VerbatimUrl::parse_path(path.as_ref(), working_dir)
+                    let url = Url::parse_path(path.as_ref(), working_dir)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
                         .with_given(url.to_string());
                     return Ok((url, extras));
                 }
 
-                let url = VerbatimUrl::parse_absolute_path(path.as_ref())
+                let url = Url::parse_absolute_path(path.as_ref())
                     .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::<VerbatimUrl>::UrlError(err),
+                        message: Pep508ErrorSource::UrlError(err),
                         start,
                         len,
                         input: cursor.to_string(),
@@ -253,11 +282,9 @@ fn preprocess_unnamed_url(
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`
             Some(_) => {
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                let url = VerbatimUrl::parse_url(expanded.as_ref())
+                let url = Url::parse_unnamed_url(expanded.as_ref())
                     .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::<VerbatimUrl>::UrlError(VerbatimUrlError::Url(
-                            err,
-                        )),
+                        message: Pep508ErrorSource::UrlError(err),
                         start,
                         len,
                         input: cursor.to_string(),
@@ -269,12 +296,18 @@ fn preprocess_unnamed_url(
             // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
             _ => {
                 if let Some(working_dir) = working_dir {
-                    let url = VerbatimUrl::parse_path(expanded.as_ref(), working_dir)
+                    let url = Url::parse_path(expanded.as_ref(), working_dir)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
                         .with_given(url.to_string());
                     return Ok((url, extras));
                 }
 
-                let url = VerbatimUrl::parse_absolute_path(expanded.as_ref())
+                let url = Url::parse_absolute_path(expanded.as_ref())
                     .map_err(|err| Pep508Error {
                         message: Pep508ErrorSource::UrlError(err),
                         start,
@@ -288,12 +321,18 @@ fn preprocess_unnamed_url(
     } else {
         // Ex) `../editable/`
         if let Some(working_dir) = working_dir {
-            let url =
-                VerbatimUrl::parse_path(expanded.as_ref(), working_dir).with_given(url.to_string());
+            let url = Url::parse_path(expanded.as_ref(), working_dir)
+                .map_err(|err| Pep508Error {
+                    message: Pep508ErrorSource::UrlError(err),
+                    start,
+                    len,
+                    input: cursor.to_string(),
+                })?
+                .with_given(url.to_string());
             return Ok((url, extras));
         }
 
-        let url = VerbatimUrl::parse_absolute_path(expanded.as_ref())
+        let url = Url::parse_absolute_path(expanded.as_ref())
             .map_err(|err| Pep508Error {
                 message: Pep508ErrorSource::UrlError(err),
                 start,
@@ -311,10 +350,10 @@ fn preprocess_unnamed_url(
 /// For example:
 /// - `https://download.pytorch.org/whl/torch_stable.html[dev]`
 /// - `../editable[dev]`
-fn parse_unnamed_url(
+fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
-) -> Result<(VerbatimUrl, Vec<ExtraName>), Pep508Error<VerbatimUrl>> {
+) -> Result<(Url, Vec<ExtraName>), Pep508Error<Url>> {
     // wsp*
     cursor.eat_whitespace();
     // <URI_reference>

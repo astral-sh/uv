@@ -73,7 +73,7 @@ derivative = { version = "2.2.0" }
 directories = { version = "5.0.1" }
 dirs-sys = { version = "0.4.1" }
 dunce = { version = "1.0.4" }
-either = { version = "1.9.0" }
+either = { version = "1.12.0" }
 encoding_rs_io = { version = "0.1.7" }
 flate2 = { version = "1.0.28", default-features = false }
 fs-err = { version = "2.11.0" }
@@ -89,7 +89,7 @@ http = { version = "1.1.0" }
 indexmap = { version = "2.2.5" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
-itertools = { version = "0.12.1" }
+itertools = { version = "0.13.0" }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }
@@ -98,6 +98,7 @@ nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
 owo-colors = { version = "4.0.0" }
 path-absolutize = { version = "3.1.1" }
+path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
@@ -134,7 +135,6 @@ tokio-util = { version = "0.7.10", features = ["compat"] }
 toml = { version = "0.8.12" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.2.0", features = ["plot"] }
-tracing-indicatif = { version = "0.3.6" }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
 tracing-tree = { version = "0.3.0" }
 unicode-width = { version = "0.1.11" }
@@ -145,7 +145,7 @@ wiremock = { version = "0.6.0" }
 walkdir = { version = "2.5.0" }
 which = { version = "6.0.0" }
 winapi = { version = "0.3.9", features = ["fileapi", "handleapi", "ioapiset", "winbase", "winioctl", "winnt"] }
-zip = { version = "1.1.0", default-features = false, features = ["deflate"] }
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
 ignored = ["flate2"]
@@ -215,7 +215,6 @@ unix-archive = ".tar.gz"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
   "aarch64-apple-darwin",
-  "aarch64-unknown-linux-gnu",
   "aarch64-unknown-linux-musl",
   "arm-unknown-linux-musleabihf",
   "armv7-unknown-linux-gnueabihf",

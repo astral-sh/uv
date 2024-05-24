@@ -25,20 +25,33 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
-use distribution_types::{ParsedUrlError, Requirement, Resolution};
+use distribution_types::{Requirement, Resolution};
 use pep440_rs::Version;
 use pep508_rs::PackageName;
+use pypi_types::VerbatimParsedUrl;
 use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
-static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
+static MISSING_HEADER_RE_GCC: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: (.*\.(?:h|h..)): No such file or directory",
     )
     .unwrap()
+});
+
+/// e.g. `pygraphviz/graphviz_wrap.c:3023:10: fatal error: 'graphviz/cgraph.h' file not found`
+static MISSING_HEADER_RE_CLANG: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: '(.*\.(?:h|h..))' file not found")
+        .unwrap()
+});
+
+/// e.g. `pygraphviz/graphviz_wrap.c(3023): fatal error C1083: Cannot open include file: 'graphviz/cgraph.h': No such file or directory`
+static MISSING_HEADER_RE_MSVC: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r".*\.(?:c|c..|h|h..)\(\d+\): fatal error C1083: Cannot open include file: '(.*\.(?:h|h..))': No such file or directory")
+        .unwrap()
 });
 
 /// e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
@@ -54,18 +67,16 @@ static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
-    requirements: vec![Requirement::from_pep508(
+    requirements: vec![Requirement::from(
         pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
-    )
-    .unwrap()],
+    )],
 });
 
 /// The requirements for `--legacy-setup-py` builds.
 static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
     [
-        Requirement::from_pep508(pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap())
-            .unwrap(),
-        Requirement::from_pep508(pep508_rs::Requirement::from_str("wheel").unwrap()).unwrap(),
+        Requirement::from(pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap()),
+        Requirement::from(pep508_rs::Requirement::from_str("wheel").unwrap()),
     ]
 });
 
@@ -104,8 +115,6 @@ pub enum Error {
     },
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
-    #[error("Failed to parse requirements from build backend")]
-    DirectUrl(#[source] Box<ParsedUrlError>),
 }
 
 #[derive(Debug)]
@@ -161,8 +170,11 @@ impl Error {
 
         // In the cases i've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff
         let missing_library = stderr.lines().rev().take(10).find_map(|line| {
-            if let Some((_, [header])) =
-                MISSING_HEADER_RE.captures(line.trim()).map(|c| c.extract())
+            if let Some((_, [header])) = MISSING_HEADER_RE_GCC
+                .captures(line.trim())
+                .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
+                .or(MISSING_HEADER_RE_MSVC.captures(line.trim()))
+                .map(|c| c.extract())
             {
                 Some(MissingLibrary::Header(header.to_string()))
             } else if let Some((_, [library])) =
@@ -229,7 +241,7 @@ pub struct Project {
 #[serde(rename_all = "kebab-case")]
 pub struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
-    pub requires: Vec<pep508_rs::Requirement>,
+    pub requires: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
     /// A string naming a Python object that will be used to perform the build.
     pub build_backend: Option<String>,
     /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
@@ -586,9 +598,8 @@ impl SourceBuild {
                         requirements: build_system
                             .requires
                             .into_iter()
-                            .map(Requirement::from_pep508)
-                            .collect::<Result<_, _>>()
-                            .map_err(|err| Box::new(Error::DirectUrl(err)))?,
+                            .map(Requirement::from)
+                            .collect(),
                     }
                 } else {
                     // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
@@ -967,7 +978,7 @@ async fn create_pep517_build_environment(
     })?;
 
     // Deserialize the requirements from the output file.
-    let extra_requires: Vec<pep508_rs::Requirement> = serde_json::from_slice::<Vec<pep508_rs::Requirement>>(&contents).map_err(|err| {
+    let extra_requires: Vec<pep508_rs::Requirement<VerbatimParsedUrl>> = serde_json::from_slice::<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>(&contents).map_err(|err| {
         Error::from_command_output(
             format!(
                 "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
@@ -976,11 +987,7 @@ async fn create_pep517_build_environment(
             version_id,
         )
     })?;
-    let extra_requires: Vec<_> = extra_requires
-        .into_iter()
-        .map(Requirement::from_pep508)
-        .collect::<Result<_, _>>()
-        .map_err(Error::DirectUrl)?;
+    let extra_requires: Vec<_> = extra_requires.into_iter().map(Requirement::from).collect();
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution

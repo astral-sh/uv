@@ -68,7 +68,7 @@ impl<'a> Planner<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn build(
         self,
-        mut site_packages: SitePackages<'_>,
+        mut site_packages: SitePackages,
         reinstall: &Reinstall,
         no_binary: &NoBinary,
         hasher: &HashStrategy,
@@ -247,7 +247,6 @@ impl<'a> Planner<'a> {
                         let wheel = DirectUrlBuiltDist {
                             filename,
                             location: location.clone(),
-                            subdirectory: subdirectory.clone(),
                             url: url.clone(),
                         };
 
@@ -337,7 +336,7 @@ impl<'a> Planner<'a> {
                     // Store the canonicalized path, which also serves to validate that it exists.
                     let path = match url
                         .to_file_path()
-                        .map_err(|()| Error::UrlFilename(url.to_url()))?
+                        .map_err(|()| Error::MissingFilePath(url.to_url()))?
                         .canonicalize()
                     {
                         Ok(path) => path,

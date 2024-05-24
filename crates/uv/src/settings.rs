@@ -17,7 +17,7 @@ use uv_interpreter::{PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_requirements::ExtrasSpecification;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_workspace::{PipOptions, Workspace};
+use uv_workspace::{Combine, PipOptions, Workspace};
 
 use crate::cli::{
     ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
@@ -34,6 +34,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
     pub(crate) native_tls: bool,
+    pub(crate) connectivity: Connectivity,
     pub(crate) isolated: bool,
     pub(crate) preview: PreviewMode,
 }
@@ -50,12 +51,20 @@ impl GlobalSettings {
                 args.color
             },
             native_tls: flag(args.native_tls, args.no_native_tls)
-                .or(workspace.and_then(|workspace| workspace.options.native_tls))
+                .combine(workspace.and_then(|workspace| workspace.options.native_tls))
                 .unwrap_or(false),
+            connectivity: if flag(args.offline, args.no_offline)
+                .combine(workspace.and_then(|workspace| workspace.options.offline))
+                .unwrap_or(false)
+            {
+                Connectivity::Offline
+            } else {
+                Connectivity::Online
+            },
             isolated: args.isolated,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
-                    .or(workspace.and_then(|workspace| workspace.options.preview))
+                    .combine(workspace.and_then(|workspace| workspace.options.preview))
                     .unwrap_or(false),
             ),
         }
@@ -199,8 +208,7 @@ impl PipCompileSettings {
             header,
             annotation_style,
             custom_compile_command,
-            offline,
-            no_offline,
+
             refresh,
             no_refresh,
             refresh_package,
@@ -261,7 +269,7 @@ impl PipCompileSettings {
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-                    offline: flag(offline, no_offline),
+
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -307,6 +315,7 @@ impl PipCompileSettings {
                     link_mode,
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
+                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -321,8 +330,10 @@ impl PipCompileSettings {
 pub(crate) struct PipSyncSettings {
     // CLI-only settings.
     pub(crate) src_file: Vec<PathBuf>,
+    pub(crate) constraint: Vec<PathBuf>,
     pub(crate) reinstall: Reinstall,
     pub(crate) refresh: Refresh,
+    pub(crate) dry_run: bool,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -333,12 +344,11 @@ impl PipSyncSettings {
     pub(crate) fn resolve(args: PipSyncArgs, workspace: Option<Workspace>) -> Self {
         let PipSyncArgs {
             src_file,
+            constraint,
             reinstall,
             no_reinstall,
             reinstall_package,
-            offline,
             refresh,
-            no_offline,
             no_refresh,
             refresh_package,
             link_mode,
@@ -371,14 +381,21 @@ impl PipSyncSettings {
             python_platform,
             strict,
             no_strict,
+            exclude_newer,
+            dry_run,
             compat_args: _,
         } = args;
 
         Self {
             // CLI-only settings.
             src_file,
+            constraint: constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
+            dry_run,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
@@ -387,7 +404,7 @@ impl PipSyncSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-                    offline: flag(offline, no_offline),
+
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -410,11 +427,13 @@ impl PipSyncSettings {
                     }),
                     python_version,
                     python_platform,
+                    exclude_newer,
                     link_mode,
                     compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
+                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -438,6 +457,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) uv_lock: Option<String>,
+
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
 }
@@ -460,9 +480,7 @@ impl PipInstallSettings {
             reinstall,
             no_reinstall,
             reinstall_package,
-            offline,
             refresh,
-            no_offline,
             no_refresh,
             refresh_package,
             no_deps,
@@ -529,7 +547,7 @@ impl PipInstallSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-                    offline: flag(offline, no_offline),
+
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -567,6 +585,7 @@ impl PipInstallSettings {
                     require_hashes: flag(require_hashes, no_require_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
+                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -599,8 +618,6 @@ impl PipUninstallSettings {
             break_system_packages,
             no_break_system_packages,
             target,
-            offline,
-            no_offline,
         } = args;
 
         Self {
@@ -615,7 +632,7 @@ impl PipUninstallSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-                    offline: flag(offline, no_offline),
+
                     keyring_provider,
                     ..PipOptions::default()
                 },
@@ -823,8 +840,7 @@ impl VenvSettings {
             no_index,
             index_strategy,
             keyring_provider,
-            offline,
-            no_offline,
+
             exclude_newer,
             compat_args: _,
         } = args;
@@ -842,7 +858,7 @@ impl VenvSettings {
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-                    offline: flag(offline, no_offline),
+
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -875,7 +891,6 @@ pub(crate) struct PipSharedSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
-    pub(crate) connectivity: Connectivity,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) no_binary: NoBinary,
@@ -916,7 +931,6 @@ impl PipSharedSettings {
             system,
             break_system_packages,
             target,
-            offline,
             index_url,
             extra_index_url,
             no_index,
@@ -955,100 +969,133 @@ impl PipSharedSettings {
             require_hashes,
             concurrent_builds,
             concurrent_downloads,
+            concurrent_installs,
         } = workspace
             .and_then(|workspace| workspace.options.pip)
             .unwrap_or_default();
 
         Self {
             index_locations: IndexLocations::new(
-                args.index_url.or(index_url),
-                args.extra_index_url.or(extra_index_url).unwrap_or_default(),
-                args.find_links.or(find_links).unwrap_or_default(),
-                args.no_index.or(no_index).unwrap_or_default(),
+                args.index_url.combine(index_url),
+                args.extra_index_url
+                    .combine(extra_index_url)
+                    .unwrap_or_default(),
+                args.find_links.combine(find_links).unwrap_or_default(),
+                args.no_index.combine(no_index).unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(
-                args.all_extras.or(all_extras).unwrap_or_default(),
-                args.extra.or(extra).unwrap_or_default(),
+                args.all_extras.combine(all_extras).unwrap_or_default(),
+                args.extra.combine(extra).unwrap_or_default(),
             ),
-            dependency_mode: if args.no_deps.or(no_deps).unwrap_or_default() {
+            dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct
             } else {
                 DependencyMode::Transitive
             },
-            resolution: args.resolution.or(resolution).unwrap_or_default(),
-            prerelease: args.prerelease.or(prerelease).unwrap_or_default(),
-            output_file: args.output_file.or(output_file),
-            no_strip_extras: args.no_strip_extras.or(no_strip_extras).unwrap_or_default(),
-            no_annotate: args.no_annotate.or(no_annotate).unwrap_or_default(),
-            no_header: args.no_header.or(no_header).unwrap_or_default(),
-            custom_compile_command: args.custom_compile_command.or(custom_compile_command),
+            resolution: args.resolution.combine(resolution).unwrap_or_default(),
+            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            output_file: args.output_file.combine(output_file),
+            no_strip_extras: args
+                .no_strip_extras
+                .combine(no_strip_extras)
+                .unwrap_or_default(),
+            no_annotate: args.no_annotate.combine(no_annotate).unwrap_or_default(),
+            no_header: args.no_header.combine(no_header).unwrap_or_default(),
+            custom_compile_command: args.custom_compile_command.combine(custom_compile_command),
             annotation_style: args
                 .annotation_style
-                .or(annotation_style)
+                .combine(annotation_style)
                 .unwrap_or_default(),
-            connectivity: if args.offline.or(offline).unwrap_or_default() {
-                Connectivity::Offline
-            } else {
-                Connectivity::Online
-            },
-            index_strategy: args.index_strategy.or(index_strategy).unwrap_or_default(),
+            index_strategy: args
+                .index_strategy
+                .combine(index_strategy)
+                .unwrap_or_default(),
             keyring_provider: args
                 .keyring_provider
-                .or(keyring_provider)
+                .combine(keyring_provider)
                 .unwrap_or_default(),
-            generate_hashes: args.generate_hashes.or(generate_hashes).unwrap_or_default(),
-            setup_py: if args.legacy_setup_py.or(legacy_setup_py).unwrap_or_default() {
+            generate_hashes: args
+                .generate_hashes
+                .combine(generate_hashes)
+                .unwrap_or_default(),
+            setup_py: if args
+                .legacy_setup_py
+                .combine(legacy_setup_py)
+                .unwrap_or_default()
+            {
                 SetupPyStrategy::Setuptools
             } else {
                 SetupPyStrategy::Pep517
             },
             no_build_isolation: args
                 .no_build_isolation
-                .or(no_build_isolation)
+                .combine(no_build_isolation)
                 .unwrap_or_default(),
             no_build: NoBuild::from_args(
-                args.only_binary.or(only_binary).unwrap_or_default(),
-                args.no_build.or(no_build).unwrap_or_default(),
+                args.only_binary.combine(only_binary).unwrap_or_default(),
+                args.no_build.combine(no_build).unwrap_or_default(),
             ),
-            config_setting: args.config_settings.or(config_settings).unwrap_or_default(),
-            python_version: args.python_version.or(python_version),
-            python_platform: args.python_platform.or(python_platform),
-            exclude_newer: args.exclude_newer.or(exclude_newer),
-            no_emit_package: args.no_emit_package.or(no_emit_package).unwrap_or_default(),
-            emit_index_url: args.emit_index_url.or(emit_index_url).unwrap_or_default(),
-            emit_find_links: args.emit_find_links.or(emit_find_links).unwrap_or_default(),
+            config_setting: args
+                .config_settings
+                .combine(config_settings)
+                .unwrap_or_default(),
+            python_version: args.python_version.combine(python_version),
+            python_platform: args.python_platform.combine(python_platform),
+            exclude_newer: args.exclude_newer.combine(exclude_newer),
+            no_emit_package: args
+                .no_emit_package
+                .combine(no_emit_package)
+                .unwrap_or_default(),
+            emit_index_url: args
+                .emit_index_url
+                .combine(emit_index_url)
+                .unwrap_or_default(),
+            emit_find_links: args
+                .emit_find_links
+                .combine(emit_find_links)
+                .unwrap_or_default(),
             emit_marker_expression: args
                 .emit_marker_expression
-                .or(emit_marker_expression)
+                .combine(emit_marker_expression)
                 .unwrap_or_default(),
             emit_index_annotation: args
                 .emit_index_annotation
-                .or(emit_index_annotation)
+                .combine(emit_index_annotation)
                 .unwrap_or_default(),
-            link_mode: args.link_mode.or(link_mode).unwrap_or_default(),
-            require_hashes: args.require_hashes.or(require_hashes).unwrap_or_default(),
-            python: args.python.or(python),
-            system: args.system.or(system).unwrap_or_default(),
+            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            require_hashes: args
+                .require_hashes
+                .combine(require_hashes)
+                .unwrap_or_default(),
+            python: args.python.combine(python),
+            system: args.system.combine(system).unwrap_or_default(),
             break_system_packages: args
                 .break_system_packages
-                .or(break_system_packages)
+                .combine(break_system_packages)
                 .unwrap_or_default(),
-            target: args.target.or(target).map(Target::from),
-            no_binary: NoBinary::from_args(args.no_binary.or(no_binary).unwrap_or_default()),
+            target: args.target.combine(target).map(Target::from),
+            no_binary: NoBinary::from_args(args.no_binary.combine(no_binary).unwrap_or_default()),
             compile_bytecode: args
                 .compile_bytecode
-                .or(compile_bytecode)
+                .combine(compile_bytecode)
                 .unwrap_or_default(),
-            strict: args.strict.or(strict).unwrap_or_default(),
+            strict: args.strict.combine(strict).unwrap_or_default(),
             concurrency: Concurrency {
                 downloads: args
                     .concurrent_downloads
-                    .or(concurrent_downloads)
-                    .map_or(Concurrency::DEFAULT_DOWNLOADS, NonZeroUsize::get),
+                    .combine(concurrent_downloads)
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
                 builds: args
                     .concurrent_builds
-                    .or(concurrent_builds)
-                    .map_or_else(Concurrency::default_builds, NonZeroUsize::get),
+                    .combine(concurrent_builds)
+                    .map(NonZeroUsize::get)
+                    .unwrap_or_else(Concurrency::threads),
+                installs: args
+                    .concurrent_installs
+                    .combine(concurrent_installs)
+                    .map(NonZeroUsize::get)
+                    .unwrap_or_else(Concurrency::threads),
             },
         }
     }
@@ -1061,6 +1108,9 @@ mod env {
 
     pub(super) const CONCURRENT_BUILDS: (&str, &str) =
         ("UV_CONCURRENT_BUILDS", "a non-zero integer");
+
+    pub(super) const CONCURRENT_INSTALLS: (&str, &str) =
+        ("UV_CONCURRENT_INSTALLS", "a non-zero integer");
 }
 
 /// Attempt to load and parse an environment variable with the given name.

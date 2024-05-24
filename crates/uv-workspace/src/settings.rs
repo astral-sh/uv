@@ -32,6 +32,7 @@ pub(crate) struct Tools {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
     pub native_tls: Option<bool>,
+    pub offline: Option<bool>,
     pub no_cache: Option<bool>,
     pub preview: Option<bool>,
     pub cache_dir: Option<PathBuf>,
@@ -48,7 +49,6 @@ pub struct PipOptions {
     pub system: Option<bool>,
     pub break_system_packages: Option<bool>,
     pub target: Option<PathBuf>,
-    pub offline: Option<bool>,
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
     pub no_index: Option<bool>,
@@ -87,4 +87,5 @@ pub struct PipOptions {
     pub require_hashes: Option<bool>,
     pub concurrent_downloads: Option<NonZeroUsize>,
     pub concurrent_builds: Option<NonZeroUsize>,
+    pub concurrent_installs: Option<NonZeroUsize>,
 }

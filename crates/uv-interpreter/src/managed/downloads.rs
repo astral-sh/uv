@@ -46,6 +46,8 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error("failed to parse toolchain directory name: {0}")]
+    NameError(String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -114,7 +116,7 @@ impl PythonDownloadRequest {
 
     pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
-            self.implementation = Some(ImplementationName::Cpython);
+            self.implementation = Some(ImplementationName::CPython);
         }
         if self.arch.is_none() {
             self.arch = Some(Arch::from_env()?);

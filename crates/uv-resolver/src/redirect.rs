@@ -1,9 +1,9 @@
 use url::Url;
 
-use distribution_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 use pep508_rs::VerbatimUrl;
+use pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_distribution::git_url_to_precise;
-use uv_git::{GitReference, GitUrl};
+use uv_git::GitReference;
 
 /// Given a [`VerbatimUrl`] and a redirect, apply the redirect to the URL while preserving as much
 /// of the verbatim representation as possible.
@@ -48,19 +48,10 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl) -> VerbatimParsedUrl {
         return url;
     };
 
-    // TODO(konsti): Remove once we carry more context on the `Dist` (e.g., `BranchOrTag` vs. `Tag`).
-    let lowered_git_ref = git_url
-        .reference()
-        .as_str()
-        .map_or(GitReference::DefaultBranch, |rev| {
-            GitReference::from_rev(rev)
-        });
-    let git_url = GitUrl::new(git_url.repository().clone(), lowered_git_ref);
-
     let Some(new_git_url) = git_url_to_precise(git_url.clone()) else {
         debug_assert!(
             matches!(git_url.reference(), GitReference::FullCommit(_)),
-            "Unseen git url: {}, {:?}",
+            "Unseen Git URL: {}, {:?}",
             url.verbatim,
             git_url
         );

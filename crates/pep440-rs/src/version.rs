@@ -15,7 +15,17 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 /// One of `~=` `==` `!=` `<=` `>=` `<` `>` `===`
 #[derive(
-    Eq, PartialEq, Debug, Hash, Clone, Copy, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Debug,
+    Hash,
+    Clone,
+    Copy,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]

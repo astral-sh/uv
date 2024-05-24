@@ -63,7 +63,7 @@ impl MarkerWarningKind {
 }
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(clippy::enum_variant_names)]
 pub enum MarkerValueVersion {
     /// `implementation_version`
@@ -85,7 +85,7 @@ impl Display for MarkerValueVersion {
 }
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueString {
     /// `implementation_name`
     ImplementationName,
@@ -142,7 +142,7 @@ impl Display for MarkerValueString {
 /// One of the predefined environment values
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValue {
     /// Those environment markers with a PEP 440 version as value such as `python_version`
     MarkerEnvVersion(MarkerValueVersion),
@@ -214,7 +214,7 @@ impl Display for MarkerValue {
 }
 
 /// How to compare key and value, such as by `==`, `>` or `not in`
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerOperator {
     /// `==`
     Equal,
@@ -856,7 +856,7 @@ impl MarkerEnvironment {
 /// A builder for constructing a marker environment.
 ///
 /// A value of this type can be fallibly converted to a full
-/// [`MarkerEnvironment`] via `MarkerEnvironment::try_from`. This can fail when
+/// [`MarkerEnvironment`] via [`MarkerEnvironment::try_from`]. This can fail when
 /// the version strings given aren't valid.
 ///
 /// The main utility of this type is for constructing dummy or test environment
@@ -900,7 +900,7 @@ impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
 }
 
 /// Represents one clause such as `python_version > "3.8"`.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(missing_docs)]
 pub enum MarkerExpression {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
@@ -943,7 +943,7 @@ pub enum MarkerExpression {
 }
 
 /// The operator for an extra expression, either '==' or '!='.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum ExtraOperator {
     /// `==`
     Equal,
@@ -1138,7 +1138,7 @@ impl MarkerExpression {
         }
     }
 
-    /// Creates an instance of `MarkerExpression::Arbitrary` with the given values.
+    /// Creates an instance of [`MarkerExpression::Arbitrary`] with the given values.
     fn arbitrary(
         l_value: MarkerValue,
         operator: MarkerOperator,
@@ -1151,7 +1151,7 @@ impl MarkerExpression {
         }
     }
 
-    /// Creates an instance of `MarkerExpression::Version` with the given values.
+    /// Creates an instance of [`MarkerExpression::Version`] with the given values.
     ///
     /// Reports a warning on failure, and returns `None`.
     pub fn version(
@@ -1204,7 +1204,7 @@ impl MarkerExpression {
         Some(MarkerExpression::Version { key, specifier })
     }
 
-    /// Creates an instance of `MarkerExpression::VersionInverted` with the given values.
+    /// Creates an instance of [`MarkerExpression::VersionInverted`] with the given values.
     ///
     /// Reports a warning on failure, and returns `None`.
     fn version_inverted(
@@ -1248,8 +1248,8 @@ impl MarkerExpression {
         })
     }
 
-    /// Creates an instance of `MarkerExpression::Extra` with the given values, falling back to
-    /// `MarkerExpression::Arbitrary` on failure.
+    /// Creates an instance of [`MarkerExpression::Extra`] with the given values, falling back to
+    /// [`MarkerExpression::Arbitrary`] on failure.
     fn extra(
         operator: MarkerOperator,
         value: &str,
@@ -1345,7 +1345,7 @@ impl MarkerExpression {
                 operator: ExtraOperator::NotEqual,
                 name,
             } => !extras.contains(name),
-            MarkerExpression::Arbitrary { .. } => true,
+            MarkerExpression::Arbitrary { .. } => false,
         }
     }
 
@@ -1529,7 +1529,7 @@ impl Display for MarkerExpression {
 }
 
 /// Represents one of the nested marker expressions with and/or/parentheses
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerTree {
     /// A simple expression such as `python_version > "3.8"`
     Expression(MarkerExpression),
@@ -1550,6 +1550,11 @@ impl FromStr for MarkerTree {
 }
 
 impl MarkerTree {
+    /// Like [`FromStr::from_str`], but the caller chooses the return type generic.
+    pub fn parse_str<T: Pep508Url>(markers: &str) -> Result<Self, Pep508Error<T>> {
+        parse_markers(markers, &mut TracingReporter)
+    }
+
     /// Parse a [`MarkerTree`] from a string with the given reporter.
     pub fn parse_reporter(
         markers: &str,

@@ -1,5 +1,6 @@
-use distribution_types::{DistributionMetadata, Name, VerbatimParsedUrl, VersionOrUrlRef};
+use distribution_types::{DistributionMetadata, Name, VersionOrUrlRef};
 use pep440_rs::Version;
+use pypi_types::VerbatimParsedUrl;
 use uv_normalize::PackageName;
 
 #[derive(Debug)]

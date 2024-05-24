@@ -60,7 +60,18 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
-## Running inside a docker container
+### Testing on Windows
+
+When testing debug builds on Windows, the stack can overflow resulting in a `STATUS_STACK_OVERFLOW` error code.
+This is due to a small stack size limit on Windows that we encounter when running unoptimized builds — the release
+builds do not have this problem. We [added a `UV_STACK_SIZE` variable](https://github.com/astral-sh/uv/pull/941) to
+bypass this problem during testing. We recommend bumping the stack size from the default of 1MB to 2MB, for example:
+
+```powershell
+$Env:UV_STACK_SIZE = '2000000'
+```
+
+## Running inside a Docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your system (["Someone's Been Messing With My Subnormals!" on Blogspot](https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html), ["nvidia-pyindex" on PyPI](https://pypi.org/project/nvidia-pyindex/)), which can even occur when just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 

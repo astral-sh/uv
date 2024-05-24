@@ -6,7 +6,6 @@ use std::{
 use fs_err as fs;
 use pypi_types::Scheme;
 use thiserror::Error;
-use tracing::{debug, info};
 
 /// The layout of a virtual environment.
 #[derive(Debug)]
@@ -37,34 +36,26 @@ pub enum Error {
     MissingPyVenvCfg(PathBuf),
     #[error("Broken virtualenv `{0}`: `pyvenv.cfg` could not be parsed")]
     ParsePyVenvCfg(PathBuf, #[source] io::Error),
-}
-
-/// Locate the current virtual environment.
-pub(crate) fn detect_virtualenv() -> Result<Option<PathBuf>, Error> {
-    let from_env = virtualenv_from_env();
-    if from_env.is_some() {
-        return Ok(from_env);
-    }
-    virtualenv_from_working_dir()
+    #[error(transparent)]
+    IO(#[from] io::Error),
 }
 
 /// Locate an active virtual environment by inspecting environment variables.
 ///
-/// Supports `VIRTUAL_ENV` and `CONDA_PREFIX`.
+/// Supports `VIRTUAL_ENV`.
 pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
     if let Some(dir) = env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()) {
-        info!(
-            "Found a virtualenv through VIRTUAL_ENV at: {}",
-            Path::new(&dir).display()
-        );
         return Some(PathBuf::from(dir));
     }
 
+    None
+}
+
+/// Locate an active conda environment by inspecting environment variables.
+///
+/// Supports `CONDA_PREFIX`.
+pub(crate) fn conda_prefix_from_env() -> Option<PathBuf> {
     if let Some(dir) = env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()) {
-        info!(
-            "Found a virtualenv through CONDA_PREFIX at: {}",
-            Path::new(&dir).display()
-        );
         return Some(PathBuf::from(dir));
     }
 
@@ -77,12 +68,11 @@ pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
 /// directory is itself a virtual environment (or a subdirectory of a virtual environment), the
 /// containing virtual environment is returned.
 pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
-    let current_dir = env::current_dir().expect("Failed to detect current directory");
+    let current_dir = crate::current_dir()?;
 
     for dir in current_dir.ancestors() {
         // If we're _within_ a virtualenv, return it.
         if dir.join("pyvenv.cfg").is_file() {
-            debug!("Found a virtualenv at: {}", dir.display());
             return Ok(Some(dir.to_path_buf()));
         }
 
@@ -92,7 +82,6 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
             if !dot_venv.join("pyvenv.cfg").is_file() {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
-            debug!("Found a virtualenv named .venv at: {}", dot_venv.display());
             return Ok(Some(dot_venv));
         }
     }
@@ -105,9 +94,9 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
     let venv = venv.as_ref();
     if cfg!(windows) {
         // Search for `python.exe` in the `Scripts` directory.
-        let executable = venv.join("Scripts").join("python.exe");
-        if executable.exists() {
-            return executable;
+        let default_executable = venv.join("Scripts").join("python.exe");
+        if default_executable.exists() {
+            return default_executable;
         }
 
         // Apparently, Python installed via msys2 on Windows _might_ produce a POSIX-like layout.
@@ -118,10 +107,27 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
         }
 
         // Fallback for Conda environments.
-        venv.join("python.exe")
+        let executable = venv.join("python.exe");
+        if executable.exists() {
+            return executable;
+        }
+
+        // If none of these exist, return the standard location
+        default_executable
     } else {
-        // Search for `python` in the `bin` directory.
-        venv.join("bin").join("python")
+        // Check for both `python3` over `python`, preferring the more specific one
+        let default_executable = venv.join("bin").join("python3");
+        if default_executable.exists() {
+            return default_executable;
+        }
+
+        let executable = venv.join("bin").join("python");
+        if executable.exists() {
+            return executable;
+        }
+
+        // If none of these exist, return the standard location
+        default_executable
     }
 }
 

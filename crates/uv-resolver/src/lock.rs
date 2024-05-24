@@ -2,7 +2,9 @@
 // as we build out universal locking.
 #![allow(dead_code, unreachable_code, unused_variables)]
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
 use url::Url;
@@ -11,12 +13,13 @@ use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
     GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, Resolution, ResolvedDist, ToUrlError,
+    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
-use pypi_types::HashDigest;
+use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
+use uv_git::{GitReference, GitSha};
 use uv_normalize::PackageName;
 
 use crate::resolution::AnnotatedDist;
@@ -67,7 +70,7 @@ impl Lock {
         let mut queue: VecDeque<&Distribution> = VecDeque::new();
         queue.push_back(root);
 
-        let mut map = FxHashMap::default();
+        let mut map = BTreeMap::default();
         while let Some(dist) = queue.pop_front() {
             for dep in &dist.dependencies {
                 let dep_dist = self.find_by_id(&dep.id);
@@ -77,7 +80,8 @@ impl Lock {
             let resolved_dist = ResolvedDist::Installable(dist.to_dist(marker_env, tags));
             map.insert(name, resolved_dist);
         }
-        Resolution::new(map)
+        let diagnostics = vec![];
+        Resolution::new(map, diagnostics)
     }
 
     /// Returns the distribution with the given name. If there are multiple
@@ -229,7 +233,7 @@ impl Distribution {
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
     fn to_dist(&self, _marker_env: &MarkerEnvironment, tags: &Tags) -> Dist {
         if let Some(best_wheel_index) = self.find_best_wheel(tags) {
-            return match self.id.source.kind {
+            return match &self.id.source.kind {
                 SourceKind::Registry => {
                     let wheels = self
                         .wheels
@@ -253,13 +257,34 @@ impl Distribution {
                     let built_dist = BuiltDist::Path(path_dist);
                     Dist::Built(built_dist)
                 }
-                // TODO: Handle other kinds of sources.
-                _ => todo!(),
+                SourceKind::Direct(direct) => {
+                    let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
+                    let url = Url::from(ParsedArchiveUrl {
+                        url: self.id.source.url.clone(),
+                        subdirectory: None,
+                    });
+                    let direct_dist = DirectUrlBuiltDist {
+                        filename,
+                        location: self.id.source.url.clone(),
+                        url: VerbatimUrl::from_url(url),
+                    };
+                    let built_dist = BuiltDist::DirectUrl(direct_dist);
+                    Dist::Built(built_dist)
+                }
+                SourceKind::Git(_) => {
+                    unreachable!("Wheels cannot come from Git sources")
+                }
+                SourceKind::Directory => {
+                    unreachable!("Wheels cannot come from directory sources")
+                }
+                SourceKind::Editable => {
+                    unreachable!("Wheels cannot come from editable sources")
+                }
             };
         }
 
         if let Some(sdist) = &self.sdist {
-            return match self.id.source.kind {
+            return match &self.id.source.kind {
                 SourceKind::Path => {
                     let path_dist = PathSourceDist {
                         name: self.id.name.clone(),
@@ -279,8 +304,75 @@ impl Distribution {
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
                     Dist::Source(source_dist)
                 }
-                // TODO: Handle other kinds of sources.
-                _ => todo!(),
+                SourceKind::Editable => {
+                    let dir_dist = DirectorySourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
+                        path: self.id.source.url.to_file_path().unwrap(),
+                        editable: true,
+                    };
+                    let source_dist = distribution_types::SourceDist::Directory(dir_dist);
+                    Dist::Source(source_dist)
+                }
+                SourceKind::Git(git) => {
+                    // Reconstruct the `GitUrl` from the `GitSource`.
+                    let git_url = uv_git::GitUrl::new(
+                        self.id.source.url.clone(),
+                        GitReference::from(git.kind.clone()),
+                    )
+                    .with_precise(git.precise);
+
+                    // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                    let url = Url::from(ParsedGitUrl {
+                        url: git_url.clone(),
+                        subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                    });
+
+                    let git_dist = GitSourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(url),
+                        git: Box::new(git_url),
+                        subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                    };
+                    let source_dist = distribution_types::SourceDist::Git(git_dist);
+                    Dist::Source(source_dist)
+                }
+                SourceKind::Direct(direct) => {
+                    let url = Url::from(ParsedArchiveUrl {
+                        url: self.id.source.url.clone(),
+                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    });
+                    let direct_dist = DirectUrlSourceDist {
+                        name: self.id.name.clone(),
+                        location: self.id.source.url.clone(),
+                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                        url: VerbatimUrl::from_url(url),
+                    };
+                    let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
+                    Dist::Source(source_dist)
+                }
+                SourceKind::Registry => {
+                    let file = Box::new(distribution_types::File {
+                        dist_info_metadata: false,
+                        filename: sdist.url.filename().unwrap().to_string(),
+                        hashes: vec![],
+                        requires_python: None,
+                        size: sdist.size,
+                        upload_time_utc_ms: None,
+                        url: FileLocation::AbsoluteUrl(sdist.url.to_string()),
+                        yanked: None,
+                    });
+                    let index = IndexUrl::Url(VerbatimUrl::from_url(self.id.source.url.clone()));
+                    let reg_dist = RegistrySourceDist {
+                        name: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        file,
+                        index,
+                        wheels: vec![],
+                    };
+                    let source_dist = distribution_types::SourceDist::Registry(reg_dist);
+                    Dist::Source(source_dist)
+                }
             };
         }
 
@@ -400,14 +492,20 @@ impl Source {
 
     fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Source {
         Source {
-            kind: SourceKind::Direct,
+            kind: SourceKind::Direct(DirectSource { subdirectory: None }),
             url: direct_dist.url.to_url(),
         }
     }
 
     fn from_direct_source_dist(direct_dist: &DirectUrlSourceDist) -> Source {
         Source {
-            kind: SourceKind::Direct,
+            kind: SourceKind::Direct(DirectSource {
+                subdirectory: direct_dist
+                    .subdirectory
+                    .as_deref()
+                    .and_then(Path::to_str)
+                    .map(ToString::to_string),
+            }),
             url: direct_dist.url.to_url(),
         }
     }
@@ -428,7 +526,11 @@ impl Source {
 
     fn from_directory_source_dist(directory_dist: &DirectorySourceDist) -> Source {
         Source {
-            kind: SourceKind::Directory,
+            kind: if directory_dist.editable {
+                SourceKind::Editable
+            } else {
+                SourceKind::Directory
+            },
             url: directory_dist.url.to_url(),
         }
     }
@@ -451,14 +553,17 @@ impl Source {
     }
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
-        // TODO(konsti): Fill in the Git revision details. GitSource and GitSourceDist are
-        // slightly mismatched.
         Source {
             kind: SourceKind::Git(GitSource {
-                precise: git_dist.git.precise().map(|git_sha| git_sha.to_string()),
-                kind: GitSourceKind::DefaultBranch,
+                kind: GitSourceKind::from(git_dist.git.reference().clone()),
+                precise: git_dist.git.precise().expect("precise commit"),
+                subdirectory: git_dist
+                    .subdirectory
+                    .as_deref()
+                    .and_then(Path::to_str)
+                    .map(ToString::to_string),
             }),
-            url: git_dist.git.repository().clone(),
+            url: locked_git_url(git_dist),
         }
     }
 }
@@ -477,11 +582,14 @@ impl std::str::FromStr for Source {
                 url,
             }),
             "git" => Ok(Source {
-                kind: SourceKind::Git(GitSource::from_url(&mut url)),
+                kind: SourceKind::Git(GitSource::from_url(&mut url).map_err(|err| match err {
+                    GitSourceError::InvalidSha => SourceParseError::invalid_sha(s),
+                    GitSourceError::MissingSha => SourceParseError::missing_sha(s),
+                })?),
                 url,
             }),
             "direct" => Ok(Source {
-                kind: SourceKind::Direct,
+                kind: SourceKind::Direct(DirectSource::from_url(&mut url)),
                 url,
             }),
             "path" => Ok(Source {
@@ -490,6 +598,10 @@ impl std::str::FromStr for Source {
             }),
             "directory" => Ok(Source {
                 kind: SourceKind::Directory,
+                url,
+            }),
+            "editable" => Ok(Source {
+                kind: SourceKind::Editable,
                 url,
             }),
             name => Err(SourceParseError::unrecognized_source_name(s, name)),
@@ -526,16 +638,14 @@ impl<'de> serde::Deserialize<'de> for Source {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub(crate) enum SourceKind {
     Registry,
     Git(GitSource),
-    Direct,
+    Direct(DirectSource),
     Path,
     Directory,
+    Editable,
 }
 
 impl SourceKind {
@@ -543,9 +653,10 @@ impl SourceKind {
         match *self {
             SourceKind::Registry => "registry",
             SourceKind::Git(_) => "git",
-            SourceKind::Direct => "direct",
+            SourceKind::Direct(_) => "direct",
             SourceKind::Path => "path",
             SourceKind::Directory => "directory",
+            SourceKind::Editable => "editable",
         }
     }
 
@@ -555,9 +666,35 @@ impl SourceKind {
     /// _not_ be present.
     fn requires_hash(&self) -> bool {
         match *self {
-            SourceKind::Registry | SourceKind::Direct | SourceKind::Path => true,
-            SourceKind::Git(_) | SourceKind::Directory => false,
+            SourceKind::Registry | SourceKind::Direct(_) | SourceKind::Path => true,
+            SourceKind::Git(_) | SourceKind::Directory | SourceKind::Editable => false,
         }
+    }
+}
+
+#[derive(
+    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
+pub(crate) struct DirectSource {
+    subdirectory: Option<String>,
+}
+
+impl DirectSource {
+    /// Extracts a direct source reference from the query pairs in the given URL.
+    ///
+    /// This also removes the query pairs and hash fragment from the given
+    /// URL in place.
+    fn from_url(url: &mut Url) -> DirectSource {
+        let subdirectory = url.query_pairs().find_map(|(key, val)| {
+            if key == "subdirectory" {
+                Some(val.into_owned())
+            } else {
+                None
+            }
+        });
+        url.set_query(None);
+        url.set_fragment(None);
+        DirectSource { subdirectory }
     }
 }
 
@@ -565,12 +702,18 @@ impl SourceKind {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub(crate) struct GitSource {
-    precise: Option<String>,
+    precise: GitSha,
+    subdirectory: Option<String>,
     kind: GitSourceKind,
+}
+
+/// An error that occurs when a source string could not be parsed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GitSourceError {
+    InvalidSha,
+    MissingSha,
 }
 
 impl GitSource {
@@ -579,20 +722,28 @@ impl GitSource {
     ///
     /// This also removes the query pairs and hash fragment from the given
     /// URL in place.
-    fn from_url(url: &mut Url) -> GitSource {
+    fn from_url(url: &mut Url) -> Result<GitSource, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
+        let mut subdirectory = None;
         for (key, val) in url.query_pairs() {
-            kind = match &*key {
-                "tag" => GitSourceKind::Tag(val.into_owned()),
-                "branch" => GitSourceKind::Branch(val.into_owned()),
-                "rev" => GitSourceKind::Rev(val.into_owned()),
+            match &*key {
+                "tag" => kind = GitSourceKind::Tag(val.into_owned()),
+                "branch" => kind = GitSourceKind::Branch(val.into_owned()),
+                "rev" => kind = GitSourceKind::Rev(val.into_owned()),
+                "subdirectory" => subdirectory = Some(val.into_owned()),
                 _ => continue,
             };
         }
-        let precise = url.fragment().map(ToString::to_string);
+        let precise = GitSha::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
+            .map_err(|_| GitSourceError::InvalidSha)?;
+
         url.set_query(None);
         url.set_fragment(None);
-        GitSource { precise, kind }
+        Ok(GitSource {
+            precise,
+            subdirectory,
+            kind,
+        })
     }
 }
 
@@ -620,6 +771,10 @@ pub(crate) struct SourceDist {
     /// and direct URLs. Source distributions from git or path dependencies do
     /// not have hashes associated with them.
     hash: Option<Hash>,
+    /// The size of the source distribution in bytes.
+    ///
+    /// This is only present for source distributions that come from registries.
+    size: Option<u64>,
 }
 
 impl SourceDist {
@@ -681,20 +836,23 @@ impl SourceDist {
             .to_url()
             .map_err(LockError::invalid_file_url)?;
         let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
-        Ok(SourceDist { url, hash })
+        let size = reg_dist.file.size;
+        Ok(SourceDist { url, hash, size })
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist {
             url: direct_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
         }
     }
 
     fn from_git_dist(git_dist: &GitSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist {
-            url: git_dist.url.to_url(),
+            url: locked_git_url(git_dist),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
         }
     }
 
@@ -702,6 +860,7 @@ impl SourceDist {
         SourceDist {
             url: path_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
         }
     }
 
@@ -712,8 +871,83 @@ impl SourceDist {
         SourceDist {
             url: directory_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
         }
     }
+}
+
+impl From<GitReference> for GitSourceKind {
+    fn from(value: GitReference) -> Self {
+        match value {
+            GitReference::Branch(branch) => GitSourceKind::Branch(branch.to_string()),
+            GitReference::Tag(tag) => GitSourceKind::Tag(tag.to_string()),
+            GitReference::ShortCommit(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::BranchOrTag(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::BranchOrTagOrCommit(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::NamedRef(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::FullCommit(rev) => GitSourceKind::Rev(rev.to_string()),
+            GitReference::DefaultBranch => GitSourceKind::DefaultBranch,
+        }
+    }
+}
+
+impl From<GitSourceKind> for GitReference {
+    fn from(value: GitSourceKind) -> Self {
+        match value {
+            GitSourceKind::Branch(branch) => GitReference::Branch(branch),
+            GitSourceKind::Tag(tag) => GitReference::Tag(tag),
+            GitSourceKind::Rev(rev) => GitReference::from_rev(rev),
+            GitSourceKind::DefaultBranch => GitReference::DefaultBranch,
+        }
+    }
+}
+
+/// Construct the lockfile-compatible [`URL`] for a [`GitSourceDist`].
+fn locked_git_url(git_dist: &GitSourceDist) -> Url {
+    let mut url = git_dist.git.repository().clone();
+
+    // Clear out any existing state.
+    url.set_fragment(None);
+    url.set_query(None);
+
+    // Put the subdirectory in the query.
+    if let Some(subdirectory) = git_dist.subdirectory.as_deref().and_then(Path::to_str) {
+        url.query_pairs_mut()
+            .append_pair("subdirectory", subdirectory);
+    }
+
+    // Put the requested reference in the query.
+    match git_dist.git.reference() {
+        GitReference::Branch(branch) => {
+            url.query_pairs_mut()
+                .append_pair("branch", branch.to_string().as_str());
+        }
+        GitReference::Tag(tag) => {
+            url.query_pairs_mut()
+                .append_pair("tag", tag.to_string().as_str());
+        }
+        GitReference::ShortCommit(rev)
+        | GitReference::BranchOrTag(rev)
+        | GitReference::BranchOrTagOrCommit(rev)
+        | GitReference::NamedRef(rev)
+        | GitReference::FullCommit(rev) => {
+            url.query_pairs_mut()
+                .append_pair("rev", rev.to_string().as_str());
+        }
+        GitReference::DefaultBranch => {}
+    }
+
+    // Put the precise commit in the fragment.
+    url.set_fragment(
+        git_dist
+            .git
+            .precise()
+            .as_ref()
+            .map(GitSha::to_string)
+            .as_deref(),
+    );
+
+    url
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
@@ -725,12 +959,16 @@ pub(crate) struct Wheel {
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
     url: Url,
-    /// A hash of the source distribution.
+    /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
     /// URLs. Wheels from git or path dependencies do not have hashes
     /// associated with them.
     hash: Option<Hash>,
+    /// The size of the built distribution in bytes.
+    ///
+    /// This is only present for wheels that come from registries.
+    size: Option<u64>,
     /// The filename of the wheel.
     ///
     /// This isn't part of the wire format since it's redundant with the
@@ -790,12 +1028,12 @@ impl Wheel {
             .url
             .to_url()
             .map_err(LockError::invalid_file_url)?;
-        // FIXME: Is it guaranteed that there is at least one hash?
-        // If not, we probably need to make this fallible.
         let hash = wheel.file.hashes.first().cloned().map(Hash::from);
+        let size = wheel.file.size;
         Ok(Wheel {
             url,
             hash,
+            size,
             filename,
         })
     }
@@ -804,6 +1042,7 @@ impl Wheel {
         Wheel {
             url: direct_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
             filename: direct_dist.filename.clone(),
         }
     }
@@ -812,6 +1051,7 @@ impl Wheel {
         Wheel {
             url: path_dist.url.to_url(),
             hash: hashes.first().cloned().map(Hash::from),
+            size: None,
             filename: path_dist.filename.clone(),
         }
     }
@@ -823,7 +1063,7 @@ impl Wheel {
             filename: filename.to_string(),
             hashes: vec![],
             requires_python: None,
-            size: None,
+            size: self.size,
             upload_time_utc_ms: None,
             url: FileLocation::AbsoluteUrl(self.url.to_string()),
             yanked: None,
@@ -844,12 +1084,16 @@ struct WheelWire {
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
     url: Url,
-    /// A hash of the source distribution.
+    /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
     /// URLs. Wheels from git or path dependencies do not have hashes
     /// associated with them.
     hash: Option<Hash>,
+    /// The size of the built distribution in bytes.
+    ///
+    /// This is only present for wheels that come from registries.
+    size: Option<u64>,
 }
 
 impl From<Wheel> for WheelWire {
@@ -857,6 +1101,7 @@ impl From<Wheel> for WheelWire {
         WheelWire {
             url: wheel.url,
             hash: wheel.hash,
+            size: wheel.size,
         }
     }
 }
@@ -865,18 +1110,18 @@ impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
     fn try_from(wire: WheelWire) -> Result<Wheel, String> {
-        let path_segments = wire
-            .url
-            .path_segments()
-            .ok_or_else(|| format!("could not extract path from URL `{}`", wire.url))?;
-        // This is guaranteed by the contract of Url::path_segments.
-        let last = path_segments.last().expect("path segments is non-empty");
-        let filename = last
+        // Extract the filename segment from the URL.
+        let filename = wire.url.filename().map_err(|err| err.to_string())?;
+
+        // Parse the filename as a wheel filename.
+        let filename = filename
             .parse::<WheelFilename>()
-            .map_err(|err| format!("failed to parse `{last}` as wheel filename: {err}"))?;
+            .map_err(|err| format!("failed to parse `{filename}` as wheel filename: {err}"))?;
+
         Ok(Wheel {
             url: wire.url,
             hash: wire.hash,
+            size: wire.size,
             filename,
         })
     }
@@ -1163,14 +1408,27 @@ impl SourceParseError {
         let kind = SourceParseErrorKind::InvalidUrl { err };
         SourceParseError { given, kind }
     }
+
+    fn missing_sha(given: &str) -> SourceParseError {
+        let given = given.to_string();
+        let kind = SourceParseErrorKind::MissingSha;
+        SourceParseError { given, kind }
+    }
+
+    fn invalid_sha(given: &str) -> SourceParseError {
+        let given = given.to_string();
+        let kind = SourceParseErrorKind::InvalidSha;
+        SourceParseError { given, kind }
+    }
 }
 
 impl std::error::Error for SourceParseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self.kind {
-            SourceParseErrorKind::NoPlus | SourceParseErrorKind::UnrecognizedSourceName { .. } => {
-                None
-            }
+            SourceParseErrorKind::NoPlus
+            | SourceParseErrorKind::UnrecognizedSourceName { .. }
+            | SourceParseErrorKind::MissingSha
+            | SourceParseErrorKind::InvalidSha => None,
             SourceParseErrorKind::InvalidUrl { ref err } => Some(err),
         }
     }
@@ -1185,6 +1443,8 @@ impl std::fmt::Display for SourceParseError {
                 write!(f, "unrecognized name `{name}` in source `{given}`")
             }
             SourceParseErrorKind::InvalidUrl { .. } => write!(f, "invalid URL in source `{given}`"),
+            SourceParseErrorKind::MissingSha => write!(f, "missing SHA in source `{given}`"),
+            SourceParseErrorKind::InvalidSha => write!(f, "invalid SHA in source `{given}`"),
         }
     }
 }
@@ -1204,6 +1464,10 @@ enum SourceParseErrorKind {
         /// The URL parse error.
         err: url::ParseError,
     },
+    /// An error that occurs when a Git URL is missing a precise commit SHA.
+    MissingSha,
+    /// An error that occurs when a Git URL has an invalid SHA.
+    InvalidSha,
 }
 
 /// An error that occurs when a hash digest could not be parsed.

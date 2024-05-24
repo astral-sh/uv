@@ -413,7 +413,8 @@ impl VersionMapLazy {
                             upload_time,
                         );
                         let dist = RegistrySourceDist {
-                            filename,
+                            name: filename.name.clone(),
+                            version: filename.version.clone(),
                             file: Box::new(file),
                             index: self.index.clone(),
                             wheels: vec![],
@@ -553,7 +554,10 @@ impl VersionMapLazy {
             }
         };
 
-        WheelCompatibility::Compatible(hash, priority)
+        // Break ties with the build tag.
+        let build_tag = filename.build_tag.clone();
+
+        WheelCompatibility::Compatible(hash, priority, build_tag)
     }
 }
 

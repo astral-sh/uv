@@ -102,14 +102,27 @@ fn missing_venv() -> Result<()> {
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), command(&context).arg("requirements.txt"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), command(&context).arg("requirements.txt"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: Virtualenv does not exist at: `[VENV]/`
-    "###);
+        ----- stderr -----
+        error: failed to canonicalize path `[VENV]/Scripts/python.exe`
+          Caused by: The system cannot find the path specified. (os error 3)
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), command(&context).arg("requirements.txt"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: failed to canonicalize path `[VENV]/bin/python3`
+          Caused by: No such file or directory (os error 2)
+        "###);
+    }
 
     assert!(predicates::path::missing().eval(&context.venv));
 
@@ -281,6 +294,7 @@ fn noop() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -332,6 +346,7 @@ fn link() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###
@@ -409,7 +424,7 @@ fn install_sequential() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1
@@ -498,7 +513,7 @@ fn install_git_commit() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
+    requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -511,11 +526,13 @@ fn install_git_commit() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     Ok(())
 }
@@ -527,7 +544,9 @@ fn install_git_tag() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/WerkZeug.git@2.0.0")?;
+    requirements_txt.write_str(
+        "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@test-tag",
+    )?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -540,11 +559,13 @@ fn install_git_tag() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/WerkZeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     Ok(())
 }
@@ -587,7 +608,7 @@ fn install_sdist() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Werkzeug==0.9.6")?;
+    requirements_txt.write_str("source-distribution==0.0.1")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -600,11 +621,13 @@ fn install_sdist() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==0.9.6
+     + source-distribution==0.0.1
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
@@ -615,7 +638,7 @@ fn install_sdist_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Werkzeug @ https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz")?;
+    requirements_txt.write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -628,11 +651,13 @@ fn install_sdist_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==0.9.6 (from https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
@@ -643,15 +668,17 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
     let context = TestContext::new("3.8");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("bz2==1.0.0")?;
+    requirements_txt.write_str(&format!(
+        "bz2 @ {}",
+        context
+            .workspace_root
+            .join("scripts/links/bz2-1.0.0.tar.bz2")
+            .display()
+    ))?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
-        .arg("--no-binary")
-        .arg(":all:")
-        .arg("--strict")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -660,7 +687,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + bz2==1.0.0
+     + bz2==1.0.0 (from file://[WORKSPACE]/scripts/links/bz2-1.0.0.tar.bz2)
     "###
     );
 
@@ -690,6 +717,7 @@ fn install_url_then_install_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -725,6 +753,7 @@ fn install_url_then_install_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -885,7 +914,7 @@ fn install_no_index_cached() -> Result<()> {
 }
 
 #[test]
-fn warn_on_yanked_version() -> Result<()> {
+fn warn_on_yanked() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // This version is yanked.
@@ -904,7 +933,35 @@ fn warn_on_yanked_version() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + colorama==0.4.2
-    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install"). Refresh your lockfile to pin an un-yanked version.
+    warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install").
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn warn_on_yanked_dry_run() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // This version is yanked.
+    let requirements_in = context.temp_dir.child("requirements.txt");
+    requirements_in.write_str("colorama==0.4.2")?;
+
+    uv_snapshot!(context.filters(), windows_filters=false, command(&context)
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + colorama==0.4.2
+    warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install").
     "###
     );
 
@@ -958,6 +1015,7 @@ fn install_local_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
@@ -1125,43 +1183,6 @@ fn install_local_source_distribution() -> Result<()> {
     Ok(())
 }
 
-/// The `ujson` package includes a `[build-system]`, but no `build-backend`. It lists some explicit
-/// build requirements, but _also_ depends on `wheel` and `setuptools`:
-/// ```toml
-/// [build-system]
-/// requires = ["setuptools>=42", "setuptools_scm[toml]>=3.4"]
-/// ```
-///
-/// Like `pip` and `build`, we should use PEP 517 here and respect the `requires`, but use the
-/// default build backend.
-#[test]
-#[cfg(unix)] // https://github.com/astral-sh/uv/issues/1238
-fn install_ujson() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz")?;
-
-    uv_snapshot!(command(&context)
-        .arg("requirements.txt")
-        .arg("--strict"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ujson==5.7.0 (from https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz)
-    "###
-    );
-
-    context.assert_command("import ujson").success();
-
-    Ok(())
-}
-
 /// This package includes a `[build-system]`, but no `build-backend`.
 ///
 /// It lists some explicit build requirements that are necessary to build the distribution:
@@ -1209,17 +1230,9 @@ fn install_url_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz")?;
+    requirements_txt.write_str("source_distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
 
-    let filters = if cfg!(windows) {
-        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed.\n", "")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1230,18 +1243,20 @@ fn install_url_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import tqdm").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
     parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1250,12 +1265,15 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import tqdm").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1264,7 +1282,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 
     uv_snapshot!(Command::new(get_bin())
         .arg("clean")
-        .arg("tqdm")
+        .arg("source_distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
@@ -1274,11 +1292,11 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 127 files for tqdm ([SIZE])
+    Removed 13 files for source-distribution ([SIZE])
     "###
     );
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1290,11 +1308,13 @@ fn install_url_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import tqdm").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
@@ -1306,7 +1326,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
+    requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -1319,11 +1339,13 @@ fn install_git_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     // Re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1339,12 +1361,13 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    check_command(&venv, "import werkzeug", &context.temp_dir);
+    check_command(&venv, "import uv_public_pypackage", &context.temp_dir);
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1371,7 +1394,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 4 files for werkzeug ([SIZE])
+    No cache entries found for werkzeug
     "###
     );
 
@@ -1385,13 +1408,14 @@ fn install_git_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     Ok(())
 }
@@ -1402,7 +1426,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("future==0.18.3")?;
+    requirements_txt.write_str("source_distribution==0.0.1")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -1415,11 +1439,13 @@ fn install_registry_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + future==0.18.3
+     + source-distribution==0.0.1
     "###
     );
 
-    context.assert_command("import future").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1435,12 +1461,15 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + future==0.18.3
+     + source-distribution==0.0.1
     "###
     );
 
-    context.assert_command("import future").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1449,20 +1478,20 @@ fn install_registry_source_dist_cached() -> Result<()> {
 
     let filters: Vec<(&str, &str)> = if cfg!(windows) {
         // On Windows, the number of files removed is different.
-        [("Removed 616 files", "Removed 617 files")]
+        [("Removed 13 files", "Removed 14 files")]
             .into_iter()
             .chain(context.filters())
             .collect()
     } else {
         // For some Linux distributions, like Gentoo, the number of files removed is different.
-        [("Removed 615 files", "Removed 617 files")]
+        [("Removed 12 files", "Removed 14 files")]
             .into_iter()
             .chain(context.filters())
             .collect()
     };
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
-        .arg("future")
+        .arg("source_distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
@@ -1472,7 +1501,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 617 files for future ([SIZE])
+    Removed 14 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1488,11 +1517,13 @@ fn install_registry_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + future==0.18.3
+     + source-distribution==0.0.1
     "###
     );
 
-    context.assert_command("import future").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
@@ -1503,14 +1534,14 @@ fn install_path_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a source distribution.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
-    let archive = context.temp_dir.child("wheel-0.42.0.tar.gz");
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
+    let archive = context.temp_dir.child("source_distribution-0.0.1.tar.gz");
     let mut archive_file = fs_err::File::create(archive.path())?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
-        "wheel @ {}",
+        "source-distribution @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
@@ -1525,11 +1556,13 @@ fn install_path_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import wheel").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1545,29 +1578,24 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import wheel").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
     parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    let filters = if cfg!(windows) {
-        [("Removed 3 files", "Removed 4 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("clean")
-        .arg("wheel")
+        .arg("source-distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
@@ -1577,7 +1605,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 103 files for wheel ([SIZE])
+    Removed 13 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1593,11 +1621,13 @@ fn install_path_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import wheel").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
@@ -1648,6 +1678,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
@@ -1756,6 +1787,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
     "###
@@ -1817,12 +1849,12 @@ fn duplicate_package_overlap() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to determine installation plan
-      Caused by: Detected duplicate package in requirements: markupsafe
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require markupsafe==2.1.3 and markupsafe==2.1.2, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -1892,6 +1924,7 @@ fn reinstall() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - markupsafe==2.1.3
@@ -1945,6 +1978,7 @@ fn reinstall_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tomli==2.0.1
@@ -1965,7 +1999,7 @@ fn reinstall_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
+    requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -1978,31 +2012,36 @@ fn reinstall_git() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     // Re-run the installation with `--reinstall`.
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--reinstall-package")
-        .arg("WerkZeug")
+        .arg("uv-public-pypackage")
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     Ok(())
 }
@@ -2108,7 +2147,7 @@ fn refresh_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
@@ -2123,19 +2162,25 @@ fn refresh_package() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "maturin")]
 fn sync_editable() -> Result<()> {
     let context = TestContext::new("3.12");
+    let poetry_editable = context.temp_dir.child("poetry_editable");
+    // Copy into the temporary directory so we can mutate it
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/poetry_editable"),
+        &poetry_editable,
+    )?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
         boltons==23.1.1
-        -e {workspace_root}/scripts/packages/maturin_editable
         numpy==1.26.2
             # via poetry-editable
-        -e file://{workspace_root}/scripts/packages/poetry_editable
+        -e file://{poetry_editable}
         ",
-        workspace_root = context.workspace_root.simplified_display(),
+        poetry_editable = poetry_editable.display()
     })?;
 
     // Install the editable packages.
@@ -2146,14 +2191,13 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 2 editables in [TIME]
-    Resolved 2 packages in [TIME]
+    Built 1 editable in [TIME]
+    Resolved 3 packages in [TIME]
     Downloaded 2 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Installed 3 packages in [TIME]
      + boltons==23.1.1
-     + maturin-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/maturin_editable)
      + numpy==1.26.2
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
@@ -2168,51 +2212,46 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
-    // Make sure we have the right base case.
-    let python_source_file = context
-        .workspace_root
-        .join("scripts/packages/maturin_editable/python/maturin_editable/__init__.py");
-    let python_version_1 = indoc::indoc! {r"
-        from .maturin_editable import *
+    let python_source_file = poetry_editable.path().join("poetry_editable/__init__.py");
+    let check_installed = indoc::indoc! {r#"
+        from poetry_editable import a
 
+        assert a() == "a", a()
+   "#};
+    context.assert_command(check_installed).success();
+
+    // Edit the sources and make sure the changes are respected without syncing again
+    let python_version_1 = indoc::indoc! {r"
         version = 1
    "};
     fs_err::write(&python_source_file, python_version_1)?;
 
-    let check_installed = indoc::indoc! {r#"
-        from maturin_editable import sum_as_string, version
+    let check_installed = indoc::indoc! {r"
+        from poetry_editable import version
 
         assert version == 1, version
-        assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
-   "#};
+   "};
     context.assert_command(check_installed).success();
 
-    // Edit the sources.
     let python_version_2 = indoc::indoc! {r"
-        from .maturin_editable import *
-
         version = 2
    "};
     fs_err::write(&python_source_file, python_version_2)?;
 
-    let check_installed = indoc::indoc! {r#"
-        from maturin_editable import sum_as_string, version
-        from pathlib import Path
+    let check_installed = indoc::indoc! {r"
+        from poetry_editable import version
 
         assert version == 2, version
-        assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
-   "#};
+   "};
     context.assert_command(check_installed).success();
-
-    // Don't create a git diff.
-    fs_err::write(&python_source_file, python_version_1)?;
 
     uv_snapshot!(context.filters(), command(&context)
         .arg(requirements_txt.path()), @r###"
@@ -2221,7 +2260,8 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###
     );
 
@@ -2283,6 +2323,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.1.0
@@ -2305,6 +2346,7 @@ fn sync_editable_and_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -2368,6 +2410,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "###
@@ -2411,6 +2454,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
@@ -2438,8 +2482,9 @@ fn incompatible_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: foo-1.2.3-not-compatible-wheel.whl
+    error: Failed to read `foo @ file://[TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl`
+      Caused by: Failed to unzip wheel: foo-1.2.3-not-compatible-wheel.whl
+      Caused by: unable to locate the end of central directory record
     "###
     );
 
@@ -2661,6 +2706,7 @@ fn find_links_wheel_cache() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tqdm==1000.0.0
@@ -2710,6 +2756,7 @@ fn find_links_source_cache() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tqdm==999.0.0
@@ -2770,6 +2817,7 @@ fn offline() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==23.10.1
     "###
@@ -2778,9 +2826,94 @@ fn offline() -> Result<()> {
     Ok(())
 }
 
-/// Sync with a repeated `anyio` requirement. The second requirement should be ignored.
+/// Include a `constraints.txt` file with a compatible constraint.
 #[test]
-fn repeat_requirement() -> Result<()> {
+fn compatible_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==3.7.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `constraints.txt` file with an incompatible constraint.
+#[test]
+fn incompatible_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==3.6.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require anyio==3.7.0 and anyio==3.6.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `constraints.txt` file with an irrelevant constraint.
+#[test]
+fn irrelevant_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("black==23.10.1")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==3.7.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Sync with a repeated `anyio` requirement.
+#[test]
+fn repeat_requirement_identical() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio\nanyio")?;
@@ -2801,23 +2934,45 @@ fn repeat_requirement() -> Result<()> {
     Ok(())
 }
 
-/// Sync with a repeated, but conflicting `anyio` requirement. The second requirement should cause
-/// an error.
+/// Sync with a repeated `anyio` requirement, with compatible versions.
 #[test]
-fn conflicting_requirement() -> Result<()> {
+fn repeat_requirement_compatible() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio\nanyio==4.0.0")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.in"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to determine installation plan
-      Caused by: Detected duplicate package in requirements: anyio
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###);
+
+    Ok(())
+}
+
+/// Sync with a repeated, but conflicting `anyio` requirement.
+#[test]
+fn repeat_requirement_incompatible() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio<4.0.0\nanyio==4.0.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require anyio<4.0.0 and anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -2938,6 +3093,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
@@ -2951,6 +3107,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###
     );
@@ -2976,6 +3133,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -3395,7 +3553,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+        .write_str("source-distribution==0.0.1 --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -3410,7 +3568,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.0.0
+     + source-distribution==0.0.1
     "###
     );
 
@@ -3525,7 +3683,7 @@ fn require_hashes_source_url() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+        .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -3538,7 +3696,7 @@ fn require_hashes_source_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
@@ -3552,17 +3710,18 @@ fn require_hashes_source_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.0.0 (from https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz)
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz)
+     - source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
     // Reinstall with the wrong hash, and verify that it's rejected despite being cached.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+        .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -3573,14 +3732,14 @@ fn require_hashes_source_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz`
-      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz`
+    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      Caused by: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
     Expected:
       sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
     Computed:
-      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+      sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "###
     );
 
@@ -3594,7 +3753,7 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+        .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -3604,14 +3763,14 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz`
-      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz`
+    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      Caused by: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
     Expected:
       sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
     Computed:
-      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+      sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "###
     );
 
@@ -3652,6 +3811,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
@@ -3701,7 +3861,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
@@ -3863,6 +4023,7 @@ fn require_hashes_re_download() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4062,6 +4223,7 @@ fn require_hashes_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -4264,6 +4426,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4285,6 +4448,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4519,6 +4683,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###
@@ -4719,6 +4884,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###

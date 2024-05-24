@@ -39,9 +39,10 @@ use std::str::FromStr;
 use anyhow::Result;
 use url::Url;
 
-use distribution_filename::{SourceDistFilename, WheelFilename};
+use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use pep508_rs::{Pep508Url, VerbatimUrl};
+use pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
@@ -49,6 +50,7 @@ pub use crate::annotation::*;
 pub use crate::any::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
+pub use crate::diagnostic::*;
 pub use crate::editable::*;
 pub use crate::error::*;
 pub use crate::file::*;
@@ -56,7 +58,6 @@ pub use crate::hash::*;
 pub use crate::id::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
-pub use crate::parsed_url::*;
 pub use crate::prioritized_distribution::*;
 pub use crate::requirement::*;
 pub use crate::resolution::*;
@@ -68,6 +69,7 @@ mod annotation;
 mod any;
 mod buildable;
 mod cached;
+mod diagnostic;
 mod editable;
 mod error;
 mod file;
@@ -75,7 +77,6 @@ mod hash;
 mod id;
 mod index_url;
 mod installed;
-mod parsed_url;
 mod prioritized_distribution;
 mod requirement;
 mod resolution;
@@ -202,8 +203,7 @@ pub struct DirectUrlBuiltDist {
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
     pub location: Url,
-    pub subdirectory: Option<PathBuf>,
-    /// The URL with the subdirectory fragment.
+    /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
 
@@ -211,14 +211,17 @@ pub struct DirectUrlBuiltDist {
 #[derive(Debug, Clone)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
-    pub url: VerbatimUrl,
+    /// The path to the wheel.
     pub path: PathBuf,
+    /// The URL as it was provided by the user.
+    pub url: VerbatimUrl,
 }
 
 /// A source distribution that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone)]
 pub struct RegistrySourceDist {
-    pub filename: SourceDistFilename,
+    pub name: PackageName,
+    pub version: Version,
     pub file: Box<File>,
     pub index: IndexUrl,
     /// When an sdist is selected, it may be the case that there were
@@ -239,8 +242,9 @@ pub struct DirectUrlSourceDist {
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
     pub location: Url,
+    /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
-    /// The URL with the subdirectory fragment.
+    /// The URL as it was provided by the user, including the subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -250,8 +254,9 @@ pub struct GitSourceDist {
     pub name: PackageName,
     /// The URL without the revision and subdirectory fragment.
     pub git: Box<GitUrl>,
+    /// The subdirectory within the Git repository in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
-    /// The URL with the revision and subdirectory fragment.
+    /// The URL as it was provided by the user, including the revision and subdirectory fragment.
     pub url: VerbatimUrl,
 }
 
@@ -259,17 +264,22 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone)]
 pub struct PathSourceDist {
     pub name: PackageName,
-    pub url: VerbatimUrl,
+    /// The path to the archive.
     pub path: PathBuf,
+    /// The URL as it was provided by the user.
+    pub url: VerbatimUrl,
 }
 
 /// A source distribution that exists in a local directory.
 #[derive(Debug, Clone)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
-    pub url: VerbatimUrl,
+    /// The path to the directory.
     pub path: PathBuf,
+    /// Whether the package should be installed in editable mode.
     pub editable: bool,
+    /// The URL as it was provided by the user.
+    pub url: VerbatimUrl,
 }
 
 impl Dist {
@@ -298,7 +308,6 @@ impl Dist {
             Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                 filename,
                 location,
-                subdirectory,
                 url,
             })))
         } else {
@@ -331,9 +340,9 @@ impl Dist {
         if path.is_dir() {
             Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
-                url,
                 path,
                 editable,
+                url,
             })))
         } else if path
             .extension()
@@ -355,8 +364,8 @@ impl Dist {
 
             Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                 filename,
-                url,
                 path,
+                url,
             })))
         } else {
             if editable {
@@ -365,8 +374,8 @@ impl Dist {
 
             Ok(Self::Source(SourceDist::Path(PathSourceDist {
                 name,
-                url,
                 path,
+                url,
             })))
         }
     }
@@ -418,6 +427,14 @@ impl Dist {
         }
     }
 
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::Source(dist) => dist.is_local(),
+            Self::Built(dist) => dist.is_local(),
+        }
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
@@ -443,6 +460,11 @@ impl Dist {
 }
 
 impl BuiltDist {
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Path(_))
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
@@ -488,7 +510,7 @@ impl SourceDist {
 
     pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Registry(source_dist) => Some(&source_dist.filename.version),
+            Self::Registry(source_dist) => Some(&source_dist.version),
             Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) | Self::Directory(_) => None,
         }
     }
@@ -499,6 +521,11 @@ impl SourceDist {
             Self::Directory(DirectorySourceDist { editable, .. }) => *editable,
             _ => false,
         }
+    }
+
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Directory(_) | Self::Path(_))
     }
 
     /// Returns the path to the source distribution, if it's a local distribution.
@@ -544,7 +571,7 @@ impl Name for PathBuiltDist {
 
 impl Name for RegistrySourceDist {
     fn name(&self) -> &PackageName {
-        &self.filename.name
+        &self.name
     }
 }
 
@@ -629,7 +656,7 @@ impl DistributionMetadata for PathBuiltDist {
 
 impl DistributionMetadata for RegistrySourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef {
-        VersionOrUrlRef::Version(&self.filename.version)
+        VersionOrUrlRef::Version(&self.version)
     }
 }
 
@@ -701,13 +728,15 @@ impl RemoteSource for File {
 impl RemoteSource for Url {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
-        let filename = self
+        let path_segments = self
             .path_segments()
-            .and_then(Iterator::last)
-            .ok_or_else(|| Error::UrlFilename(self.clone()))?;
+            .ok_or_else(|| Error::MissingPathSegments(self.clone()))?;
+
+        // This is guaranteed by the contract of `Url::path_segments`.
+        let last = path_segments.last().expect("path segments is non-empty");
 
         // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(filename)?;
+        let filename = urlencoding::decode(last)?;
 
         Ok(filename)
     }

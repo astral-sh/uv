@@ -7,11 +7,12 @@ use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name, Requirement, UnresolvedRequirement};
 use pep508_rs::UnnamedRequirement;
+use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
-use uv_interpreter::{PythonEnvironment, Target};
+use uv_interpreter::{PythonEnvironment, SystemPython, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::commands::{elapsed, ExitStatus};
@@ -43,13 +44,13 @@ pub(crate) async fn pip_uninstall(
         RequirementsSpecification::from_simple_sources(sources, &client_builder, preview).await?;
 
     // Detect the current Python interpreter.
-    let venv = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, &cache)?
-    } else if system {
-        PythonEnvironment::from_default_python(&cache)?
+    let system = if system {
+        SystemPython::Required
     } else {
-        PythonEnvironment::from_virtualenv(&cache)?
+        SystemPython::Explicit
     };
+    let venv = PythonEnvironment::find(python.as_deref(), system, &cache)?;
+
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
@@ -94,7 +95,7 @@ pub(crate) async fn pip_uninstall(
     let site_packages = uv_installer::SitePackages::from_executable(&venv)?;
 
     // Partition the requirements into named and unnamed requirements.
-    let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement>) = spec
+    let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement<VerbatimParsedUrl>>) = spec
         .requirements
         .into_iter()
         .partition_map(|entry| match entry.requirement {
@@ -118,7 +119,7 @@ pub(crate) async fn pip_uninstall(
     let urls = {
         let mut urls = unnamed
             .into_iter()
-            .map(|requirement| requirement.url.to_url())
+            .map(|requirement| requirement.url.verbatim.to_url())
             .collect::<Vec<_>>();
         urls.sort_unstable();
         urls.dedup();

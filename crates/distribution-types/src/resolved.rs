@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use pep508_rs::PackageName;
+use pypi_types::Yanked;
 
 use crate::{
     BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
@@ -44,10 +45,30 @@ impl ResolvedDist {
         }
     }
 
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::Installable(dist) => dist.is_local(),
+            Self::Installed(dist) => dist.is_local(),
+        }
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Installable(dist) => dist.index(),
+            Self::Installed(_) => None,
+        }
+    }
+
+    /// Returns the [`Yanked`] status of the distribution, if available.
+    pub fn yanked(&self) -> Option<&Yanked> {
+        match self {
+            Self::Installable(dist) => match dist {
+                Dist::Source(SourceDist::Registry(sdist)) => sdist.file.yanked.as_ref(),
+                Dist::Built(BuiltDist::Registry(wheel)) => wheel.best_wheel().file.yanked.as_ref(),
+                _ => None,
+            },
             Self::Installed(_) => None,
         }
     }
@@ -61,7 +82,8 @@ impl ResolvedDistRef<'_> {
                 // has an sdist, so this always succeeds.
                 let source = prioritized.source_dist().expect("a source distribution");
                 assert_eq!(
-                    sdist.filename, source.filename,
+                    (&sdist.name, &sdist.version),
+                    (&source.name, &source.version),
                     "expected chosen sdist to match prioritized sdist"
                 );
                 ResolvedDist::Installable(Dist::Source(SourceDist::Registry(source)))

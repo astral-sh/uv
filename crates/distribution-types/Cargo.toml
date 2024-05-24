@@ -25,12 +25,10 @@ uv-normalize = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
-git2 = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 rkyv = { workspace = true }
-rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

@@ -33,7 +33,7 @@ pub(crate) struct Cli {
     pub(crate) cache_args: CacheArgs,
 
     /// The path to a `uv.toml` file to use for configuration.
-    #[arg(long, env = "UV_CONFIG_FILE", hide = true)]
+    #[arg(global = true, long, env = "UV_CONFIG_FILE")]
     pub(crate) config_file: Option<PathBuf>,
 }
 
@@ -81,6 +81,13 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
     pub(crate) no_native_tls: bool,
 
+    /// Disable network access, relying only on locally cached data and locally available files.
+    #[arg(global = true, long, overrides_with("no_offline"))]
+    pub(crate) offline: bool,
+
+    #[arg(global = true, long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
+
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
     pub(crate) preview: bool,
@@ -121,6 +128,8 @@ impl From<ColorChoice> for anstream::ColorChoice {
 pub(crate) enum Commands {
     /// Resolve and install Python packages.
     Pip(PipNamespace),
+    /// Run and manage executable Python packages.
+    Tool(ToolNamespace),
     /// Create a virtual environment.
     #[command(alias = "virtualenv", alias = "v")]
     Venv(VenvArgs),
@@ -364,23 +373,17 @@ pub(crate) struct PipCompileArgs {
     pub(crate) custom_compile_command: Option<String>,
 
     /// Run offline, i.e., without accessing the network.
-    #[arg(
-        global = true,
-        long,
-        conflicts_with = "refresh",
-        conflicts_with = "refresh_package",
-        overrides_with("no_offline")
-    )]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
-    #[arg(long, overrides_with("no_refresh"))]
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
 
-    #[arg(long, overrides_with("refresh"), hide = true)]
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
     pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
@@ -636,6 +639,16 @@ pub(crate) struct PipSyncArgs {
     #[arg(required(true))]
     pub(crate) src_file: Vec<PathBuf>,
 
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    pub(crate) constraint: Vec<Maybe<PathBuf>>,
+
     /// Reinstall all packages, regardless of whether they're already installed.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub(crate) reinstall: bool,
@@ -647,23 +660,16 @@ pub(crate) struct PipSyncArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
 
-    #[arg(
-        global = true,
-        long,
-        conflicts_with = "refresh",
-        conflicts_with = "refresh_package",
-        overrides_with("no_offline")
-    )]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
-
     /// Refresh all cached data.
-    #[arg(long, overrides_with("no_refresh"))]
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
 
-    #[arg(long, overrides_with("refresh"), hide = true)]
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
     pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
@@ -923,7 +929,7 @@ pub(crate) struct PipSyncArgs {
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
-    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub(crate) python_platform: Option<TargetTriple>,
@@ -935,6 +941,18 @@ pub(crate) struct PipSyncArgs {
 
     #[arg(long, overrides_with("strict"), hide = true)]
     pub(crate) no_strict: bool,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+
+    /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
+    /// print the resulting plan.
+    #[arg(long)]
+    pub(crate) dry_run: bool,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipSyncCompatArgs,
@@ -1011,23 +1029,16 @@ pub(crate) struct PipInstallArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
 
-    #[arg(
-        global = true,
-        long,
-        conflicts_with = "refresh",
-        conflicts_with = "refresh_package",
-        overrides_with("no_offline")
-    )]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
-
     /// Refresh all cached data.
-    #[arg(long, overrides_with("no_refresh"))]
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
 
-    #[arg(long, overrides_with("refresh"), hide = true)]
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
     pub(crate) no_refresh: bool,
 
     /// Refresh cached data for a specific package.
@@ -1312,7 +1323,7 @@ pub(crate) struct PipInstallArgs {
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
-    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub(crate) python_platform: Option<TargetTriple>,
@@ -1428,13 +1439,6 @@ pub(crate) struct PipUninstallArgs {
     /// or system Python interpreter.
     #[arg(long)]
     pub(crate) target: Option<PathBuf>,
-
-    /// Run offline, i.e., without accessing the network.
-    #[arg(long, overrides_with("no_offline"))]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
 }
 
 #[derive(Args)]
@@ -1806,13 +1810,6 @@ pub(crate) struct VenvArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub(crate) keyring_provider: Option<KeyringProviderType>,
 
-    /// Run offline, i.e., without accessing the network.
-    #[arg(long, overrides_with("no_offline"))]
-    pub(crate) offline: bool,
-
-    #[arg(long, overrides_with("offline"), hide = true)]
-    pub(crate) no_offline: bool,
-
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
@@ -1919,4 +1916,47 @@ struct AddArgs {
 struct RemoveArgs {
     /// The name of the package to remove (e.g., `Django`).
     name: PackageName,
+}
+
+#[derive(Args)]
+pub(crate) struct ToolNamespace {
+    #[command(subcommand)]
+    pub(crate) command: ToolCommand,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ToolCommand {
+    /// Run a tool
+    Run(ToolRunArgs),
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct ToolRunArgs {
+    /// The command to run.
+    pub(crate) target: String,
+
+    /// The arguments to the command.
+    #[arg(allow_hyphen_values = true)]
+    pub(crate) args: Vec<OsString>,
+
+    /// Use the given package to provide the command.
+    ///
+    /// By default, the package name is assumed to match the command name.
+    #[arg(long)]
+    pub(crate) from: Option<String>,
+
+    /// Include the following extra requirements.
+    #[arg(long)]
+    pub(crate) with: Vec<String>,
+
+    /// The Python interpreter to use to build the run environment.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        group = "discovery"
+    )]
+    pub(crate) python: Option<String>,
 }

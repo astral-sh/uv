@@ -7,7 +7,7 @@ use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::split_scheme;
-use pypi_types::{DistInfoMetadata, HashDigest, Yanked};
+use pypi_types::{CoreMetadata, HashDigest, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
@@ -44,9 +44,11 @@ impl File {
     pub fn try_from(file: pypi_types::File, base: &Url) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file
-                .dist_info_metadata
+                .core_metadata
                 .as_ref()
-                .is_some_and(DistInfoMetadata::is_available),
+                .or(file.dist_info_metadata.as_ref())
+                .or(file.data_dist_info_metadata.as_ref())
+                .is_some_and(CoreMetadata::is_available),
             filename: file.filename,
             hashes: file.hashes.into_digests(),
             requires_python: file

@@ -10,6 +10,7 @@ use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
+use cli::{ToolCommand, ToolNamespace};
 use uv_cache::Cache;
 use uv_requirements::RequirementsSource;
 use uv_workspace::Combine;
@@ -43,6 +44,7 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod cli;
 mod commands;
 mod compat;
+mod editables;
 mod logging;
 mod printer;
 mod settings;
@@ -176,9 +178,14 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
+
             let requirements = args
                 .src_file
                 .into_iter()
@@ -220,7 +227,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.keyring_provider,
                 args.shared.setup_py,
                 args.shared.config_setting,
-                args.shared.connectivity,
+                globals.connectivity,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
                 args.shared.python_version,
@@ -247,17 +254,28 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
-            let sources = args
+
+            let requirements = args
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
+            let constraints = args
+                .constraint
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
 
             commands::pip_sync(
-                &sources,
+                &requirements,
+                &constraints,
                 &args.reinstall,
                 args.shared.link_mode,
                 args.shared.compile_bytecode,
@@ -266,7 +284,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.index_strategy,
                 args.shared.keyring_provider,
                 args.shared.setup_py,
-                args.shared.connectivity,
+                globals.connectivity,
                 &args.shared.config_setting,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
@@ -274,6 +292,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.python_version,
                 args.shared.python_platform,
                 args.shared.strict,
+                args.shared.exclude_newer,
                 args.shared.python,
                 args.shared.system,
                 args.shared.break_system_packages,
@@ -282,6 +301,7 @@ async fn run() -> Result<ExitStatus> {
                 globals.native_tls,
                 globals.preview,
                 cache,
+                args.dry_run,
                 printer,
             )
             .await
@@ -293,6 +313,10 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
@@ -335,7 +359,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.compile_bytecode,
                 args.shared.require_hashes,
                 args.shared.setup_py,
-                args.shared.connectivity,
+                globals.connectivity,
                 &args.shared.config_setting,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
@@ -384,7 +408,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.break_system_packages,
                 args.shared.target,
                 cache,
-                args.shared.connectivity,
+                globals.connectivity,
                 globals.native_tls,
                 globals.preview,
                 args.shared.keyring_provider,
@@ -507,7 +531,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
-                args.shared.connectivity,
+                globals.connectivity,
                 args.seed,
                 args.allow_existing,
                 args.shared.exclude_newer,
@@ -551,6 +575,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 globals.isolated,
                 globals.preview,
+                globals.connectivity,
                 &cache,
                 printer,
             )
@@ -585,6 +610,26 @@ async fn run() -> Result<ExitStatus> {
         Commands::GenerateShellCompletion { shell } => {
             shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
+        }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Run(args),
+        }) => {
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::run_tool(
+                args.target,
+                args.args,
+                args.python,
+                args.from,
+                args.with,
+                globals.isolated,
+                globals.preview,
+                globals.connectivity,
+                &cache,
+                printer,
+            )
+            .await
         }
     }
 }

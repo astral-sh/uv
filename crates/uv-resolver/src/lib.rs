@@ -1,4 +1,5 @@
 pub use dependency_mode::DependencyMode;
+pub use editables::BuiltEditableMetadata;
 pub use error::ResolveError;
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
@@ -9,7 +10,7 @@ pub use options::{Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError};
 pub use prerelease_mode::PreReleaseMode;
 pub use python_requirement::PythonRequirement;
-pub use resolution::{AnnotationStyle, Diagnostic, DisplayResolutionGraph, ResolutionGraph};
+pub use resolution::{AnnotationStyle, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
     BuildId, DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,

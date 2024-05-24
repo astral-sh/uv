@@ -12,7 +12,7 @@ mod source;
 mod util;
 
 /// A URL reference to a Git repository.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash, Ord)]
 pub struct GitUrl {
     /// The URL of the Git repository, with any query parameters, fragments, and leading `git+`
     /// removed.
@@ -76,7 +76,7 @@ impl TryFrom<Url> for GitUrl {
             .rsplit_once('@')
             .map(|(prefix, suffix)| (prefix.to_string(), suffix.to_string()))
         {
-            reference = GitReference::from_rev(&suffix);
+            reference = GitReference::from_rev(suffix);
             url.set_path(&prefix);
         }
 

@@ -22,17 +22,17 @@ impl std::fmt::Display for SourceAnnotation {
         match self {
             Self::Requirement(origin) => match origin {
                 RequirementOrigin::File(path) => {
-                    write!(f, "-r {}", path.user_display())
+                    write!(f, "-r {}", path.portable_display())
                 }
                 RequirementOrigin::Project(path, project_name) => {
-                    write!(f, "{project_name} ({})", path.user_display())
+                    write!(f, "{project_name} ({})", path.portable_display())
                 }
             },
             Self::Constraint(origin) => {
-                write!(f, "-c {}", origin.path().user_display())
+                write!(f, "-c {}", origin.path().portable_display())
             }
             Self::Override(origin) => {
-                write!(f, "--override {}", origin.path().user_display())
+                write!(f, "--override {}", origin.path().portable_display())
             }
         }
     }

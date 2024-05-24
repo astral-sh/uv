@@ -11,13 +11,18 @@ pub struct Concurrency {
     ///
     /// Note this value must be non-zero.
     pub builds: usize,
+    /// The maximum number of concurrent installs.
+    ///
+    /// Note this value must be non-zero.
+    pub installs: usize,
 }
 
 impl Default for Concurrency {
     fn default() -> Self {
         Concurrency {
             downloads: Concurrency::DEFAULT_DOWNLOADS,
-            builds: Concurrency::default_builds(),
+            builds: Concurrency::threads(),
+            installs: Concurrency::threads(),
         }
     }
 }
@@ -26,8 +31,8 @@ impl Concurrency {
     // The default concurrent downloads limit.
     pub const DEFAULT_DOWNLOADS: usize = 50;
 
-    // The default concurrent builds limit.
-    pub fn default_builds() -> usize {
+    // The default concurrent builds and install limit.
+    pub fn threads() -> usize {
         std::thread::available_parallelism()
             .map(NonZeroUsize::get)
             .unwrap_or(1)

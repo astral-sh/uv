@@ -16,13 +16,11 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, SourceAnnotation,
-    SourceAnnotations, Verbatim,
+    IndexLocations, LocalEditable, LocalEditables, SourceAnnotation, SourceAnnotations, Verbatim,
 };
 use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
-use pypi_types::Metadata23;
 use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -36,21 +34,25 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
-use uv_interpreter::PythonVersion;
-use uv_interpreter::{find_best_python, find_requested_python, PythonEnvironment};
+use uv_interpreter::{
+    find_best_interpreter, find_interpreter, InterpreterRequest, PythonEnvironment, SystemPython,
+    VersionRequest,
+};
+use uv_interpreter::{PythonVersion, SourceSelector};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex,
-    InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
-    Resolver,
+    AnnotationStyle, BuiltEditableMetadata, DependencyMode, DisplayResolutionGraph, ExcludeNewer,
+    Exclusions, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode,
+    PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::operations;
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -161,12 +163,26 @@ pub(crate) async fn pip_compile(
     }
 
     // Find an interpreter to use for building distributions
-    let interpreter = if let Some(python) = python.as_ref() {
-        find_requested_python(python, &cache)?
-            .ok_or_else(|| uv_interpreter::Error::RequestedPythonNotFound(python.to_string()))?
+    let system = if system {
+        SystemPython::Required
     } else {
-        find_best_python(python_version.as_ref(), system, &cache)?
+        SystemPython::Allowed
     };
+    let interpreter = if let Some(python) = python.as_ref() {
+        let request = InterpreterRequest::parse(python);
+        let sources = SourceSelector::from_settings(system);
+        find_interpreter(&request, system, &sources, &cache)??
+    } else {
+        let request = if let Some(version) = python_version.as_ref() {
+            // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
+            InterpreterRequest::Version(VersionRequest::from(version))
+        } else {
+            InterpreterRequest::default()
+        };
+        find_best_interpreter(&request, system, &cache)??
+    }
+    .into_interpreter();
+
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
@@ -443,7 +459,7 @@ pub(crate) async fn pip_compile(
 
         // Build all editables.
         let editable_wheel_dir = tempdir_in(cache.root())?;
-        let editables: Vec<(LocalEditable, Metadata23, Requirements)> = downloader
+        let editables: Vec<BuiltEditableMetadata> = downloader
             .build_editables(editables, editable_wheel_dir.path())
             .await
             .context("Failed to build editables")?
@@ -455,25 +471,25 @@ pub(crate) async fn pip_compile(
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()?,
+                        .map(Requirement::from)
+                        .collect(),
                     optional_dependencies: IndexMap::default(),
                 };
-                Ok::<_, Box<ParsedUrlError>>((
-                    built_editable.editable,
-                    built_editable.metadata,
+                BuiltEditableMetadata {
+                    built: built_editable.editable,
+                    metadata: built_editable.metadata,
                     requirements,
-                ))
+                }
             })
-            .collect::<Result<_, _>>()?;
+            .collect();
 
         // Validate that the editables are compatible with the target Python version.
-        for (_, metadata, _) in &editables {
-            if let Some(python_requires) = metadata.requires_python.as_ref() {
+        for editable in &editables {
+            if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
                 if !python_requires.contains(python_requirement.target()) {
                     return Err(anyhow!(
                         "Editable `{}` requires Python {}, but resolution targets Python {}",
-                        metadata.name,
+                        editable.metadata.name,
                         python_requires,
                         python_requirement.target()
                     ));
@@ -546,7 +562,7 @@ pub(crate) async fn pip_compile(
         &top_level_index,
         &hasher,
         &build_dispatch,
-        &EmptyInstalledPackages,
+        EmptyInstalledPackages,
         DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )?
     .with_reporter(ResolverReporter::from(printer));
@@ -572,17 +588,6 @@ pub(crate) async fn pip_compile(
         )
         .dimmed()
     )?;
-
-    // Notify the user of any diagnostics.
-    for diagnostic in resolution.diagnostics() {
-        writeln!(
-            printer.stderr(),
-            "{}{} {}",
-            "warning".yellow().bold(),
-            ":".bold(),
-            diagnostic.message().bold()
-        )?;
-    }
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file)?;
@@ -684,6 +689,9 @@ pub(crate) async fn pip_compile(
         }
     }
 
+    // Notify the user of any resolution diagnostics.
+    operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+
     Ok(ExitStatus::Success)
 }
 
@@ -699,7 +707,7 @@ fn cmd(
     }
     let args = env::args_os()
         .skip(1)
-        .map(|arg| arg.user_display().to_string())
+        .map(|arg| arg.to_string_lossy().to_string())
         .scan(None, move |skip_next, arg| {
             if matches!(skip_next, Some(true)) {
                 // Reset state; skip this iteration.

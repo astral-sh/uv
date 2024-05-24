@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::Arc};
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
@@ -6,15 +6,14 @@ use rustc_hash::FxHashSet;
 use thiserror::Error;
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, GitSourceDist, LocalEditable, Requirement,
-    RequirementSource, Requirements, SourceDist,
+    BuiltDist, Dist, DistributionMetadata, GitSourceDist, Requirement, RequirementSource,
+    SourceDist,
 };
 use pep508_rs::MarkerEnvironment;
-use pypi_types::Metadata23;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_git::GitUrl;
-use uv_resolver::{InMemoryIndex, MetadataResponse};
+use uv_resolver::{BuiltEditableMetadata, InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 #[derive(Debug, Error)]
@@ -25,8 +24,6 @@ pub enum LookaheadError {
     DownloadAndBuild(SourceDist, #[source] uv_distribution::Error),
     #[error(transparent)]
     UnsupportedUrl(#[from] distribution_types::Error),
-    #[error(transparent)]
-    InvalidRequirement(#[from] Box<distribution_types::ParsedUrlError>),
 }
 
 /// A resolver for resolving lookahead requirements from direct URLs.
@@ -53,7 +50,7 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     /// The overrides for the project.
     overrides: &'a Overrides,
     /// The editable requirements for the project.
-    editables: &'a [(LocalEditable, Metadata23, Requirements)],
+    editables: &'a [BuiltEditableMetadata],
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -69,7 +66,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
-        editables: &'a [(LocalEditable, Metadata23, Requirements)],
+        editables: &'a [BuiltEditableMetadata],
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -113,17 +110,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .constraints
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-            .chain(
-                self.editables
-                    .iter()
-                    .flat_map(|(editable, _metadata, requirements)| {
-                        self.constraints
-                            .apply(self.overrides.apply(&requirements.dependencies))
-                            .filter(|requirement| {
-                                requirement.evaluate_markers(markers, &editable.extras)
-                            })
-                    }),
-            )
+            .chain(self.editables.iter().flat_map(|editable| {
+                self.constraints
+                    .apply(self.overrides.apply(&editable.requirements.dependencies))
+                    .filter(|requirement| {
+                        requirement.evaluate_markers(markers, &editable.built.extras)
+                    })
+            }))
             .cloned()
             .collect();
 
@@ -197,17 +190,18 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let requires_dist = {
             let id = dist.version_id();
-            if let Some(archive) = self
-                .index
-                .get_metadata(&id)
-                .as_deref()
-                .and_then(|response| {
-                    if let MetadataResponse::Found(archive, ..) = response {
-                        Some(archive)
-                    } else {
-                        None
-                    }
-                })
+            if let Some(archive) =
+                self.index
+                    .distributions()
+                    .get(&id)
+                    .as_deref()
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive, ..) = response {
+                            Some(archive)
+                        } else {
+                            None
+                        }
+                    })
             {
                 // If the metadata is already in the index, return it.
                 archive
@@ -215,8 +209,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()?
+                    .map(Requirement::from)
+                    .collect()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
@@ -234,12 +228,10 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
                 // Insert the metadata into the index.
                 self.index
-                    .insert_metadata(id, MetadataResponse::Found(archive));
+                    .distributions()
+                    .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                requires_dist
-                    .into_iter()
-                    .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()?
+                requires_dist.into_iter().map(Requirement::from).collect()
             }
         };
 

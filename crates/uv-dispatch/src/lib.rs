@@ -12,7 +12,7 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{IndexLocations, Name, Requirement, Resolution, SourceDist};
+use distribution_types::{CachedDist, IndexLocations, Name, Requirement, Resolution, SourceDist};
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
@@ -153,7 +153,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.index,
             &HashStrategy::None,
             self,
-            &EmptyInstalledPackages,
+            EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
         let graph = resolver.resolve().await.with_context(|| {
@@ -176,7 +176,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
-    ) -> Result<()> {
+    ) -> Result<Vec<CachedDist>> {
         debug!(
             "Installing in {} in {}",
             resolution
@@ -192,12 +192,14 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         // Determine the set of installed packages.
         let site_packages = SitePackages::from_executable(venv)?;
 
+        let requirements = resolution.requirements().collect::<Vec<_>>();
+
         let Plan {
             cached,
             remote,
             reinstalls,
             extraneous: _,
-        } = Planner::with_requirements(&resolution.requirements()).build(
+        } = Planner::with_requirements(&requirements).build(
             site_packages,
             &Reinstall::None,
             &NoBinary::None,
@@ -211,7 +213,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         // Nothing to do.
         if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
             debug!("No build requirements to install for build");
-            return Ok(());
+            return Ok(vec![]);
         }
 
         // Resolve any registry-based requirements.
@@ -280,7 +282,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .context("Failed to install build dependencies")?;
         }
 
-        Ok(())
+        Ok(wheels)
     }
 
     #[instrument(skip_all, fields(version_id = version_id, subdirectory = ?subdirectory))]

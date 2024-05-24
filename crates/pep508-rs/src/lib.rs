@@ -16,7 +16,6 @@
 
 #![warn(missing_docs)]
 
-use cursor::Cursor;
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -39,18 +38,18 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use url::Url;
 
+use cursor::Cursor;
 pub use marker::{
     ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
     MarkerTree, MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
     StringVersion,
 };
+pub use origin::RequirementOrigin;
 #[cfg(feature = "pyo3")]
 use pep440_rs::PyVersion;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "non-pep508-extensions")]
-pub use unnamed::UnnamedRequirement;
-// Parity with the crates.io version of pep508_rs
-pub use origin::RequirementOrigin;
+pub use unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use verbatim_url::{
     expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,
@@ -123,7 +122,7 @@ impl<T: Pep508Url> Display for Pep508Error<T> {
     }
 }
 
-/// We need this to allow e.g. anyhow's `.context()`
+/// We need this to allow anyhow's `.context()` and `AsDynError`.
 impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<T> {}
 
 #[cfg(feature = "pyo3")]
@@ -153,17 +152,6 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     pub marker: Option<MarkerTree>,
     /// The source file containing the requirement.
     pub origin: Option<RequirementOrigin>,
-}
-
-impl Requirement {
-    /// Set the source file containing the requirement.
-    #[must_use]
-    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
-        Self {
-            origin: Some(origin),
-            ..self
-        }
-    }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
@@ -453,10 +441,19 @@ impl<T: Pep508Url> Requirement<T> {
             ..self
         }
     }
+
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
+        Self {
+            origin: Some(origin),
+            ..self
+        }
+    }
 }
 
 /// Type to parse URLs from `name @ <url>` into. Defaults to [`url::Url`].
-pub trait Pep508Url: Clone + Display + Debug {
+pub trait Pep508Url: Display + Debug + Sized {
     /// String to URL parsing error
     type Err: Error + Debug;
 
@@ -1136,7 +1133,7 @@ mod tests {
 
     #[cfg(feature = "non-pep508-extensions")]
     fn parse_unnamed_err(input: &str) -> String {
-        crate::UnnamedRequirement::from_str(input)
+        crate::UnnamedRequirement::<VerbatimUrl>::from_str(input)
             .unwrap_err()
             .to_string()
     }
@@ -1256,7 +1253,7 @@ mod tests {
     #[test]
     #[cfg(feature = "non-pep508-extensions")]
     fn direct_url_no_extras() {
-        let numpy = crate::UnnamedRequirement::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
+        let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
         assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
         assert_eq!(numpy.extras, vec![]);
     }
@@ -1264,9 +1261,10 @@ mod tests {
     #[test]
     #[cfg(all(unix, feature = "non-pep508-extensions"))]
     fn direct_url_extras() {
-        let numpy =
-            crate::UnnamedRequirement::from_str("/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]")
-                .unwrap();
+        let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str(
+            "/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]",
+        )
+        .unwrap();
         assert_eq!(
             numpy.url.to_string(),
             "file:///path/to/numpy-1.26.4-cp312-cp312-win32.whl"
@@ -1277,7 +1275,7 @@ mod tests {
     #[test]
     #[cfg(all(windows, feature = "non-pep508-extensions"))]
     fn direct_url_extras() {
-        let numpy = crate::UnnamedRequirement::from_str(
+        let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str(
             "C:\\path\\to\\numpy-1.26.4-cp312-cp312-win32.whl[dev]",
         )
         .unwrap();
@@ -1459,7 +1457,8 @@ mod tests {
     fn test_marker_parsing() {
         let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
         let actual =
-            parse_markers_cursor::<Url>(&mut Cursor::new(marker), &mut TracingReporter).unwrap();
+            parse_markers_cursor::<VerbatimUrl>(&mut Cursor::new(marker), &mut TracingReporter)
+                .unwrap();
         let expected = MarkerTree::And(vec![
             MarkerTree::Expression(MarkerExpression::Version {
                 key: MarkerValueVersion::PythonVersion,

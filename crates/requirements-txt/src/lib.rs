@@ -44,13 +44,12 @@ use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use distribution_types::{
-    ParsedUrlError, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
-};
+use distribution_types::{Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep508_rs::{
     expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
     RequirementOrigin, Scheme, VerbatimUrl,
 };
+use pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
@@ -59,7 +58,7 @@ use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
 
-pub use crate::requirement::{RequirementsTxtRequirement, RequirementsTxtRequirementError};
+pub use crate::requirement::RequirementsTxtRequirement;
 
 mod requirement;
 
@@ -203,7 +202,7 @@ impl EditableRequirement {
     ) -> Result<Self, RequirementsTxtParserError> {
         // Identify the markers.
         let (given, marker) = if let Some((requirement, marker)) = Self::split_markers(given) {
-            let marker = MarkerTree::from_str(marker).map_err(|err| {
+            let marker = MarkerTree::parse_str(marker).map_err(|err| {
                 // Map from error on the markers to error on the whole requirement.
                 let err = Pep508Error {
                     message: err.message,
@@ -216,14 +215,14 @@ impl EditableRequirement {
                         RequirementsTxtParserError::Pep508 {
                             start: err.start,
                             end: err.start + err.len,
-                            source: err,
+                            source: Box::new(err),
                         }
                     }
                     Pep508ErrorSource::UnsupportedRequirement(_) => {
                         RequirementsTxtParserError::UnsupportedRequirement {
                             start: err.start,
                             end: err.start + err.len,
-                            source: err,
+                            source: Box::new(err),
                         }
                     }
                 }
@@ -248,14 +247,14 @@ impl EditableRequirement {
                         RequirementsTxtParserError::Pep508 {
                             start: err.start,
                             end: err.start + err.len,
-                            source: err,
+                            source: Box::new(err),
                         }
                     }
                     Pep508ErrorSource::UnsupportedRequirement(_) => {
                         RequirementsTxtParserError::UnsupportedRequirement {
                             start: err.start,
                             end: err.start + err.len,
-                            source: err,
+                            source: Box::new(err),
                         }
                     }
                 }
@@ -297,10 +296,15 @@ impl EditableRequirement {
             VerbatimUrl::parse_path(expanded.as_ref(), working_dir.as_ref())
         };
 
+        let url = url.map_err(|err| RequirementsTxtParserError::VerbatimUrl {
+            source: err,
+            url: expanded.to_string(),
+        })?;
+
         // Create a `PathBuf`.
         let path = url
             .to_file_path()
-            .map_err(|()| RequirementsTxtParserError::InvalidEditablePath(expanded.to_string()))?;
+            .map_err(|()| RequirementsTxtParserError::UrlConversion(expanded.to_string()))?;
 
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
         let url = url.with_given(requirement.to_string());
@@ -398,21 +402,19 @@ pub struct RequirementEntry {
 // We place the impl here instead of next to `UnresolvedRequirementSpecification` because
 // `UnresolvedRequirementSpecification` is defined in `distribution-types` and `requirements-txt`
 // depends on `distribution-types`.
-impl TryFrom<RequirementEntry> for UnresolvedRequirementSpecification {
-    type Error = Box<ParsedUrlError>;
-
-    fn try_from(value: RequirementEntry) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<RequirementEntry> for UnresolvedRequirementSpecification {
+    fn from(value: RequirementEntry) -> Self {
+        Self {
             requirement: match value.requirement {
                 RequirementsTxtRequirement::Named(named) => {
-                    UnresolvedRequirement::Named(Requirement::from_pep508(named)?)
+                    UnresolvedRequirement::Named(Requirement::from(named))
                 }
                 RequirementsTxtRequirement::Unnamed(unnamed) => {
                     UnresolvedRequirement::Unnamed(unnamed)
                 }
             },
             hashes: value.hashes,
-        })
+        }
     }
 }
 
@@ -422,7 +424,7 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<pep508_rs::Requirement>,
+    pub constraints: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
@@ -909,30 +911,10 @@ fn parse_requirement_and_hashes(
                 requirement
             }
         })
-        .map_err(|err| match err {
-            RequirementsTxtRequirementError::ParsedUrl(err) => {
-                RequirementsTxtParserError::ParsedUrl {
-                    source: err,
-                    start,
-                    end,
-                }
-            }
-            RequirementsTxtRequirementError::Pep508(err) => match err.message {
-                Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                    RequirementsTxtParserError::Pep508 {
-                        source: err,
-                        start,
-                        end,
-                    }
-                }
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    RequirementsTxtParserError::UnsupportedRequirement {
-                        source: err,
-                        start,
-                        end,
-                    }
-                }
-            },
+        .map_err(|err| RequirementsTxtParserError::Pep508 {
+            source: err,
+            start,
+            end,
         })?;
 
     let hashes = if has_hashes {
@@ -1034,7 +1016,11 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
-    InvalidEditablePath(String),
+    VerbatimUrl {
+        source: pep508_rs::VerbatimUrlError,
+        url: String,
+    },
+    UrlConversion(String),
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
     NoBinary {
@@ -1059,17 +1045,17 @@ pub enum RequirementsTxtParserError {
         column: usize,
     },
     UnsupportedRequirement {
-        source: Pep508Error,
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
         start: usize,
         end: usize,
     },
     Pep508 {
-        source: Pep508Error,
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
         start: usize,
         end: usize,
     },
     ParsedUrl {
-        source: Box<ParsedUrlError>,
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
         start: usize,
         end: usize,
     },
@@ -1091,7 +1077,7 @@ impl RequirementsTxtParserError {
     fn with_offset(self, offset: usize) -> Self {
         match self {
             Self::IO(err) => Self::IO(err),
-            Self::InvalidEditablePath(given) => Self::InvalidEditablePath(given),
+            Self::UrlConversion(given) => Self::UrlConversion(given),
             Self::Url {
                 source,
                 url,
@@ -1103,6 +1089,7 @@ impl RequirementsTxtParserError {
                 start: start + offset,
                 end: end + offset,
             },
+            Self::VerbatimUrl { source, url } => Self::VerbatimUrl { source, url },
             Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
             Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
             Self::NoBinary {
@@ -1171,11 +1158,14 @@ impl Display for RequirementsTxtParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::IO(err) => err.fmt(f),
-            Self::InvalidEditablePath(given) => {
-                write!(f, "Invalid editable path: {given}")
-            }
             Self::Url { url, start, .. } => {
                 write!(f, "Invalid URL at position {start}: `{url}`")
+            }
+            Self::VerbatimUrl { source, url } => {
+                write!(f, "Invalid URL: `{url}`: {source}")
+            }
+            Self::UrlConversion(given) => {
+                write!(f, "Unable to convert URL to path: {given}")
             }
             Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
@@ -1231,7 +1221,8 @@ impl std::error::Error for RequirementsTxtParserError {
         match &self {
             Self::IO(err) => err.source(),
             Self::Url { source, .. } => Some(source),
-            Self::InvalidEditablePath(_) => None,
+            Self::VerbatimUrl { source, .. } => Some(source),
+            Self::UrlConversion(_) => None,
             Self::UnsupportedUrl(_) => None,
             Self::MissingRequirementPrefix(_) => None,
             Self::NoBinary { source, .. } => Some(source),
@@ -1260,10 +1251,13 @@ impl Display for RequirementsTxtFileError {
                     self.file.user_display(),
                 )
             }
-            RequirementsTxtParserError::InvalidEditablePath(given) => {
+            RequirementsTxtParserError::VerbatimUrl { url, .. } => {
+                write!(f, "Invalid URL in `{}`: `{url}`", self.file.user_display())
+            }
+            RequirementsTxtParserError::UrlConversion(given) => {
                 write!(
                     f,
-                    "Invalid editable path in `{}`: {given}",
+                    "Unable to convert URL to path `{}`: {given}",
                     self.file.user_display()
                 )
             }

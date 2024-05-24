@@ -1,23 +1,22 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use distribution_types::{ParsedUrlError, Requirement, RequirementSource};
+use distribution_types::{Requirement, RequirementSource};
 use pep440_rs::{Operator, Version};
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
-use pypi_types::{HashDigest, HashError};
+use pypi_types::{HashDigest, HashError, VerbatimParsedUrl};
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_normalize::PackageName;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
     #[error("direct URL requirements without package names are not supported: `{0}`")]
-    Bare(UnnamedRequirement),
+    Bare(UnnamedRequirement<VerbatimParsedUrl>),
     #[error(transparent)]
     Hash(#[from] HashError),
-    #[error(transparent)]
-    ParsedUrl(#[from] Box<ParsedUrlError>),
 }
 
 /// A pinned requirement, as extracted from a `requirements.txt` file.
@@ -32,9 +31,7 @@ impl Preference {
     pub fn from_entry(entry: RequirementEntry) -> Result<Self, PreferenceError> {
         Ok(Self {
             requirement: match entry.requirement {
-                RequirementsTxtRequirement::Named(requirement) => {
-                    Requirement::from_pep508(requirement)?
-                }
+                RequirementsTxtRequirement::Named(requirement) => Requirement::from(requirement),
                 RequirementsTxtRequirement::Unnamed(requirement) => {
                     return Err(PreferenceError::Bare(requirement));
                 }
@@ -69,7 +66,7 @@ impl Preference {
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
 #[derive(Debug, Clone)]
-pub(crate) struct Preferences(FxHashMap<PackageName, Pin>);
+pub(crate) struct Preferences(Arc<FxHashMap<PackageName, Pin>>);
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
@@ -81,10 +78,10 @@ impl Preferences {
         preferences: PreferenceIterator,
         markers: Option<&MarkerEnvironment>,
     ) -> Self {
-        Self(
-            // TODO(zanieb): We should explicitly ensure that when a package name is seen multiple times
-            // that the newest or oldest version is preferred dependning on the resolution strategy;
-            // right now, the order is dependent on the given iterator.
+        // TODO(zanieb): We should explicitly ensure that when a package name is seen multiple times
+        // that the newest or oldest version is preferred dependning on the resolution strategy;
+        // right now, the order is dependent on the given iterator.
+        let preferences =
             preferences
                 .into_iter()
                 .filter_map(|preference| {
@@ -130,8 +127,9 @@ impl Preferences {
                         }
                     }
                 })
-                .collect(),
-        )
+                .collect();
+
+        Self(Arc::new(preferences))
     }
 
     /// Return the pinned version for a package, if any.

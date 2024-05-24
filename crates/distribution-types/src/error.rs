@@ -14,8 +14,11 @@ pub enum Error {
     #[error(transparent)]
     WheelFilename(#[from] distribution_filename::WheelFilenameError),
 
-    #[error("Unable to extract filename from URL: {0}")]
-    UrlFilename(Url),
+    #[error("Unable to extract file path from URL: {0}")]
+    MissingFilePath(Url),
+
+    #[error("Could not extract path segments from URL: {0}")]
+    MissingPathSegments(Url),
 
     #[error("Distribution not found at: {0}")]
     NotFound(Url),

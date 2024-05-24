@@ -98,7 +98,8 @@ impl FlatIndex {
                 let compatibility =
                     Self::source_dist_compatibility(&filename, &file.hashes, hasher, no_build);
                 let dist = RegistrySourceDist {
-                    filename: filename.clone(),
+                    name: filename.name.clone(),
+                    version: filename.version.clone(),
                     file: Box::new(file),
                     index,
                     wheels: vec![],
@@ -174,7 +175,7 @@ impl FlatIndex {
             TagCompatibility::Compatible(priority) => priority,
         };
 
-        // Check if hashes line up
+        // Check if hashes line up.
         let hash = if let HashPolicy::Validate(required) = hasher.get_package(&filename.name) {
             if hashes.is_empty() {
                 HashComparison::Missing
@@ -187,7 +188,10 @@ impl FlatIndex {
             HashComparison::Matched
         };
 
-        WheelCompatibility::Compatible(hash, priority)
+        // Break ties with the build tag.
+        let build_tag = filename.build_tag.clone();
+
+        WheelCompatibility::Compatible(hash, priority, build_tag)
     }
 
     /// Get the [`FlatDistributions`] for the given package name.

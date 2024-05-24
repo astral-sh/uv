@@ -144,7 +144,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
@@ -171,7 +171,7 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
       |
     1 | [project]
@@ -209,7 +209,7 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: after parsing '1.0', found '.x', which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
@@ -436,6 +436,46 @@ fn install_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Install a requirements file with pins that conflict
+///
+/// This is likely to occur in the real world when compiled on one platform then installed on another.
+#[test]
+fn install_requirements_txt_conflicting_pins() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+
+    // We pin `click` to a conflicting requirement
+    requirements_txt.write_str(
+        r"
+blinker==1.7.0
+click==7.0.0
+flask==3.0.2
+itsdangerous==2.1.2
+jinja2==3.1.3
+markupsafe==2.1.5
+werkzeug==3.0.1
+",
+    )?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask==3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask==3.0.2 are incompatible.
+          And because you require flask==3.0.2, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a `pyproject.toml` file with a `poetry` section.
 #[test]
 fn install_pyproject_toml_poetry() -> Result<()> {
@@ -562,6 +602,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.2
      + flask==2.3.3
@@ -585,6 +626,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.3
      + flask==3.0.2
@@ -607,6 +649,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==3.0.2
      + flask==3.0.2
@@ -720,6 +763,7 @@ fn reinstall_incomplete() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
     warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      + anyio==4.0.0
@@ -777,6 +821,7 @@ fn allow_incompatibilities() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - jinja2==3.1.3
      + jinja2==2.11.3
@@ -885,6 +930,7 @@ fn install_editable_and_registry() {
     ----- stderr -----
     Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
@@ -924,6 +970,7 @@ fn install_editable_and_registry() {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
      + black==23.10.0
@@ -1623,6 +1670,7 @@ fn reinstall_no_binary() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
      + anyio==4.3.0
@@ -1953,6 +2001,7 @@ fn install_upgrade() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.6.2
      + anyio==4.3.0
@@ -2000,6 +2049,7 @@ fn install_upgrade() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - httpcore==0.16.3
      + httpcore==1.0.4
@@ -2452,6 +2502,7 @@ fn reinstall_duplicate() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - pip==21.3.1
      - pip==22.1.1
@@ -2572,6 +2623,7 @@ requires-python = ">=3.8"
     Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
@@ -2637,6 +2689,7 @@ dependencies = {file = ["requirements.txt"]}
     ----- stderr -----
     Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example==0.1.0 (from file://[TEMP_DIR]/editable)
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2658,6 +2711,7 @@ dependencies = {file = ["requirements.txt"]}
     Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
@@ -2742,6 +2796,7 @@ requires-python = ">=3.8"
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Downloaded 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
@@ -3917,6 +3972,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
      + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
@@ -4014,6 +4070,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
      + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4141,6 +4198,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -4159,6 +4217,7 @@ fn already_installed_local_version_of_remote_package() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 3 packages in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
      + anyio==4.3.0
@@ -4176,6 +4235,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -4260,6 +4320,7 @@ fn already_installed_multiple_versions() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - anyio==4.0.0
@@ -4280,6 +4341,7 @@ fn already_installed_multiple_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - anyio==4.0.0
@@ -4391,6 +4453,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
@@ -4951,7 +5014,7 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: Failed to parse entry for: `tqdm`
       Caused by: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
     "###

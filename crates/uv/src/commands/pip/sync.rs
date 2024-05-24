@@ -2,47 +2,43 @@ use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
-use anyhow::{Context, Result};
-use itertools::Itertools;
+use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, Name, ResolvedDist};
+use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
-use pypi_types::Yanked;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy,
+    SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
-use uv_installer::{Downloader, Plan, Planner, SitePackages};
-use uv_interpreter::{PythonEnvironment, PythonVersion, Target};
-use uv_requirements::{
-    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
-};
+use uv_installer::SitePackages;
+use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
+use uv_requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
+    DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
+    ResolutionMode,
 };
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
-use uv_warnings::warn_user;
+use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
-use crate::commands::pip::editables::ResolvedEditables;
-use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::pip::operations;
+use crate::commands::pip::operations::Modifications;
+use crate::commands::ExitStatus;
+use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_sync(
-    sources: &[RequirementsSource],
+    requirements: &[RequirementsSource],
+    constraints: &[RequirementsSource],
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -59,6 +55,7 @@ pub(crate) async fn pip_sync(
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     strict: bool,
+    exclude_newer: Option<ExcludeNewer>,
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
@@ -67,31 +64,46 @@ pub(crate) async fn pip_sync(
     native_tls: bool,
     preview: PreviewMode,
     cache: Cache,
+    dry_run: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let start = std::time::Instant::now();
-
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider);
 
+    // Initialize a few defaults.
+    let overrides = &[];
+    let extras = ExtrasSpecification::default();
+    let upgrade = Upgrade::default();
+    let resolution_mode = ResolutionMode::default();
+    let prerelease_mode = PreReleaseMode::default();
+    let dependency_mode = DependencyMode::Direct;
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
-        project: _,
+        project,
         requirements,
-        constraints: _,
-        overrides: _,
+        constraints,
+        overrides,
         editables,
         source_trees,
-        extras: _,
         index_url,
         extra_index_urls,
         no_index,
         find_links,
         no_binary: specified_no_binary,
         no_build: specified_no_build,
-    } = RequirementsSpecification::from_simple_sources(sources, &client_builder, preview).await?;
+        extras: _,
+    } = operations::read_requirements(
+        requirements,
+        constraints,
+        overrides,
+        &ExtrasSpecification::default(),
+        &client_builder,
+        preview,
+    )
+    .await?;
 
     // Validate that the requirements are non-empty.
     let num_requirements = requirements.len() + source_trees.len() + editables.len();
@@ -101,13 +113,13 @@ pub(crate) async fn pip_sync(
     }
 
     // Detect the current Python interpreter.
-    let venv = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, &cache)?
-    } else if system {
-        PythonEnvironment::from_default_python(&cache)?
+    let system = if system {
+        SystemPython::Required
     } else {
-        PythonEnvironment::from_virtualenv(&cache)?
+        SystemPython::Explicit
     };
+    let venv = PythonEnvironment::find(python.as_deref(), system, &cache)?;
+
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
@@ -214,8 +226,8 @@ pub(crate) async fn pip_sync(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(venv.interpreter().markers())
-        .platform(venv.interpreter().platform())
+        .markers(&markers)
+        .platform(interpreter.platform())
         .build();
 
     // Resolve the flat indexes from `--find-links`.
@@ -224,12 +236,6 @@ pub(crate) async fn pip_sync(
         let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, &tags, &hasher, &no_build, &no_binary)
     };
-
-    // Create a shared in-memory index.
-    let index = InMemoryIndex::default();
-
-    // Track in-flight downloads, builds, etc., across resolutions.
-    let in_flight = InFlight::default();
 
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
@@ -242,14 +248,17 @@ pub(crate) async fn pip_sync(
     let no_binary = no_binary.combine(specified_no_binary);
     let no_build = no_build.combine(specified_no_build);
 
-    // Determine the set of installed packages.
-    let site_packages = SitePackages::from_executable(&venv)?;
+    // Create a shared in-memory index.
+    let index = InMemoryIndex::default();
 
-    // Prep the build context.
-    let build_dispatch = BuildDispatch::new(
+    // Track in-flight downloads, builds, etc., across resolutions.
+    let in_flight = InFlight::default();
+
+    // Create a build dispatch for resolution.
+    let resolve_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        venv.interpreter(),
+        interpreter,
         &index_locations,
         &flat_index,
         &index,
@@ -261,43 +270,18 @@ pub(crate) async fn pip_sync(
         &no_build,
         &no_binary,
         concurrency,
-    );
+    )
+    .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
-    // Convert from unnamed to named requirements.
-    let requirements = {
-        // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(
-            requirements,
-            &hasher,
-            &index,
-            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
+    // Determine the set of installed packages.
+    let site_packages = SitePackages::from_executable(&venv)?;
 
-        // Resolve any source trees into requirements.
-        if !source_trees.is_empty() {
-            requirements.extend(
-                SourceTreeResolver::new(
-                    source_trees,
-                    &ExtrasSpecification::None,
-                    &hasher,
-                    &index,
-                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-                )
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?,
-            );
-        }
-
-        requirements
-    };
-
-    // Resolve any editables.
+    // Build all editable distributions. The editables are shared between resolution and
+    // installation, and should live for the duration of the command.
     let editables = ResolvedEditables::resolve(
-        editables,
+        editables
+            .into_iter()
+            .map(ResolvedEditables::from_requirement),
         &site_packages,
         reinstall,
         &hasher,
@@ -305,304 +289,112 @@ pub(crate) async fn pip_sync(
         &tags,
         &cache,
         &client,
-        &build_dispatch,
+        &resolve_dispatch,
         concurrency,
         printer,
     )
     .await?;
 
-    // Partition into those that should be linked from the cache (`cached`), those that need to be
-    // downloaded (`remote`), and those that should be removed (`extraneous`).
-    let Plan {
-        cached,
-        remote,
-        reinstalls,
-        extraneous,
-    } = Planner::with_requirements(&requirements)
-        .with_editable_requirements(&editables)
-        .build(
-            site_packages,
-            reinstall,
-            &no_binary,
-            &hasher,
-            &index_locations,
-            &cache,
-            &venv,
-            &tags,
-        )
-        .context("Failed to determine installation plan")?;
+    let options = OptionsBuilder::new()
+        .resolution_mode(resolution_mode)
+        .prerelease_mode(prerelease_mode)
+        .dependency_mode(dependency_mode)
+        .exclude_newer(exclude_newer)
+        .index_strategy(index_strategy)
+        .build();
 
-    // Nothing to do.
-    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        let s = if num_requirements == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Audited {} in {}",
-                format!("{num_requirements} package{s}").bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
+    let resolution = match operations::resolve(
+        requirements,
+        constraints,
+        overrides,
+        source_trees,
+        project,
+        &extras,
+        &editables,
+        site_packages.clone(),
+        &hasher,
+        reinstall,
+        &upgrade,
+        interpreter,
+        &tags,
+        &markers,
+        &client,
+        &flat_index,
+        &index,
+        &resolve_dispatch,
+        concurrency,
+        options,
+        printer,
+    )
+    .await
+    {
+        Ok(resolution) => Resolution::from(resolution),
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
+            let report = miette::Report::msg(format!("{err}"))
+                .context("No solution found when resolving dependencies:");
+            eprint!("{report:?}");
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => return Err(err.into()),
+    };
 
-        return Ok(ExitStatus::Success);
-    }
+    // Re-initialize the in-flight map.
+    let in_flight = InFlight::default();
 
-    // Resolve any registry-based requirements.
-    let remote = if remote.is_empty() {
-        Vec::new()
+    // If we're running with `--reinstall`, initialize a separate `BuildDispatch`, since we may
+    // end up removing some distributions from the environment.
+    let install_dispatch = if reinstall.is_none() {
+        resolve_dispatch
     } else {
-        let start = std::time::Instant::now();
-
-        // Determine the tags, markers, and interpreter to use for resolution.
-        let interpreter = venv.interpreter();
-        let tags = interpreter.tags()?;
-        let markers = interpreter.markers();
-        let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
-
-        // Resolve with `--no-deps`.
-        let options = OptionsBuilder::new()
-            .dependency_mode(DependencyMode::Direct)
-            .build();
-
-        // Create a bound on the progress bar, since we know the number of packages upfront.
-        let reporter = ResolverReporter::from(printer).with_length(remote.len() as u64);
-
-        // Run the resolver.
-        let resolver = Resolver::new(
-            Manifest::simple(remote),
-            options,
-            &python_requirement,
-            Some(markers),
-            tags,
+        BuildDispatch::new(
+            &client,
+            &cache,
+            interpreter,
+            &index_locations,
             &flat_index,
             &index,
-            &hasher,
-            &build_dispatch,
-            // TODO(zanieb): We should consider support for installed packages in pip sync
-            &EmptyInstalledPackages,
-            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-        )?
-        .with_reporter(reporter);
-
-        let resolution = match resolver.resolve().await {
-            Err(uv_resolver::ResolveError::NoSolution(err)) => {
-                let report = miette::Report::msg(format!("{err}"))
-                    .context("No solution found when resolving dependencies:");
-                eprint!("{report:?}");
-                return Ok(ExitStatus::Failure);
-            }
-            result => result,
-        }?;
-
-        let s = if resolution.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Resolved {} in {}",
-                format!("{} package{}", resolution.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-
-        resolution
-            .into_distributions()
-            .filter_map(|dist| match dist {
-                ResolvedDist::Installable(dist) => Some(dist),
-                ResolvedDist::Installed(_) => None,
-            })
-            .collect::<Vec<_>>()
-    };
-
-    // Download, build, and unzip any missing distributions.
-    let wheels = if remote.is_empty() {
-        Vec::new()
-    } else {
-        let start = std::time::Instant::now();
-
-        let downloader = Downloader::new(
-            &cache,
-            &tags,
-            &hasher,
-            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+            &in_flight,
+            setup_py,
+            config_settings,
+            build_isolation,
+            link_mode,
+            &no_build,
+            &no_binary,
+            concurrency,
         )
-        .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
-
-        let wheels = downloader
-            .download(remote.clone(), &in_flight)
-            .await
-            .context("Failed to download distributions")?;
-
-        let s = if wheels.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Downloaded {} in {}",
-                format!("{} package{}", wheels.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-
-        wheels
+        .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
 
-    // Remove any unnecessary packages.
-    if !extraneous.is_empty() || !reinstalls.is_empty() {
-        let start = std::time::Instant::now();
+    // Sync the environment.
+    operations::install(
+        &resolution,
+        &editables,
+        site_packages,
+        Modifications::Exact,
+        reinstall,
+        &no_binary,
+        link_mode,
+        compile,
+        &index_locations,
+        &hasher,
+        &tags,
+        &client,
+        &in_flight,
+        concurrency,
+        &install_dispatch,
+        &cache,
+        &venv,
+        dry_run,
+        printer,
+    )
+    .await?;
 
-        for dist_info in extraneous.iter().chain(reinstalls.iter()) {
-            match uv_installer::uninstall(dist_info).await {
-                Ok(summary) => {
-                    debug!(
-                        "Uninstalled {} ({} file{}, {} director{})",
-                        dist_info.name(),
-                        summary.file_count,
-                        if summary.file_count == 1 { "" } else { "s" },
-                        summary.dir_count,
-                        if summary.dir_count == 1 { "y" } else { "ies" },
-                    );
-                }
-                Err(uv_installer::UninstallError::Uninstall(
-                    install_wheel_rs::Error::MissingRecord(_),
-                )) => {
-                    warn_user!(
-                        "Failed to uninstall package at {} due to missing RECORD file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
-                    );
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
+    // Notify the user of any resolution diagnostics.
+    operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-        let s = if extraneous.len() + reinstalls.len() == 1 {
-            ""
-        } else {
-            "s"
-        };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Uninstalled {} in {}",
-                format!("{} package{}", extraneous.len() + reinstalls.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-    }
-
-    // Install the resolved distributions.
-    let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
-    if !wheels.is_empty() {
-        let start = std::time::Instant::now();
-        uv_installer::Installer::new(&venv)
-            .with_link_mode(link_mode)
-            .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
-            .install(&wheels)?;
-
-        let s = if wheels.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Installed {} in {}",
-                format!("{} package{}", wheels.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-    }
-
-    if compile {
-        compile_bytecode(&venv, &cache, printer).await?;
-    }
-
-    // Report on any changes in the environment.
-    for event in extraneous
-        .into_iter()
-        .chain(reinstalls.into_iter())
-        .map(|distribution| ChangeEvent {
-            dist: LocalDist::from(distribution),
-            kind: ChangeEventKind::Removed,
-        })
-        .chain(wheels.into_iter().map(|distribution| ChangeEvent {
-            dist: LocalDist::from(distribution),
-            kind: ChangeEventKind::Added,
-        }))
-        .sorted_unstable_by(|a, b| {
-            a.dist
-                .name()
-                .cmp(b.dist.name())
-                .then_with(|| a.kind.cmp(&b.kind))
-                .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
-        })
-    {
-        match event.kind {
-            ChangeEventKind::Added => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "+".green(),
-                    event.dist.name().as_ref().bold(),
-                    event.dist.installed_version().to_string().dimmed()
-                )?;
-            }
-            ChangeEventKind::Removed => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "-".red(),
-                    event.dist.name().as_ref().bold(),
-                    event.dist.installed_version().to_string().dimmed()
-                )?;
-            }
-        }
-    }
-
-    // Validate that the environment is consistent.
-    if strict {
-        let site_packages = SitePackages::from_executable(&venv)?;
-        for diagnostic in site_packages.diagnostics()? {
-            writeln!(
-                printer.stderr(),
-                "{}{} {}",
-                "warning".yellow().bold(),
-                ":".bold(),
-                diagnostic.message().bold()
-            )?;
-        }
-    }
-
-    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
-    // have been yanked, we currently don't show this message on the second run anymore
-    for dist in &remote {
-        let Some(file) = dist.file() else {
-            continue;
-        };
-        match &file.yanked {
-            None | Some(Yanked::Bool(false)) => {}
-            Some(Yanked::Bool(true)) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} {dist} is yanked. Refresh your lockfile to pin an un-yanked version.",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-            Some(Yanked::Reason(reason)) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} {dist} is yanked (reason: \"{reason}\"). Refresh your lockfile to pin an un-yanked version.",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-        }
+    // Notify the user of any environment diagnostics.
+    if strict && !dry_run {
+        operations::diagnose_environment(&resolution, &venv, printer)?;
     }
 
     Ok(ExitStatus::Success)

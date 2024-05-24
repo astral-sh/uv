@@ -8,11 +8,11 @@ use serde::Serialize;
 use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
-use distribution_types::{InstalledDist, Name};
+use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_interpreter::PythonEnvironment;
+use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
@@ -33,19 +33,12 @@ pub(crate) fn pip_list(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
-    let venv = if let Some(python) = python {
-        PythonEnvironment::from_requested_python(python, cache)?
-    } else if system {
-        PythonEnvironment::from_default_python(cache)?
+    let system = if system {
+        SystemPython::Required
     } else {
-        match PythonEnvironment::from_virtualenv(cache) {
-            Ok(venv) => venv,
-            Err(uv_interpreter::Error::VenvNotFound) => {
-                PythonEnvironment::from_default_python(cache)?
-            }
-            Err(err) => return Err(err.into()),
-        }
+        SystemPython::Allowed
     };
+    let venv = PythonEnvironment::find(python, system, cache)?;
 
     debug!(
         "Using Python {} environment at {}",
@@ -65,11 +58,14 @@ pub(crate) fn pip_list(
         .filter(|dist| !exclude.contains(dist.name()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .collect_vec();
-    if results.is_empty() {
-        return Ok(ExitStatus::Success);
-    }
 
     match format {
+        ListFormat::Json => {
+            let rows = results.iter().copied().map(Entry::from).collect_vec();
+            let output = serde_json::to_string(&rows)?;
+            writeln!(printer.stdout(), "{output}")?;
+        }
+        ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
             // The package name and version are always present.
             let mut columns = vec![
@@ -111,11 +107,7 @@ pub(crate) fn pip_list(
                 writeln!(printer.stdout(), "{}", elems.join(" ").trim_end())?;
             }
         }
-        ListFormat::Json => {
-            let rows = results.iter().copied().map(Entry::from).collect_vec();
-            let output = serde_json::to_string(&rows)?;
-            writeln!(printer.stdout(), "{output}")?;
-        }
+        ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
                 writeln!(

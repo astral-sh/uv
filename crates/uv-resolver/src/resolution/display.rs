@@ -1,14 +1,11 @@
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 
-use distribution_types::{
-    DistributionMetadata, IndexUrl, LocalEditable, Name, SourceAnnotations, Verbatim,
-};
+use distribution_types::{IndexUrl, LocalEditable, Name, SourceAnnotations, Verbatim};
 use pypi_types::HashDigest;
 use uv_normalize::PackageName;
 
@@ -137,8 +134,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     return None;
                 }
 
-                let node = if let Some((editable, _, _)) = self.resolution.editables.get(name) {
-                    Node::Editable(editable)
+                let node = if let Some(editable) = self.resolution.editables.get(name) {
+                    Node::Editable(&editable.built)
                 } else {
                     Node::Distribution(dist)
                 };
@@ -155,19 +152,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             let mut line = match node {
                 Node::Editable(editable) => format!("-e {}", editable.verbatim()),
                 Node::Distribution(dist) => {
-                    if self.include_extras && !dist.extras.is_empty() {
-                        let mut extras = dist.extras.clone();
-                        extras.sort_unstable();
-                        extras.dedup();
-                        format!(
-                            "{}[{}]{}",
-                            dist.name(),
-                            extras.into_iter().join(", "),
-                            dist.version_or_url().verbatim()
-                        )
-                    } else {
-                        dist.verbatim().to_string()
-                    }
+                    dist.to_requirements_txt(self.include_extras).to_string()
                 }
             };
 
@@ -207,11 +192,19 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 };
 
                 match self.annotation_style {
-                    AnnotationStyle::Line => {
-                        if !edges.is_empty() {
+                    AnnotationStyle::Line => match edges.as_slice() {
+                        [] if source.is_empty() => {}
+                        [] if source.len() == 1 => {
+                            let separator = if has_hashes { "\n    " } else { "  " };
+                            let comment = format!("# via {}", source.iter().next().unwrap())
+                                .green()
+                                .to_string();
+                            annotation = Some((separator, comment));
+                        }
+                        edges => {
                             let separator = if has_hashes { "\n    " } else { "  " };
                             let deps = edges
-                                .into_iter()
+                                .iter()
                                 .map(|dependency| format!("{}", dependency.name()))
                                 .chain(source.iter().map(std::string::ToString::to_string))
                                 .collect::<Vec<_>>()
@@ -219,7 +212,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let comment = format!("# via {deps}").green().to_string();
                             annotation = Some((separator, comment));
                         }
-                    }
+                    },
                     AnnotationStyle::Split => match edges.as_slice() {
                         [] if source.is_empty() => {}
                         [] if source.len() == 1 => {

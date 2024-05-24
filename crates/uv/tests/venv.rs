@@ -218,8 +218,12 @@ fn create_venv_unknown_python_minor() {
     let mut command = context.venv_command();
     command
         .arg(context.venv.as_os_str())
+        // Request a version we know we'll never see
         .arg("--python")
-        .arg("3.15");
+        .arg("3.100")
+        // Unset this variable to force what the user would see
+        .env_remove("UV_TEST_PYTHON_PATH");
+
     if cfg!(windows) {
         uv_snapshot!(&mut command, @r###"
         success: false
@@ -227,7 +231,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No Python 3.15 found through `py --list-paths` or in `PATH`. Is Python 3.15 installed?
+          × No interpreter found for Python 3.100 in search path or `py` launcher output
         "###
         );
     } else {
@@ -237,7 +241,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No Python 3.15 in `PATH`. Is Python 3.15 installed?
+          × No interpreter found for Python 3.100 in search path
         "###
         );
     }
@@ -249,28 +253,36 @@ fn create_venv_unknown_python_minor() {
 fn create_venv_unknown_python_patch() {
     let context = VenvTestContext::new(&["3.12"]);
 
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (
-            r"No Python 3\.8\.0 found through `py --list-paths` or in `PATH`\. Is Python 3\.8\.0 installed\?",
-            "No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?",
-        ),
-    ];
-    uv_snapshot!(filters, context.venv_command()
+    let mut command = context.venv_command();
+    command
         .arg(context.venv.as_os_str())
+        // Request a version we know we'll never see
         .arg("--python")
-        .arg("3.8.0"), @r###"
-    success: false
-    exit_code: 1
-    ----- stdout -----
+        .arg("3.12.100")
+        // Unset this variable to force what the user would see
+        .env_remove("UV_TEST_PYTHON_PATH");
 
-    ----- stderr -----
-      × No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?
-    "###
-    );
+    if cfg!(windows) {
+        uv_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No interpreter found for Python 3.12.100 in search path or `py` launcher output
+        "###
+        );
+    } else {
+        uv_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No interpreter found for Python 3.12.100 in search path
+        "###
+        );
+    }
 
     context.venv.assert(predicates::path::missing());
 }

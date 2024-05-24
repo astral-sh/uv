@@ -470,7 +470,7 @@ fn dependency_excludes_range_of_compatible_versions() {
               package-a<2.0.0
               package-a>=3.0.0
 
-          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, all versions of package-c, package-b!=1.0.0 are incompatible.
+          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, package-b!=1.0.0, all versions of package-c are incompatible.
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
               package-b<=1.0.0
               package-b>=3.0.0
@@ -595,7 +595,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
               package-a<2.0.0
               package-a>=3.0.0
 
-          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-c, package-a!=3.0.0, package-b!=1.0.0 are incompatible.
+          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, package-b!=1.0.0, all versions of package-c are incompatible.
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
               package-b<=1.0.0
               package-b>=3.0.0
@@ -708,10 +708,10 @@ fn missing_extra() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: The package `package-a==1.0.0` does not have an extra named `extra`.
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
+    warning: The package `package-a==1.0.0` does not have an extra named `extra`.
     "###);
 
     // Missing extras are ignored during resolution.
@@ -1081,10 +1081,10 @@ fn extra_does_not_exist_backtrack() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: The package `package-a==3.0.0` does not have an extra named `extra`.
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==3.0.0
+    warning: The package `package-a==3.0.0` does not have an extra named `extra`.
     "###);
 
     // The resolver should not backtrack to `a==1.0.0` because missing extras are
@@ -3378,7 +3378,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c>=2.0.0b1, we can conclude that all versions of package-a depend on package-c>=2.0.0b1.
           And because only package-c<2.0.0b1 is available, we can conclude that all versions of package-a depend on package-c>3.0.0.
-          And because package-b==1.0.0 depends on package-c and only package-b==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-a are incompatible.
+          And because package-b==1.0.0 depends on package-c and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
           And because you require package-a and package-b, we can conclude that the requirements are unsatisfiable.
 
           hint: package-c was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -4779,7 +4779,7 @@ fn transitive_package_only_yanked_in_range_opt_in() {
     Installed 2 packages in [TIME]
      + package-a==0.1.0
      + package-b==1.0.0
-    warning: package-b==1.0.0 is yanked (reason: "Yanked for testing").
+    warning: `package-b==1.0.0` is yanked (reason: "Yanked for testing").
     "###);
 
     // Since the user included a dependency on `b` with an exact specifier, the yanked
@@ -4911,7 +4911,7 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
      + package-a==1.0.0
      + package-b==1.0.0
      + package-c==2.0.0
-    warning: package-c==2.0.0 is yanked (reason: "Yanked for testing").
+    warning: `package-c==2.0.0` is yanked (reason: "Yanked for testing").
     "###);
 
     // Since the user explicitly selected the yanked version of `c`, it can be

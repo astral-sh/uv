@@ -19,7 +19,7 @@ use crate::candidate_selector::CandidateSelector;
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 
-use super::PubGrubPackage;
+use super::{PubGrubPackage, PubGrubPackageInner};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -44,7 +44,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 format!("we are solving dependencies of {package} {version}")
             }
             External::NoVersions(package, set) => {
-                if matches!(package, PubGrubPackage::Python(_)) {
+                if matches!(&**package, PubGrubPackageInner::Python(_)) {
                     if let Some(python) = self.python_requirement {
                         if python.target() == python.installed() {
                             // Simple case, the installed version is the same as the target version
@@ -107,11 +107,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     }
                 }
             }
-            External::Custom(package, set, reason) => match package {
-                PubGrubPackage::Root(Some(name)) => {
+            External::Custom(package, set, reason) => match &**package {
+                PubGrubPackageInner::Root(Some(name)) => {
                     format!("{name} cannot be used because {reason}")
                 }
-                PubGrubPackage::Root(None) => {
+                PubGrubPackageInner::Root(None) => {
                     format!("your requirements cannot be used because {reason}")
                 }
                 _ => match reason {
@@ -131,12 +131,12 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
-                match package {
-                    PubGrubPackage::Root(Some(name)) => format!(
+                match &**package {
+                    PubGrubPackageInner::Root(Some(name)) => format!(
                         "{name} depends on {}",
                         PackageRange::dependency(dependency, &dependency_set)
                     ),
-                    PubGrubPackage::Root(None) => format!(
+                    PubGrubPackageInner::Root(None) => format!(
                         "you require {}",
                         PackageRange::dependency(dependency, &dependency_set)
                     ),
@@ -152,17 +152,27 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 
     /// Try to print terms of an incompatibility in a human-readable way.
     fn format_terms(&self, terms: &Map<PubGrubPackage, Term<Range<Version>>>) -> String {
-        let terms_vec: Vec<_> = terms.iter().collect();
+        let mut terms_vec: Vec<_> = terms.iter().collect();
+        // We avoid relying on hashmap iteration order here by always sorting
+        // by package first.
+        terms_vec.sort_by(|&(pkg1, _), &(pkg2, _)| pkg1.cmp(pkg2));
         match terms_vec.as_slice() {
-            [] | [(PubGrubPackage::Root(_), _)] => "the requirements are unsatisfiable".into(),
-            [(package @ PubGrubPackage::Package(..), Term::Positive(range))] => {
+            [] => "the requirements are unsatisfiable".into(),
+            [(root, _)] if matches!(&**(*root), PubGrubPackageInner::Root(_)) => {
+                "the requirements are unsatisfiable".into()
+            }
+            [(package, Term::Positive(range))]
+                if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
+            {
                 let range = self.simplify_set(range, package);
                 format!(
                     "{} cannot be used",
                     PackageRange::compatibility(package, &range)
                 )
             }
-            [(package @ PubGrubPackage::Package(..), Term::Negative(range))] => {
+            [(package, Term::Negative(range))]
+                if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
+            {
                 let range = self.simplify_set(range, package);
                 format!(
                     "{} must be used",
@@ -336,13 +346,13 @@ impl PubGrubReportFormatter<'_> {
                 let dependency_set2 = self.simplify_set(dependency_set2, dependency2);
                 let dependency2 = PackageRange::dependency(dependency2, &dependency_set2);
 
-                match package1 {
-                    PubGrubPackage::Root(Some(name)) => format!(
+                match &**package1 {
+                    PubGrubPackageInner::Root(Some(name)) => format!(
                         "{name} depends on {}and {}",
                         Padded::new("", &dependency1, " "),
                         dependency2,
                     ),
-                    PubGrubPackage::Root(None) => format!(
+                    PubGrubPackageInner::Root(None) => format!(
                         "you require {}and {}",
                         Padded::new("", &dependency1, " "),
                         dependency2,
@@ -399,10 +409,10 @@ impl PubGrubReportFormatter<'_> {
     ) -> IndexSet<PubGrubHint> {
         /// Returns `true` if pre-releases were allowed for a package.
         fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
-            let PubGrubPackage::Package(package, ..) = package else {
+            let PubGrubPackageInner::Package { name, .. } = &**package else {
                 return false;
             };
-            selector.prerelease_strategy().allows(package)
+            selector.prerelease_strategy().allows(name)
         }
 
         let mut hints = IndexSet::default();
@@ -457,7 +467,7 @@ impl PubGrubReportFormatter<'_> {
                         let no_find_links =
                             index_locations.flat_index().peekable().peek().is_none();
 
-                        if let PubGrubPackage::Package(name, ..) = package {
+                        if let PubGrubPackageInner::Package { name, .. } = &**package {
                             // Add hints due to the package being entirely unavailable.
                             match unavailable_packages.get(name) {
                                 Some(UnavailablePackage::NoIndex) => {
@@ -786,7 +796,13 @@ impl PackageRange<'_> {
 
 impl std::fmt::Display for PackageRange<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let package = fmt_package(self.package);
+        // Exit early for the root package — the range is not meaningful
+        let package = match &**self.package {
+            PubGrubPackageInner::Root(Some(name)) => return write!(f, "{name}"),
+            PubGrubPackageInner::Root(None) => return write!(f, "your requirements"),
+            _ => self.package,
+        };
+
         if self.range.is_empty() {
             return write!(f, "{package} ∅");
         }
@@ -963,13 +979,5 @@ impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
         }
 
         write!(f, "{result}")
-    }
-}
-
-fn fmt_package(package: &PubGrubPackage) -> String {
-    match package {
-        PubGrubPackage::Root(Some(name)) => name.to_string(),
-        PubGrubPackage::Root(None) => "you require".to_string(),
-        _ => format!("{package}"),
     }
 }
