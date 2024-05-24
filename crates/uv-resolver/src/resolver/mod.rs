@@ -337,10 +337,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                     let selection = state.pubgrub.partial_solution.extract_solution();
                     resolutions.push(ResolutionGraph::from_state(
+                        &self.index,
                         &selection,
                         &state.pins,
-                        self.index.packages(),
-                        self.index.distributions(),
                         &state.pubgrub,
                         &self.preferences,
                     )?);
