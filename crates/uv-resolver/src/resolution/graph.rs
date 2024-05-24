@@ -1,5 +1,4 @@
 use std::hash::BuildHasherDefault;
-use std::sync::Arc;
 
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
@@ -19,7 +18,6 @@ use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
-use crate::resolver::FxOnceMap;
 use crate::{
     lock, InMemoryIndex, Lock, LockError, Manifest, MetadataResponse, ResolveError,
     VersionsResponse,
@@ -39,10 +37,9 @@ impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
+        index: &InMemoryIndex,
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
-        packages: &FxOnceMap<PackageName, Arc<VersionsResponse>>,
-        distributions: &FxOnceMap<VersionId, Arc<MetadataResponse>>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
     ) -> anyhow::Result<Self, ResolveError> {
@@ -94,7 +91,7 @@ impl ResolutionGraph {
                         .filter(|digests| !digests.is_empty())
                     {
                         digests.to_vec()
-                    } else if let Some(versions_response) = packages.get(name) {
+                    } else if let Some(versions_response) = index.packages().get(name) {
                         if let VersionsResponse::Found(ref version_maps) = *versions_response {
                             version_maps
                                 .iter()
@@ -115,12 +112,15 @@ impl ResolutionGraph {
                     let metadata = {
                         let dist = PubGrubDistribution::from_registry(name, version);
 
-                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.version_id()
-                            )
-                        });
+                        let response = index
+                            .distributions()
+                            .get(&dist.version_id())
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Every package should have metadata: {:?}",
+                                    dist.version_id()
+                                )
+                            });
 
                         let MetadataResponse::Found(archive) = &*response else {
                             panic!(
@@ -168,7 +168,9 @@ impl ResolutionGraph {
                         .filter(|digests| !digests.is_empty())
                     {
                         digests.to_vec()
-                    } else if let Some(metadata_response) = distributions.get(&dist.version_id()) {
+                    } else if let Some(metadata_response) =
+                        index.distributions().get(&dist.version_id())
+                    {
                         if let MetadataResponse::Found(ref archive) = *metadata_response {
                             let mut digests = archive.hashes.clone();
                             digests.sort_unstable();
@@ -184,12 +186,15 @@ impl ResolutionGraph {
                     let metadata = {
                         let dist = PubGrubDistribution::from_url(name, url);
 
-                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.version_id()
-                            )
-                        });
+                        let response = index
+                            .distributions()
+                            .get(&dist.version_id())
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Every package should have metadata: {:?}",
+                                    dist.version_id()
+                                )
+                            });
 
                         let MetadataResponse::Found(archive) = &*response else {
                             panic!(
