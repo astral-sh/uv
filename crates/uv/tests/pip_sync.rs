@@ -513,7 +513,7 @@ fn install_git_commit() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
+    requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -526,11 +526,13 @@ fn install_git_commit() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     Ok(())
 }
@@ -542,7 +544,9 @@ fn install_git_tag() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/WerkZeug.git@2.0.0")?;
+    requirements_txt.write_str(
+        "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@test-tag",
+    )?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -555,11 +559,13 @@ fn install_git_tag() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/WerkZeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     Ok(())
 }
@@ -1353,7 +1359,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
+    requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -1366,11 +1372,13 @@ fn install_git_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     // Re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1388,11 +1396,11 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    check_command(&venv, "import werkzeug", &context.temp_dir);
+    check_command(&venv, "import uv_public_pypackage", &context.temp_dir);
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1419,7 +1427,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 4 files for werkzeug ([SIZE])
+    No cache entries found for werkzeug
     "###
     );
 
@@ -1433,13 +1441,14 @@ fn install_git_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     Ok(())
 }
@@ -2019,7 +2028,7 @@ fn reinstall_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
+    requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -2032,17 +2041,19 @@ fn reinstall_git() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     // Re-run the installation with `--reinstall`.
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--reinstall-package")
-        .arg("WerkZeug")
+        .arg("uv-public-pypackage")
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -2052,12 +2063,14 @@ fn reinstall_git() -> Result<()> {
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
-    context.assert_command("import werkzeug").success();
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     Ok(())
 }
