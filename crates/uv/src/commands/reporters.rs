@@ -73,12 +73,12 @@ impl ProgressReporter {
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
         let mut state = self.state.lock().unwrap();
 
-        // preserve ascending order
+        // Preserve ascending order.
         let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
         state.sizes.insert(position, size.unwrap_or(0));
 
         let progress = self.multi_progress.insert(
-            // make sure not to reorder the initial "downloading.." bar, or any previous bars
+            // Make sure not to reorder the initial "Downloading..." bar, or any previous bars.
             position + 1 + state.headers,
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
@@ -86,10 +86,10 @@ impl ProgressReporter {
         if size.is_some() {
             progress.set_style(
                 ProgressStyle::with_template(
-                    "{wide_msg:.dim} {decimal_bytes}/{decimal_total_bytes} [{bar:30}]",
+                    "{msg:10.dim} {bar:30.green/dim} {decimal_bytes:>7}/{decimal_total_bytes:7}",
                 )
                 .unwrap()
-                .progress_chars("##-"),
+                .progress_chars("--"),
             );
             progress.set_message(name.to_string());
         } else {
@@ -161,12 +161,13 @@ impl From<Printer> for DownloadReporter {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
 
         let progress = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
+        progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
-            ProgressStyle::with_template(":: Downloading dependencies... ({pos}/{len})")
+            ProgressStyle::with_template("{spinner:.white} {msg:.dim} ({pos}/{len})")
                 .unwrap()
-                .progress_chars("##-"),
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
         );
-        progress.set_message("Fetching packages...");
+        progress.set_message("Downloading packages...");
 
         let reporter = ProgressReporter {
             printer,
@@ -188,8 +189,7 @@ impl DownloadReporter {
 }
 
 impl uv_installer::DownloadReporter for DownloadReporter {
-    fn on_progress(&self, dist: &CachedDist) {
-        self.reporter.root.set_message(format!("{dist}"));
+    fn on_progress(&self, _dist: &CachedDist) {
         self.reporter.root.inc(1);
     }
 
