@@ -472,7 +472,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let progress = self
                     .reporter
                     .as_ref()
-                    .map(|reporter| reporter.on_download_start(dist.name(), size));
+                    .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
 
                 let reader = response
                     .bytes_stream()
@@ -488,10 +488,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                match self.reporter {
-                    Some(ref reporter) => {
-                        let mut reader =
-                            ProgressReader::new(&mut hasher, progress.unwrap(), &**reporter);
+                match progress {
+                    Some((reporter, progress)) => {
+                        let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         uv_extract::stream::unzip(&mut reader, temp_dir.path()).await?;
                     }
                     None => {
@@ -512,8 +511,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheRead)?;
 
-                if let Some(ref reporter) = self.reporter {
-                    reporter.on_download_complete(dist.name(), progress.unwrap());
+                if let Some((reporter, progress)) = progress {
+                    reporter.on_download_complete(dist.name(), progress);
                 }
 
                 Ok(Archive::new(
@@ -595,7 +594,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let progress = self
                     .reporter
                     .as_ref()
-                    .map(|reporter| reporter.on_download_start(dist.name(), size));
+                    .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
 
                 let reader = response
                     .bytes_stream()
@@ -607,13 +606,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheWrite)?;
                 let mut writer = tokio::io::BufWriter::new(tokio::fs::File::from_std(temp_file));
 
-                match self.reporter {
-                    Some(ref reporter) => {
+                match progress {
+                    Some((reporter, progress)) => {
                         // note this will report 100% progress after the download is complete, even
                         // if we stil have to unzip and hash, which may not be that fast for large
                         // files
                         let mut reader =
-                            ProgressReader::new(reader.compat(), progress.unwrap(), &**reporter);
+                            ProgressReader::new(reader.compat(), progress, &**reporter);
 
                         tokio::io::copy(&mut reader, &mut writer)
                             .await
@@ -669,8 +668,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheRead)?;
 
-                if let Some(ref reporter) = self.reporter {
-                    reporter.on_download_complete(dist.name(), progress.unwrap());
+                if let Some((reporter, progress)) = progress {
+                    reporter.on_download_complete(dist.name(), progress);
                 }
 
                 Ok(Archive::new(id, hashes))
@@ -903,8 +902,7 @@ fn content_length(req: &reqwest::Request) -> Option<u64> {
     req.headers()
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
-        .and_then(|val| val.parse::<usize>().ok())
-        .map(|len| len as u64)
+        .and_then(|val| val.parse::<u64>().ok())
 }
 
 /// An asynchronous reader that reports progress as bytes are read.
