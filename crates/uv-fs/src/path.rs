@@ -27,7 +27,7 @@ pub trait Simplified {
     ///
     /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's
     /// equivalent to [`std::path::Display`].
-    fn simplified_display(&self) -> std::path::Display;
+    fn simplified_display(&self) -> impl std::fmt::Display;
 
     /// Canonicalize a path without a `\\?\` prefix on Windows.
     fn simple_canonicalize(&self) -> std::io::Result<PathBuf>;
@@ -41,7 +41,12 @@ pub trait Simplified {
     ///
     /// If the [`Path`] is not relative to the base path, will attempt to relativize the path
     /// against the current working directory.
-    fn relative_display(&self, base: impl AsRef<Path>) -> impl std::fmt::Display;
+    fn user_display_from(&self, base: impl AsRef<Path>) -> impl std::fmt::Display;
+
+    /// Render a [`Path`] for user-facing display using a portable representation.
+    ///
+    /// Like [`user_display`], but uses a portable representation for relative paths.
+    fn portable_display(&self) -> impl std::fmt::Display;
 }
 
 impl<T: AsRef<Path>> Simplified for T {
@@ -49,7 +54,7 @@ impl<T: AsRef<Path>> Simplified for T {
         dunce::simplified(self.as_ref())
     }
 
-    fn simplified_display(&self) -> std::path::Display {
+    fn simplified_display(&self) -> impl std::fmt::Display {
         dunce::simplified(self.as_ref()).display()
     }
 
@@ -67,13 +72,10 @@ impl<T: AsRef<Path>> Simplified for T {
                 .unwrap_or(path)
         });
 
-        // Use a portable representation for relative paths.
-        path.to_slash()
-            .map(Either::Left)
-            .unwrap_or_else(|| Either::Right(path.display()))
+        path.display()
     }
 
-    fn relative_display(&self, base: impl AsRef<Path>) -> impl std::fmt::Display {
+    fn user_display_from(&self, base: impl AsRef<Path>) -> impl std::fmt::Display {
         let path = dunce::simplified(self.as_ref());
 
         // Attempt to strip the base, then the current working directory, then the canonicalized
@@ -83,6 +85,19 @@ impl<T: AsRef<Path>> Simplified for T {
                 path.strip_prefix(CANONICAL_CWD.simplified())
                     .unwrap_or(path)
             })
+        });
+
+        path.display()
+    }
+
+    fn portable_display(&self) -> impl std::fmt::Display {
+        let path = dunce::simplified(self.as_ref());
+
+        // Attempt to strip the current working directory, then the canonicalized current working
+        // directory, in case they differ.
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
+            path.strip_prefix(CANONICAL_CWD.simplified())
+                .unwrap_or(path)
         });
 
         // Use a portable representation for relative paths.

@@ -1260,7 +1260,7 @@ impl fmt::Display for InterpreterNotFound {
                     f,
                     "Interpreter directory `{}` does not contain Python executable at `{}`",
                     directory.user_display(),
-                    executable.relative_display(directory)
+                    executable.user_display_from(directory)
                 )
             }
             Self::ExecutableNotFoundInSearchPath(name) => {

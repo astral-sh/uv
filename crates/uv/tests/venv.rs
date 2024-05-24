@@ -76,7 +76,7 @@ impl VenvTestContext {
             "interpreter at: [PATH]".to_string(),
         ));
         filters.push((
-            r"Activate with: (?:.*)/Scripts/activate".to_string(),
+            r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
             "Activate with: source .venv/bin/activate".to_string(),
         ));
 
