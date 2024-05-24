@@ -43,14 +43,14 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
-poloto = { version = "19.1.2" }
+poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.0" }
-resvg = { version = "0.29.0" }
+resvg = { version = "0.29.0", optional = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tagu = { version = "0.1.6" }
+tagu = { version = "0.1.6", optional = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
@@ -63,3 +63,7 @@ mimalloc = { version = "0.1.39" }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
 tikv-jemallocator = { version = "0.5.4" }
+
+[features]
+default = []
+render = ["poloto", "resvg", "tagu"]
