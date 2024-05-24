@@ -5,7 +5,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
-use crate::{DependencyMode, Manifest, Preference};
+use crate::{DependencyMode, Manifest};
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
@@ -20,10 +20,8 @@ impl AllowedYanks {
     ) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
 
-        for requirement in manifest
-            .requirements(markers, dependencies)
-            .chain(manifest.preferences.iter().map(Preference::requirement))
-        {
+        // Allow yanks for any pinned input requirements.
+        for requirement in manifest.requirements(markers, dependencies) {
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };
@@ -40,6 +38,15 @@ impl AllowedYanks {
                     .insert(specifier.version().clone());
             }
         }
+
+        // Allow yanks for any packages that are already pinned in the lockfile.
+        for preference in &manifest.preferences {
+            allowed_yanks
+                .entry(preference.name().clone())
+                .or_default()
+                .insert(preference.version().clone());
+        }
+
         Self(allowed_yanks)
     }
 

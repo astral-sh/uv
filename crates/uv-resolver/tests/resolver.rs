@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 
 use distribution_types::{CachedDist, IndexLocations, Requirement, Resolution, SourceDist};
+use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use platform_tags::{Arch, Os, Platform, Tags};
 use uv_cache::Cache;
@@ -20,6 +21,7 @@ use uv_configuration::{
 };
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::{find_default_interpreter, Interpreter, PythonEnvironment};
+use uv_normalize::PackageName;
 use uv_resolver::{
     DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
     OptionsBuilder, PreReleaseMode, Preference, PythonRequirement, ResolutionGraph, ResolutionMode,
@@ -473,9 +475,10 @@ async fn black_respect_preference() -> Result<()> {
         )?)],
         Constraints::default(),
         Overrides::default(),
-        vec![Preference::from_requirement(Requirement::from(
-            pep508_rs::Requirement::from_str("black==23.9.0")?,
-        ))],
+        vec![Preference::simple(
+            PackageName::from_str("black")?,
+            Version::from_str("23.9.0")?,
+        )],
         None,
         vec![],
         Exclusions::default(),
@@ -513,9 +516,10 @@ async fn black_ignore_preference() -> Result<()> {
         )?)],
         Constraints::default(),
         Overrides::default(),
-        vec![Preference::from_requirement(Requirement::from(
-            pep508_rs::Requirement::from_str("black==23.9.2")?,
-        ))],
+        vec![Preference::simple(
+            PackageName::from_str("black")?,
+            Version::from_str("23.9.2")?,
+        )],
         None,
         vec![],
         Exclusions::default(),

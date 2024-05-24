@@ -16,7 +16,6 @@ workspace = true
 [dependencies]
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true, features = ["clap"], default-features = false }
-pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
