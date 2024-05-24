@@ -1255,17 +1255,9 @@ fn install_url_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz")?;
+    requirements_txt.write_str("source_distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
 
-    let filters = if cfg!(windows) {
-        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed.\n", "")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1276,18 +1268,20 @@ fn install_url_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import tqdm").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
     parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1298,11 +1292,13 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import tqdm").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = context.temp_dir.child("parent");
@@ -1311,7 +1307,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 
     uv_snapshot!(Command::new(get_bin())
         .arg("clean")
-        .arg("tqdm")
+        .arg("source_distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
@@ -1321,11 +1317,11 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 127 files for tqdm ([SIZE])
+    Removed 13 files for source-distribution ([SIZE])
     "###
     );
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1337,11 +1333,13 @@ fn install_url_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
-    context.assert_command("import tqdm").success();
+    context
+        .assert_command("import source_distribution")
+        .success();
 
     Ok(())
 }
