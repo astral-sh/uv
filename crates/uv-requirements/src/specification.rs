@@ -311,6 +311,7 @@ impl RequirementsSpecification {
                         hashes: vec![],
                     })
                     .collect(),
+                extras: project.used_extras,
                 ..Self::default()
             }))
         } else {
