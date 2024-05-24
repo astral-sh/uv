@@ -63,7 +63,7 @@ impl Platform {
         Ok(Self::new(
             Os::from_env()?,
             Arch::from_env()?,
-            Libc::from_env()?,
+            Libc::from_env(),
         ))
     }
 }
@@ -149,12 +149,14 @@ impl Arch {
 }
 
 impl Libc {
-    pub(crate) fn from_env() -> Result<Self, Error> {
+    pub(crate) fn from_env() -> Self {
         // TODO(zanieb): Perform this lookup
         match std::env::consts::OS {
-            "linux" => Ok(Libc::Gnu),
-            "windows" | "macos" => Ok(Libc::None),
-            _ => Err(Error::LibcNotDetected()),
+            // Supported platforms.
+            "linux" => Libc::Gnu,
+            "windows" | "macos" => Libc::None,
+            // Platforms without explicit support.
+            _ => Libc::None,
         }
     }
 }

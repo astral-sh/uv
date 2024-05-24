@@ -125,7 +125,7 @@ impl PythonDownloadRequest {
             self.os = Some(Os::from_env()?);
         }
         if self.libc.is_none() {
-            self.libc = Some(Libc::from_env()?);
+            self.libc = Some(Libc::from_env());
         }
         Ok(self)
     }

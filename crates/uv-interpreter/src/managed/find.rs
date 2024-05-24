@@ -169,6 +169,6 @@ pub fn toolchains_for_version(version: &PythonVersion) -> Result<Vec<Toolchain>,
 fn platform_key_from_env() -> Result<String, Error> {
     let os = Os::from_env()?;
     let arch = Arch::from_env()?;
-    let libc = Libc::from_env()?;
+    let libc = Libc::from_env();
     Ok(format!("{os}-{arch}-{libc}").to_lowercase())
 }
