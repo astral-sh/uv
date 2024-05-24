@@ -2,7 +2,7 @@ use core::fmt;
 use fs_err as fs;
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -37,6 +37,7 @@ impl InstalledToolchains {
         }
     }
 
+    /// Create a temporary installed toolchain directory.
     pub fn temp() -> Result<Self, io::Error> {
         Self::from_path(StateStore::temp()?.bucket(StateBucket::Toolchains))
     }
@@ -49,6 +50,17 @@ impl InstalledToolchains {
 
         // Create the cache directory, if it doesn't exist.
         fs::create_dir_all(root)?;
+
+        // Add a .gitignore.
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(root.join(".gitignore"))
+        {
+            Ok(mut file) => file.write_all(b"*")?,
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err),
+        }
 
         Ok(self)
     }

@@ -1,5 +1,5 @@
 use std::{
-    io::{self},
+    io::{self, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -51,6 +51,17 @@ impl StateStore {
 
         // Create the state store directory, if it doesn't exist.
         fs::create_dir_all(root)?;
+
+        // Add a .gitignore.
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(root.join(".gitignore"))
+        {
+            Ok(mut file) => file.write_all(b"*")?,
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err),
+        }
 
         Ok(Self {
             root: fs::canonicalize(root)?,
