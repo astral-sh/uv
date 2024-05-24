@@ -52,7 +52,7 @@ impl AnnotatedDist {
                                     // Strip the prefix, to convert, e.g., `file://flask-3.0.3-py3-none-any.whl` to `flask-3.0.3-py3-none-any.whl`.
                                     //
                                     // However, we should allow any of the following:
-                                    // - `file://flask-3.0.3-py3-none-any.whl`
+                                    // - `file:///flask-3.0.3-py3-none-any.whl`
                                     // - `file://C:\Users\user\flask-3.0.3-py3-none-any.whl`
                                     // - `file:///C:\Users\user\flask-3.0.3-py3-none-any.whl`
                                     if !path.starts_with("${PROJECT_ROOT}")

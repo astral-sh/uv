@@ -6,15 +6,13 @@ use tracing::trace;
 
 use distribution_types::{Requirement, RequirementSource};
 use pep440_rs::{Operator, Version};
-use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
-use pypi_types::{HashDigest, HashError, VerbatimParsedUrl};
+use pep508_rs::MarkerEnvironment;
+use pypi_types::{HashDigest, HashError};
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_normalize::PackageName;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
-    #[error("direct URL requirements without package names are not supported: `{0}`")]
-    Bare(UnnamedRequirement<VerbatimParsedUrl>),
     #[error(transparent)]
     Hash(#[from] HashError),
 }
@@ -28,12 +26,12 @@ pub struct Preference {
 
 impl Preference {
     /// Create a [`Preference`] from a [`RequirementEntry`].
-    pub fn from_entry(entry: RequirementEntry) -> Result<Self, PreferenceError> {
-        Ok(Self {
+    pub fn from_entry(entry: RequirementEntry) -> Result<Option<Self>, PreferenceError> {
+        Ok(Some(Self {
             requirement: match entry.requirement {
                 RequirementsTxtRequirement::Named(requirement) => Requirement::from(requirement),
-                RequirementsTxtRequirement::Unnamed(requirement) => {
-                    return Err(PreferenceError::Bare(requirement));
+                RequirementsTxtRequirement::Unnamed(_) => {
+                    return Ok(None);
                 }
             },
             hashes: entry
@@ -42,7 +40,7 @@ impl Preference {
                 .map(String::as_str)
                 .map(HashDigest::from_str)
                 .collect::<Result<_, _>>()?,
-        })
+        }))
     }
 
     /// Create a [`Preference`] from a [`Requirement`].
