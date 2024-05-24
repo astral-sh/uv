@@ -1,4 +1,4 @@
-import boltons
+import idna
 
 
 def seeds():

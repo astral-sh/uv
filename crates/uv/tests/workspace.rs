@@ -215,13 +215,12 @@ fn test_albatross_root_workspace() {
 
     ----- stderr -----
     Built 3 editables in [TIME]
-    Resolved 8 packages in [TIME]
-    Downloaded 5 packages in [TIME]
-    Installed 8 packages in [TIME]
+    Resolved 7 packages in [TIME]
+    Downloaded 4 packages in [TIME]
+    Installed 7 packages in [TIME]
      + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace)
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
-     + boltons==24.0.0
      + idna==3.6
      + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
@@ -258,12 +257,11 @@ fn test_albatross_root_workspace_bird_feeder() {
 
     ----- stderr -----
     Built 2 editables in [TIME]
-    Resolved 6 packages in [TIME]
-    Downloaded 4 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
-     + boltons==24.0.0
      + idna==3.6
      + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
@@ -299,12 +297,11 @@ fn test_albatross_root_workspace_albatross() {
 
     ----- stderr -----
     Built 2 editables in [TIME]
-    Resolved 6 packages in [TIME]
-    Downloaded 4 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
-     + boltons==24.0.0
      + idna==3.6
      + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
@@ -340,12 +337,11 @@ fn test_albatross_virtual_workspace() {
 
     ----- stderr -----
     Built 2 editables in [TIME]
-    Resolved 6 packages in [TIME]
-    Downloaded 4 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-virtual-workspace/packages/bird-feeder)
-     + boltons==24.0.0
      + idna==3.6
      + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-virtual-workspace/packages/seeds)
      + sniffio==1.3.1

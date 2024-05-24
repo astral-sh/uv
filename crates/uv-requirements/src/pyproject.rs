@@ -410,7 +410,7 @@ pub(crate) fn lower_requirement(
     );
     // Check that all dependencies on workspace packages are declared as such.
     if !is_workspace_dep && workspace.packages().contains_key(&requirement.name)
-        // Support reclusive self-inclusion (extras that activate other extras).
+        // Support recursive self-inclusion (extras that activate other extras).
         && &requirement.name != project_name
     {
         return Err(LoweringError::UndeclaredWorkspacePackage);

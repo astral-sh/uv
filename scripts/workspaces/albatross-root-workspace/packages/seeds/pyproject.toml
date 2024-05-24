@@ -1,7 +1,7 @@
 [project]
 name = "seeds"
 version = "1.0.0"
-dependencies = ["boltons==24.0.0"]
+dependencies = ["idna==3.6"]
 
 [build-system]
 requires = ["hatchling"]

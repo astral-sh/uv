@@ -151,7 +151,7 @@ impl RequirementsSpecification {
         let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
             .with_context(|| format!("Failed to parse: `{name}`"))?;
 
-        // First try to find the project in the exiting workspace (if any), then try workspace
+        // First try to find the project in the existing workspace (if any), then try workspace
         // discovery.
         let project_in_exiting_workspace = workspace.and_then(|workspace| {
             // We use `is_same_file` instead of indexing by path to support different versions of
