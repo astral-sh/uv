@@ -664,15 +664,17 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
     let context = TestContext::new("3.8");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("bz2==1.0.0")?;
+    requirements_txt.write_str(&format!(
+        "bz2 @ {}",
+        context
+            .workspace_root
+            .join("scripts/links/bz2-1.0.0.tar.bz2")
+            .display()
+    ))?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
-        .arg("--no-binary")
-        .arg(":all:")
-        .arg("--strict")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -681,7 +683,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + bz2==1.0.0
+     + bz2==1.0.0 (from file://[WORKSPACE]/scripts/links/bz2-1.0.0.tar.bz2)
     "###
     );
 
