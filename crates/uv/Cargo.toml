@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.2.2"
+version = "0.2.3"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -16,7 +16,6 @@ workspace = true
 [dependencies]
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true, features = ["clap"], default-features = false }
-pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }

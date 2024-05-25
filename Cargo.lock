@@ -4471,7 +4471,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4496,7 +4496,6 @@ dependencies = [
  "miette",
  "mimalloc",
  "owo-colors",
- "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "predicates",
@@ -5057,7 +5056,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "uv-virtualenv"

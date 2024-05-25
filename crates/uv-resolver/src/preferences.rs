@@ -4,17 +4,15 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use distribution_types::{Requirement, RequirementSource};
+use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Operator, Version};
-use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
-use pypi_types::{HashDigest, HashError, VerbatimParsedUrl};
+use pep508_rs::{MarkerEnvironment, MarkerTree, VersionOrUrl};
+use pypi_types::{HashDigest, HashError};
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_normalize::PackageName;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
-    #[error("direct URL requirements without package names are not supported: `{0}`")]
-    Bare(UnnamedRequirement<VerbatimParsedUrl>),
     #[error(transparent)]
     Hash(#[from] HashError),
 }
@@ -22,45 +20,80 @@ pub enum PreferenceError {
 /// A pinned requirement, as extracted from a `requirements.txt` file.
 #[derive(Clone, Debug)]
 pub struct Preference {
-    requirement: Requirement,
+    name: PackageName,
+    version: Version,
+    marker: Option<MarkerTree>,
     hashes: Vec<HashDigest>,
 }
 
 impl Preference {
+    /// Create a simple [`Preference`] with no hashes.
+    pub fn simple(name: PackageName, version: Version) -> Self {
+        Self {
+            name,
+            version,
+            marker: None,
+            hashes: Vec::new(),
+        }
+    }
+
     /// Create a [`Preference`] from a [`RequirementEntry`].
-    pub fn from_entry(entry: RequirementEntry) -> Result<Self, PreferenceError> {
-        Ok(Self {
-            requirement: match entry.requirement {
-                RequirementsTxtRequirement::Named(requirement) => Requirement::from(requirement),
-                RequirementsTxtRequirement::Unnamed(requirement) => {
-                    return Err(PreferenceError::Bare(requirement));
-                }
-            },
+    pub fn from_entry(entry: RequirementEntry) -> Result<Option<Self>, PreferenceError> {
+        let RequirementsTxtRequirement::Named(requirement) = entry.requirement else {
+            return Ok(None);
+        };
+
+        let Some(VersionOrUrl::VersionSpecifier(specifier)) = requirement.version_or_url.as_ref()
+        else {
+            trace!("Excluding {requirement} from preferences due to non-version specifier.");
+            return Ok(None);
+        };
+
+        let [specifier] = specifier.as_ref() else {
+            trace!("Excluding {requirement} from preferences due to multiple version specifiers.");
+            return Ok(None);
+        };
+
+        if *specifier.operator() != Operator::Equal {
+            trace!("Excluding {requirement} from preferences due to inexact version specifier.");
+            return Ok(None);
+        }
+
+        Ok(Some(Self {
+            name: requirement.name,
+            version: specifier.version().clone(),
+            marker: requirement.marker,
             hashes: entry
                 .hashes
                 .iter()
                 .map(String::as_str)
                 .map(HashDigest::from_str)
                 .collect::<Result<_, _>>()?,
-        })
+        }))
     }
 
-    /// Create a [`Preference`] from a [`Requirement`].
-    pub fn from_requirement(requirement: Requirement) -> Self {
+    /// Create a [`Preference`] from an installed distribution.
+    pub fn from_installed(dist: &InstalledDist) -> Self {
+        let version = match dist.installed_version() {
+            InstalledVersion::Version(version) => version,
+            InstalledVersion::Url(_, version) => version,
+        };
         Self {
-            requirement,
+            name: dist.name().clone(),
+            version: version.clone(),
+            marker: None,
             hashes: Vec::new(),
         }
     }
 
-    /// Return the name of the package for this preference.
+    /// Return the [`PackageName`] of the package for this [`Preference`].
     pub fn name(&self) -> &PackageName {
-        &self.requirement.name
+        &self.name
     }
 
-    /// Return the [`Requirement`] for this preference.
-    pub fn requirement(&self) -> &Requirement {
-        &self.requirement
+    /// Return the [`Version`] of the package for this [`Preference`].
+    pub fn version(&self) -> &Version {
+        &self.version
     }
 }
 
@@ -79,55 +112,27 @@ impl Preferences {
         markers: Option<&MarkerEnvironment>,
     ) -> Self {
         // TODO(zanieb): We should explicitly ensure that when a package name is seen multiple times
-        // that the newest or oldest version is preferred dependning on the resolution strategy;
+        // that the newest or oldest version is preferred depending on the resolution strategy;
         // right now, the order is dependent on the given iterator.
-        let preferences =
-            preferences
-                .into_iter()
-                .filter_map(|preference| {
-                    let Preference {
-                        requirement,
-                        hashes,
-                    } = preference;
-
-                    // Search for, e.g., `flask==1.2.3` entries that match the current environment.
-                    if !requirement.evaluate_markers(markers, &[]) {
-                        trace!(
-                            "Excluding {requirement} from preferences due to unmatched markers."
-                        );
-                        return None;
-                    }
-                    match &requirement.source {
-                        RequirementSource::Registry { specifier, ..} => {
-                            let [version_specifier] = specifier.as_ref() else {
-                                    trace!(
-                                    "Excluding {requirement} from preferences due to multiple version specifiers."
-                                );
-                                    return None;
-                                };
-                                if *version_specifier.operator() != Operator::Equal {
-                                    trace!(
-                                    "Excluding {requirement} from preferences due to inexact version specifier."
-                                );
-                                    return None;
-                                }
-                                Some((
-                                    requirement.name,
-                                    Pin {
-                                        version: version_specifier.version().clone(),
-                                        hashes,
-                                    },
-                                ))
-                            }
-                        RequirementSource::Url {..} | RequirementSource::Git { .. } | RequirementSource::Path { .. }=> {
-                            trace!(
-                                "Excluding {requirement} from preferences due to URL dependency."
-                            );
-                            None
-                        }
-                    }
-                })
-                .collect();
+        let preferences = preferences
+            .into_iter()
+            .filter_map(|preference| {
+                if preference.marker.as_ref().map_or(true, |marker| {
+                    marker.evaluate_optional_environment(markers, &[])
+                }) {
+                    Some((
+                        preference.name,
+                        Pin {
+                            version: preference.version,
+                            hashes: preference.hashes,
+                        },
+                    ))
+                } else {
+                    trace!("Excluding {preference} from preferences due to unmatched markers.");
+                    None
+                }
+            })
+            .collect();
 
         Self(Arc::new(preferences))
     }
@@ -147,6 +152,12 @@ impl Preferences {
             .get(package_name)
             .filter(|pin| pin.version() == version)
             .map(Pin::hashes)
+    }
+}
+
+impl std::fmt::Display for Preference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}=={}", self.name, self.version)
     }
 }
 

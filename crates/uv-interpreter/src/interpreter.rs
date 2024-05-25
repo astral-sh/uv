@@ -595,9 +595,13 @@ impl InterpreterInfo {
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             "",
-            format!("{}.msgpack", digest(&executable)),
+            // We use the absolute path for the cache entry to avoid cache collisions for relative paths
+            // but we do not want to query the executable with symbolic links resolved
+            format!("{}.msgpack", digest(&uv_fs::absolutize_path(executable)?)),
         );
 
+        // We check the timestamp of the canonicalized executable to check if an underlying
+        // interpreter has been modified
         let modified = Timestamp::from_path(uv_fs::canonicalize_executable(executable)?)?;
 
         // Read from the cache.
