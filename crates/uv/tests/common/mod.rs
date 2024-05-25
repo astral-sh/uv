@@ -13,6 +13,7 @@ use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
+use uv_configuration::PreviewMode;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
@@ -412,7 +413,7 @@ pub fn python_path_with_versions(
                     VersionRequest::from_str(python_version)
                         .expect("The test version request must be valid"),
                 );
-                let sources = SourceSelector::All;
+                let sources = SourceSelector::All(PreviewMode::Enabled);
                 if let Ok(found) = find_interpreter(
                     &request,
                     // Without required, we could pick the current venv here and the test fails

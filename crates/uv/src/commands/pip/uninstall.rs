@@ -49,7 +49,7 @@ pub(crate) async fn pip_uninstall(
     } else {
         SystemPython::Explicit
     };
-    let venv = PythonEnvironment::find(python.as_deref(), system, &cache)?;
+    let venv = PythonEnvironment::find(python.as_deref(), system, preview, &cache)?;
 
     debug!(
         "Using Python {} environment at {}",

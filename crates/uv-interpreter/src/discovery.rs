@@ -2,6 +2,7 @@ use itertools::Itertools;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
+use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 use which::which;
@@ -46,13 +47,12 @@ pub enum InterpreterRequest {
 }
 
 /// The sources to consider when finding a Python interpreter.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceSelector {
     // Consider all interpreter sources.
-    #[default]
-    All,
+    All(PreviewMode),
     // Only consider system interpreter sources
-    System,
+    System(PreviewMode),
     // Only consider virtual environment sources
     VirtualEnv,
     // Only consider a custom set of sources
@@ -632,9 +632,12 @@ pub fn find_interpreter(
 /// Virtual environments are not included in discovery.
 ///
 /// See [`find_interpreter`] for more details on interpreter discovery.
-pub fn find_default_interpreter(cache: &Cache) -> Result<InterpreterResult, Error> {
+pub fn find_default_interpreter(
+    preview: PreviewMode,
+    cache: &Cache,
+) -> Result<InterpreterResult, Error> {
     let request = InterpreterRequest::default();
-    let sources = SourceSelector::System;
+    let sources = SourceSelector::System(preview);
 
     let result = find_interpreter(&request, SystemPython::Required, &sources, cache)?;
     if let Ok(ref found) = result {
@@ -658,12 +661,13 @@ pub fn find_default_interpreter(cache: &Cache) -> Result<InterpreterResult, Erro
 pub fn find_best_interpreter(
     request: &InterpreterRequest,
     system: SystemPython,
+    preview: PreviewMode,
     cache: &Cache,
 ) -> Result<InterpreterResult, Error> {
     debug!("Starting interpreter discovery for {}", request);
 
     // Determine if we should be allowed to look outside of virtual environments.
-    let sources = SourceSelector::from_settings(system);
+    let sources = SourceSelector::from_settings(system, preview);
 
     // First, check for an exact match (or the first available version if no Python versfion was provided)
     debug!("Looking for exact match for request {request}");
@@ -1136,16 +1140,23 @@ impl SourceSelector {
     /// Return true if this selector includes the given [`InterpreterSource`].
     fn contains(&self, source: InterpreterSource) -> bool {
         match self {
-            Self::All => true,
-            Self::System => [
-                InterpreterSource::ProvidedPath,
-                InterpreterSource::SearchPath,
-                #[cfg(windows)]
-                InterpreterSource::PyLauncher,
-                InterpreterSource::ManagedToolchain,
-                InterpreterSource::ParentInterpreter,
-            ]
-            .contains(&source),
+            Self::All(preview) => {
+                // Always return `true` except for `ManagedToolchain` which requires preview mode
+                source != InterpreterSource::ManagedToolchain || preview.is_enabled()
+            }
+            Self::System(preview) => {
+                [
+                    InterpreterSource::ProvidedPath,
+                    InterpreterSource::SearchPath,
+                    #[cfg(windows)]
+                    InterpreterSource::PyLauncher,
+                    InterpreterSource::ParentInterpreter,
+                ]
+                .contains(&source)
+                    // Allow `ManagedToolchain` in preview
+                    || (source == InterpreterSource::ManagedToolchain
+                        && preview.is_enabled())
+            }
             Self::VirtualEnv => [
                 InterpreterSource::DiscoveredEnvironment,
                 InterpreterSource::ActiveEnvironment,
@@ -1157,7 +1168,7 @@ impl SourceSelector {
     }
 
     /// Return a [`SourceSelector`] based the settings.
-    pub fn from_settings(system: SystemPython) -> Self {
+    pub fn from_settings(system: SystemPython, preview: PreviewMode) -> Self {
         if env::var_os("UV_FORCE_MANAGED_PYTHON").is_some() {
             debug!("Only considering managed toolchains due to `UV_FORCE_MANAGED_PYTHON`");
             Self::from_sources([InterpreterSource::ManagedToolchain])
@@ -1171,8 +1182,8 @@ impl SourceSelector {
             ])
         } else {
             match system {
-                SystemPython::Allowed | SystemPython::Explicit => Self::All,
-                SystemPython::Required => Self::System,
+                SystemPython::Allowed | SystemPython::Explicit => Self::All(preview),
+                SystemPython::Required => Self::System(preview),
                 SystemPython::Disallowed => Self::VirtualEnv,
             }
         }
@@ -1283,19 +1294,37 @@ impl fmt::Display for InterpreterNotFound {
 impl fmt::Display for SourceSelector {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::All => f.write_str("all sources"),
+            Self::All(_) => f.write_str("all sources"),
             Self::VirtualEnv => f.write_str("virtual environments"),
-            Self::System => {
-                // TODO(zanieb): We intentionally omit managed toolchains for now since they are not public
+            Self::System(preview) => {
                 if cfg!(windows) {
-                    write!(
-                        f,
-                        "{} or {}",
-                        InterpreterSource::SearchPath,
-                        InterpreterSource::PyLauncher
-                    )
+                    if preview.is_disabled() {
+                        write!(
+                            f,
+                            "{} or {}",
+                            InterpreterSource::SearchPath,
+                            InterpreterSource::PyLauncher
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}, {}, or {}",
+                            InterpreterSource::SearchPath,
+                            InterpreterSource::PyLauncher,
+                            InterpreterSource::ManagedToolchain
+                        )
+                    }
                 } else {
-                    write!(f, "{}", InterpreterSource::SearchPath)
+                    if preview.is_disabled() {
+                        write!(f, "{}", InterpreterSource::SearchPath)
+                    } else {
+                        write!(
+                            f,
+                            "{} or {}",
+                            InterpreterSource::SearchPath,
+                            InterpreterSource::ManagedToolchain
+                        )
+                    }
                 }
             }
             Self::Custom(sources) => {

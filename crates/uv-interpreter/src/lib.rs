@@ -70,6 +70,7 @@ mod tests {
     };
     use temp_env::with_vars;
     use test_log::test;
+    use uv_configuration::PreviewMode;
 
     use assert_fs::{prelude::*, TempDir};
     use uv_cache::Cache;
@@ -301,7 +302,7 @@ mod tests {
                 ("PATH", Some("")),
             ],
             || {
-                let result = find_default_interpreter(&cache);
+                let result = find_default_interpreter(PreviewMode::Disabled, &cache);
                 assert!(
                     matches!(
                         result,
@@ -319,7 +320,7 @@ mod tests {
                 ("PATH", None::<OsString>),
             ],
             || {
-                let result = find_default_interpreter(&cache);
+                let result = find_default_interpreter(PreviewMode::Disabled, &cache);
                 assert!(
                     matches!(
                         result,
@@ -348,7 +349,7 @@ mod tests {
                 ("PATH", Some(tempdir.path().as_os_str())),
             ],
             || {
-                let result = find_default_interpreter(&cache);
+                let result = find_default_interpreter(PreviewMode::Disabled, &cache);
                 assert!(
                 matches!(
                     result,
@@ -382,7 +383,7 @@ mod tests {
                 ("PATH", Some(tempdir.path().as_os_str())),
             ],
             || {
-                let result = find_default_interpreter(&cache);
+                let result = find_default_interpreter(PreviewMode::Disabled, &cache);
                 assert!(
                     matches!(
                         result,
@@ -460,7 +461,7 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let result = find_default_interpreter(&cache);
+                let result = find_default_interpreter(PreviewMode::Disabled, &cache);
                 assert!(
                     matches!(
                         result,
@@ -499,7 +500,7 @@ mod tests {
                 ("PWD", Some(pwd.path().as_os_str())),
             ],
             || {
-                let result = find_default_interpreter(&cache);
+                let result = find_default_interpreter(PreviewMode::Disabled, &cache);
                 assert!(
                 matches!(
                     result,
@@ -552,7 +553,7 @@ mod tests {
                 ("PWD", Some(pwd.path().into())),
             ],
             || {
-                let result = find_default_interpreter(&cache);
+                let result = find_default_interpreter(PreviewMode::Disabled, &cache);
                 assert!(
                     matches!(
                         result,
@@ -599,7 +600,7 @@ mod tests {
                 let result = find_interpreter(
                     &InterpreterRequest::Any,
                     SystemPython::Allowed,
-                    &SourceSelector::All,
+                    &SourceSelector::All(PreviewMode::Disabled),
                     &cache,
                 )
                 .unwrap()
@@ -633,7 +634,7 @@ mod tests {
                 let result = find_interpreter(
                     &InterpreterRequest::Any,
                     SystemPython::Allowed,
-                    &SourceSelector::All,
+                    &SourceSelector::All(PreviewMode::Disabled),
                     &cache,
                 )
                 .unwrap()
@@ -675,7 +676,7 @@ mod tests {
                 let result = find_interpreter(
                     &InterpreterRequest::Any,
                     SystemPython::Required,
-                    &SourceSelector::All,
+                    &SourceSelector::All(PreviewMode::Disabled),
                     &cache,
                 )
                 .unwrap()
@@ -717,7 +718,7 @@ mod tests {
                 let result = find_interpreter(
                     &InterpreterRequest::Any,
                     SystemPython::Disallowed,
-                    &SourceSelector::All,
+                    &SourceSelector::All(PreviewMode::Disabled),
                     &cache,
                 )
                 .unwrap()
@@ -738,7 +739,7 @@ mod tests {
         let tempdir = TempDir::new()?;
         let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
-        let sources = SourceSelector::All;
+        let sources = SourceSelector::All(PreviewMode::Disabled);
 
         with_vars(
             [
@@ -791,7 +792,7 @@ mod tests {
         let tempdir = TempDir::new()?;
         let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
-        let sources = SourceSelector::All;
+        let sources = SourceSelector::All(PreviewMode::Disabled);
 
         with_vars(
             [
@@ -844,7 +845,7 @@ mod tests {
         let tempdir = TempDir::new()?;
         let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
-        let sources = SourceSelector::All;
+        let sources = SourceSelector::All(PreviewMode::Disabled);
 
         with_vars(
             [
@@ -887,7 +888,7 @@ mod tests {
         let tempdir = TempDir::new()?;
         let toolchains = InstalledToolchains::temp()?;
         let cache = Cache::temp()?;
-        let sources = SourceSelector::All;
+        let sources = SourceSelector::All(PreviewMode::Disabled);
 
         with_vars(
             [
@@ -948,6 +949,7 @@ mod tests {
                 let result = find_best_interpreter(
                     &InterpreterRequest::parse("3.11.9"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -999,6 +1001,7 @@ mod tests {
                 let result = find_best_interpreter(
                     &InterpreterRequest::parse("3.11.9"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -1041,6 +1044,7 @@ mod tests {
                 let result = find_best_interpreter(
                     &InterpreterRequest::parse("3.11.9"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -1095,6 +1099,7 @@ mod tests {
                     // TODO(zanieb): Consider moving this test to `PythonEnvironment::find` instead
                     &InterpreterRequest::parse("3.12"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -1147,6 +1152,7 @@ mod tests {
                     // TODO(zanieb): Consider moving this test to `PythonEnvironment::find` instead
                     &InterpreterRequest::parse("3.10"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -1199,6 +1205,7 @@ mod tests {
                     // TODO(zanieb): Consider moving this test to `PythonEnvironment::find` instead
                     &InterpreterRequest::parse("3.10.2"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -1252,6 +1259,7 @@ mod tests {
                     // Request the search path Python with a matching minor
                     &InterpreterRequest::parse("3.11.2"),
                     crate::SystemPython::Disallowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -1294,6 +1302,7 @@ mod tests {
                     // Request the search path Python with a matching minor
                     &InterpreterRequest::parse("3.10.2"),
                     crate::SystemPython::Disallowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -1342,9 +1351,13 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Allowed, &cache)
-                        .expect("An environment is found");
+                let environment = PythonEnvironment::find(
+                    None,
+                    crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.12.0",
@@ -1377,7 +1390,7 @@ mod tests {
             || {
                 let environment =
                     // Note this environment is not treated as a system interpreter
-                    PythonEnvironment::find(None, SystemPython::Disallowed, &cache)
+                    PythonEnvironment::find(None, SystemPython::Disallowed, PreviewMode::Disabled, &cache)
                         .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
@@ -1413,7 +1426,7 @@ mod tests {
             || {
                 let environment =
                     // Note this environment is not treated as a system interpreter
-                    PythonEnvironment::find(None, SystemPython::Disallowed, &cache)
+                    PythonEnvironment::find(None, SystemPython::Disallowed, PreviewMode::Disabled, &cache)
                         .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
@@ -1445,9 +1458,13 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Allowed, &cache)
-                        .expect("An environment is found");
+                let environment = PythonEnvironment::find(
+                    None,
+                    crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.12.0",
@@ -1488,9 +1505,13 @@ mod tests {
                 ("PWD", Some(pwd.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Allowed, &cache)
-                        .expect("An environment is found");
+                let environment = PythonEnvironment::find(
+                    None,
+                    crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.12.1",
@@ -1531,9 +1552,13 @@ mod tests {
                 ("PWD", Some(pwd.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Explicit, &cache)
-                        .expect("An environment is found");
+                let environment = PythonEnvironment::find(
+                    None,
+                    crate::SystemPython::Explicit,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.12.1",
@@ -1574,9 +1599,13 @@ mod tests {
                 ("PWD", Some(pwd.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Disallowed, &cache)
-                        .expect("An environment is found");
+                let environment = PythonEnvironment::find(
+                    None,
+                    crate::SystemPython::Disallowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.12.0",
@@ -1617,9 +1646,13 @@ mod tests {
                 ("PWD", Some(pwd.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Required, &cache)
-                        .expect("An environment is found");
+                let environment = PythonEnvironment::find(
+                    None,
+                    crate::SystemPython::Required,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("An environment is found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.12.2",
@@ -1651,9 +1684,13 @@ mod tests {
                 ("VIRTUAL_ENV", Some(venv.clone().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Required, &cache)
-                        .expect("Environment should be found");
+                let environment = PythonEnvironment::find(
+                    None,
+                    crate::SystemPython::Required,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("Environment should be found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.10.1",
@@ -1674,9 +1711,13 @@ mod tests {
                 ("VIRTUAL_ENV", Some(venv.clone().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(Some("3.12"), crate::SystemPython::Required, &cache)
-                        .expect("Environment should be found");
+                let environment = PythonEnvironment::find(
+                    Some("3.12"),
+                    crate::SystemPython::Required,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("Environment should be found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.12.2",
@@ -1698,8 +1739,12 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let result =
-                    PythonEnvironment::find(Some("3.12.3"), crate::SystemPython::Required, &cache);
+                let result = PythonEnvironment::find(
+                    Some("3.12.3"),
+                    crate::SystemPython::Required,
+                    PreviewMode::Disabled,
+                    &cache,
+                );
                 assert!(
                     result.is_err(),
                     "We should not find an environment; got {result:?}"
@@ -1727,7 +1772,12 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let result = PythonEnvironment::find(None, crate::SystemPython::Disallowed, &cache);
+                let result = PythonEnvironment::find(
+                    None,
+                    crate::SystemPython::Disallowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                );
                 assert!(
                     result.is_err(),
                     "We should not find an environment; got {result:?}"
@@ -1759,9 +1809,13 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(Some("foobar"), crate::SystemPython::Allowed, &cache)
-                        .expect("Environment should be found");
+                let environment = PythonEnvironment::find(
+                    Some("foobar"),
+                    crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("Environment should be found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.10.0",
@@ -1798,6 +1852,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some("./foo/bar"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");
@@ -1837,6 +1892,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some(python.to_str().expect("Test path is valid unicode")),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");
@@ -1871,6 +1927,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some(venv.to_str().expect("Test path is valid unicode")),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");
@@ -1910,6 +1967,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some(python.to_str().expect("Test path is valid unicode")),
                     crate::SystemPython::Explicit,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");
@@ -1949,6 +2007,7 @@ mod tests {
                 let result = PythonEnvironment::find(
                     Some(python.to_str().expect("Test path is valid unicode")),
                     crate::SystemPython::Disallowed,
+                    PreviewMode::Disabled,
                     &cache,
                 );
                 assert!(
@@ -1986,6 +2045,7 @@ mod tests {
                     PythonEnvironment::find(
                         Some("./foo/bar"),
                         crate::SystemPython::Allowed,
+                        PreviewMode::Disabled,
                         &cache,
                     );
                 assert!(
@@ -2024,9 +2084,13 @@ mod tests {
                 ("PWD", Some(pwd.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(Some("foobar"), crate::SystemPython::Required, &cache)
-                        .expect("Environment should be found");
+                let environment = PythonEnvironment::find(
+                    Some("foobar"),
+                    crate::SystemPython::Required,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("Environment should be found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.10.0",
@@ -2058,9 +2122,13 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(Some("pypy"), crate::SystemPython::Allowed, &cache)
-                        .expect("Environment should be found");
+                let environment = PythonEnvironment::find(
+                    Some("pypy"),
+                    crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("Environment should be found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.10.1",
@@ -2095,9 +2163,13 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(Some("pypy"), crate::SystemPython::Allowed, &cache)
-                        .expect("Environment should be found");
+                let environment = PythonEnvironment::find(
+                    Some("pypy"),
+                    crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("Environment should be found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.10.1",
@@ -2133,9 +2205,13 @@ mod tests {
                 ("PWD", Some(tempdir.path().into())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(Some("pypy3.10"), crate::SystemPython::Allowed, &cache)
-                        .expect("Environment should be found");
+                let environment = PythonEnvironment::find(
+                    Some("pypy3.10"),
+                    crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &cache,
+                )
+                .expect("Environment should be found");
                 assert_eq!(
                     environment.interpreter().python_full_version().to_string(),
                     "3.10.1",
@@ -2175,6 +2251,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some("pypy@3.10"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");
@@ -2219,6 +2296,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some("pypy@3.10"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");
@@ -2250,6 +2328,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some("pypy@3.10"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");
@@ -2293,6 +2372,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some("pypy@3.10"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");
@@ -2328,6 +2408,7 @@ mod tests {
                 let environment = PythonEnvironment::find(
                     Some("pypy@3.10"),
                     crate::SystemPython::Allowed,
+                    PreviewMode::Disabled,
                     &cache,
                 )
                 .expect("Environment should be found");

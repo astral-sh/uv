@@ -17,7 +17,7 @@ use platform_tags::{Arch, Os, Platform, Tags};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
-    BuildKind, Concurrency, Constraints, NoBinary, NoBuild, Overrides, SetupPyStrategy,
+    BuildKind, Concurrency, Constraints, NoBinary, NoBuild, Overrides, PreviewMode, SetupPyStrategy,
 };
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::{find_default_interpreter, Interpreter, PythonEnvironment};
@@ -133,7 +133,7 @@ async fn resolve(
     let client = RegistryClientBuilder::new(cache).build();
     let flat_index = FlatIndex::default();
     let index = InMemoryIndex::default();
-    let real_interpreter = find_default_interpreter(&Cache::temp().unwrap())
+    let real_interpreter = find_default_interpreter(PreviewMode::Disabled, &Cache::temp().unwrap())
         .unwrap()
         .expect("Python should be installed")
         .into_interpreter();
