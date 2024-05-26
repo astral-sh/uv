@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.4
+
+### CLI
+
+- Allow `--system` and `--python` to be passed together ([#3830](https://github.com/astral-sh/uv/pull/3830))
+
+### Bug fixes
+
+- Ignore `libc` on other platforms ([#3825](https://github.com/astral-sh/uv/pull/3825))
+
 ## 0.2.3
 
 ### Enhancements
