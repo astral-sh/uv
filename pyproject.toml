@@ -67,10 +67,3 @@ version_files = [
   "crates/uv/Cargo.toml",
   "crates/uv-version/Cargo.toml",
 ]
-
-# Add namespace for test
-[tool.uv]
-overrides = [
-  "flask==3.0.0",
-  "nvidia-cuda-runtime==12.1.105"
-]
