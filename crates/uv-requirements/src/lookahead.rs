@@ -4,6 +4,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use thiserror::Error;
+use tracing::trace;
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, GitSourceDist, Requirement, RequirementSource,
@@ -152,6 +153,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
     ) -> Result<Option<RequestedRequirements>, LookaheadError> {
+        trace!("Performing lookahead for {requirement}");
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
         let dist = match requirement.source {

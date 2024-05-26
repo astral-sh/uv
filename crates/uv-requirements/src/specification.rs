@@ -248,7 +248,7 @@ impl RequirementsSpecification {
                 // The workspace discovery succeeds even with dynamic metadata, in which case we
                 // fall back to building here.
                 let dynamic_pyproject_toml = Self {
-                    source_trees: vec![dir.to_path_buf()],
+                    source_trees: vec![path.to_path_buf()],
                     ..Self::default()
                 };
                 Ok(static_pyproject_toml.unwrap_or(dynamic_pyproject_toml))
