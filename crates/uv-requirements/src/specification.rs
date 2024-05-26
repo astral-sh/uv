@@ -1,3 +1,34 @@
+//! Collecting the requirements to compile, sync or install.
+//!
+//! # `requirements.txt` format
+//!
+//! The `requirements.txt` (also known as `requirements.in`) format is static except for the
+//! possibility of making network requests.
+//!
+//! All entries are stored as `requirements` and `editables` or `constraints`  depending on the kind
+//! of inclusion (`uv pip install -r` and `uv pip compile` vs. `uv pip install -c` and
+//! `uv pip compile -c`).
+//!
+//! # `pyproject.toml` and directory source.
+//!
+//! `pyproject.toml` come in two forms: PEP 621 compliant with static dependencies and non-PEP 621
+//! compliant or with dynamic metadata. There are different ways how the requirements flow:
+//! * `uv pip install -r pyproject.toml`: We require a PEP 621 compliant `pyproject.toml`. We add
+//!   all dependencies from it as `requirements`.
+//! * `uv pip install .` in a directory with `pyproject.toml` or `uv pip compile requirements.in`
+//!   where the `requirements.in` points to that directory: The directory is listed in
+//!   `requirements`. The lookahead resolver reads the static metadata from `pyproject.toml` if
+//!   available, otherwise it calls PEP 517 to resolve.
+//! * `uv pip install -r pyproject.toml` or `uv pip compile requirements.in`: The `pyproject.toml`
+//!   must be valid (in other circumstances we allow invalid `dependencies` e.g. for hatch's
+//!   relative path support), but it can be dynamic. We set the `project`. If it is static, we add
+//!   all `dependencies` from the pyproject.toml as `requirements` (and drop the directory). If it
+//!   is dynamic, we add the directory `source_trees`.
+//! * `uv pip install -e`: We add the directory in `editables` instead of `requirements`. The
+//!   lookahead resolver resolves it the same.
+//! * `setup.py` or `setup.cfg` instead of `pyproject.toml`: Directory is an entry in
+//!   `source_trees`.
+
 use std::collections::VecDeque;
 use std::iter;
 use std::path::{Path, PathBuf};
