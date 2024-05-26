@@ -45,7 +45,7 @@ pub(crate) async fn lock(
     let spec = RequirementsSpecification::from_sources(
         &project.requirements(),
         &[],
-        &project.overrides(),
+        &[],
         &ExtrasSpecification::None,
         &client_builder,
         preview,

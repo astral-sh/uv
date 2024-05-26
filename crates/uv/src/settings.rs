@@ -182,6 +182,8 @@ pub(crate) struct PipCompileSettings {
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
+    // Override dependencies from workspace.
+    pub(crate) override_from_workspace: Vec<String>
 }
 
 impl PipCompileSettings {
@@ -252,6 +254,12 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
+        let override_from_workspace: Vec<String> = workspace
+            .as_ref()
+            .and_then(|ws| ws.options.override_dependencies.as_ref())
+            .cloned()
+            .unwrap_or_else(Vec::new);
+
         Self {
             // CLI-only settings.
             src_file,
@@ -263,6 +271,7 @@ impl PipCompileSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             uv_lock: flag(unstable_uv_lock_file, no_unstable_uv_lock_file).unwrap_or(false),
+            override_from_workspace,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
@@ -457,6 +466,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) uv_lock: Option<String>,
+    pub(crate) override_from_workspace: Vec<String>,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -524,6 +534,12 @@ impl PipInstallSettings {
             compat_args: _,
         } = args;
 
+        let override_from_workspace: Vec<String> = workspace
+            .as_ref()
+            .and_then(|ws| ws.options.override_dependencies.as_ref())
+            .cloned()
+            .unwrap_or_else(Vec::new);
+
         Self {
             // CLI-only settings.
             package,
@@ -539,6 +555,7 @@ impl PipInstallSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
             uv_lock: unstable_uv_lock_file,
+            override_from_workspace: override_from_workspace,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
