@@ -37,7 +37,7 @@ pub struct Options {
     pub preview: Option<bool>,
     pub cache_dir: Option<PathBuf>,
     pub pip: Option<PipOptions>,
-    pub override_dependencies: Option<Vec<String>>
+    pub override_dependencies: Option<Vec<String>>,
 }
 
 /// A `[tool.uv.pip]` section.

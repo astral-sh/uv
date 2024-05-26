@@ -2878,7 +2878,7 @@ fn override_dependency_from_pyproject() -> Result<()> {
     let context = TestContext::new("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
-    r#"[project]
+        r#"[project]
     name = "example"
     version = "0.0.0"
     dependencies = [
@@ -2933,7 +2933,7 @@ fn override_dependency_from_uvtoml() -> Result<()> {
     let context = TestContext::new("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
-    r#"[project]
+        r#"[project]
     name = "example"
     version = "0.0.0"
     dependencies = [

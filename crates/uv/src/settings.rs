@@ -183,7 +183,7 @@ pub(crate) struct PipCompileSettings {
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
     // Override dependencies from workspace.
-    pub(crate) override_from_workspace: Vec<String>
+    pub(crate) override_from_workspace: Vec<String>,
 }
 
 impl PipCompileSettings {

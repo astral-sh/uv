@@ -200,7 +200,11 @@ async fn run() -> Result<ExitStatus> {
                 .r#override
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .chain(args.override_from_workspace.into_iter().map(RequirementsSource::from_package))
+                .chain(
+                    args.override_from_workspace
+                        .into_iter()
+                        .map(RequirementsSource::from_package),
+                )
                 .collect::<Vec<_>>();
 
             commands::pip_compile(
@@ -341,7 +345,11 @@ async fn run() -> Result<ExitStatus> {
                 .r#override
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .chain(args.override_from_workspace.into_iter().map(RequirementsSource::from_package))
+                .chain(
+                    args.override_from_workspace
+                        .into_iter()
+                        .map(RequirementsSource::from_package),
+                )
                 .collect::<Vec<_>>();
 
             commands::pip_install(
