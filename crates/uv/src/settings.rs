@@ -555,7 +555,7 @@ impl PipInstallSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
             uv_lock: unstable_uv_lock_file,
-            override_from_workspace: override_from_workspace,
+            override_from_workspace,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
