@@ -1,7 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use crate::common::{get_bin, uv_snapshot, TestContext};
+use crate::common::{get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
@@ -9,29 +9,17 @@ mod common;
 ///
 /// The goal of the workspace tests is to resolve local workspace packages correctly. We add some
 /// non-workspace dependencies to ensure that transitive non-workspace dependencies are also
-/// correctly resolved. We use a downloaded version with a directory index to speed up test
-/// execution and prevent accidentally using non-workspace packages with the same name as a
-/// workspace package.
+/// correctly resolved.
 pub fn install_workspace(context: &TestContext) -> std::process::Command {
-    let find_links_dir = env::current_dir()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("scripts")
-        .join("links");
-
     let mut command = std::process::Command::new(get_bin());
     command
         .arg("pip")
         .arg("install")
+        .arg("--preview")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .arg("--preview")
-        .arg("--offline")
-        .arg("--find-links")
-        .arg(find_links_dir)
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
         .arg("-e")
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
@@ -112,7 +100,7 @@ fn test_albatross_in_examples() {
     Downloaded 1 package in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-in-example)
-     + tqdm==4.66.4
+     + tqdm==4.66.2
     "###
     );
 
@@ -146,7 +134,7 @@ fn test_albatross_just_project() {
     Downloaded 1 package in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-just-project)
-     + tqdm==4.66.4
+     + tqdm==4.66.2
     "###
     );
 
@@ -224,7 +212,7 @@ fn test_albatross_root_workspace() {
      + idna==3.6
      + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
-     + tqdm==4.66.4
+     + tqdm==4.66.2
     "###
     );
 
