@@ -62,7 +62,7 @@ impl Toolchain {
                 .split('-')
                 .nth(1)
                 .ok_or(Error::NameError(
-                    "Not enough `-` separarated values".to_string(),
+                    "Not enough `-`-separated values".to_string(),
                 ))?,
         )
         .map_err(|err| Error::NameError(format!("Name has invalid Python version: {err}")))?;

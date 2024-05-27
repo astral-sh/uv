@@ -4,13 +4,6 @@ use std::{
 };
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Platform {
-    os: Os,
-    arch: Arch,
-    libc: Libc,
-}
-
 /// All supported operating systems.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Os {
@@ -52,20 +45,7 @@ pub enum Error {
     #[error("Architecture not supported: {0}")]
     ArchNotSupported(String),
     #[error("Libc type could not be detected")]
-    LibcNotDetected(),
-}
-
-impl Platform {
-    pub fn new(os: Os, arch: Arch, libc: Libc) -> Self {
-        Self { os, arch, libc }
-    }
-    pub fn from_env() -> Result<Self, Error> {
-        Ok(Self::new(
-            Os::from_env()?,
-            Arch::from_env()?,
-            Libc::from_env(),
-        ))
-    }
+    LibcNotDetected,
 }
 
 impl fmt::Display for Os {
