@@ -188,9 +188,9 @@ impl RequirementSource {
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
             ParsedUrl::Path(local_file) => RequirementSource::Path {
-                editable: local_file.editable,
                 path: local_file.path,
                 url,
+                editable: local_file.editable,
             },
             ParsedUrl::Git(git) => RequirementSource::Git {
                 url,

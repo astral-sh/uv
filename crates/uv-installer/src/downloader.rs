@@ -7,9 +7,7 @@ use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
 
-use distribution_types::{
-    BuildableSource, CachedDist, Dist, Hashed, Identifier, LocalEditable, RemoteSource,
-};
+use distribution_types::{BuildableSource, CachedDist, Dist, Hashed, Identifier, RemoteSource};
 use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_distribution::{DistributionDatabase, LocalWheel};
@@ -187,12 +185,6 @@ pub trait Reporter: Send + Sync {
 
     /// Callback to invoke when a source distribution build is complete.
     fn on_build_complete(&self, source: &BuildableSource, id: usize);
-
-    /// Callback to invoke when a editable build is kicked off.
-    fn on_editable_build_start(&self, dist: &LocalEditable) -> usize;
-
-    /// Callback to invoke when a editable build is complete.
-    fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;

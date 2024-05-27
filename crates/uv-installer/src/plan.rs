@@ -35,8 +35,7 @@ pub struct Planner<'a> {
 
 impl<'a> Planner<'a> {
     /// Set the requirements use in the [`Plan`].
-    #[must_use]
-    pub fn with_requirements(requirements: &'a [Requirement]) -> Self {
+    pub fn new(requirements: &'a [Requirement]) -> Self {
         Self { requirements }
     }
 

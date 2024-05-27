@@ -300,7 +300,7 @@ pub(crate) async fn install(
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
-    let plan = Planner::with_requirements(&requirements)
+    let plan = Planner::new(&requirements)
         .build(
             site_packages,
             reinstall,
