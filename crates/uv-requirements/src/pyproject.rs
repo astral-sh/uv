@@ -699,7 +699,7 @@ mod test {
             ProjectWorkspace::dummy(path.as_ref(), &PackageName::from_str("foo").unwrap());
         let pyproject_toml =
             toml::from_str(contents).context("Failed to parse: `pyproject.toml`")?;
-        Ok(RequirementsSpecification::parse_direct_pyproject_toml(
+        RequirementsSpecification::parse_direct_pyproject_toml(
             &pyproject_toml,
             project_workspace.workspace(),
             extras,
@@ -707,7 +707,7 @@ mod test {
             PreviewMode::Enabled,
         )
         .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?
-        .context("Missing workspace")?)
+        .context("Missing workspace")
     }
 
     fn format_err(input: &str) -> String {
