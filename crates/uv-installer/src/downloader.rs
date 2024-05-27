@@ -3,6 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use futures::{stream::FuturesUnordered, FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use pep508_rs::PackageName;
 use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
@@ -169,6 +170,7 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
         let id = dist.distribution_id();
         if in_flight.downloads.register(id.clone()) {
             let policy = self.hashes.get(&dist);
+
             let result = self
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
@@ -223,6 +225,16 @@ pub trait Reporter: Send + Sync {
     /// Callback to invoke when the operation is complete.
     fn on_complete(&self);
 
+    /// Callback to invoke when a download is kicked off.
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize;
+
+    /// Callback to invoke when a download makes progress (i.e. some number of bytes are
+    /// downloaded).
+    fn on_download_progress(&self, index: usize, bytes: u64);
+
+    /// Callback to invoke when a download is complete.
+    fn on_download_complete(&self, name: &PackageName, index: usize);
+
     /// Callback to invoke when a source distribution build is kicked off.
     fn on_build_start(&self, source: &BuildableSource) -> usize;
 
@@ -268,5 +280,17 @@ impl uv_distribution::Reporter for Facade {
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
         self.reporter.on_checkout_complete(url, rev, index);
+    }
+
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+        self.reporter.on_download_start(name, size)
+    }
+
+    fn on_download_progress(&self, index: usize, inc: u64) {
+        self.reporter.on_download_progress(index, inc);
+    }
+
+    fn on_download_complete(&self, name: &PackageName, index: usize) {
+        self.reporter.on_download_complete(name, index);
     }
 }
