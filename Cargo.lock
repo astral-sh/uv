@@ -2500,7 +2500,7 @@ checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 
 [[package]]
 name = "pep440_rs"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "indoc",
  "once_cell",
@@ -2514,7 +2514,7 @@ dependencies = [
 
 [[package]]
 name = "pep508_rs"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "derivative",
  "insta",
