@@ -451,7 +451,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         url: Url,
         filename: &WheelFilename,
-        mut size: Option<u64>,
+        size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
@@ -462,10 +462,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Fetch the archive from the cache, or download it if necessary.
         let req = self.request(url.clone())?;
 
-        // get the size from the content-length header if not provided by the registry
-        if size.is_none() {
-            size = content_length(&req);
-        }
+        // Extract the size from the `Content-Length` header, if not provided by the registry.
+        let size = size.or_else(|| content_length(&req));
 
         let download = |response: reqwest::Response| {
             async {
@@ -574,7 +572,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         url: Url,
         filename: &WheelFilename,
-        mut size: Option<u64>,
+        size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
@@ -584,10 +582,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let req = self.request(url.clone())?;
 
-        // get the size from the content-length header if not provided by the registry
-        if size.is_none() {
-            size = content_length(&req);
-        }
+        // Extract the size from the `Content-Length` header, if not provided by the registry.
+        let size = size.or_else(|| content_length(&req));
 
         let download = |response: reqwest::Response| {
             async {
@@ -608,9 +604,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 match progress {
                     Some((reporter, progress)) => {
-                        // note this will report 100% progress after the download is complete, even
-                        // if we stil have to unzip and hash, which may not be that fast for large
-                        // files
+                        // Wrap the reader in a progress reporter. This will report 100% progress
+                        // after the download is complete, even if we still have to unzip and hash
+                        // part of the file.
                         let mut reader =
                             ProgressReader::new(reader.compat(), progress, &**reporter);
 
