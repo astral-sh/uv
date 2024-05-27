@@ -131,7 +131,7 @@ impl FromStr for Arch {
         match s.to_lowercase().as_str() {
             "aarch64" | "arm64" => Ok(Self::Aarch64),
             "armv6l" => Ok(Self::Armv6L),
-            "armv7l" => Ok(Self::Armv7L),
+            "armv7l" | "arm" => Ok(Self::Armv7L),
             "powerpc64le" | "ppc64le" => Ok(Self::Powerpc64Le),
             "powerpc64" | "ppc64" => Ok(Self::Powerpc64),
             "x86" | "i686" | "i386" => Ok(Self::X86),
