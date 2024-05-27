@@ -287,9 +287,9 @@ impl Dist {
     /// URL.
     pub fn from_http_url(
         name: PackageName,
+        url: VerbatimUrl,
         location: Url,
         subdirectory: Option<PathBuf>,
-        url: VerbatimUrl,
     ) -> Result<Dist, Error> {
         if Path::new(url.path())
             .extension()
@@ -323,9 +323,9 @@ impl Dist {
     /// A local built or source distribution from a `file://` URL.
     pub fn from_file_url(
         name: PackageName,
+        url: VerbatimUrl,
         path: &Path,
         editable: bool,
-        url: VerbatimUrl,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
         let path = match path.canonicalize() {
@@ -399,9 +399,9 @@ impl Dist {
     pub fn from_url(name: PackageName, url: VerbatimParsedUrl) -> Result<Self, Error> {
         match url.parsed_url {
             ParsedUrl::Archive(archive) => {
-                Self::from_http_url(name, archive.url, archive.subdirectory, url.verbatim)
+                Self::from_http_url(name, url.verbatim, archive.url, archive.subdirectory)
             }
-            ParsedUrl::Path(file) => Self::from_file_url(name, &file.path, false, url.verbatim),
+            ParsedUrl::Path(file) => Self::from_file_url(name, url.verbatim, &file.path, false),
             ParsedUrl::Git(git) => {
                 Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)
             }
