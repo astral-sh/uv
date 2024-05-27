@@ -86,6 +86,7 @@ ARCH_MAP = {
     "ppc64le": "powerpc64le",
     "i686": "x86",
     "i386": "x86",
+    "armv7": "armv7l",
 }
 OS_MAP = {"darwin": "macos"}
 
@@ -106,7 +107,7 @@ def parse_filename(filename):
 
 
 def normalize_triple(triple):
-    if "-static" in triple:
+    if "-static" in triple or "-gnueabihf" in triple or "-gnueabi" in triple:
         logging.debug("Skipping %r: unknown triple", triple)
         return
     triple = SPECIAL_TRIPLES.get(triple, triple)
