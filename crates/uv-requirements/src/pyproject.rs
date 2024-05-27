@@ -286,9 +286,8 @@ impl Pep621Metadata {
         }
 
         let requirements = lower_requirements(
-            // TODO(konsti): Avoid the clone.
-            &project.dependencies.clone().unwrap_or_default(),
-            &project.optional_dependencies.clone().unwrap_or_default(),
+            project.dependencies.as_deref(),
+            project.optional_dependencies.as_ref(),
             pyproject_path,
             &project.name,
             project_dir,
@@ -326,8 +325,8 @@ impl Pep621Metadata {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_requirements(
-    dependencies: &[String],
-    optional_dependencies: &IndexMap<ExtraName, Vec<String>>,
+    dependencies: Option<&[String]>,
+    optional_dependencies: Option<&IndexMap<ExtraName, Vec<String>>>,
     pyproject_path: &Path,
     project_name: &PackageName,
     project_dir: &Path,
@@ -336,7 +335,8 @@ pub(crate) fn lower_requirements(
     preview: PreviewMode,
 ) -> Result<Requirements, Pep621Error> {
     let dependencies = dependencies
-        .iter()
+        .into_iter()
+        .flatten()
         .map(|dependency| {
             let requirement = pep508_rs::Requirement::from_str(dependency)?.with_origin(
                 RequirementOrigin::Project(pyproject_path.to_path_buf(), project_name.clone()),
@@ -354,7 +354,8 @@ pub(crate) fn lower_requirements(
         })
         .collect::<Result<_, Pep621Error>>()?;
     let optional_dependencies = optional_dependencies
-        .iter()
+        .into_iter()
+        .flatten()
         .map(|(extra_name, dependencies)| {
             let dependencies: Vec<_> = dependencies
                 .iter()
@@ -400,19 +401,22 @@ pub(crate) fn lower_requirement(
         .or(workspace.sources().get(&requirement.name))
         .cloned();
 
-    let is_workspace_dep = matches!(
-        source,
-        Some(Source::Workspace {
-            // By using toml, we technically support `workspace = false`.
-            workspace: true,
-            ..
-        })
-    );
-    // Check that all dependencies on workspace packages are declared as such.
-    if !is_workspace_dep && workspace.packages().contains_key(&requirement.name)
-        // Support recursive self-inclusion (extras that activate other extras).
-        && &requirement.name != project_name
-    {
+    let workspace_package_declared =
+        // We require that when you use a package that's part of the workspace, ...
+        !workspace.packages().contains_key(&requirement.name)
+        // ... it must be declared as a workspace dependency (`workspace = true`), ...
+        || matches!(
+            source,
+            Some(Source::Workspace {
+                // By using toml, we technically support `workspace = false`.
+                workspace: true,
+                ..
+            })
+        )
+        // ... except for recursive self-inclusion (extras that activate other extras), e.g.
+        // `framework[machine_learning]` depends on `framework[cuda]`.
+        || &requirement.name == project_name;
+    if !workspace_package_declared {
         return Err(LoweringError::UndeclaredWorkspacePackage);
     }
 

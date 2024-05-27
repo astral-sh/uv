@@ -9268,6 +9268,7 @@ fn tool_uv_sources() -> Result<()> {
     Ok(())
 }
 
+/// Check that a dynamic `pyproject.toml` is supported a compile input file.
 #[test]
 fn dynamic_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.12");

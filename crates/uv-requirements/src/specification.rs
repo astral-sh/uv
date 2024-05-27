@@ -2,7 +2,7 @@
 //!
 //! # `requirements.txt` format
 //!
-//! The `requirements.txt` (also known as `requirements.in`) format is static except for the
+//! The `requirements.txt` format (also known as `requirements.in`) is static except for the
 //! possibility of making network requests.
 //!
 //! All entries are stored as `requirements` and `editables` or `constraints`  depending on the kind
@@ -11,19 +11,17 @@
 //!
 //! # `pyproject.toml` and directory source.
 //!
-//! `pyproject.toml` come in two forms: PEP 621 compliant with static dependencies and non-PEP 621
-//! compliant or with dynamic metadata. There are different ways how the requirements flow:
-//! * `uv pip install -r pyproject.toml`: We require a PEP 621 compliant `pyproject.toml`. We add
-//!   all dependencies from it as `requirements`.
+//! `pyproject.toml` files come in two forms: PEP 621 compliant with static dependencies and non-PEP 621
+//! compliant or PEP 621 compliant with dynamic metadata. There are different ways how the requirements are evaluated:
+//! * `uv pip install -r pyproject.toml` or `uv pip compile requirements.in`: The `pyproject.toml`
+//!   must be valid (in other circumstances we allow invalid `dependencies` e.g. for hatch's
+//!   relative path support), but it can be dynamic. We set the `project` from the `name` entry. If it is static, we add
+//!   all `dependencies` from the pyproject.toml as `requirements` (and drop the directory). If it
+//!   is dynamic, we add the directory to `source_trees`.
 //! * `uv pip install .` in a directory with `pyproject.toml` or `uv pip compile requirements.in`
 //!   where the `requirements.in` points to that directory: The directory is listed in
 //!   `requirements`. The lookahead resolver reads the static metadata from `pyproject.toml` if
 //!   available, otherwise it calls PEP 517 to resolve.
-//! * `uv pip install -r pyproject.toml` or `uv pip compile requirements.in`: The `pyproject.toml`
-//!   must be valid (in other circumstances we allow invalid `dependencies` e.g. for hatch's
-//!   relative path support), but it can be dynamic. We set the `project`. If it is static, we add
-//!   all `dependencies` from the pyproject.toml as `requirements` (and drop the directory). If it
-//!   is dynamic, we add the directory `source_trees`.
 //! * `uv pip install -e`: We add the directory in `editables` instead of `requirements`. The
 //!   lookahead resolver resolves it the same.
 //! * `setup.py` or `setup.cfg` instead of `pyproject.toml`: Directory is an entry in

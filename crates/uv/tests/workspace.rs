@@ -5,7 +5,7 @@ use crate::common::{get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
-/// A `pip install` command for the workspace using only local packages.
+/// A `pip install` command for workspaces.
 ///
 /// The goal of the workspace tests is to resolve local workspace packages correctly. We add some
 /// non-workspace dependencies to ensure that transitive non-workspace dependencies are also
