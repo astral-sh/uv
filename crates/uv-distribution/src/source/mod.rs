@@ -1100,7 +1100,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
-            return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
+            return Err(Error::HashesNotSupportedEditable(source.to_string()));
         }
 
         let cache_shard = self.build_context.cache().shard(
@@ -1124,8 +1124,24 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(metadata));
         }
 
-        // Build the wheel.
-        // TODO(charlie): Add support for `prepare_metadata_for_build_editable`.
+        // If the backend supports `prepare_metadata_for_build_wheel`, use it.
+        if let Some(metadata) = self
+            .build_metadata(source, &resource.path, None)
+            .boxed_local()
+            .await?
+        {
+            // Store the metadata.
+            fs::create_dir_all(metadata_entry.dir())
+                .await
+                .map_err(Error::CacheWrite)?;
+            write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+                .await
+                .map_err(Error::CacheWrite)?;
+
+            return Ok(ArchiveMetadata::from(metadata));
+        }
+
+        // Otherwise, we need to build a wheel.
         let task = self
             .reporter
             .as_ref()
@@ -1531,7 +1547,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 subdirectory,
                 &source.to_string(),
                 source.as_dist(),
-                BuildKind::Wheel,
+                if source.is_editable() {
+                    BuildKind::Editable
+                } else {
+                    BuildKind::Wheel
+                },
             )
             .await
             .map_err(|err| Error::Build(source.to_string(), err))?;

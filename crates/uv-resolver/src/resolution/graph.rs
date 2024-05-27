@@ -486,6 +486,14 @@ impl ResolutionGraph {
             }
         }
 
+        // Ensure that we consider markers from direct dependencies.
+        for direct_req in manifest.apply(manifest.requirements.iter()) {
+            let Some(ref marker_tree) = direct_req.marker else {
+                continue;
+            };
+            add_marker_params_from_tree(marker_tree, &mut seen_marker_values);
+        }
+
         // Generate the final marker expression as a conjunction of
         // strict equality terms.
         let mut conjuncts = vec![];
