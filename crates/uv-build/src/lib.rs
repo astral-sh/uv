@@ -677,23 +677,23 @@ impl SourceBuild {
         fs::create_dir(&metadata_directory)?;
 
         // Write the hook output to a file so that we can read it back reliably.
-        let outfile = self
-            .temp_dir
-            .path()
-            .join("prepare_metadata_for_build_wheel.txt");
+        let outfile = self.temp_dir.path().join(format!(
+            "prepare_metadata_for_build_{}.txt",
+            self.build_kind
+        ));
 
         debug!(
-            "Calling `{}.prepare_metadata_for_build_wheel()`",
-            pep517_backend.backend
+            "Calling `{}.prepare_metadata_for_build_{}()`",
+            pep517_backend.backend, self.build_kind,
         );
         let script = formatdoc! {
             r#"
             {}
             import json
 
-            prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
-            if prepare_metadata_for_build_wheel:
-                dirname = prepare_metadata_for_build_wheel("{}", {})
+            prepare_metadata_for_build = getattr(backend, "prepare_metadata_for_build_{}", None)
+            if prepare_metadata_for_build:
+                dirname = prepare_metadata_for_build("{}", {})
             else:
                 dirname = None
 
@@ -701,13 +701,14 @@ impl SourceBuild {
                 fp.write(dirname or "")
             "#,
             pep517_backend.backend_import(),
+            self.build_kind,
             escape_path_for_python(&metadata_directory),
             self.config_settings.escape_for_python(),
             outfile.escape_for_python(),
         };
         let span = info_span!(
             "run_python_script",
-            script="prepare_metadata_for_build_wheel",
+            script=format!("prepare_metadata_for_build_{}", self.build_kind),
             python_version = %self.venv.interpreter().python_version()
         );
         let output = self
@@ -723,7 +724,7 @@ impl SourceBuild {
             .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
-                "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
+                format!("Build backend failed to determine metadata through `prepare_metadata_for_build_{}`", self.build_kind),
                 &output,
                 &self.version_id,
             ));
