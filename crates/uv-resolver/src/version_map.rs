@@ -554,7 +554,10 @@ impl VersionMapLazy {
             }
         };
 
-        WheelCompatibility::Compatible(hash, priority)
+        // Break ties with the build tag.
+        let build_tag = filename.build_tag.clone();
+
+        WheelCompatibility::Compatible(hash, priority, build_tag)
     }
 }
 

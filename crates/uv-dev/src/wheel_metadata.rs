@@ -5,8 +5,9 @@ use anyhow::{bail, Result};
 use clap::Parser;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, DirectUrlBuiltDist, ParsedUrl, RemoteSource};
+use distribution_types::{BuiltDist, DirectUrlBuiltDist, RemoteSource};
 use pep508_rs::VerbatimUrl;
+use pypi_types::ParsedUrl;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
 

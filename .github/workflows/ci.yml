@@ -144,7 +144,6 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          export UV_BOOTSTRAP_DIR="$(pwd)/bin"
           cargo nextest run \
             --features python-patch \
             --workspace \
@@ -467,6 +466,39 @@ jobs:
         run: |
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
+
+  integration-test-github-actions:
+    needs: build-binary-linux
+    name: "integration test | github actions"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Install a package without system opt-in"
+        run: |
+          ./uv pip install anyio && exit 1 || echo "Failed as expected"
+
+      - name: "Install a package with system opt-in"
+        run: |
+          ./uv pip install anyio --system
+
+      - name: Configure uv to use the system Python by default
+        run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
+
+      - name: "Install a package with environment system opt-in"
+        run: |
+          ./uv pip install anyio --reinstall
 
   cache-test-ubuntu:
     needs: build-binary-linux
@@ -1056,6 +1088,12 @@ jobs:
           tool: cargo-codspeed
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: "Install requirements and prime cache"
+        run: |
+          sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
+          cargo run --bin uv -- venv --cache-dir .cache
+          cargo run --bin uv -- pip compile scripts/requirements/airflow.in --cache-dir .cache
 
       - name: "Build benchmarks"
         run: cargo codspeed build --features codspeed -p bench

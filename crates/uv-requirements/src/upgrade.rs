@@ -31,6 +31,7 @@ pub async fn read_lockfile(
         .requirements
         .into_iter()
         .map(Preference::from_entry)
+        .filter_map(Result::transpose)
         .collect::<Result<Vec<_>, PreferenceError>>()?;
 
     // Apply the upgrade strategy to the requirements.

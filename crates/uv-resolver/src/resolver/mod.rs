@@ -48,6 +48,9 @@ use crate::pubgrub::{
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
+pub(crate) use crate::resolver::availability::{
+    IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
+};
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub(crate) use crate::resolver::index::FxOnceMap;
 pub use crate::resolver::index::InMemoryIndex;
@@ -60,119 +63,13 @@ pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, FlatIndex, Options};
 
+mod availability;
 mod batch_prefetch;
 mod index;
 mod locals;
 mod provider;
 mod reporter;
 mod urls;
-
-/// The reason why a package or a version cannot be used.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum UnavailableReason {
-    /// The entire package cannot be used.
-    Package(UnavailablePackage),
-    /// A single version cannot be used.
-    Version(UnavailableVersion),
-}
-
-impl Display for UnavailableReason {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Version(version) => Display::fmt(version, f),
-            Self::Package(package) => Display::fmt(package, f),
-        }
-    }
-}
-
-/// The package version is unavailable and cannot be used. Unlike [`PackageUnavailable`], this
-/// applies to a single version of the package.
-///
-/// Most variant are from [`MetadataResponse`] without the error source (since we don't format
-/// the source).
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum UnavailableVersion {
-    /// Version is incompatible because it has no usable distributions
-    IncompatibleDist(IncompatibleDist),
-    /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata,
-    /// The wheel metadata was found, but the metadata was inconsistent.
-    InconsistentMetadata,
-    /// The wheel has an invalid structure.
-    InvalidStructure,
-    /// The wheel metadata was not found in the cache and the network is not available.
-    Offline,
-    /// Forward any kind of resolver error.
-    ResolverError(String),
-}
-
-impl Display for UnavailableVersion {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnavailableVersion::IncompatibleDist(invalid_dist) => Display::fmt(invalid_dist, f),
-            UnavailableVersion::InvalidMetadata => f.write_str("has invalid metadata"),
-            UnavailableVersion::InconsistentMetadata => f.write_str("has inconsistent metadata"),
-            UnavailableVersion::InvalidStructure => f.write_str("has an invalid package format"),
-            UnavailableVersion::Offline => f.write_str(
-                "network connectivity is disabled, but the metadata wasn't found in the cache",
-            ),
-            UnavailableVersion::ResolverError(err) => f.write_str(err),
-        }
-    }
-}
-
-/// The package is unavailable and cannot be used.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum UnavailablePackage {
-    /// Index lookups were disabled (i.e., `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`).
-    NoIndex,
-    /// Network requests were disabled (i.e., `--offline`), and the package was not found in the cache.
-    Offline,
-    /// The package was not found in the registry.
-    NotFound,
-    /// The package metadata was found, but could not be parsed.
-    InvalidMetadata(String),
-    /// The package has an invalid structure.
-    InvalidStructure(String),
-}
-
-impl UnavailablePackage {
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            UnavailablePackage::NoIndex => "was not found in the provided package locations",
-            UnavailablePackage::Offline => "was not found in the cache",
-            UnavailablePackage::NotFound => "was not found in the package registry",
-            UnavailablePackage::InvalidMetadata(_) => "has invalid metadata",
-            UnavailablePackage::InvalidStructure(_) => "has an invalid package format",
-        }
-    }
-}
-
-impl Display for UnavailablePackage {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-/// The package is unavailable at specific versions.
-#[derive(Debug, Clone)]
-pub(crate) enum IncompletePackage {
-    /// Network requests were disabled (i.e., `--offline`), and the wheel metadata was not found in the cache.
-    Offline,
-    /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(String),
-    /// The wheel metadata was found, but the metadata was inconsistent.
-    InconsistentMetadata(String),
-    /// The wheel has an invalid structure.
-    InvalidStructure(String),
-}
-
-enum ResolverVersion {
-    /// A usable version
-    Available(Version),
-    /// A version that is not usable for some reason
-    Unavailable(Version, UnavailableVersion),
-}
 
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
     state: ResolverState<InstalledPackages>,
@@ -1063,8 +960,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()?;
+                        .map(Requirement::from)
+                        .collect();
                     let dependencies = PubGrubDependencies::from_requirements(
                         &requirements,
                         &self.constraints,
@@ -1170,8 +1067,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()?;
+                    .map(Requirement::from)
+                    .collect();
                 let dependencies = PubGrubDependencies::from_requirements(
                     &requirements,
                     &self.constraints,

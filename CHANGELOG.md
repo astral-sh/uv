@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.4
+
+### CLI
+
+- Allow `--system` and `--python` to be passed together ([#3830](https://github.com/astral-sh/uv/pull/3830))
+
+### Bug fixes
+
+- Ignore `libc` on other platforms ([#3825](https://github.com/astral-sh/uv/pull/3825))
+
+## 0.2.3
+
+### Enhancements
+
+- Incorporate build tag into wheel prioritization ([#3781](https://github.com/astral-sh/uv/pull/3781))
+- Avoid displaying log for satisfied editables if none are requested ([#3795](https://github.com/astral-sh/uv/pull/3795))
+- Improve logging during interpreter discovery ([#3790](https://github.com/astral-sh/uv/pull/3790))
+- Improve logging for environment locking ([#3792](https://github.com/astral-sh/uv/pull/3792))
+- Improve logging of interpreter implementation ([#3791](https://github.com/astral-sh/uv/pull/3791))
+- Remove extra details from interpreter query traces ([#3803](https://github.com/astral-sh/uv/pull/3803))
+- Use colon more consistently in error messages ([#3788](https://github.com/astral-sh/uv/pull/3788))
+
+### Configuration
+
+- Add JSON alias for `unsafe-any-match` ([#3820](https://github.com/astral-sh/uv/pull/3820))
+
+### Release
+
+- Remove redundant dynamically linked Linux binary again (#3762)" ([#3778](https://github.com/astral-sh/uv/pull/3778))
+- Remove `aarch64-unknown-linux-gnu` from list of expected binaries ([#3761](https://github.com/astral-sh/uv/pull/3761))
+
+### Bug fixes
+
+- Always include package names for Git and HTTPS dependencies ([#3821](https://github.com/astral-sh/uv/pull/3821))
+- Fix interpreter cache collisions for relative virtualenv paths ([#3823](https://github.com/astral-sh/uv/pull/3823))
+- Ignore unnamed requirements in preferences ([#3826](https://github.com/astral-sh/uv/pull/3826))
+- Search for `python3` in unix virtual environments ([#3798](https://github.com/astral-sh/uv/pull/3798))
+- Use a cross-platform representation for relative paths in `pip compile` ([#3804](https://github.com/astral-sh/uv/pull/3804))
+
 ## 0.2.2
 
 ### Enhancements
@@ -34,7 +73,7 @@ requested version, skipping interpreters that are broken or do not satisfy the r
 
 Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
 the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
-also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept *any* interpreter implementation.
 
 In summary, the following Python interpreter requests are now allowed:
 
@@ -52,7 +91,7 @@ To align the user expecations, uv now respects the interpreter that starts it. F
 now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
 
 We now check if discovered intepreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
-installation directory that is _not_ a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
+installation directory that is *not* a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
 to request the interpreter.
 
 ### Enhancements

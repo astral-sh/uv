@@ -7,21 +7,40 @@ RequirementsTxt {
         RequirementEntry {
             requirement: Unnamed(
                 UnnamedRequirement {
-                    url: VerbatimUrl {
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
-                            query: None,
-                            fragment: None,
-                        },
-                        given: Some(
-                            "./scripts/packages/black_editable",
+                    url: VerbatimParsedUrl {
+                        parsed_url: Path(
+                            ParsedPathUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                path: "<REQUIREMENTS_DIR>/./scripts/packages/black_editable",
+                                editable: false,
+                            },
                         ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./scripts/packages/black_editable",
+                            ),
+                        },
                     },
                     extras: [],
                     marker: None,
@@ -37,21 +56,40 @@ RequirementsTxt {
         RequirementEntry {
             requirement: Unnamed(
                 UnnamedRequirement {
-                    url: VerbatimUrl {
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
-                            query: None,
-                            fragment: None,
-                        },
-                        given: Some(
-                            "./scripts/packages/black_editable",
+                    url: VerbatimParsedUrl {
+                        parsed_url: Path(
+                            ParsedPathUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                path: "<REQUIREMENTS_DIR>/./scripts/packages/black_editable",
+                                editable: false,
+                            },
                         ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./scripts/packages/black_editable",
+                            ),
+                        },
                     },
                     extras: [
                         ExtraName(
@@ -71,21 +109,40 @@ RequirementsTxt {
         RequirementEntry {
             requirement: Unnamed(
                 UnnamedRequirement {
-                    url: VerbatimUrl {
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "/scripts/packages/black_editable",
-                            query: None,
-                            fragment: None,
-                        },
-                        given: Some(
-                            "file:///scripts/packages/black_editable",
+                    url: VerbatimParsedUrl {
+                        parsed_url: Path(
+                            ParsedPathUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/scripts/packages/black_editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                path: "/scripts/packages/black_editable",
+                                editable: false,
+                            },
                         ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/scripts/packages/black_editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "file:///scripts/packages/black_editable",
+                            ),
+                        },
                     },
                     extras: [],
                     marker: None,

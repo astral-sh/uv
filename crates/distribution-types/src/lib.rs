@@ -42,6 +42,7 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use pep508_rs::{Pep508Url, VerbatimUrl};
+use pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
@@ -57,7 +58,6 @@ pub use crate::hash::*;
 pub use crate::id::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
-pub use crate::parsed_url::*;
 pub use crate::prioritized_distribution::*;
 pub use crate::requirement::*;
 pub use crate::resolution::*;
@@ -77,7 +77,6 @@ mod hash;
 mod id;
 mod index_url;
 mod installed;
-mod parsed_url;
 mod prioritized_distribution;
 mod requirement;
 mod resolution;
@@ -428,6 +427,14 @@ impl Dist {
         }
     }
 
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::Source(dist) => dist.is_local(),
+            Self::Built(dist) => dist.is_local(),
+        }
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
@@ -453,6 +460,11 @@ impl Dist {
 }
 
 impl BuiltDist {
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Path(_))
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
@@ -509,6 +521,11 @@ impl SourceDist {
             Self::Directory(DirectorySourceDist { editable, .. }) => *editable,
             _ => false,
         }
+    }
+
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Directory(_) | Self::Path(_))
     }
 
     /// Returns the path to the source distribution, if it's a local distribution.

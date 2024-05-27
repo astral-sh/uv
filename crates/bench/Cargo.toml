@@ -34,11 +34,13 @@ pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
+uv-dispatch = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
+install-wheel-rs = { workspace = true }
 
 anyhow = { workspace = true }
 codspeed-criterion-compat = { version = "2.6.0", default-features = false, optional = true }

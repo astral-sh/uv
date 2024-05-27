@@ -16,8 +16,7 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, LocalEditable, LocalEditables, ParsedUrlError, SourceAnnotation,
-    SourceAnnotations, Verbatim,
+    IndexLocations, LocalEditable, LocalEditables, SourceAnnotation, SourceAnnotations, Verbatim,
 };
 use distribution_types::{Requirement, Requirements};
 use install_wheel_rs::linker::LinkMode;
@@ -171,16 +170,16 @@ pub(crate) async fn pip_compile(
     };
     let interpreter = if let Some(python) = python.as_ref() {
         let request = InterpreterRequest::parse(python);
-        let sources = SourceSelector::from_settings(system);
+        let sources = SourceSelector::from_settings(system, preview);
         find_interpreter(&request, system, &sources, &cache)??
     } else {
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
             InterpreterRequest::Version(VersionRequest::from(version))
         } else {
-            InterpreterRequest::Version(VersionRequest::Default)
+            InterpreterRequest::default()
         };
-        find_best_interpreter(&request, system, &cache)??
+        find_best_interpreter(&request, system, preview, &cache)??
     }
     .into_interpreter();
 
@@ -472,17 +471,17 @@ pub(crate) async fn pip_compile(
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()?,
+                        .map(Requirement::from)
+                        .collect(),
                     optional_dependencies: IndexMap::default(),
                 };
-                Ok::<_, Box<ParsedUrlError>>(BuiltEditableMetadata {
+                BuiltEditableMetadata {
                     built: built_editable.editable,
                     metadata: built_editable.metadata,
                     requirements,
-                })
+                }
             })
-            .collect::<Result<_, _>>()?;
+            .collect();
 
         // Validate that the editables are compatible with the target Python version.
         for editable in &editables {
@@ -708,7 +707,7 @@ fn cmd(
     }
     let args = env::args_os()
         .skip(1)
-        .map(|arg| arg.user_display().to_string())
+        .map(|arg| arg.to_string_lossy().to_string())
         .scan(None, move |skip_next, arg| {
             if matches!(skip_next, Some(true)) {
                 // Reset state; skip this iteration.

@@ -9,7 +9,7 @@ use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter}
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use dashmap::DashMap;
-use distribution_types::{BuiltDist, IndexLocations, InstalledDist, ParsedUrlError, SourceDist};
+use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
 use pep440_rs::Version;
 use pep508_rs::Requirement;
 use uv_normalize::PackageName;
@@ -95,10 +95,6 @@ pub enum ResolveError {
 
     #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
     UnhashedPackage(PackageName),
-
-    // TODO(konsti): Attach the distribution that contained the invalid requirement as error source.
-    #[error("Failed to parse requirements")]
-    DirectUrl(#[from] Box<ParsedUrlError>),
 
     /// Something unexpected happened.
     #[error("{0}")]

@@ -9,13 +9,15 @@ use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
 use std::ffi::OsString;
+use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
+use uv_configuration::PreviewMode;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_interpreter::managed::toolchains_for_version;
+use uv_interpreter::managed::InstalledToolchains;
 use uv_interpreter::{
     find_interpreter, InterpreterRequest, PythonVersion, SourceSelector, VersionRequest,
 };
@@ -337,15 +339,22 @@ pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path
     cache_dir: &assert_fs::TempDir,
     python: &str,
 ) -> PathBuf {
-    let python = toolchains_for_version(
-        &PythonVersion::from_str(python).expect("Tests should use a valid Python version"),
-    )
-    .expect("Tests are run on a supported platform")
-    .first()
-    .map(uv_interpreter::managed::Toolchain::executable)
-    // We'll search for the request Python on the PATH if not found in the toolchain versions
-    // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
-    .unwrap_or(PathBuf::from(python));
+    let python = InstalledToolchains::from_settings()
+        .map(|installed_toolchains| {
+            installed_toolchains
+                .find_version(
+                    &PythonVersion::from_str(python)
+                        .expect("Tests should use a valid Python version"),
+                )
+                .expect("Tests are run on a supported platform")
+                .next()
+                .as_ref()
+                .map(uv_interpreter::managed::Toolchain::executable)
+        })
+        // We'll search for the request Python on the PATH if not found in the toolchain versions
+        // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
+        .unwrap_or_default()
+        .unwrap_or(PathBuf::from(python));
 
     let venv = temp_dir.child(".venv");
     Command::new(get_bin())
@@ -380,30 +389,36 @@ pub fn python_path_with_versions(
     let selected_pythons = python_versions
         .iter()
         .flat_map(|python_version| {
-            let inner = toolchains_for_version(
-                &PythonVersion::from_str(python_version)
-                    .expect("Tests should use a valid Python version"),
-            )
-            .expect("Tests are run on a supported platform")
-            .iter()
-            .map(|toolchain| {
-                toolchain
-                    .executable()
-                    .parent()
-                    .expect("Executables must exist in a directory")
-                    .to_path_buf()
-            })
-            .collect::<Vec<_>>();
+            let inner = InstalledToolchains::from_settings()
+                .map(|toolchains| {
+                    toolchains
+                        .find_version(
+                            &PythonVersion::from_str(python_version)
+                                .expect("Tests should use a valid Python version"),
+                        )
+                        .expect("Tests are run on a supported platform")
+                        .map(|toolchain| {
+                            toolchain
+                                .executable()
+                                .parent()
+                                .expect("Executables must exist in a directory")
+                                .to_path_buf()
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
             if inner.is_empty() {
                 // Fallback to a system lookup if we failed to find one in the toolchain directory
                 let request = InterpreterRequest::Version(
                     VersionRequest::from_str(python_version)
                         .expect("The test version request must be valid"),
                 );
-                let sources = SourceSelector::All;
+                let sources = SourceSelector::All(PreviewMode::Enabled);
                 if let Ok(found) = find_interpreter(
                     &request,
-                    uv_interpreter::SystemPython::Allowed,
+                    // Without required, we could pick the current venv here and the test fails
+                    // because the venv subcommand requires a system interpreter.
+                    uv_interpreter::SystemPython::Required,
                     &sources,
                     &cache,
                 )

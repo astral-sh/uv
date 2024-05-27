@@ -1,8 +1,7 @@
 use anyhow::Result;
 use cache_key::{CanonicalUrl, RepositoryUrl};
 use std::fmt::Debug;
-use tracing::log::debug;
-use tracing::trace;
+use tracing::{debug, trace};
 
 use distribution_types::{InstalledDirectUrlDist, InstalledDist, RequirementSource};
 use pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};

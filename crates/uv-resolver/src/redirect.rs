@@ -1,7 +1,7 @@
 use url::Url;
 
-use distribution_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 use pep508_rs::VerbatimUrl;
+use pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_distribution::git_url_to_precise;
 use uv_git::GitReference;
 

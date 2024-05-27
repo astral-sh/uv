@@ -46,6 +46,7 @@ pub(crate) enum Error {
 /// Initialize a virtual environment for the current project.
 pub(crate) fn init_environment(
     project: &ProjectWorkspace,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, Error> {
@@ -57,7 +58,7 @@ pub(crate) fn init_environment(
         Ok(venv) => Ok(venv),
         Err(uv_interpreter::Error::NotFound(_)) => {
             // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
-            let interpreter = find_default_interpreter(cache)
+            let interpreter = find_default_interpreter(preview, cache)
                 .map_err(uv_interpreter::Error::from)?
                 .map_err(uv_interpreter::Error::from)?
                 .into_interpreter();
@@ -114,10 +115,9 @@ pub(crate) async fn update_environment(
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_executable(&venv)?;
-
-    // If the requirements are already satisfied, we're done.
     if spec.source_trees.is_empty() {
         match site_packages.satisfies(&spec.requirements, &spec.editables, &spec.constraints)? {
+            // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
             } => {
@@ -129,10 +129,12 @@ pub(crate) async fn update_environment(
                         .sorted()
                         .join(" | ")
                 );
-                debug!(
-                    "All editables satisfied: {}",
-                    spec.editables.iter().map(ToString::to_string).join(", ")
-                );
+                if !spec.editables.is_empty() {
+                    debug!(
+                        "All editables satisfied: {}",
+                        spec.editables.iter().map(ToString::to_string).join(", ")
+                    );
+                }
                 return Ok(venv);
             }
             SatisfiesResult::Unsatisfied(requirement) => {

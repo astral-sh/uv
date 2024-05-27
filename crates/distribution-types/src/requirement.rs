@@ -9,7 +9,7 @@ use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, V
 use uv_git::{GitReference, GitSha};
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::{ParsedUrl, ParsedUrlError};
+use crate::{ParsedUrl, VerbatimParsedUrl};
 
 /// The requirements of a distribution, an extension over PEP 508's requirements.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -44,9 +44,11 @@ impl Requirement {
             true
         }
     }
+}
 
+impl From<pep508_rs::Requirement<VerbatimParsedUrl>> for Requirement {
     /// Convert a [`pep508_rs::Requirement`] to a [`Requirement`].
-    pub fn from_pep508(requirement: pep508_rs::Requirement) -> Result<Self, Box<ParsedUrlError>> {
+    fn from(requirement: pep508_rs::Requirement<VerbatimParsedUrl>) -> Self {
         let source = match requirement.version_or_url {
             None => RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
@@ -58,17 +60,16 @@ impl Requirement {
                 index: None,
             },
             Some(VersionOrUrl::Url(url)) => {
-                let direct_url = ParsedUrl::try_from(url.to_url())?;
-                RequirementSource::from_parsed_url(direct_url, url)
+                RequirementSource::from_parsed_url(url.parsed_url, url.verbatim)
             }
         };
-        Ok(Requirement {
+        Requirement {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
             source,
             origin: requirement.origin,
-        })
+        }
     }
 }
 

@@ -36,20 +36,13 @@ If tests fail due to a mismatch in the JSON Schema, run: `cargo dev generate-jso
 
 ### Python
 
-Testing uv requires multiple specific Python versions. You can install them into
-`<project root>/bin` via our bootstrapping script:
+Testing uv requires multiple specific Python versions; they can be installed with:
 
 ```shell
-cargo run -p uv-dev -- fetch-python
+cargo dev fetch-python
 ```
 
-You may need to add the versions to your `PATH`:
-
-```shell
-source .env
-```
-
-You can configure the bootstrapping directory with `UV_BOOTSTRAP_DIR`.
+The storage directory can be configured with `UV_TOOLCHAIN_DIR`.
 
 ### Local testing
 

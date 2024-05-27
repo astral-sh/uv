@@ -9,11 +9,11 @@ use thiserror::Error;
 use tracing::warn;
 
 use pep440_rs::{Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError};
-use pep508_rs::{Pep508Error, Requirement, VerbatimUrl};
+use pep508_rs::{Pep508Error, Requirement};
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
 use crate::lenient_requirement::LenientRequirement;
-use crate::LenientVersionSpecifiers;
+use crate::{LenientVersionSpecifiers, VerbatimParsedUrl};
 
 /// Python Package Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
@@ -29,7 +29,7 @@ pub struct Metadata23 {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
-    pub requires_dist: Vec<Requirement<VerbatimUrl>>,
+    pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
 }
@@ -50,7 +50,7 @@ pub enum MetadataError {
     #[error(transparent)]
     Pep440Error(#[from] VersionSpecifiersParseError),
     #[error(transparent)]
-    Pep508Error(#[from] Pep508Error<VerbatimUrl>),
+    Pep508Error(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
     #[error(transparent)]
     InvalidName(#[from] InvalidNameError),
     #[error("Invalid `Metadata-Version` field: {0}")]
@@ -59,6 +59,12 @@ pub enum MetadataError {
     UnsupportedMetadataVersion(String),
     #[error("The following field was marked as dynamic: {0}")]
     DynamicField(&'static str),
+}
+
+impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
+    fn from(error: Pep508Error<VerbatimParsedUrl>) -> Self {
+        Self::Pep508Error(Box::new(error))
+    }
 }
 
 /// From <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/metadata.rs#LL78C2-L91C26>

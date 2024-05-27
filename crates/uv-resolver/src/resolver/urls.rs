@@ -1,11 +1,9 @@
+use distribution_types::{RequirementSource, Verbatim};
 use rustc_hash::FxHashMap;
 use tracing::debug;
 
-use distribution_types::{
-    ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, RequirementSource, Verbatim,
-    VerbatimParsedUrl,
-};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
+use pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_distribution::is_same_reference;
 use uv_git::GitUrl;
 use uv_normalize::PackageName;

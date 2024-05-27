@@ -58,7 +58,7 @@ pub(crate) async fn run(
 
         let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
 
-        let venv = project::init_environment(&project, cache, printer)?;
+        let venv = project::init_environment(&project, preview, cache, printer)?;
 
         // Install the project requirements.
         Some(
@@ -85,10 +85,10 @@ pub(crate) async fn run(
         let interpreter = if let Some(project_env) = &project_env {
             project_env.interpreter().clone()
         } else if let Some(python) = python.as_ref() {
-            PythonEnvironment::from_requested_python(python, SystemPython::Allowed, cache)?
+            PythonEnvironment::from_requested_python(python, SystemPython::Allowed, preview, cache)?
                 .into_interpreter()
         } else {
-            PythonEnvironment::from_default_python(cache)?.into_interpreter()
+            PythonEnvironment::from_default_python(preview, cache)?.into_interpreter()
         };
 
         // TODO(charlie): If the environment satisfies the requirements, skip creation.

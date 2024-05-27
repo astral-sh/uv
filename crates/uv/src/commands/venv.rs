@@ -14,7 +14,7 @@ use install_wheel_rs::linker::LinkMode;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, KeyringProviderType};
+use uv_configuration::{Concurrency, KeyringProviderType, PreviewMode};
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -48,6 +48,7 @@ pub(crate) async fn venv(
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -62,6 +63,7 @@ pub(crate) async fn venv(
         system_site_packages,
         connectivity,
         seed,
+        preview,
         allow_existing,
         exclude_newer,
         native_tls,
@@ -110,6 +112,7 @@ async fn venv_impl(
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
+    preview: PreviewMode,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
@@ -120,10 +123,10 @@ async fn venv_impl(
     let interpreter = if let Some(python) = python_request.as_ref() {
         let system = uv_interpreter::SystemPython::Required;
         let request = InterpreterRequest::parse(python);
-        let sources = SourceSelector::from_settings(system);
+        let sources = SourceSelector::from_settings(system, preview);
         find_interpreter(&request, system, &sources, cache)
     } else {
-        find_default_interpreter(cache)
+        find_default_interpreter(preview, cache)
     }
     .into_diagnostic()?
     .into_diagnostic()?
@@ -225,16 +228,14 @@ async fn venv_impl(
         let requirements = if interpreter.python_tuple() < (3, 12) {
             // Only include `setuptools` and `wheel` on Python <3.12
             vec![
-                Requirement::from_pep508(pep508_rs::Requirement::from_str("pip").unwrap()).unwrap(),
-                Requirement::from_pep508(pep508_rs::Requirement::from_str("setuptools").unwrap())
-                    .unwrap(),
-                Requirement::from_pep508(pep508_rs::Requirement::from_str("wheel").unwrap())
-                    .unwrap(),
+                Requirement::from(pep508_rs::Requirement::from_str("pip").unwrap()),
+                Requirement::from(pep508_rs::Requirement::from_str("setuptools").unwrap()),
+                Requirement::from(pep508_rs::Requirement::from_str("wheel").unwrap()),
             ]
         } else {
-            vec![
-                Requirement::from_pep508(pep508_rs::Requirement::from_str("pip").unwrap()).unwrap(),
-            ]
+            vec![Requirement::from(
+                pep508_rs::Requirement::from_str("pip").unwrap(),
+            )]
         };
 
         // Resolve and install the requirements.

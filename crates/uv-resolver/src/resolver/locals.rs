@@ -203,9 +203,10 @@ mod tests {
     use anyhow::Result;
     use url::Url;
 
-    use distribution_types::{ParsedUrl, RequirementSource};
+    use distribution_types::RequirementSource;
     use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
     use pep508_rs::VerbatimUrl;
+    use pypi_types::ParsedUrl;
 
     use crate::resolver::locals::{iter_locals, Locals};
 

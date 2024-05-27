@@ -8,7 +8,7 @@ use tracing::debug;
 use url::Url;
 
 use cache_key::{CanonicalUrl, RepositoryUrl};
-use distribution_types::ParsedGitUrl;
+use pypi_types::ParsedGitUrl;
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::LockedFile;
 use uv_git::{Fetch, GitReference, GitSha, GitSource, GitUrl};

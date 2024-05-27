@@ -19,6 +19,8 @@ use uv_fs::Simplified;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
+    IO(#[from] io::Error),
+    #[error(transparent)]
     PlatformError(#[from] PlatformError),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
@@ -125,7 +127,7 @@ impl PythonDownloadRequest {
             self.os = Some(Os::from_env()?);
         }
         if self.libc.is_none() {
-            self.libc = Some(Libc::from_env()?);
+            self.libc = Some(Libc::from_env());
         }
         Ok(self)
     }

@@ -2,12 +2,12 @@ use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
+use distribution_types::{IndexLocations, Resolution};
 use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
@@ -114,7 +114,7 @@ pub(crate) async fn pip_install(
     } else {
         SystemPython::Explicit
     };
-    let venv = PythonEnvironment::find(python.as_deref(), system, &cache)?;
+    let venv = PythonEnvironment::find(python.as_deref(), system, preview, &cache)?;
 
     debug!(
         "Using Python {} environment at {}",
@@ -159,9 +159,9 @@ pub(crate) async fn pip_install(
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;
 
-    // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
-    // enough to let us remove this check. But right now, for large environments, it's an order of
-    // magnitude faster to validate the environment than to resolve the requirements.
+    // Check if the current environment satisfies the requirements.
+    // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
+    // it's an order of magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
@@ -169,6 +169,7 @@ pub(crate) async fn pip_install(
         && uv_lock.is_none()
     {
         match site_packages.satisfies(&requirements, &editables, &constraints)? {
+            // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
             } => {
@@ -181,11 +182,12 @@ pub(crate) async fn pip_install(
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
-
-                debug!(
-                    "All editables satisfied: {}",
-                    editables.iter().map(ToString::to_string).join(" | ")
-                );
+                if !editables.is_empty() {
+                    debug!(
+                        "All editables satisfied: {}",
+                        editables.iter().map(ToString::to_string).join(" | ")
+                    );
+                }
                 let num_requirements = requirements.len() + editables.len();
                 let s = if num_requirements == 1 { "" } else { "s" };
                 writeln!(

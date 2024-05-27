@@ -35,45 +35,47 @@ impl AnnotatedDist {
     /// supported in `requirements.txt`).
     pub(crate) fn to_requirements_txt(&self, include_extras: bool) -> Cow<str> {
         // If the URL is not _definitively_ an absolute `file://` URL, write it as a relative path.
-        if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
-            let given = url.verbatim();
-            match split_scheme(&given) {
-                Some((scheme, path)) => {
-                    match Scheme::parse(scheme) {
-                        Some(Scheme::File) => {
-                            if path
-                                .strip_prefix("//localhost")
-                                .filter(|path| path.starts_with('/'))
-                                .is_some()
-                            {
-                                // Always absolute; nothing to do.
-                            } else if let Some(path) = path.strip_prefix("//") {
-                                // Strip the prefix, to convert, e.g., `file://flask-3.0.3-py3-none-any.whl` to `flask-3.0.3-py3-none-any.whl`.
-                                //
-                                // However, we should allow any of the following:
-                                // - `file://flask-3.0.3-py3-none-any.whl`
-                                // - `file://C:\Users\user\flask-3.0.3-py3-none-any.whl`
-                                // - `file:///C:\Users\user\flask-3.0.3-py3-none-any.whl`
-                                if !path.starts_with("${PROJECT_ROOT}")
-                                    && !Path::new(path).has_root()
+        if self.dist.is_local() {
+            if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
+                let given = url.verbatim();
+                match split_scheme(&given) {
+                    Some((scheme, path)) => {
+                        match Scheme::parse(scheme) {
+                            Some(Scheme::File) => {
+                                if path
+                                    .strip_prefix("//localhost")
+                                    .filter(|path| path.starts_with('/'))
+                                    .is_some()
                                 {
-                                    return Cow::Owned(path.to_string());
+                                    // Always absolute; nothing to do.
+                                } else if let Some(path) = path.strip_prefix("//") {
+                                    // Strip the prefix, to convert, e.g., `file://flask-3.0.3-py3-none-any.whl` to `flask-3.0.3-py3-none-any.whl`.
+                                    //
+                                    // However, we should allow any of the following:
+                                    // - `file:///flask-3.0.3-py3-none-any.whl`
+                                    // - `file://C:\Users\user\flask-3.0.3-py3-none-any.whl`
+                                    // - `file:///C:\Users\user\flask-3.0.3-py3-none-any.whl`
+                                    if !path.starts_with("${PROJECT_ROOT}")
+                                        && !Path::new(path).has_root()
+                                    {
+                                        return Cow::Owned(path.to_string());
+                                    }
+                                } else {
+                                    // Ex) `file:./flask-3.0.3-py3-none-any.whl`
+                                    return given;
                                 }
-                            } else {
-                                // Ex) `file:./flask-3.0.3-py3-none-any.whl`
+                            }
+                            Some(_) => {}
+                            None => {
+                                // Ex) `flask @ C:\Users\user\flask-3.0.3-py3-none-any.whl`
                                 return given;
                             }
                         }
-                        Some(_) => {}
-                        None => {
-                            // Ex) `flask @ C:\Users\user\flask-3.0.3-py3-none-any.whl`
-                            return given;
-                        }
                     }
-                }
-                None => {
-                    // Ex) `flask @ flask-3.0.3-py3-none-any.whl`
-                    return given;
+                    None => {
+                        // Ex) `flask @ flask-3.0.3-py3-none-any.whl`
+                        return given;
+                    }
                 }
             }
         }

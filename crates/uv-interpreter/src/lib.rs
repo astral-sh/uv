@@ -34,7 +34,7 @@ pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
     std::env::var_os("PWD")
         .map(std::path::PathBuf::from)
-        .map(Result::Ok)
+        .map(Ok)
         .unwrap_or(std::env::current_dir())
 }
 
@@ -53,7 +53,7 @@ pub enum Error {
     PyLauncher(#[from] py_launcher::Error),
 
     #[error(transparent)]
-    NotFound(#[from] discovery::InterpreterNotFound),
+    NotFound(#[from] InterpreterNotFound),
 }
 
 // The mock interpreters are not valid on Windows so we don't have unit test coverage there
@@ -62,295 +62,365 @@ pub enum Error {
 mod tests {
     use anyhow::Result;
     use indoc::{formatdoc, indoc};
+
     use std::{
         env,
-        ffi::OsString,
+        ffi::{OsStr, OsString},
         path::{Path, PathBuf},
         str::FromStr,
     };
     use temp_env::with_vars;
     use test_log::test;
 
-    use assert_fs::{prelude::*, TempDir};
+    use assert_fs::{fixture::ChildPath, prelude::*, TempDir};
     use uv_cache::Cache;
+    use uv_configuration::PreviewMode;
 
     use crate::{
-        discovery::{self, DiscoveredInterpreter, InterpreterRequest, VersionRequest},
-        find_best_interpreter, find_default_interpreter, find_interpreter,
-        implementation::ImplementationName,
-        virtualenv::virtualenv_python_executable,
-        Error, InterpreterNotFound, InterpreterSource, PythonEnvironment, PythonVersion,
-        SourceSelector, SystemPython,
+        discovery::DiscoveredInterpreter, find_best_interpreter, find_default_interpreter,
+        find_interpreter, implementation::ImplementationName, managed::InstalledToolchains,
+        virtualenv::virtualenv_python_executable, Error, InterpreterNotFound, InterpreterRequest,
+        InterpreterSource, PythonEnvironment, PythonVersion, SourceSelector, SystemPython,
+        VersionRequest,
     };
 
-    /// Create a fake Python interpreter executable which returns fixed metadata mocking our interpreter
-    /// query script output.
-    fn create_mock_interpreter(
-        path: &Path,
-        version: &PythonVersion,
-        implementation: ImplementationName,
-        system: bool,
-    ) -> Result<()> {
-        let json = indoc! {r##"
-            {
-                "result": "success",
-                "platform": {
-                    "os": {
-                        "name": "manylinux",
-                        "major": 2,
-                        "minor": 38
-                    },
-                    "arch": "x86_64"
-                },
-                "markers": {
-                    "implementation_name": "{IMPLEMENTATION}",
-                    "implementation_version": "{FULL_VERSION}",
-                    "os_name": "posix",
-                    "platform_machine": "x86_64",
-                    "platform_python_implementation": "{IMPLEMENTATION}",
-                    "platform_release": "6.5.0-13-generic",
-                    "platform_system": "Linux",
-                    "platform_version": "#13-Ubuntu SMP PREEMPT_DYNAMIC Fri Nov  3 12:16:05 UTC 2023",
-                    "python_full_version": "{FULL_VERSION}",
-                    "python_version": "{VERSION}",
-                    "sys_platform": "linux"
-                },
-                "base_exec_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                "base_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                "prefix": "{PREFIX}",
-                "sys_executable": "{PATH}",
-                "sys_path": [
-                    "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/lib/python{VERSION}",
-                    "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
-                ],
-                "stdlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}",
-                "scheme": {
-                    "data": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                    "include": "/home/ferris/.pyenv/versions/{FULL_VERSION}/include",
-                    "platlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages",
-                    "purelib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages",
-                    "scripts": "/home/ferris/.pyenv/versions/{FULL_VERSION}/bin"
-                },
-                "virtualenv": {
-                    "data": "",
-                    "include": "include",
-                    "platlib": "lib/python{VERSION}/site-packages",
-                    "purelib": "lib/python{VERSION}/site-packages",
-                    "scripts": "bin"
-                },
-                "pointer_size": "64",
-                "gil_disabled": true
-            }
-        "##};
-
-        let json = if system {
-            json.replace("{PREFIX}", "/home/ferris/.pyenv/versions/{FULL_VERSION}")
-        } else {
-            json.replace("{PREFIX}", "/home/ferris/projects/uv/.venv")
-        };
-
-        let json = json
-            .replace(
-                "{PATH}",
-                path.to_str().expect("Path can be represented as string"),
-            )
-            .replace("{FULL_VERSION}", &version.to_string())
-            .replace("{VERSION}", &version.without_patch().to_string())
-            .replace("{IMPLEMENTATION}", implementation.as_str());
-
-        fs_err::write(
-            path,
-            formatdoc! {r##"
-            #!/bin/bash
-            echo '{json}'
-            "##},
-        )?;
-
-        fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
-
-        Ok(())
+    struct TestContext {
+        tempdir: TempDir,
+        cache: Cache,
+        toolchains: InstalledToolchains,
+        search_path: Option<Vec<PathBuf>>,
+        workdir: ChildPath,
     }
 
-    /// Create a mock Python 2 interpreter executable which returns a fixed error message mocking
-    /// invocation of Python 2 with the `-I` flag as done by our query script.
-    fn create_mock_python2_interpreter(path: &Path) -> Result<()> {
-        let output = indoc! { r"
-            Unknown option: -I
-            usage: /usr/bin/python [option] ... [-c cmd | -m mod | file | -] [arg] ...
-            Try `python -h` for more information.
-        "};
+    impl TestContext {
+        fn new() -> Result<Self> {
+            let tempdir = TempDir::new()?;
+            let workdir = tempdir.child("workdir");
+            workdir.create_dir_all()?;
 
-        fs_err::write(
-            path,
-            formatdoc! {r##"
-            #!/bin/bash
-            echo '{output}' 1>&2
-            "##},
-        )?;
-
-        fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
-
-        Ok(())
-    }
-
-    /// Create child directories in a temporary directory.
-    fn create_children<P: AsRef<Path>>(tempdir: &TempDir, names: &[P]) -> Result<Vec<PathBuf>> {
-        let paths: Vec<PathBuf> = names
-            .iter()
-            .map(|name| tempdir.child(name).to_path_buf())
-            .collect();
-        for path in &paths {
-            fs_err::create_dir_all(path)?;
+            Ok(Self {
+                tempdir,
+                cache: Cache::temp()?,
+                toolchains: InstalledToolchains::temp()?,
+                search_path: None,
+                workdir,
+            })
         }
-        Ok(paths)
-    }
 
-    /// Create fake Python interpreters the given Python versions.
-    ///
-    /// Returns a search path for the mock interpreters.
-    fn simple_mock_interpreters(tempdir: &TempDir, versions: &[&'static str]) -> Result<OsString> {
-        let kinds: Vec<_> = versions
-            .iter()
-            .map(|version| (true, ImplementationName::default(), "python", *version))
-            .collect();
-        mock_interpreters(tempdir, kinds.as_slice())
-    }
+        /// Clear the search path.
+        fn reset_search_path(&mut self) {
+            self.search_path = None;
+        }
 
-    /// Create fake Python interpreters the given Python implementations and versions.
-    ///
-    /// Returns a search path for the mock interpreters.
-    fn mock_interpreters(
-        tempdir: &TempDir,
-        kinds: &[(bool, ImplementationName, &'static str, &'static str)],
-    ) -> Result<OsString> {
-        let names: Vec<OsString> = (0..kinds.len())
-            .map(|i| OsString::from(i.to_string()))
-            .collect();
-        let paths = create_children(tempdir, names.as_slice())?;
-        for (path, (system, implementation, executable, version)) in
-            itertools::zip_eq(&paths, kinds)
+        /// Add a directory to the search path.
+        fn add_to_search_path(&mut self, path: PathBuf) {
+            match self.search_path.as_mut() {
+                Some(paths) => paths.push(path),
+                None => self.search_path = Some(vec![path]),
+            };
+        }
+
+        /// Create a new directory and add it to the search path.
+        fn new_search_path_directory(&mut self, name: impl AsRef<Path>) -> Result<ChildPath> {
+            let child = self.tempdir.child(name);
+            child.create_dir_all()?;
+            self.add_to_search_path(child.to_path_buf());
+            Ok(child)
+        }
+
+        fn run<F, R>(&self, closure: F) -> R
+        where
+            F: FnOnce() -> R,
         {
-            let python = format!("{executable}{}", std::env::consts::EXE_SUFFIX);
-            create_mock_interpreter(
-                &path.join(python),
-                &PythonVersion::from_str(version).unwrap(),
-                *implementation,
-                *system,
-            )?;
+            self.run_with_vars(&[], closure)
         }
-        Ok(env::join_paths(paths)?)
-    }
 
-    /// Create a mock virtual environment in the given directory.
-    ///
-    /// Returns the path to the virtual environment.
-    fn mock_venv(tempdir: &TempDir, version: &'static str) -> Result<PathBuf> {
-        let venv = tempdir.child(".venv");
-        let executable = virtualenv_python_executable(&venv);
-        fs_err::create_dir_all(
-            executable
-                .parent()
-                .expect("A Python executable path should always have a parent"),
-        )?;
-        create_mock_interpreter(
-            &executable,
-            &PythonVersion::from_str(version).expect("A valid Python version is used for tests"),
-            ImplementationName::default(),
-            false,
-        )?;
-        venv.child("pyvenv.cfg").touch()?;
-        Ok(venv.to_path_buf())
-    }
+        fn run_with_vars<F, R>(&self, vars: &[(&str, Option<&OsStr>)], closure: F) -> R
+        where
+            F: FnOnce() -> R,
+        {
+            let path = self
+                .search_path
+                .as_ref()
+                .map(|paths| env::join_paths(paths).unwrap());
 
-    /// Create a mock conda prefix in the given directory.
-    ///
-    /// These are like virtual environments but they look like system interpreters because `prefix` and `base_prefix` are equal.
-    ///
-    /// Returns the path to the environment.
-    fn mock_conda_prefix(tempdir: &TempDir, version: &'static str) -> Result<PathBuf> {
-        let env = tempdir.child("conda");
-        let executable = virtualenv_python_executable(&env);
-        fs_err::create_dir_all(
-            executable
-                .parent()
-                .expect("A Python executable path should always have a parent"),
-        )?;
-        create_mock_interpreter(
-            &executable,
-            &PythonVersion::from_str(version).expect("A valid Python version is used for tests"),
-            ImplementationName::default(),
-            true,
-        )?;
-        env.child("pyvenv.cfg").touch()?;
-        Ok(env.to_path_buf())
+            let mut run_vars = vec![
+                // Ensure `PATH` is used
+                ("UV_TEST_PYTHON_PATH", None),
+                ("PATH", path.as_deref()),
+                // Use the temporary toolchain directory
+                ("UV_TOOLCHAIN_DIR", Some(self.toolchains.root().as_os_str())),
+                // Set a working directory
+                ("PWD", Some(self.workdir.path().as_os_str())),
+            ];
+            for (key, value) in vars {
+                run_vars.push((key, *value));
+            }
+            with_vars(&run_vars, closure)
+        }
+
+        /// Create a fake Python interpreter executable which returns fixed metadata mocking our interpreter
+        /// query script output.
+        fn create_mock_interpreter(
+            path: &Path,
+            version: &PythonVersion,
+            implementation: ImplementationName,
+            system: bool,
+        ) -> Result<()> {
+            let json = indoc! {r##"
+                    {
+                        "result": "success",
+                        "platform": {
+                            "os": {
+                                "name": "manylinux",
+                                "major": 2,
+                                "minor": 38
+                            },
+                            "arch": "x86_64"
+                        },
+                        "markers": {
+                            "implementation_name": "{IMPLEMENTATION}",
+                            "implementation_version": "{FULL_VERSION}",
+                            "os_name": "posix",
+                            "platform_machine": "x86_64",
+                            "platform_python_implementation": "{IMPLEMENTATION}",
+                            "platform_release": "6.5.0-13-generic",
+                            "platform_system": "Linux",
+                            "platform_version": "#13-Ubuntu SMP PREEMPT_DYNAMIC Fri Nov  3 12:16:05 UTC 2023",
+                            "python_full_version": "{FULL_VERSION}",
+                            "python_version": "{VERSION}",
+                            "sys_platform": "linux"
+                        },
+                        "base_exec_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
+                        "base_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
+                        "prefix": "{PREFIX}",
+                        "sys_executable": "{PATH}",
+                        "sys_path": [
+                            "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/lib/python{VERSION}",
+                            "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
+                        ],
+                        "stdlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}",
+                        "scheme": {
+                            "data": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
+                            "include": "/home/ferris/.pyenv/versions/{FULL_VERSION}/include",
+                            "platlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages",
+                            "purelib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages",
+                            "scripts": "/home/ferris/.pyenv/versions/{FULL_VERSION}/bin"
+                        },
+                        "virtualenv": {
+                            "data": "",
+                            "include": "include",
+                            "platlib": "lib/python{VERSION}/site-packages",
+                            "purelib": "lib/python{VERSION}/site-packages",
+                            "scripts": "bin"
+                        },
+                        "pointer_size": "64",
+                        "gil_disabled": true
+                    }
+                "##};
+
+            let json = if system {
+                json.replace("{PREFIX}", "/home/ferris/.pyenv/versions/{FULL_VERSION}")
+            } else {
+                json.replace("{PREFIX}", "/home/ferris/projects/uv/.venv")
+            };
+
+            let json = json
+                .replace(
+                    "{PATH}",
+                    path.to_str().expect("Path can be represented as string"),
+                )
+                .replace("{FULL_VERSION}", &version.to_string())
+                .replace("{VERSION}", &version.without_patch().to_string())
+                .replace("{IMPLEMENTATION}", implementation.as_str());
+
+            fs_err::create_dir_all(path.parent().unwrap())?;
+            fs_err::write(
+                path,
+                formatdoc! {r##"
+                    #!/bin/bash
+                    echo '{json}'
+                    "##},
+            )?;
+
+            fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
+
+            Ok(())
+        }
+
+        /// Create a mock Python 2 interpreter executable which returns a fixed error message mocking
+        /// invocation of Python 2 with the `-I` flag as done by our query script.
+        fn create_mock_python2_interpreter(path: &Path) -> Result<()> {
+            let output = indoc! { r"
+                    Unknown option: -I
+                    usage: /usr/bin/python [option] ... [-c cmd | -m mod | file | -] [arg] ...
+                    Try `python -h` for more information.
+                "};
+
+            fs_err::write(
+                path,
+                formatdoc! {r##"
+                    #!/bin/bash
+                    echo '{output}' 1>&2
+                    "##},
+            )?;
+
+            fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
+
+            Ok(())
+        }
+
+        /// Create child directories in a temporary directory.
+        fn new_search_path_directories<P: AsRef<Path>>(
+            &mut self,
+            names: &[P],
+        ) -> Result<Vec<ChildPath>> {
+            let paths = names
+                .iter()
+                .map(|name| self.new_search_path_directory(name))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(paths)
+        }
+
+        /// Create fake Python interpreters the given Python versions.
+        ///
+        /// Adds them to the test context search path.
+        fn add_python_to_workdir(&self, name: &str, version: &str) -> Result<()> {
+            TestContext::create_mock_interpreter(
+                self.workdir.child(name).as_ref(),
+                &PythonVersion::from_str(version).expect("Test uses valid version"),
+                ImplementationName::default(),
+                true,
+            )
+        }
+
+        /// Create fake Python interpreters the given Python versions.
+        ///
+        /// Adds them to the test context search path.
+        fn add_python_versions(&mut self, versions: &[&'static str]) -> Result<()> {
+            let interpreters: Vec<_> = versions
+                .iter()
+                .map(|version| (true, ImplementationName::default(), "python", *version))
+                .collect();
+            self.add_python_interpreters(interpreters.as_slice())
+        }
+
+        /// Create fake Python interpreters the given Python implementations and versions.
+        ///
+        /// Adds them to the test context search path.
+        fn add_python_interpreters(
+            &mut self,
+            kinds: &[(bool, ImplementationName, &'static str, &'static str)],
+        ) -> Result<()> {
+            // Generate a "unique" folder name for each interpreter
+            let names: Vec<OsString> = kinds
+                .iter()
+                .map(|(system, implementation, name, version)| {
+                    OsString::from_str(&format!("{system}-{implementation}-{name}-{version}"))
+                        .unwrap()
+                })
+                .collect();
+            let paths = self.new_search_path_directories(names.as_slice())?;
+            for (path, (system, implementation, executable, version)) in
+                itertools::zip_eq(&paths, kinds)
+            {
+                let python = format!("{executable}{}", env::consts::EXE_SUFFIX);
+                Self::create_mock_interpreter(
+                    &path.join(python),
+                    &PythonVersion::from_str(version).unwrap(),
+                    *implementation,
+                    *system,
+                )?;
+            }
+            Ok(())
+        }
+
+        /// Create a mock virtual environment at the given directory
+        fn mock_venv(path: impl AsRef<Path>, version: &'static str) -> Result<()> {
+            let executable = virtualenv_python_executable(path.as_ref());
+            fs_err::create_dir_all(
+                executable
+                    .parent()
+                    .expect("A Python executable path should always have a parent"),
+            )?;
+            TestContext::create_mock_interpreter(
+                &executable,
+                &PythonVersion::from_str(version)
+                    .expect("A valid Python version is used for tests"),
+                ImplementationName::default(),
+                false,
+            )?;
+            ChildPath::new(path.as_ref().join("pyvenv.cfg")).touch()?;
+            Ok(())
+        }
+
+        /// Create a mock conda prefix at the given directory.
+        ///
+        /// These are like virtual environments but they look like system interpreters because `prefix` and `base_prefix` are equal.
+        fn mock_conda_prefix(path: impl AsRef<Path>, version: &'static str) -> Result<()> {
+            let executable = virtualenv_python_executable(&path);
+            fs_err::create_dir_all(
+                executable
+                    .parent()
+                    .expect("A Python executable path should always have a parent"),
+            )?;
+            TestContext::create_mock_interpreter(
+                &executable,
+                &PythonVersion::from_str(version)
+                    .expect("A valid Python version is used for tests"),
+                ImplementationName::default(),
+                true,
+            )?;
+            ChildPath::new(path.as_ref().join("pyvenv.cfg")).touch()?;
+            Ok(())
+        }
     }
 
     #[test]
     fn find_default_interpreter_empty_path() -> Result<()> {
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                ("PATH", Some("")),
-            ],
-            || {
-                let result = find_default_interpreter(&cache);
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
-                    ),
-                    "With an empty path, no Python installation should be detected got {result:?}"
-                );
-            },
+        context.search_path = Some(vec![]);
+        let result =
+            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache));
+        assert!(
+            matches!(
+                result,
+                Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
+            ),
+            "With an empty path, no Python installation should be detected got {result:?}"
         );
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                ("PATH", None::<OsString>),
-            ],
-            || {
-                let result = find_default_interpreter(&cache);
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
-                    ),
-                    "With an unset path, no Python installation should be detected; got {result:?}"
-                );
-            },
+        context.search_path = None;
+        let result =
+            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache));
+        assert!(
+            matches!(
+                result,
+                Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
+            ),
+            "With an unset path, no Python installation should be detected got {result:?}"
         );
 
         Ok(())
     }
 
     #[test]
-    fn find_default_interpreter_invalid_executable() -> Result<()> {
-        let cache = Cache::temp()?;
-        let tempdir = TempDir::new()?;
-        let python = tempdir.child(format!("python{}", std::env::consts::EXE_SUFFIX));
-        python.touch()?;
+    fn find_default_interpreter_unexecutable_file() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context
+            .new_search_path_directory("path")?
+            .child(format!("python{}", env::consts::EXE_SUFFIX))
+            .touch()?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                ("PATH", Some(tempdir.path().as_os_str())),
-            ],
-            || {
-                let result = find_default_interpreter(&cache);
-                assert!(
-                matches!(
-                    result,
-                    Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
-                ),
-                "With an invalid Python executable, no Python installation should be detected; got {result:?}"
-            );
-            },
+        let result =
+            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache));
+        assert!(
+            matches!(
+                result,
+                Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
+            ),
+            "With an non-executable Python, no Python installation should be detected; got {result:?}"
         );
 
         Ok(())
@@ -358,35 +428,20 @@ mod tests {
 
     #[test]
     fn find_default_interpreter_valid_executable() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let python = tempdir.child(format!("python{}", std::env::consts::EXE_SUFFIX));
-        create_mock_interpreter(
-            &python,
-            &PythonVersion::from_str("3.12.1").unwrap(),
-            ImplementationName::default(),
-            true,
-        )?;
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.1"])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                ("PATH", Some(tempdir.path().as_os_str())),
-            ],
-            || {
-                let result = find_default_interpreter(&cache);
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find the valid executable; got {result:?}"
-                );
-            },
+        let interpreter =
+            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache))??;
+        assert!(
+            matches!(
+                interpreter,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find the valid executable; got {interpreter:?}"
         );
 
         Ok(())
@@ -394,112 +449,74 @@ mod tests {
 
     #[test]
     fn find_default_interpreter_valid_executable_after_invalid() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let children = create_children(
-            &tempdir,
-            &["query-parse-error", "not-executable", "good", "empty"],
-        )?;
-
-        // Just an empty file
-        tempdir
-            .child("not-executable")
-            .child(format!("python{}", std::env::consts::EXE_SUFFIX))
-            .touch()?;
+        let mut context = TestContext::new()?;
+        let children = context.new_search_path_directories(&[
+            "query-parse-error",
+            "not-executable",
+            "empty",
+            "good",
+        ])?;
 
         // An executable file with a bad response
         #[cfg(unix)]
         fs_err::write(
-            tempdir
-                .child("query-parse-error")
-                .child(format!("python{}", std::env::consts::EXE_SUFFIX)),
+            children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
             formatdoc! {r##"
             #!/bin/bash
             echo 'foo'
             "##},
         )?;
         fs_err::set_permissions(
-            tempdir
-                .child("query-parse-error")
-                .child(format!("python{}", std::env::consts::EXE_SUFFIX))
-                .path(),
+            children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
             std::os::unix::fs::PermissionsExt::from_mode(0o770),
         )?;
 
-        // An interpreter
-        let python = tempdir
-            .child("good")
-            .child(format!("python{}", std::env::consts::EXE_SUFFIX));
-        create_mock_interpreter(
+        // A non-executable file
+        ChildPath::new(children[1].join(format!("python{}", env::consts::EXE_SUFFIX))).touch()?;
+
+        // An empty directory at `children[2]`
+
+        // An good interpreter!
+        let python = children[3].join(format!("python{}", env::consts::EXE_SUFFIX));
+        TestContext::create_mock_interpreter(
             &python,
             &PythonVersion::from_str("3.12.1").unwrap(),
             ImplementationName::default(),
             true,
         )?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(env::join_paths(
-                        [tempdir.child("missing").as_os_str()]
-                            .into_iter()
-                            .chain(children.iter().map(|child| child.as_os_str())),
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_default_interpreter(&cache);
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should skip the bad executable in favor of the good one; got {result:?}"
-                );
-                assert_eq!(
-                    result.unwrap().unwrap().interpreter().sys_executable(),
-                    python.path()
-                );
-            },
+        let found =
+            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache))??;
+        assert!(
+            matches!(
+                found,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should skip the bad executables in favor of the good one; got {found:?}"
         );
+        assert_eq!(found.interpreter().sys_executable(), python);
 
         Ok(())
     }
 
     #[test]
     fn find_default_interpreter_only_python2_executable() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let pwd = tempdir.child("pwd");
-        pwd.create_dir_all()?;
-        let cache = Cache::temp()?;
-        let python = tempdir.child(format!("python{}", std::env::consts::EXE_SUFFIX));
-        create_mock_python2_interpreter(&python)?;
+        let mut context = TestContext::new()?;
+        let python = context
+            .new_search_path_directory("python2")?
+            .child(format!("python{}", env::consts::EXE_SUFFIX));
+        TestContext::create_mock_python2_interpreter(&python)?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                ("PATH", Some(tempdir.path().as_os_str())),
-                ("PWD", Some(pwd.path().as_os_str())),
-            ],
-            || {
-                let result = find_default_interpreter(&cache);
-                assert!(
-                matches!(
-                    result,
-                    Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
-                ),
-                // TODO(zanieb): We could improve the error handling to hint this to the user
-                "If only Python 2 is available, we should not find an interpreter; got {result:?}"
-            );
-            },
+        let result = context
+            .run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache))
+            .expect("An environment should be found");
+        assert!(
+            matches!(result, Err(InterpreterNotFound::NoPythonInstallation(..))),
+            // TODO(zanieb): We could improve the error handling to hint this to the user
+            "If only Python 2 is available, we should not find an interpreter; got {result:?}"
         );
 
         Ok(())
@@ -507,132 +524,81 @@ mod tests {
 
     #[test]
     fn find_default_interpreter_skip_python2_executable() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        tempdir.child("bad").create_dir_all()?;
-        tempdir.child("good").create_dir_all()?;
-        let python2 = tempdir
-            .child("bad")
-            .child(format!("python{}", std::env::consts::EXE_SUFFIX));
-        create_mock_python2_interpreter(&python2)?;
-        let pwd = tempdir.child("pwd");
-        pwd.create_dir_all()?;
+        let mut context = TestContext::new()?;
 
-        let python3 = tempdir
-            .child("good")
-            .child(format!("python{}", std::env::consts::EXE_SUFFIX));
-        create_mock_interpreter(
+        let python2 = context
+            .new_search_path_directory("python2")?
+            .child(format!("python{}", env::consts::EXE_SUFFIX));
+        TestContext::create_mock_python2_interpreter(&python2)?;
+
+        let python3 = context
+            .new_search_path_directory("python3")?
+            .child(format!("python{}", env::consts::EXE_SUFFIX));
+        TestContext::create_mock_interpreter(
             &python3,
             &PythonVersion::from_str("3.12.1").unwrap(),
             ImplementationName::default(),
             true,
         )?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(env::join_paths([
-                        tempdir.child("bad").as_os_str(),
-                        tempdir.child("good").as_os_str(),
-                    ])?),
-                ),
-                ("PWD", Some(pwd.path().into())),
-            ],
-            || {
-                let result = find_default_interpreter(&cache);
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should skip the Python 2 installation and find the Python 3 interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    result.unwrap().unwrap().interpreter().sys_executable(),
-                    python3.path()
-                );
-            },
+        let found =
+            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache))??;
+        assert!(
+            matches!(
+                found,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should skip the Python 2 installation and find the Python 3 interpreter; got {found:?}"
         );
+        assert_eq!(found.interpreter().sys_executable(), python3.path());
 
         Ok(())
     }
 
     #[test]
     fn find_interpreter_system_python_allowed() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_interpreters(&[
+            (false, ImplementationName::CPython, "python", "3.10.0"),
+            (true, ImplementationName::CPython, "python", "3.10.1"),
+        ])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[
-                            (false, ImplementationName::CPython, "python", "3.10.0"),
-                            (true, ImplementationName::CPython, "python", "3.10.1"),
-                        ],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_interpreter(
-                    &InterpreterRequest::Version(VersionRequest::Default),
-                    SystemPython::Allowed,
-                    &SourceSelector::All,
-                    &cache,
-                )
-                .unwrap()
-                .unwrap();
-                assert_eq!(
-                    result.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                    "Should find the first interpreter regardless of system"
-                );
-            },
+        let found = context.run(|| {
+            find_interpreter(
+                &InterpreterRequest::Any,
+                SystemPython::Allowed,
+                &SourceSelector::All(PreviewMode::Disabled),
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            found.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "Should find the first interpreter regardless of system"
         );
 
         // Reverse the order of the virtual environment and system
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[
-                            (true, ImplementationName::CPython, "python", "3.10.0"),
-                            (false, ImplementationName::CPython, "python", "3.10.1"),
-                        ],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_interpreter(
-                    &InterpreterRequest::Version(VersionRequest::Default),
-                    SystemPython::Allowed,
-                    &SourceSelector::All,
-                    &cache,
-                )
-                .unwrap()
-                .unwrap();
-                assert_eq!(
-                    result.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                    "Should find the first interpreter regardless of system"
-                );
-            },
+        context.reset_search_path();
+        context.add_python_interpreters(&[
+            (true, ImplementationName::CPython, "python", "3.10.1"),
+            (false, ImplementationName::CPython, "python", "3.10.0"),
+        ])?;
+
+        let found = context.run(|| {
+            find_interpreter(
+                &InterpreterRequest::Any,
+                SystemPython::Allowed,
+                &SourceSelector::All(PreviewMode::Disabled),
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            found.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "Should find the first interpreter regardless of system"
         );
 
         Ok(())
@@ -640,40 +606,24 @@ mod tests {
 
     #[test]
     fn find_interpreter_system_python_required() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_interpreters(&[
+            (false, ImplementationName::CPython, "python", "3.10.0"),
+            (true, ImplementationName::CPython, "python", "3.10.1"),
+        ])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[
-                            (false, ImplementationName::CPython, "python", "3.10.0"),
-                            (true, ImplementationName::CPython, "python", "3.10.1"),
-                        ],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_interpreter(
-                    &InterpreterRequest::Version(VersionRequest::Default),
-                    SystemPython::Required,
-                    &SourceSelector::All,
-                    &cache,
-                )
-                .unwrap()
-                .unwrap();
-                assert_eq!(
-                    result.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                    "Should skip the virtual environment"
-                );
-            },
+        let found = context.run(|| {
+            find_interpreter(
+                &InterpreterRequest::Any,
+                SystemPython::Required,
+                &SourceSelector::All(PreviewMode::Disabled),
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            found.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "Should skip the virtual environment"
         );
 
         Ok(())
@@ -681,39 +631,24 @@ mod tests {
 
     #[test]
     fn find_interpreter_system_python_disallowed() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_interpreters(&[
+            (true, ImplementationName::CPython, "python", "3.10.0"),
+            (false, ImplementationName::CPython, "python", "3.10.1"),
+        ])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[
-                            (true, ImplementationName::CPython, "python", "3.10.0"),
-                            (false, ImplementationName::CPython, "python", "3.10.1"),
-                        ],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_interpreter(
-                    &InterpreterRequest::Version(VersionRequest::Default),
-                    SystemPython::Disallowed,
-                    &SourceSelector::All,
-                    &cache,
-                )
-                .unwrap()
-                .unwrap();
-                assert_eq!(
-                    result.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                    "Should skip the system Python"
-                );
-            },
+        let found = context.run(|| {
+            find_interpreter(
+                &InterpreterRequest::Any,
+                SystemPython::Allowed,
+                &SourceSelector::All(PreviewMode::Disabled),
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            found.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "Should skip the system Python"
         );
 
         Ok(())
@@ -721,51 +656,32 @@ mod tests {
 
     #[test]
     fn find_interpreter_version_minor() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let sources = SourceSelector::All;
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.10.1", "3.11.2", "3.12.3"])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(
-                        &tempdir,
-                        &["3.10.1", "3.11.2", "3.12.3"],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_interpreter(
-                    &InterpreterRequest::parse("3.11"),
-                    SystemPython::Allowed,
-                    &sources,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find an interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    &result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.11.2",
-                    "We should find the correct interpreter for the request"
-                );
-            },
+        let found = context.run(|| {
+            find_interpreter(
+                &InterpreterRequest::parse("3.11"),
+                SystemPython::Allowed,
+                &SourceSelector::All(PreviewMode::Disabled),
+                &context.cache,
+            )
+        })??;
+
+        assert!(
+            matches!(
+                found,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find an interpreter; got {found:?}"
+        );
+        assert_eq!(
+            &found.interpreter().python_full_version().to_string(),
+            "3.11.2",
+            "We should find the correct interpreter for the request"
         );
 
         Ok(())
@@ -773,51 +689,32 @@ mod tests {
 
     #[test]
     fn find_interpreter_version_patch() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let sources = SourceSelector::All;
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.10.1", "3.11.3", "3.11.2", "3.12.3"])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(
-                        &tempdir,
-                        &["3.10.1", "3.11.2", "3.12.3"],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_interpreter(
-                    &InterpreterRequest::parse("3.11.2"),
-                    SystemPython::Allowed,
-                    &sources,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find an interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.11.2",
-                    "We should find the correct interpreter for the request"
-                );
-            },
+        let found = context.run(|| {
+            find_interpreter(
+                &InterpreterRequest::parse("3.11.2"),
+                SystemPython::Allowed,
+                &SourceSelector::All(PreviewMode::Disabled),
+                &context.cache,
+            )
+        })??;
+
+        assert!(
+            matches!(
+                found,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find an interpreter; got {found:?}"
+        );
+        assert_eq!(
+            &found.interpreter().python_full_version().to_string(),
+            "3.11.2",
+            "We should find the correct interpreter for the request"
         );
 
         Ok(())
@@ -825,41 +722,26 @@ mod tests {
 
     #[test]
     fn find_interpreter_version_minor_no_match() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let sources = SourceSelector::All;
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.10.1", "3.11.2", "3.12.3"])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(
-                        &tempdir,
-                        &["3.10.1", "3.11.2", "3.12.3"],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_interpreter(
-                    &InterpreterRequest::parse("3.9"),
-                    SystemPython::Allowed,
-                    &sources,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Err(InterpreterNotFound::NoMatchingVersion(
-                            _,
-                            VersionRequest::MajorMinor(3, 9)
-                        )))
-                    ),
-                    "We should not find an interpreter; got {result:?}"
-                );
-            },
+        let result = context.run(|| {
+            find_interpreter(
+                &InterpreterRequest::parse("3.9"),
+                SystemPython::Allowed,
+                &SourceSelector::All(PreviewMode::Disabled),
+                &context.cache,
+            )
+        })?;
+        assert!(
+            matches!(
+                result,
+                Err(InterpreterNotFound::NoMatchingVersion(
+                    _,
+                    VersionRequest::MajorMinor(3, 9)
+                ))
+            ),
+            "We should not find an interpreter; got {result:?}"
         );
 
         Ok(())
@@ -867,41 +749,26 @@ mod tests {
 
     #[test]
     fn find_interpreter_version_patch_no_match() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let sources = SourceSelector::All;
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.10.1", "3.11.2", "3.12.3"])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(
-                        &tempdir,
-                        &["3.10.1", "3.11.2", "3.12.3"],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_interpreter(
-                    &InterpreterRequest::parse("3.11.9"),
-                    SystemPython::Allowed,
-                    &sources,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Err(InterpreterNotFound::NoMatchingVersion(
-                            _,
-                            VersionRequest::MajorMinorPatch(3, 11, 9)
-                        )))
-                    ),
-                    "We should not find an interpreter; got {result:?}"
-                );
-            },
+        let result = context.run(|| {
+            find_interpreter(
+                &InterpreterRequest::parse("3.11.9"),
+                SystemPython::Allowed,
+                &SourceSelector::All(PreviewMode::Disabled),
+                &context.cache,
+            )
+        })?;
+        assert!(
+            matches!(
+                result,
+                Err(InterpreterNotFound::NoMatchingVersion(
+                    _,
+                    VersionRequest::MajorMinorPatch(3, 11, 9)
+                ))
+            ),
+            "We should not find an interpreter; got {result:?}"
         );
 
         Ok(())
@@ -909,49 +776,32 @@ mod tests {
 
     #[test]
     fn find_best_interpreter_version_patch_exact() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.10.1", "3.11.2", "3.11.4", "3.11.3", "3.12.5"])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(
-                        &tempdir,
-                        &["3.10.1", "3.11.2", "3.11.9"],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_best_interpreter(
-                    &InterpreterRequest::parse("3.11.9"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find an interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.11.9",
-                    "We should prefer the exact match"
-                );
-            },
+        let found = context.run(|| {
+            find_best_interpreter(
+                &InterpreterRequest::parse("3.11.3"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })??;
+
+        assert!(
+            matches!(
+                found,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find an interpreter; got {found:?}"
+        );
+        assert_eq!(
+            &found.interpreter().python_full_version().to_string(),
+            "3.11.3",
+            "We should prefer the exact request"
         );
 
         Ok(())
@@ -959,144 +809,32 @@ mod tests {
 
     #[test]
     fn find_best_interpreter_version_patch_fallback() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.10.1", "3.11.2", "3.11.4", "3.11.3", "3.12.5"])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(
-                        &tempdir,
-                        &["3.10.1", "3.11.2", "3.12.3"],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_best_interpreter(
-                    &InterpreterRequest::parse("3.11.9"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find an interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.11.2",
-                    "We should fallback to the matching minor version"
-                );
-            },
+        let found = context.run(|| {
+            find_best_interpreter(
+                &InterpreterRequest::parse("3.11.11"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })??;
+
+        assert!(
+            matches!(
+                found,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find an interpreter; got {found:?}"
         );
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(
-                        &tempdir,
-                        &["3.10.1", "3.11.2", "3.11.8", "3.12.3"],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_best_interpreter(
-                    &InterpreterRequest::parse("3.11.9"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find an interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.11.2",
-                    "We fallback to the first matching minor version, not the closest patch"
-                );
-            },
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn find_best_interpreter_skips_broken_active_environment() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-
-        let venv = mock_venv(&tempdir, "3.12.0")?;
-        // Delete the `pyvenv.cfg` to "break" the environment
-        fs_err::remove_file(venv.join("pyvenv.cfg"))?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.11.1", "3.12.3"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_best_interpreter(
-                    // TODO(zanieb): Consider moving this test to `PythonEnvironment::find` instead
-                    &InterpreterRequest::parse("3.12"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::ActiveEnvironment,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find an interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.12.0",
-                    "We should prefer the active environment"
-                );
-            },
+        assert_eq!(
+            &found.interpreter().python_full_version().to_string(),
+            "3.11.2",
+            "We should fallback to the first matching minor"
         );
 
         Ok(())
@@ -1104,50 +842,28 @@ mod tests {
 
     #[test]
     fn find_best_interpreter_skips_source_without_match() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&venv, "3.12.0")?;
+        context.add_python_versions(&["3.10.1"])?;
 
-        let venv = mock_venv(&tempdir, "3.12.0")?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.1"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_best_interpreter(
-                    // TODO(zanieb): Consider moving this test to `PythonEnvironment::find` instead
-                    &InterpreterRequest::parse("3.10"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::SearchPath,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should skip the active environment in favor of the requested version; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.10.1",
-                    "We should prefer the active environment"
-                );
-            },
+        let found = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            find_best_interpreter(
+                &InterpreterRequest::parse("3.10"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })??;
+        assert!(
+            matches!(
+                found,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should skip the active environment in favor of the requested version; got {found:?}"
         );
 
         Ok(())
@@ -1155,144 +871,33 @@ mod tests {
 
     #[test]
     fn find_best_interpreter_returns_to_earlier_source_on_fallback() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&venv, "3.10.1")?;
+        context.add_python_versions(&["3.10.3"])?;
 
-        let venv = mock_venv(&tempdir, "3.10.0")?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.3"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_best_interpreter(
-                    // TODO(zanieb): Consider moving this test to `PythonEnvironment::find` instead
-                    &InterpreterRequest::parse("3.10.2"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::ActiveEnvironment,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should prefer to the active environment after relaxing; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.10.0",
-                    "We should prefer the active environment"
-                );
-            },
+        let found = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            find_best_interpreter(
+                &InterpreterRequest::parse("3.10.2"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })??;
+        assert!(
+            matches!(
+                found,
+                DiscoveredInterpreter {
+                    source: InterpreterSource::ActiveEnvironment,
+                    interpreter: _
+                }
+            ),
+            "We should prefer the active environment after relaxing; got {found:?}"
         );
-
-        Ok(())
-    }
-
-    #[test]
-    fn find_best_interpreter_virtualenv_used_if_system_not_allowed() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-
-        let venv = mock_venv(&tempdir, "3.11.1")?;
-
-        // Matching minor version
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.11.2"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.clone().into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_best_interpreter(
-                    // Request the search path Python with a matching minor
-                    &InterpreterRequest::parse("3.11.2"),
-                    crate::SystemPython::Disallowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::ActiveEnvironment,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find an interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.11.1",
-                    "We should use the active environment"
-                );
-            },
-        );
-
-        // Matching major version
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.11.2", "3.10.0"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = find_best_interpreter(
-                    // Request the search path Python with a matching minor
-                    &InterpreterRequest::parse("3.10.2"),
-                    crate::SystemPython::Disallowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Ok(Ok(DiscoveredInterpreter {
-                            source: InterpreterSource::ActiveEnvironment,
-                            interpreter: _
-                        }))
-                    ),
-                    "We should find an interpreter; got {result:?}"
-                );
-                assert_eq!(
-                    result
-                        .unwrap()
-                        .unwrap()
-                        .interpreter()
-                        .python_full_version()
-                        .to_string(),
-                    "3.11.1",
-                    "We should use the active environment"
-                );
-            },
+        assert_eq!(
+            found.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "We should prefer the active environment"
         );
 
         Ok(())
@@ -1300,32 +905,23 @@ mod tests {
 
     #[test]
     fn find_environment_from_active_environment() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let context = TestContext::new()?;
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&venv, "3.12.0")?;
 
-        let venv = mock_venv(&tempdir, "3.12.0")?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Allowed, &cache)
-                        .expect("An environment is found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.0",
-                    "We should prefer the active environment"
-                );
-            },
+        let environment =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should prefer the active environment"
         );
 
         Ok(())
@@ -1333,32 +929,24 @@ mod tests {
 
     #[test]
     fn find_environment_from_conda_prefix() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let conda_prefix = mock_conda_prefix(&tempdir, "3.12.0")?;
+        let context = TestContext::new()?;
+        let condaenv = context.tempdir.child("condaenv");
+        TestContext::mock_conda_prefix(&condaenv, "3.12.0")?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
-                ),
-                ("CONDA_PREFIX", Some(conda_prefix.into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment =
-                    // Note this environment is not treated as a system interpreter
-                    PythonEnvironment::find(None, SystemPython::Disallowed, &cache)
-                        .expect("An environment is found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.0",
-                    "We should allow the conda environment"
-                );
-            },
+        let environment =
+            context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
+                // Note this environment is not treated as a system interpreter
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Disallowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should allow the active conda environment"
         );
 
         Ok(())
@@ -1366,34 +954,48 @@ mod tests {
 
     #[test]
     fn find_environment_from_conda_prefix_and_virtualenv() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let generic = mock_venv(&tempdir, "3.12.0")?;
-        let conda = mock_conda_prefix(&tempdir, "3.12.1")?;
+        let context = TestContext::new()?;
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&venv, "3.12.0")?;
+        let condaenv = context.tempdir.child("condaenv");
+        TestContext::mock_conda_prefix(&condaenv, "3.12.1")?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.2", "3.11.3"])?),
-                ),
-                ("CONDA_PREFIX", Some(conda.into())),
-                ("VIRTUAL_ENV", Some(generic.into())),
-                ("PWD", Some(tempdir.path().into())),
+        let environment = context.run_with_vars(
+            &[
+                ("VIRTUAL_ENV", Some(venv.as_os_str())),
+                ("CONDA_PREFIX", Some(condaenv.as_os_str())),
             ],
             || {
-                let environment =
-                    // Note this environment is not treated as a system interpreter
-                    PythonEnvironment::find(None, SystemPython::Disallowed, &cache)
-                        .expect("An environment is found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.0",
-                    "We should prefer the active environment"
-                );
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
             },
+        )?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should prefer the non-conda environment"
+        );
+
+        // Put a virtual environment in the working directory
+        let venv = context.workdir.child(".venv");
+        TestContext::mock_venv(venv, "3.12.2")?;
+        let environment =
+            context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.1",
+            "We should prefer the conda environment over inactive virtual environments"
         );
 
         Ok(())
@@ -1401,31 +1003,72 @@ mod tests {
 
     #[test]
     fn find_environment_from_discovered_environment() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
 
-        let _venv = mock_venv(&tempdir, "3.12.0")?;
+        // Create a virtual environment in a parent of the workdir
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(venv, "3.12.0")?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Allowed, &cache)
-                        .expect("An environment is found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.0",
-                    "We should prefer the discovered environment"
-                );
-            },
+        let environment = context
+            .run(|| {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })
+            .expect("An environment should be found");
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should find the environment"
+        );
+
+        // Add some system versions to ensure we don't use those
+        context.add_python_versions(&["3.12.1", "3.12.2"])?;
+        let environment = context
+            .run(|| {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })
+            .expect("An environment should be found");
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should prefer the discovered virtual environment over available system versions"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_environment_skips_broken_active_environment() -> Result<()> {
+        let context = TestContext::new()?;
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&venv, "3.12.0")?;
+
+        // Delete the pyvenv cfg to break the virtualenv
+        fs_err::remove_file(venv.join("pyvenv.cfg"))?;
+
+        let environment =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            // TODO(zanieb): We should skip this environment, why don't we?
+            "We should prefer the active environment"
         );
 
         Ok(())
@@ -1433,167 +1076,98 @@ mod tests {
 
     #[test]
     fn find_environment_from_parent_interpreter() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let pwd = tempdir.child("pwd");
-        pwd.create_dir_all()?;
-        let venv = mock_venv(&tempdir, "3.12.0")?;
-        let python = tempdir.child("python").to_path_buf();
-        create_mock_interpreter(
-            &python,
-            &PythonVersion::from_str("3.12.1").unwrap(),
+        let mut context = TestContext::new()?;
+
+        let parent = context.tempdir.child("python").to_path_buf();
+        TestContext::create_mock_interpreter(
+            &parent,
+            &PythonVersion::from_str("3.12.0").unwrap(),
             ImplementationName::CPython,
+            // Note we mark this as a system interpreter instead of a virtual environment
             true,
         )?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
-                ),
-                ("UV_INTERNAL__PARENT_INTERPRETER", Some(python.into())),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(pwd.path().into())),
-            ],
+        let environment = context.run_with_vars(
+            &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Allowed, &cache)
-                        .expect("An environment is found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.1",
-                    "We should prefer parent interpreter"
-                );
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
             },
+        )?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should find the parent interpreter"
         );
 
-        Ok(())
-    }
-
-    #[test]
-    fn find_environment_from_parent_interpreter_system_explicit() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let pwd = tempdir.child("pwd");
-        pwd.create_dir_all()?;
-        let venv = mock_venv(&tempdir, "3.12.0")?;
-        let python = tempdir.child("python").to_path_buf();
-        create_mock_interpreter(
-            &python,
-            &PythonVersion::from_str("3.12.1").unwrap(),
-            ImplementationName::CPython,
-            true,
-        )?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
-                ),
-                ("UV_INTERNAL__PARENT_INTERPRETER", Some(python.into())),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(pwd.path().into())),
+        // Parent interpreters are preferred over virtual environments and system interpreters
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&venv, "3.12.2")?;
+        context.add_python_versions(&["3.12.3"])?;
+        let environment = context.run_with_vars(
+            &[
+                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
+                ("VIRTUAL_ENV", Some(venv.as_os_str())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Explicit, &cache)
-                        .expect("An environment is found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.1",
-                    "We prefer the parent interpreter even though it is system"
-                );
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
             },
+        )?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should prefer the parent interpreter"
         );
 
-        Ok(())
-    }
-
-    #[test]
-    fn find_environment_from_parent_interpreter_system_disallowed() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let pwd = tempdir.child("pwd");
-        pwd.create_dir_all()?;
-        let venv = mock_venv(&tempdir, "3.12.0")?;
-        let python = tempdir.child("python").to_path_buf();
-        create_mock_interpreter(
-            &python,
-            &PythonVersion::from_str("3.12.1").unwrap(),
-            ImplementationName::CPython,
-            true,
-        )?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
-                ),
-                ("UV_INTERNAL__PARENT_INTERPRETER", Some(python.into())),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(pwd.path().into())),
+        // Test with `SystemPython::Explicit`
+        let environment = context.run_with_vars(
+            &[
+                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
+                ("VIRTUAL_ENV", Some(venv.as_os_str())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Disallowed, &cache)
-                        .expect("An environment is found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.0",
-                    "We find the virtual environment Python because the system is explicitly not allowed"
-                );
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Explicit,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
             },
+        )?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should prefer the parent interpreter"
         );
 
-        Ok(())
-    }
-
-    #[test]
-    fn find_environment_from_parent_interpreter_system_required() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let pwd = tempdir.child("pwd");
-        pwd.create_dir_all()?;
-        let venv = mock_venv(&tempdir, "3.12.0")?;
-        let python = tempdir.child("python").to_path_buf();
-        create_mock_interpreter(
-            &python,
-            &PythonVersion::from_str("3.12.1").unwrap(),
-            ImplementationName::CPython,
-            false,
-        )?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.12.2", "3.12.3"])?),
-                ),
-                ("UV_INTERNAL__PARENT_INTERPRETER", Some(python.into())),
-                ("VIRTUAL_ENV", Some(venv.into())),
-                ("PWD", Some(pwd.path().into())),
+        // Test with `SystemPython::Disallowed`
+        let environment = context.run_with_vars(
+            &[
+                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
+                ("VIRTUAL_ENV", Some(venv.as_os_str())),
             ],
             || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Required, &cache)
-                        .expect("An environment is found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.2",
-                    "We should skip the parent interpreter since its in a virtual environment"
-                );
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Disallowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
             },
+        )?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.2",
+            "We find the virtual environment Python because a system is explicitly not allowed"
         );
 
         Ok(())
@@ -1601,77 +1175,55 @@ mod tests {
 
     #[test]
     fn find_environment_active_environment_skipped_if_system_required() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&venv, "3.9.0")?;
+        context.add_python_versions(&["3.10.0", "3.11.1", "3.12.2"])?;
 
-        let venv = mock_venv(&tempdir, "3.12.0")?;
-
-        // Without a request
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.clone().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(None, crate::SystemPython::Required, &cache)
-                        .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                    "We should skip the active environment"
-                );
-            },
+        // Without a specific request
+        let environment =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Required,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should skip the active environment"
         );
 
-        // With a requested version
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.12.2"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.clone().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(Some("3.12"), crate::SystemPython::Required, &cache)
-                        .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.12.2",
-                    "We should skip the active environment"
-                );
-            },
+        // With a requested minor version
+        let environment =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                PythonEnvironment::find(
+                    Some("3.12"),
+                    SystemPython::Required,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.2",
+            "We should skip the active environment"
         );
 
-        // Request a patch version that cannot be found
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.12.2"])?),
-                ),
-                ("VIRTUAL_ENV", Some(venv.clone().into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result =
-                    PythonEnvironment::find(Some("3.12.3"), crate::SystemPython::Required, &cache);
-                assert!(
-                    result.is_err(),
-                    "We should not find an environment; got {result:?}"
-                );
-            },
+        // With a patch version that cannot be found
+        let result = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            PythonEnvironment::find(
+                Some("3.12.3"),
+                SystemPython::Required,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        });
+        assert!(
+            result.is_err(),
+            "We should not find an environment; got {result:?}"
         );
 
         Ok(())
@@ -1679,59 +1231,96 @@ mod tests {
 
     #[test]
     fn find_environment_fails_if_no_virtualenv_and_system_not_allowed() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.10.1", "3.11.2"])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None),
-                ("UV_BOOTSTRAP_DIR", None),
-                (
-                    "PATH",
-                    Some(simple_mock_interpreters(&tempdir, &["3.10.1", "3.11.2"])?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = PythonEnvironment::find(None, crate::SystemPython::Disallowed, &cache);
-                assert!(
-                    result.is_err(),
-                    "We should not find an environment; got {result:?}"
-                );
-            },
+        let result = context.run(|| {
+            PythonEnvironment::find(
+                None,
+                SystemPython::Disallowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(
+                result,
+                Err(Error::NotFound(InterpreterNotFound::NoPythonInstallation(
+                    SourceSelector::VirtualEnv,
+                    None
+                )))
+            ),
+            "We should not find an environment; got {result:?}"
         );
 
+        // With an invalid virtual environment variable
+        let result = context.run_with_vars(
+            &[("VIRTUAL_ENV", Some(context.tempdir.as_os_str()))],
+            || {
+                PythonEnvironment::find(
+                    Some("3.12.3"),
+                    SystemPython::Required,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            },
+        );
+        assert!(
+            matches!(
+                result,
+                Err(Error::NotFound(InterpreterNotFound::NoMatchingVersion(
+                    SourceSelector::System(PreviewMode::Disabled),
+                    VersionRequest::MajorMinorPatch(3, 12, 3)
+                )))
+            ),
+            "We should not find an environment; got {result:?}"
+        );
         Ok(())
     }
 
     #[test]
     fn find_environment_allows_name_in_working_directory() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let python = tempdir.join("foobar");
-        create_mock_interpreter(
-            &python,
-            &PythonVersion::from_str("3.10.0").unwrap(),
-            ImplementationName::default(),
-            true,
-        )?;
+        let context = TestContext::new()?;
+        context.add_python_to_workdir("foobar", "3.10.0")?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", None),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(Some("foobar"), crate::SystemPython::Allowed, &cache)
-                        .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                    "We should find the `foobar` executable"
-                );
-            },
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("foobar"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should find the named executbale"
+        );
+
+        let result = context.run(|| {
+            PythonEnvironment::find(
+                None,
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(result, Err(Error::NotFound(..))),
+            "We should not find it without a specific request"
+        );
+
+        let result = context.run(|| {
+            PythonEnvironment::find(
+                Some("3.10.0"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(result, Err(Error::NotFound(..))),
+            "We should not find it via a matching version request"
         );
 
         Ok(())
@@ -1739,36 +1328,42 @@ mod tests {
 
     #[test]
     fn find_environment_allows_relative_file_path() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        tempdir.child("foo").create_dir_all()?;
-        let python = tempdir.child("foo").join("bar");
-        create_mock_interpreter(
+        let mut context = TestContext::new()?;
+        let python = context.workdir.child("foo").join("bar");
+        TestContext::create_mock_interpreter(
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             true,
         )?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", None),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some("./foo/bar"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                    "We should find the `bar` interpreter"
-                );
-            },
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("./foo/bar"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should find the `bar` executable"
+        );
+
+        context.add_python_versions(&["3.11.1"])?;
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("./foo/bar"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should prefer the `bar` executable over the system and virtualenvs"
         );
 
         Ok(())
@@ -1776,36 +1371,76 @@ mod tests {
 
     #[test]
     fn find_environment_allows_absolute_file_path() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        tempdir.child("foo").create_dir_all()?;
-        let python = tempdir.child("foo").join("bar");
-        create_mock_interpreter(
+        let mut context = TestContext::new()?;
+        let python = context.tempdir.child("foo").join("bar");
+        TestContext::create_mock_interpreter(
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             true,
         )?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", None),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some(python.to_str().expect("Test path is valid unicode")),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                    "We should find the `bar` interpreter"
-                );
-            },
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some(python.to_str().unwrap()),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should find the `bar` executable"
+        );
+
+        // With `SystemPython::Explicit
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some(python.to_str().unwrap()),
+                SystemPython::Explicit,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should allow the `bar` executable with explicit system"
+        );
+
+        let result = context.run(|| {
+            PythonEnvironment::find(
+                Some(python.to_str().unwrap()),
+                SystemPython::Disallowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(
+                result,
+                Err(Error::Discovery(
+                    crate::discovery::Error::SourceNotSelected(_, InterpreterSource::ProvidedPath)
+                ))
+            ),
+            // TODO(zanieb): We should allow this, just enforce it's a virtualenv
+            "We should not allow the direct path with disallowed system; got {result:?}"
+        );
+
+        context.add_python_versions(&["3.11.1"])?;
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some(python.to_str().unwrap()),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should prefer the `bar` executable over the system and virtualenvs"
         );
 
         Ok(())
@@ -1813,109 +1448,76 @@ mod tests {
 
     #[test]
     fn find_environment_allows_venv_directory_path() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        // Create a separate pwd to avoid ancestor discovery of the venv
-        let pwd = TempDir::new()?;
-        let cache = Cache::temp()?;
-        let venv = mock_venv(&tempdir, "3.10.0")?;
+        let mut context = TestContext::new()?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", None),
-                ("PWD", Some(pwd.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some(venv.to_str().expect("Test path is valid unicode")),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                    "We should find the venv interpreter"
-                );
-            },
+        let venv = context.tempdir.child("foo").child(".venv");
+        TestContext::mock_venv(&venv, "3.10.0")?;
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("../foo/.venv"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should find the relative venv path"
         );
 
-        Ok(())
-    }
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some(venv.to_str().unwrap()),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should find the absolute venv path"
+        );
 
-    #[test]
-    fn find_environment_allows_file_path_with_system_explicit() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        tempdir.child("foo").create_dir_all()?;
-        let python = tempdir.child("foo").join("bar");
-        create_mock_interpreter(
+        // We should allow it to be a directory that _looks_ like a virtual environmnet
+        let python = context.tempdir.child("bar").join("bin").join("python");
+        TestContext::create_mock_interpreter(
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             true,
         )?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", None),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some(python.to_str().expect("Test path is valid unicode")),
-                    crate::SystemPython::Explicit,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                    "We should find the interpreter"
-                );
-            },
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some(context.tempdir.child("bar").to_str().unwrap()),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should find the executable in the directory"
         );
 
-        Ok(())
-    }
-
-    #[test]
-    fn find_environment_does_not_allow_file_path_with_system_disallowed() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        tempdir.child("foo").create_dir_all()?;
-        let python = tempdir.child("foo").join("bar");
-        create_mock_interpreter(
-            &python,
-            &PythonVersion::from_str("3.10.0").unwrap(),
-            ImplementationName::default(),
-            true,
-        )?;
-
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", None),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result = PythonEnvironment::find(
-                    Some(python.to_str().expect("Test path is valid unicode")),
-                    crate::SystemPython::Disallowed,
-                    &cache,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Err(Error::Discovery(discovery::Error::SourceNotSelected(
-                            _,
-                            InterpreterSource::ProvidedPath
-                        )))
-                    ),
-                    "We should complain that provided paths are not allowed; got {result:?}"
-                );
-            },
+        let other_venv = context.tempdir.child("foobar").child(".venv");
+        TestContext::mock_venv(&other_venv, "3.11.1")?;
+        context.add_python_versions(&["3.12.2"])?;
+        let environment =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(other_venv.as_os_str()))], || {
+                PythonEnvironment::find(
+                    Some(venv.to_str().unwrap()),
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should prefer the requested directory over the system and active virtul environments"
         );
 
         Ok(())
@@ -1923,31 +1525,23 @@ mod tests {
 
     #[test]
     fn find_environment_treats_missing_file_path_as_file() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
-        tempdir.child("foo").create_dir_all()?;
+        let context = TestContext::new()?;
+        context.workdir.child("foo").create_dir_all()?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", None),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let result: std::prelude::v1::Result<PythonEnvironment, crate::Error> =
-                    PythonEnvironment::find(
-                        Some("./foo/bar"),
-                        crate::SystemPython::Allowed,
-                        &cache,
-                    );
-                assert!(
-                    matches!(
-                        result,
-                        Err(Error::NotFound(InterpreterNotFound::FileNotFound(_)))
-                    ),
-                    "We should not find the file; got {result:?}"
-                );
-            },
+        let result = context.run(|| {
+            PythonEnvironment::find(
+                Some("./foo/bar"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(
+                result,
+                Err(Error::NotFound(InterpreterNotFound::FileNotFound(_)))
+            ),
+            "We should not find the file; got {result:?}"
         );
 
         Ok(())
@@ -1955,34 +1549,30 @@ mod tests {
 
     #[test]
     fn find_environment_executable_name_in_search_path() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let pwd = tempdir.child("pwd");
-        pwd.create_dir_all()?;
-        let cache = Cache::temp()?;
-        let python = tempdir.join("foobar");
-        create_mock_interpreter(
+        let mut context = TestContext::new()?;
+        let python = context.tempdir.child("foo").join("bar");
+        TestContext::create_mock_interpreter(
             &python,
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             true,
         )?;
+        context.add_to_search_path(context.tempdir.child("foo").to_path_buf());
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", Some(tempdir.path().into())),
-                ("PWD", Some(pwd.path().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(Some("foobar"), crate::SystemPython::Required, &cache)
-                        .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                    "We should find the `foobar` executable"
-                );
-            },
+        let environment = context
+            .run(|| {
+                PythonEnvironment::find(
+                    Some("bar"),
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })
+            .expect("An environment should be found");
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should find the `bar` executable"
         );
 
         Ok(())
@@ -1990,31 +1580,55 @@ mod tests {
 
     #[test]
     fn find_environment_pypy() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[(true, ImplementationName::PyPy, "pypy", "3.10.1")],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(Some("pypy"), crate::SystemPython::Allowed, &cache)
-                        .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                    "We should find the pypy interpreter"
-                );
-            },
+        context.add_python_interpreters(&[(true, ImplementationName::PyPy, "pypy", "3.10.0")])?;
+        let result = context.run(|| {
+            PythonEnvironment::find(
+                None,
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(result, Err(Error::NotFound(..))),
+            "We should not the pypy interpreter if not named `python` or requested; got {result:?}"
+        );
+
+        // But we should find it
+        context.reset_search_path();
+        context.add_python_interpreters(&[(true, ImplementationName::PyPy, "python", "3.10.1")])?;
+        let environment = context
+            .run(|| {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })
+            .expect("An environment should be found");
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "We should find the pypy interpreter if it's the only one"
+        );
+
+        let environment = context
+            .run(|| {
+                PythonEnvironment::find(
+                    Some("pypy"),
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })
+            .expect("An environment should be found");
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "We should find the pypy interpreter if it's requested"
         );
 
         Ok(())
@@ -2022,34 +1636,42 @@ mod tests {
 
     #[test]
     fn find_environment_pypy_request_ignores_cpython() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_interpreters(&[
+            (true, ImplementationName::CPython, "python", "3.10.0"),
+            (true, ImplementationName::PyPy, "pypy", "3.10.1"),
+        ])?;
 
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[
-                            (true, ImplementationName::CPython, "python", "3.10.0"),
-                            (true, ImplementationName::PyPy, "pypy", "3.10.1"),
-                        ],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(Some("pypy"), crate::SystemPython::Allowed, &cache)
-                        .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                    "We should skip the CPython interpreter"
-                );
-            },
+        let environment = context
+            .run(|| {
+                PythonEnvironment::find(
+                    Some("pypy"),
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })
+            .expect("An environment should be found");
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "We should skip the CPython interpreter"
+        );
+
+        let environment = context
+            .run(|| {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })
+            .expect("An environment should be found");
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should take the first interpreter without a specific request"
         );
 
         Ok(())
@@ -2057,35 +1679,24 @@ mod tests {
 
     #[test]
     fn find_environment_pypy_request_skips_wrong_versions() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_interpreters(&[
+            (true, ImplementationName::PyPy, "pypy", "3.9"),
+            (true, ImplementationName::PyPy, "pypy", "3.10.1"),
+        ])?;
 
-        // We should prefer the `pypy` executable with the requested version
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[
-                            (true, ImplementationName::PyPy, "pypy", "3.9"),
-                            (true, ImplementationName::PyPy, "pypy", "3.10.1"),
-                        ],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment =
-                    PythonEnvironment::find(Some("pypy3.10"), crate::SystemPython::Allowed, &cache)
-                        .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                    "We should skip the first interpreter"
-                );
-            },
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("pypy3.10"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "We should skip the first interpreter"
         );
 
         Ok(())
@@ -2093,39 +1704,25 @@ mod tests {
 
     #[test]
     fn find_environment_pypy_finds_executable_with_version_name() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
+        context.add_python_interpreters(&[
+            (true, ImplementationName::PyPy, "pypy3.9", "3.10.0"), // We don't consider this one because of the executable name
+            (true, ImplementationName::PyPy, "pypy3.10", "3.10.1"),
+            (true, ImplementationName::PyPy, "pypy", "3.10.2"),
+        ])?;
 
-        // We should find executables that include the version number
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[
-                            (true, ImplementationName::PyPy, "pypy3.9", "3.10.0"), // We don't consider this one because of the executable name
-                            (true, ImplementationName::PyPy, "pypy3.10", "3.10.1"),
-                            (true, ImplementationName::PyPy, "pypy", "3.10.2"),
-                        ],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some("pypy@3.10"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                    "We should find the one with the requested version"
-                );
-            },
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("pypy@3.10"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "We should find the requested interpreter version"
         );
 
         Ok(())
@@ -2133,71 +1730,54 @@ mod tests {
 
     #[test]
     fn find_environment_pypy_prefers_executable_with_implementation_name() -> Result<()> {
-        let tempdir = TempDir::new()?;
-        let cache = Cache::temp()?;
+        let mut context = TestContext::new()?;
 
-        // We should prefer `pypy` executables over `python` executables even if they are both pypy
-        create_mock_interpreter(
-            &tempdir.path().join("python"),
+        // We should prefer `pypy` executables over `python` executables in the same directory
+        // even if they are both pypy
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python"),
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::PyPy,
             true,
         )?;
-        create_mock_interpreter(
-            &tempdir.path().join("pypy"),
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("pypy"),
             &PythonVersion::from_str("3.10.1").unwrap(),
             ImplementationName::PyPy,
             true,
         )?;
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", Some(tempdir.path().into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some("pypy@3.10"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                );
-            },
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("pypy@3.10"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.1",
         );
 
-        // But we should not prefer `pypy` executables over `python` executables that
-        // appear earlier in the search path
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                (
-                    "PATH",
-                    Some(mock_interpreters(
-                        &tempdir,
-                        &[
-                            (true, ImplementationName::PyPy, "python", "3.10.0"),
-                            (true, ImplementationName::PyPy, "pypy", "3.10.1"),
-                        ],
-                    )?),
-                ),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some("pypy@3.10"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                );
-            },
+        // But `python` executables earlier in the search path will take precedence
+        context.reset_search_path();
+        context.add_python_interpreters(&[
+            (true, ImplementationName::PyPy, "python", "3.10.2"),
+            (true, ImplementationName::PyPy, "pypy", "3.10.3"),
+        ])?;
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("pypy@3.10"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.2",
         );
 
         Ok(())
@@ -2205,74 +1785,62 @@ mod tests {
 
     #[test]
     fn find_environment_pypy_prefers_executable_with_version() -> Result<()> {
-        let cache = Cache::temp()?;
-
-        // We should prefer executables with the version number over those with implementation names
-        let tempdir = TempDir::new()?;
-        create_mock_interpreter(
-            &tempdir.path().join("pypy3.10"),
+        let mut context = TestContext::new()?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("pypy3.10"),
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::PyPy,
             true,
         )?;
-        create_mock_interpreter(
-            &tempdir.path().join("pypy"),
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("pypy"),
             &PythonVersion::from_str("3.10.1").unwrap(),
             ImplementationName::PyPy,
             true,
         )?;
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", Some(tempdir.path().into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some("pypy@3.10"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.0",
-                );
-            },
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("pypy@3.10"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should prefer executables with the version number over those with implementation names"
         );
 
-        // But we'll prefer an implementation name executable over a generic name with a version
-        let tempdir = TempDir::new()?;
-        create_mock_interpreter(
-            &tempdir.path().join("python3.10"),
+        let mut context = TestContext::new()?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python3.10"),
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::PyPy,
             true,
         )?;
-        create_mock_interpreter(
-            &tempdir.path().join("pypy"),
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("pypy"),
             &PythonVersion::from_str("3.10.1").unwrap(),
             ImplementationName::PyPy,
             true,
         )?;
-        with_vars(
-            [
-                ("UV_TEST_PYTHON_PATH", None::<OsString>),
-                ("PATH", Some(tempdir.path().into())),
-                ("PWD", Some(tempdir.path().into())),
-            ],
-            || {
-                let environment = PythonEnvironment::find(
-                    Some("pypy@3.10"),
-                    crate::SystemPython::Allowed,
-                    &cache,
-                )
-                .expect("Environment should be found");
-                assert_eq!(
-                    environment.interpreter().python_full_version().to_string(),
-                    "3.10.1",
-                );
-            },
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let environment = context.run(|| {
+            PythonEnvironment::find(
+                Some("pypy@3.10"),
+                SystemPython::Allowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "We should prefer an implementation name executable over a generic name with a version"
         );
 
         Ok(())

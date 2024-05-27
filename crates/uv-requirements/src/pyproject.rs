@@ -20,9 +20,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{ParsedUrlError, Requirement, RequirementSource, Requirements};
+use distribution_types::{Requirement, RequirementSource, Requirements};
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{RequirementOrigin, VerbatimUrl, VersionOrUrl};
+use pep508_rs::{Pep508Error, RequirementOrigin, VerbatimUrl, VersionOrUrl};
+use pypi_types::VerbatimParsedUrl;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_git::GitReference;
@@ -34,7 +35,7 @@ use crate::ExtrasSpecification;
 #[derive(Debug, Error)]
 pub enum Pep621Error {
     #[error(transparent)]
-    Pep508(#[from] pep508_rs::Pep508Error),
+    Pep508(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
     #[error("Must specify a `[project]` section alongside `[tool.uv.sources]`")]
     MissingProjectSection,
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
@@ -43,12 +44,16 @@ pub enum Pep621Error {
     LoweringError(PackageName, #[source] LoweringError),
 }
 
+impl From<Pep508Error<VerbatimParsedUrl>> for Pep621Error {
+    fn from(error: Pep508Error<VerbatimParsedUrl>) -> Self {
+        Self::Pep508(Box::new(error))
+    }
+}
+
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.
 #[derive(Debug, Error)]
 pub enum LoweringError {
-    #[error("Invalid URL structure")]
-    DirectUrl(#[from] Box<ParsedUrlError>),
     #[error("Unsupported path (can't convert to URL): `{}`", _0.user_display())]
     PathToUrl(PathBuf),
     #[error("Package is not included as workspace package in `tool.uv.workspace`")]
@@ -385,7 +390,7 @@ pub(crate) fn lower_requirements(
 
 /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
 pub(crate) fn lower_requirement(
-    requirement: pep508_rs::Requirement,
+    requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
     project_name: &PackageName,
     project_dir: &Path,
     project_sources: &BTreeMap<PackageName, Source>,
@@ -420,7 +425,7 @@ pub(crate) fn lower_requirement(
                 requirement.name
             );
         }
-        return Ok(Requirement::from_pep508(requirement)?);
+        return Ok(Requirement::from(requirement));
     };
 
     if preview.is_disabled() {
@@ -680,7 +685,7 @@ mod test {
             path.as_ref(),
             PreviewMode::Enabled,
         )
-        .with_context(|| format!("Failed to parse `{}`", path.user_display()))
+        .with_context(|| format!("Failed to parse: `{}`", path.user_display()))
     }
 
     fn format_err(input: &str) -> String {
@@ -709,7 +714,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
           Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
         "###);
@@ -730,7 +735,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
           Caused by: Can only specify one of rev, tag, or branch
         "###);
@@ -752,7 +757,7 @@ mod test {
 
         // TODO(konsti): This should tell you the set of valid fields
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: TOML parse error at line 9, column 8
           |
         9 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
@@ -778,7 +783,7 @@ mod test {
 
         // TODO(konsti): This should tell you the set of valid fields
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: TOML parse error at line 9, column 8
           |
         9 | tqdm = { path = "tqdm", index = "torch" }
@@ -817,7 +822,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: TOML parse error at line 9, column 16
           |
         9 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
@@ -843,7 +848,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: TOML parse error at line 9, column 8
           |
         9 | tqdm = { url = "§invalid#+#*Ä" }
@@ -868,7 +873,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
           Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
         "###);
@@ -889,7 +894,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: Failed to parse entry for: `tqdm`
           Caused by: Package is not included as workspace package in `tool.uv.workspace`
         "###);
@@ -910,7 +915,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: pyproject.toml section is declared as dynamic, but must be static: `project.dependencies`
         "###);
     }
@@ -923,7 +928,7 @@ mod test {
         "};
 
         assert_snapshot!(format_err(input), @r###"
-        error: Failed to parse `pyproject.toml`
+        error: Failed to parse: `pyproject.toml`
           Caused by: Must specify a `[project]` section alongside `[tool.uv.sources]`
         "###);
     }
