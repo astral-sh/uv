@@ -2,6 +2,7 @@ use itertools::Either;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use uv_configuration::PreviewMode;
 
 use same_file::is_same_file;
 
@@ -26,12 +27,17 @@ struct PythonEnvironmentShared {
 
 impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] from a user request.
-    pub fn find(python: Option<&str>, system: SystemPython, cache: &Cache) -> Result<Self, Error> {
+    pub fn find(
+        python: Option<&str>,
+        system: SystemPython,
+        preview: PreviewMode,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
         // Detect the current Python interpreter.
         if let Some(python) = python {
-            Self::from_requested_python(python, system, cache)
+            Self::from_requested_python(python, system, preview, cache)
         } else if system.is_preferred() {
-            Self::from_default_python(cache)
+            Self::from_default_python(preview, cache)
         } else {
             // First check for a parent intepreter
             // We gate this check to avoid an extra log message when it is not set
@@ -46,7 +52,9 @@ impl PythonEnvironment {
             // Then a virtual environment
             match Self::from_virtualenv(cache) {
                 Ok(venv) => Ok(venv),
-                Err(Error::NotFound(_)) if system.is_allowed() => Self::from_default_python(cache),
+                Err(Error::NotFound(_)) if system.is_allowed() => {
+                    Self::from_default_python(preview, cache)
+                }
                 Err(err) => Err(err),
             }
         }
@@ -110,9 +118,10 @@ impl PythonEnvironment {
     pub fn from_requested_python(
         request: &str,
         system: SystemPython,
+        preview: PreviewMode,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let sources = SourceSelector::from_settings(system);
+        let sources = SourceSelector::from_settings(system, preview);
         let request = InterpreterRequest::parse(request);
         let interpreter = find_interpreter(&request, system, &sources, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
@@ -122,8 +131,8 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] for the default Python interpreter.
-    pub fn from_default_python(cache: &Cache) -> Result<Self, Error> {
-        let interpreter = find_default_interpreter(cache)??.into_interpreter();
+    pub fn from_default_python(preview: PreviewMode, cache: &Cache) -> Result<Self, Error> {
+        let interpreter = find_default_interpreter(preview, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.prefix().to_path_buf(),
             interpreter,

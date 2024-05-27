@@ -170,7 +170,7 @@ pub(crate) async fn pip_compile(
     };
     let interpreter = if let Some(python) = python.as_ref() {
         let request = InterpreterRequest::parse(python);
-        let sources = SourceSelector::from_settings(system);
+        let sources = SourceSelector::from_settings(system, preview);
         find_interpreter(&request, system, &sources, &cache)??
     } else {
         let request = if let Some(version) = python_version.as_ref() {
@@ -179,7 +179,7 @@ pub(crate) async fn pip_compile(
         } else {
             InterpreterRequest::default()
         };
-        find_best_interpreter(&request, system, &cache)??
+        find_best_interpreter(&request, system, preview, &cache)??
     }
     .into_interpreter();
 

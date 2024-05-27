@@ -10,6 +10,7 @@ use unicode_width::UnicodeWidthStr;
 
 use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
+use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_interpreter::{PythonEnvironment, SystemPython};
@@ -29,6 +30,7 @@ pub(crate) fn pip_list(
     strict: bool,
     python: Option<&str>,
     system: bool,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -38,7 +40,7 @@ pub(crate) fn pip_list(
     } else {
         SystemPython::Allowed
     };
-    let venv = PythonEnvironment::find(python, system, cache)?;
+    let venv = PythonEnvironment::find(python, system, preview, cache)?;
 
     debug!(
         "Using Python {} environment at {}",

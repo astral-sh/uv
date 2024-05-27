@@ -34,7 +34,7 @@ pub(crate) async fn lock(
     let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(&project, cache, printer)?;
+    let venv = project::init_environment(&project, preview, cache, printer)?;
 
     // TODO(zanieb): Support client configuration
     let client_builder = BaseClientBuilder::default();
