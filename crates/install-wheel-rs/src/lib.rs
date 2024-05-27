@@ -70,7 +70,7 @@ pub enum Error {
     RecordCsv(#[from] csv::Error),
     #[error("Broken virtualenv: {0}")]
     BrokenVenv(String),
-    #[error("Unable to create Windows launch for {0} (only x64_64 is supported)")]
+    #[error("Unable to create Windows launcher for {0} (only x64_64 is supported)")]
     UnsupportedWindowsArch(&'static str),
     #[error("Unable to create Windows launcher on non-Windows platform")]
     NotWindows,
