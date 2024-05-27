@@ -7,7 +7,7 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{get_bin, uv_snapshot, TestContext};
+use crate::common::{get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
@@ -33,6 +33,8 @@ fn sync_command(context: &TestContext) -> Command {
         .arg("sync")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir);
