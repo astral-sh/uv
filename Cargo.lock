@@ -4927,6 +4927,7 @@ dependencies = [
  "uv-client",
  "uv-extract",
  "uv-fs",
+ "uv-state",
  "uv-warnings",
  "which",
  "winapi",
@@ -5032,6 +5033,15 @@ dependencies = [
  "uv-normalize",
  "uv-types",
  "uv-warnings",
+]
+
+[[package]]
+name = "uv-state"
+version = "0.0.1"
+dependencies = [
+ "directories",
+ "fs-err",
+ "tempfile",
 ]
 
 [[package]]

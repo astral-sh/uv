@@ -23,6 +23,7 @@ uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
+uv-state = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }

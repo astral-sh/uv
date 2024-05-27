@@ -19,6 +19,8 @@ use uv_fs::Simplified;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
+    IO(#[from] io::Error),
+    #[error(transparent)]
     PlatformError(#[from] PlatformError),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
