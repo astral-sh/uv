@@ -47,6 +47,14 @@ impl BuildableSource<'_> {
             Self::Url(_) => None,
         }
     }
+
+    /// Returns `true` if the source is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Dist(dist) => dist.is_editable(),
+            Self::Url(url) => url.is_editable(),
+        }
+    }
 }
 
 impl std::fmt::Display for BuildableSource<'_> {
@@ -75,6 +83,14 @@ impl<'a> SourceUrl<'a> {
             Self::Git(dist) => dist.url,
             Self::Path(dist) => dist.url,
             Self::Directory(dist) => dist.url,
+        }
+    }
+
+    /// Returns `true` if the source is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Directory(dist) => dist.editable,
+            _ => false,
         }
     }
 }
@@ -151,6 +167,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 pub struct DirectorySourceUrl<'a> {
     pub url: &'a Url,
     pub path: Cow<'a, Path>,
+    pub editable: bool,
 }
 
 impl std::fmt::Display for DirectorySourceUrl<'_> {
@@ -164,6 +181,7 @@ impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
         Self {
             url: &dist.url,
             path: Cow::Borrowed(&dist.path),
+            editable: dist.editable,
         }
     }
 }

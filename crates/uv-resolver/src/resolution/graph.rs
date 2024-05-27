@@ -16,7 +16,6 @@ use pypi_types::{ParsedUrlError, Yanked};
 use uv_normalize::PackageName;
 
 use crate::dependency_provider::UvDependencyProvider;
-use crate::editables::Editables;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
@@ -34,8 +33,6 @@ use crate::{
 pub struct ResolutionGraph {
     /// The underlying graph.
     pub(crate) petgraph: petgraph::graph::Graph<AnnotatedDist, Range<Version>, petgraph::Directed>,
-    /// The set of editable requirements in this resolution.
-    pub(crate) editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
 }
@@ -50,7 +47,6 @@ impl ResolutionGraph {
         distributions: &FxOnceMap<VersionId, Arc<MetadataResponse>>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
-        editables: Editables,
     ) -> anyhow::Result<Self, ResolveError> {
         // Collect and validate the extras.
         let mut extras = FxHashMap::default();
@@ -102,50 +98,34 @@ impl ResolutionGraph {
                     marker: None,
                     url: Some(url),
                 } => {
-                    if let Some(editable) = editables.get(name) {
-                        if editable.metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
-                        } else {
-                            let dist = Dist::from_editable(name.clone(), editable.built.clone())?;
+                    let dist = PubGrubDistribution::from_url(name, url);
 
-                            diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                                dist: dist.into(),
-                                extra: extra.clone(),
-                            });
-                        }
+                    let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
+                        panic!(
+                            "Every package should have metadata: {:?}",
+                            dist.version_id()
+                        )
+                    });
+
+                    let MetadataResponse::Found(archive) = &*response else {
+                        panic!(
+                            "Every package should have metadata: {:?}",
+                            dist.version_id()
+                        )
+                    };
+
+                    if archive.metadata.provides_extras.contains(extra) {
+                        extras
+                            .entry(name.clone())
+                            .or_insert_with(Vec::new)
+                            .push(extra.clone());
                     } else {
-                        let dist = PubGrubDistribution::from_url(name, url);
+                        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
 
-                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.version_id()
-                            )
+                        diagnostics.push(ResolutionDiagnostic::MissingExtra {
+                            dist: dist.into(),
+                            extra: extra.clone(),
                         });
-
-                        let MetadataResponse::Found(archive) = &*response else {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.version_id()
-                            )
-                        };
-
-                        if archive.metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
-                        } else {
-                            let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
-
-                            diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                                dist: dist.into(),
-                                extra: extra.clone(),
-                            });
-                        }
                     }
                 }
                 _ => {}
@@ -254,75 +234,60 @@ impl ResolutionGraph {
                     url: Some(url),
                 } => {
                     // Create the distribution.
-                    if let Some(editable) = editables.get(name) {
-                        let dist = Dist::from_editable(name.clone(), editable.built.clone())?;
 
-                        // Add the distribution to the graph.
-                        let index = petgraph.add_node(AnnotatedDist {
-                            dist: dist.into(),
-                            extras: editable.built.extras.clone(),
-                            hashes: vec![],
-                            metadata: editable.metadata.clone(),
-                        });
-                        inverse.insert(name, index);
-                    } else {
-                        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
+                    let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
 
-                        // Extract the hashes, preserving those that were already present in the
-                        // lockfile if necessary.
-                        let hashes = if let Some(digests) = preferences
-                            .match_hashes(name, version)
-                            .filter(|digests| !digests.is_empty())
-                        {
-                            digests.to_vec()
-                        } else if let Some(metadata_response) =
-                            distributions.get(&dist.version_id())
-                        {
-                            if let MetadataResponse::Found(ref archive) = *metadata_response {
-                                let mut digests = archive.hashes.clone();
-                                digests.sort_unstable();
-                                digests
-                            } else {
-                                vec![]
-                            }
+                    // Extract the hashes, preserving those that were already present in the
+                    // lockfile if necessary.
+                    let hashes = if let Some(digests) = preferences
+                        .match_hashes(name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        digests.to_vec()
+                    } else if let Some(metadata_response) = distributions.get(&dist.version_id()) {
+                        if let MetadataResponse::Found(ref archive) = *metadata_response {
+                            let mut digests = archive.hashes.clone();
+                            digests.sort_unstable();
+                            digests
                         } else {
                             vec![]
-                        };
-
-                        // Extract the metadata.
-                        let metadata = {
-                            let dist = PubGrubDistribution::from_url(name, url);
-
-                            let response =
-                                distributions.get(&dist.version_id()).unwrap_or_else(|| {
-                                    panic!(
-                                        "Every package should have metadata: {:?}",
-                                        dist.version_id()
-                                    )
-                                });
-
-                            let MetadataResponse::Found(archive) = &*response else {
-                                panic!(
-                                    "Every package should have metadata: {:?}",
-                                    dist.version_id()
-                                )
-                            };
-
-                            archive.metadata.clone()
-                        };
-
-                        // Extract the extras.
-                        let extras = extras.get(name).cloned().unwrap_or_default();
-
-                        // Add the distribution to the graph.
-                        let index = petgraph.add_node(AnnotatedDist {
-                            dist: dist.into(),
-                            extras,
-                            hashes,
-                            metadata,
-                        });
-                        inverse.insert(name, index);
+                        }
+                    } else {
+                        vec![]
                     };
+
+                    // Extract the metadata.
+                    let metadata = {
+                        let dist = PubGrubDistribution::from_url(name, url);
+
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        });
+
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        };
+
+                        archive.metadata.clone()
+                    };
+
+                    // Extract the extras.
+                    let extras = extras.get(name).cloned().unwrap_or_default();
+
+                    // Add the distribution to the graph.
+                    let index = petgraph.add_node(AnnotatedDist {
+                        dist: dist.into(),
+                        extras,
+                        hashes,
+                        metadata,
+                    });
+                    inverse.insert(name, index);
                 }
                 _ => {}
             };
@@ -380,7 +345,6 @@ impl ResolutionGraph {
 
         Ok(Self {
             petgraph,
-            editables,
             diagnostics,
         })
     }
@@ -520,20 +484,6 @@ impl ResolutionGraph {
                 };
                 add_marker_params_from_tree(marker_tree, &mut seen_marker_values);
             }
-        }
-
-        // Ensure that we consider markers from direct dependencies.
-        let direct_reqs = manifest.requirements.iter().chain(
-            manifest
-                .editables
-                .iter()
-                .flat_map(|editable| &editable.requirements.dependencies),
-        );
-        for direct_req in manifest.apply(direct_reqs) {
-            let Some(ref marker_tree) = direct_req.marker else {
-                continue;
-            };
-            add_marker_params_from_tree(marker_tree, &mut seen_marker_values);
         }
 
         // Generate the final marker expression as a conjunction of

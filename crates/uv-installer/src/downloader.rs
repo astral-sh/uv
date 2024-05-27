@@ -1,23 +1,19 @@
 use std::cmp::Reverse;
-use std::path::Path;
 use std::sync::Arc;
 
-use futures::{stream::FuturesUnordered, FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
 use pep508_rs::PackageName;
 use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, Dist, Hashed, Identifier, LocalEditable, LocalEditables,
-    RemoteSource,
+    BuildableSource, CachedDist, Dist, Hashed, Identifier, LocalEditable, RemoteSource,
 };
 use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_types::{BuildContext, HashStrategy, InFlight};
-
-use crate::editable::BuiltEditable;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -113,55 +109,6 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
         }
 
         Ok(wheels)
-    }
-
-    /// Build a set of editables
-    #[instrument(skip_all)]
-    pub async fn build_editables(
-        &self,
-        editables: LocalEditables,
-        editable_wheel_dir: &Path,
-    ) -> Result<Vec<BuiltEditable>, Error> {
-        // Build editables in parallel
-        let mut results = Vec::with_capacity(editables.len());
-        let mut fetches = editables
-            .into_iter()
-            .map(|editable| async move {
-                let task_id = self
-                    .reporter
-                    .as_ref()
-                    .map(|reporter| reporter.on_editable_build_start(&editable));
-                let (local_wheel, metadata) = self
-                    .database
-                    .build_wheel_editable(&editable, editable_wheel_dir)
-                    .await
-                    .map_err(Error::Editable)?;
-                let cached_dist = CachedDist::from(local_wheel);
-                if let Some(task_id) = task_id {
-                    if let Some(reporter) = &self.reporter {
-                        reporter.on_editable_build_complete(&editable, task_id);
-                    }
-                }
-                Ok::<_, Error>((editable, cached_dist, metadata))
-            })
-            .collect::<FuturesUnordered<_>>();
-
-        while let Some((editable, wheel, metadata)) = fetches.next().await.transpose()? {
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_progress(&wheel);
-            }
-            results.push(BuiltEditable {
-                editable,
-                wheel,
-                metadata,
-            });
-        }
-
-        if let Some(reporter) = self.reporter.as_ref() {
-            reporter.on_complete();
-        }
-
-        Ok(results)
     }
 
     /// Download, build, and unzip a single wheel.

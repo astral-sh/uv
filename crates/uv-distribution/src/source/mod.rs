@@ -16,8 +16,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, DirectorySourceDist, DirectorySourceUrl, Dist, FileLocation, GitSourceUrl,
-    HashPolicy, Hashed, LocalEditable, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
+    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
@@ -165,9 +165,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
-                self.source_tree(source, &DirectorySourceUrl::from(dist), tags, hashes)
-                    .boxed_local()
-                    .await?
+                if dist.editable {
+                    self.editable(source, &DirectorySourceUrl::from(dist), tags, hashes)
+                        .boxed_local()
+                        .await?
+                } else {
+                    self.source_tree(source, &DirectorySourceUrl::from(dist), tags, hashes)
+                        .boxed_local()
+                        .await?
+                }
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 let cache_shard = self
@@ -217,9 +223,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
-                self.source_tree(source, resource, tags, hashes)
-                    .boxed_local()
-                    .await?
+                if resource.editable {
+                    self.editable(source, resource, tags, hashes)
+                        .boxed_local()
+                        .await?
+                } else {
+                    self.source_tree(source, resource, tags, hashes)
+                        .boxed_local()
+                        .await?
+                }
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 let cache_shard = self.build_context.cache().shard(
@@ -320,9 +332,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
-                self.source_tree_metadata(source, &DirectorySourceUrl::from(dist), hashes)
-                    .boxed_local()
-                    .await?
+                if dist.editable {
+                    self.editable_metadata(source, &DirectorySourceUrl::from(dist), hashes)
+                        .boxed_local()
+                        .await?
+                } else {
+                    self.source_tree_metadata(source, &DirectorySourceUrl::from(dist), hashes)
+                        .boxed_local()
+                        .await?
+                }
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 let cache_shard = self
@@ -365,11 +383,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
-                self.source_tree_metadata(source, resource, hashes)
-                    .boxed_local()
-                    .await?
+                if resource.editable {
+                    self.editable_metadata(source, resource, hashes)
+                        .boxed_local()
+                        .await?
+                } else {
+                    self.source_tree_metadata(source, resource, hashes)
+                        .boxed_local()
+                        .await?
+                }
             }
-
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
@@ -1010,6 +1033,130 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(revision)
     }
 
+    /// Build a source distribution from a local editable directory (i.e., directory).
+    async fn editable(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &DirectorySourceUrl<'_>,
+        tags: &Tags,
+        hashes: HashPolicy<'_>,
+    ) -> Result<BuiltWheelMetadata, Error> {
+        // Before running the build, check that the hashes match.
+        if hashes.is_validate() {
+            return Err(Error::HashesNotSupportedEditable(source.to_string()));
+        }
+
+        let cache_shard = self.build_context.cache().shard(
+            CacheBucket::BuiltWheels,
+            WheelCache::Editable(resource.url).root(),
+        );
+
+        let _lock = lock_shard(&cache_shard).await?;
+
+        // Fetch the revision for the source distribution.
+        let revision = self
+            .source_tree_revision(source, resource, &cache_shard)
+            .await?;
+
+        // Scope all operations to the revision. Within the revision, there's no need to check for
+        // freshness, since entries have to be fresher than the revision itself.
+        let cache_shard = cache_shard.shard(revision.id());
+
+        // If the cache contains a compatible wheel, return it.
+        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
+            return Ok(built_wheel);
+        }
+
+        // Otherwise, we need to build a wheel.
+        let task = self
+            .reporter
+            .as_ref()
+            .map(|reporter| reporter.on_build_start(source));
+
+        let (disk_filename, filename, metadata) = self
+            .build_distribution(source, &resource.path, None, &cache_shard)
+            .await?;
+
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_build_complete(source, task);
+            }
+        }
+
+        // Store the metadata.
+        let metadata_entry = cache_shard.entry(METADATA);
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
+
+        Ok(BuiltWheelMetadata {
+            path: cache_shard.join(&disk_filename),
+            target: cache_shard.join(filename.stem()),
+            filename,
+            hashes: vec![],
+        })
+    }
+
+    /// Build the source distribution's metadata from a local editable directory (i.e., a directory).
+    async fn editable_metadata(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &DirectorySourceUrl<'_>,
+        hashes: HashPolicy<'_>,
+    ) -> Result<ArchiveMetadata, Error> {
+        // Before running the build, check that the hashes match.
+        if hashes.is_validate() {
+            return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
+        }
+
+        let cache_shard = self.build_context.cache().shard(
+            CacheBucket::BuiltWheels,
+            WheelCache::Editable(resource.url).root(),
+        );
+
+        let _lock = lock_shard(&cache_shard).await?;
+
+        // Fetch the revision for the source distribution.
+        let revision = self
+            .source_tree_revision(source, resource, &cache_shard)
+            .await?;
+
+        // Scope all operations to the revision. Within the revision, there's no need to check for
+        // freshness, since entries have to be fresher than the revision itself.
+        let cache_shard = cache_shard.shard(revision.id());
+
+        // If the cache contains compatible metadata, return it.
+        let metadata_entry = cache_shard.entry(METADATA);
+        if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
+            debug!("Using cached metadata for: {source}");
+            return Ok(ArchiveMetadata::from(metadata));
+        }
+
+        // Build the wheel.
+        // TODO(charlie): Add support for `prepare_metadata_for_build_editable`.
+        let task = self
+            .reporter
+            .as_ref()
+            .map(|reporter| reporter.on_build_start(source));
+
+        let (_disk_filename, _filename, metadata) = self
+            .build_distribution(source, &resource.path, None, &cache_shard)
+            .await?;
+
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_build_complete(source, task);
+            }
+        }
+
+        // Store the metadata.
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
+
+        Ok(ArchiveMetadata::from(metadata))
+    }
+
     /// Build a source distribution from a Git repository.
     async fn git(
         &self,
@@ -1314,7 +1461,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 subdirectory,
                 &source.to_string(),
                 source.as_dist(),
-                BuildKind::Wheel,
+                if source.is_editable() {
+                    BuildKind::Editable
+                } else {
+                    BuildKind::Wheel
+                },
             )
             .await
             .map_err(|err| Error::Build(source.to_string(), err))?
@@ -1408,49 +1559,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         validate(source, &metadata)?;
 
         Ok(Some(metadata))
-    }
-
-    /// Build a single directory into an editable wheel
-    pub async fn build_editable(
-        &self,
-        editable: &LocalEditable,
-        editable_wheel_dir: &Path,
-    ) -> Result<(Dist, String, WheelFilename, Metadata23), Error> {
-        debug!("Building (editable) {editable}");
-
-        // Verify that the editable exists.
-        if !editable.path.exists() {
-            return Err(Error::NotFound(editable.path.clone()));
-        }
-
-        // Build the wheel.
-        let disk_filename = self
-            .build_context
-            .setup_build(
-                &editable.path,
-                None,
-                &editable.to_string(),
-                None,
-                BuildKind::Editable,
-            )
-            .await
-            .map_err(|err| Error::BuildEditable(editable.to_string(), err))?
-            .wheel(editable_wheel_dir)
-            .await
-            .map_err(|err| Error::BuildEditable(editable.to_string(), err))?;
-        let filename = WheelFilename::from_str(&disk_filename)?;
-
-        // We finally have the name of the package and can construct the dist.
-        let dist = Dist::Source(SourceDist::Directory(DirectorySourceDist {
-            name: filename.name.clone(),
-            url: editable.url().clone(),
-            path: editable.path.clone(),
-            editable: true,
-        }));
-        let metadata = read_wheel_metadata(&filename, editable_wheel_dir.join(&disk_filename))?;
-
-        debug!("Finished building (editable): {dist}");
-        Ok((dist, disk_filename, filename, metadata))
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.

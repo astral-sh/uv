@@ -16,11 +16,11 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, IndexLocations,
-    LocalEditable, Name, SourceDist,
+    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, IndexLocations, Name,
+    SourceDist,
 };
 use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata23};
+use pypi_types::HashDigest;
 use uv_cache::{ArchiveId, ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, WheelCache};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -131,32 +131,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
             }
         }
-    }
-
-    /// Build a directory into an editable wheel.
-    pub async fn build_wheel_editable(
-        &self,
-        editable: &LocalEditable,
-        editable_wheel_dir: &Path,
-    ) -> Result<(LocalWheel, Metadata23), Error> {
-        // Build the wheel.
-        let (dist, disk_filename, filename, metadata) = self
-            .builder
-            .build_editable(editable, editable_wheel_dir)
-            .await?;
-
-        // Unzip into the editable wheel directory.
-        let path = editable_wheel_dir.join(&disk_filename);
-        let target = editable_wheel_dir.join(cache_key::digest(&editable.path));
-        let id = self.unzip_wheel(&path, &target).await?;
-        let wheel = LocalWheel {
-            dist,
-            filename,
-            archive: self.build_context.cache().archive(&id),
-            hashes: vec![],
-        };
-
-        Ok((wheel, metadata))
     }
 
     /// Fetch a wheel from the cache or download it from the index.
@@ -443,6 +417,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .download_and_build_metadata(source, hashes, &self.client)
             .boxed_local()
             .await?;
+
         Ok(metadata)
     }
 

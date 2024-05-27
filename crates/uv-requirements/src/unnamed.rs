@@ -224,6 +224,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 SourceUrl::Directory(DirectorySourceUrl {
                     url: &requirement.url.verbatim,
                     path: Cow::Borrowed(&parsed_path_url.path),
+                    editable: parsed_path_url.editable,
                 })
             }
             // If it's not a directory, assume it's a file.

@@ -66,8 +66,6 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<Requirement>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
-    /// Package to install as editable installs
-    pub editables: Vec<EditableRequirement>,
     /// The source trees from which to extract requirements.
     pub source_trees: Vec<PathBuf>,
     /// The extras used to collect requirements.
@@ -121,13 +119,18 @@ impl RequirementsSpecification {
                         .requirements
                         .into_iter()
                         .map(UnresolvedRequirementSpecification::from)
+                        .chain(
+                            requirements_txt
+                                .editables
+                                .into_iter()
+                                .map(UnresolvedRequirementSpecification::from),
+                        )
                         .collect(),
                     constraints: requirements_txt
                         .constraints
                         .into_iter()
                         .map(Requirement::from)
                         .collect(),
-                    editables: requirements_txt.editables,
                     index_url: requirements_txt.index_url.map(IndexUrl::from),
                     extra_index_urls: requirements_txt
                         .extra_index_urls
@@ -222,22 +225,23 @@ impl RequirementsSpecification {
                 requirement.path.user_display()
             );
             return Ok(Self {
-                editables: vec![requirement],
+                requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
                 ..Self::default()
             });
         };
 
         if let Some(editable_spec) = editable_spec {
-            // We only collect the editables here to keep the count of root packages
+            // We only collect the worksp here to keep the count of root packages
             // correct.
-            // TODO(konsti): Collect all workspace packages, even the non-editable ones.
-            let editables = editable_spec
-                .editables
+            let requirements = editable_spec
+                .requirements
                 .into_iter()
-                .chain(iter::once(requirement))
+                .chain(iter::once(UnresolvedRequirementSpecification::from(
+                    requirement,
+                )))
                 .collect();
             Ok(Self {
-                editables,
+                requirements,
                 ..Self::default()
             })
         } else {
@@ -246,7 +250,7 @@ impl RequirementsSpecification {
                 requirement.path.user_display()
             );
             Ok(Self {
-                editables: vec![requirement],
+                requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
                 ..Self::default()
             })
         }
@@ -363,7 +367,6 @@ impl RequirementsSpecification {
     ) -> Result<RequirementsSpecification> {
         let mut seen_editables = FxHashSet::from_iter([project.name.clone()]);
         let mut queue = VecDeque::from([project.name.clone()]);
-        let mut editables = Vec::new();
         let mut requirements = Vec::new();
         let mut used_extras = FxHashSet::default();
 
@@ -406,13 +409,15 @@ impl RequirementsSpecification {
                     url,
                 } = requirement.source
                 {
-                    editables.push(EditableRequirement {
-                        url,
-                        path,
-                        marker: requirement.marker,
-                        extras: requirement.extras,
-                        origin: requirement.origin,
-                    });
+                    requirements.push(UnresolvedRequirementSpecification::from(
+                        EditableRequirement {
+                            url,
+                            path,
+                            marker: requirement.marker,
+                            extras: requirement.extras,
+                            origin: requirement.origin,
+                        },
+                    ));
 
                     if seen_editables.insert(requirement.name.clone()) {
                         queue.push_back(requirement.name.clone());
@@ -428,7 +433,6 @@ impl RequirementsSpecification {
 
         let spec = Self {
             project: Some(project.name),
-            editables,
             requirements,
             extras: used_extras,
             ..Self::default()
@@ -459,7 +463,6 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
-            spec.editables.extend(source.editables);
             spec.source_trees.extend(source.source_trees);
 
             // Use the first project name discovered.

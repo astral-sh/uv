@@ -34,6 +34,11 @@ impl AnnotatedDist {
     /// unnamed requirement for relative paths, which can't be represented with PEP 508 (but are
     /// supported in `requirements.txt`).
     pub(crate) fn to_requirements_txt(&self, include_extras: bool) -> Cow<str> {
+        // If the URL is editable, write it as an editable requirement.
+        if self.dist.is_editable() {
+            return Cow::Owned(format!("-e {}", self.dist.verbatim()));
+        }
+
         // If the URL is not _definitively_ an absolute `file://` URL, write it as a relative path.
         if self.dist.is_local() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {

@@ -401,7 +401,9 @@ impl Dist {
             ParsedUrl::Archive(archive) => {
                 Self::from_http_url(name, url.verbatim, archive.url, archive.subdirectory)
             }
-            ParsedUrl::Path(file) => Self::from_file_url(name, url.verbatim, &file.path, false),
+            ParsedUrl::Path(file) => {
+                Self::from_file_url(name, url.verbatim, &file.path, file.editable)
+            }
             ParsedUrl::Git(git) => {
                 Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)
             }

@@ -1,15 +1,12 @@
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 
-use distribution_types::{IndexUrl, LocalEditable, Name, SourceAnnotations, Verbatim};
-use pypi_types::HashDigest;
+use distribution_types::{Name, SourceAnnotations};
 use uv_normalize::PackageName;
 
-use crate::resolution::AnnotatedDist;
 use crate::ResolutionGraph;
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
@@ -77,48 +74,6 @@ impl<'a> DisplayResolutionGraph<'a> {
     }
 }
 
-#[derive(Debug)]
-enum Node<'a> {
-    /// A node linked to an editable distribution.
-    Editable(&'a LocalEditable),
-    /// A node linked to a non-editable distribution.
-    Distribution(&'a AnnotatedDist),
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum NodeKey<'a> {
-    /// A node linked to an editable distribution, sorted by verbatim representation.
-    Editable(Cow<'a, str>),
-    /// A node linked to a non-editable distribution, sorted by package name.
-    Distribution(&'a PackageName),
-}
-
-impl<'a> Node<'a> {
-    /// Return a comparable key for the node.
-    fn key(&self) -> NodeKey<'a> {
-        match self {
-            Node::Editable(editable) => NodeKey::Editable(editable.verbatim()),
-            Node::Distribution(annotated) => NodeKey::Distribution(annotated.name()),
-        }
-    }
-
-    /// Return the [`IndexUrl`] of the distribution, if any.
-    fn index(&self) -> Option<&IndexUrl> {
-        match self {
-            Node::Editable(_) => None,
-            Node::Distribution(annotated) => annotated.dist.index(),
-        }
-    }
-
-    /// Return the hashes of the distribution.
-    fn hashes(&self) -> &[HashDigest] {
-        match self {
-            Node::Editable(_) => &[],
-            Node::Distribution(annotated) => &annotated.hashes,
-        }
-    }
-}
-
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
 impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -134,32 +89,22 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     return None;
                 }
 
-                let node = if let Some(editable) = self.resolution.editables.get(name) {
-                    Node::Editable(&editable.built)
-                } else {
-                    Node::Distribution(dist)
-                };
-                Some((index, node))
+                Some((index, dist))
             })
             .collect::<Vec<_>>();
 
         // Sort the nodes by name, but with editable packages first.
-        nodes.sort_unstable_by_key(|(index, node)| (node.key(), *index));
+        nodes.sort_unstable_by_key(|(index, node)| (!node.dist.is_editable(), node.name(), *index));
 
         // Print out the dependency graph.
         for (index, node) in nodes {
             // Display the node itself.
-            let mut line = match node {
-                Node::Editable(editable) => format!("-e {}", editable.verbatim()),
-                Node::Distribution(dist) => {
-                    dist.to_requirements_txt(self.include_extras).to_string()
-                }
-            };
+            let mut line = node.to_requirements_txt(self.include_extras).to_string();
 
             // Display the distribution hashes, if any.
             let mut has_hashes = false;
             if self.show_hashes {
-                for hash in node.hashes() {
+                for hash in &node.hashes {
                     has_hashes = true;
                     line.push_str(" \\\n");
                     line.push_str("    --hash=");
@@ -184,12 +129,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
 
                 // Include all external sources (e.g., requirements files).
                 let default = BTreeSet::default();
-                let source = match node {
-                    Node::Editable(editable) => {
-                        self.sources.get_editable(&editable.url).unwrap_or(&default)
-                    }
-                    Node::Distribution(dist) => self.sources.get(dist.name()).unwrap_or(&default),
-                };
+                let source = self.sources.get(node.name()).unwrap_or(&default);
 
                 match self.annotation_style {
                     AnnotationStyle::Line => match edges.as_slice() {
@@ -261,7 +201,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // If enabled, include indexes to indicate which index was used for each package (e.g.,
             // `# from https://pypi.org/simple`).
             if self.include_index_annotation {
-                if let Some(index) = node.index() {
+                if let Some(index) = node.dist.index() {
                     let url = index.redacted();
                     writeln!(f, "{}", format!("    # from {url}").green())?;
                 }

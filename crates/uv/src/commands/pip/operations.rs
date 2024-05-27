@@ -26,7 +26,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
-use uv_installer::{Downloader, Plan, Planner, ResolvedEditable, SitePackages};
+use uv_installer::{Downloader, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
@@ -43,7 +43,6 @@ use uv_warnings::warn_user;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::DryRunEvent;
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind};
-use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -110,7 +109,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     source_trees: Vec<PathBuf>,
     project: Option<PackageName>,
     extras: &ExtrasSpecification,
-    editables: &ResolvedEditables,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
     reinstall: &Reinstall,
@@ -176,9 +174,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let overrides = Overrides::from_requirements(overrides);
     let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
 
-    // Map the editables to their metadata.
-    let editables = editables.as_metadata();
-
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
@@ -186,7 +181,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &requirements,
                 &constraints,
                 &overrides,
-                &editables,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -215,7 +209,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides,
         preferences,
         project,
-        editables,
         exclusions,
         lookaheads,
     );
@@ -282,7 +275,6 @@ pub(crate) enum Modifications {
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     resolution: &Resolution,
-    editables: &[ResolvedEditable],
     site_packages: SitePackages,
     modifications: Modifications,
     reinstall: &Reinstall,
@@ -303,26 +295,12 @@ pub(crate) async fn install(
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
-    // Extract the requirements from the resolution, filtering out any editables that were already
-    // required. If a package is already installed as editable, it may appear in the resolution
-    // despite not being explicitly requested.
-    let requirements = resolution
-        .requirements()
-        .filter(|requirement| {
-            if requirement.source.is_editable() {
-                !editables
-                    .iter()
-                    .any(|editable| requirement.name == *editable.name())
-            } else {
-                true
-            }
-        })
-        .collect::<Vec<_>>();
+    // Extract the requirements from the resolution.
+    let requirements = resolution.requirements().collect::<Vec<_>>();
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let plan = Planner::with_requirements(&requirements)
-        .with_editable_requirements(editables)
         .build(
             site_packages,
             reinstall,

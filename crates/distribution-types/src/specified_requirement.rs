@@ -74,3 +74,12 @@ impl UnresolvedRequirement {
         }
     }
 }
+
+impl From<Requirement> for UnresolvedRequirementSpecification {
+    fn from(requirement: Requirement) -> Self {
+        Self {
+            requirement: UnresolvedRequirement::Named(requirement),
+            hashes: Vec::new(),
+        }
+    }
+}

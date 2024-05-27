@@ -118,6 +118,9 @@ pub enum Error {
     #[error("Hash-checking is not supported for local directories: `{0}`")]
     HashesNotSupportedSourceTree(String),
 
+    #[error("Hash-checking is not supported for editables: `{0}`")]
+    HashesNotSupportedEditable(String),
+
     #[error("Hash-checking is not supported for Git repositories: `{0}`")]
     HashesNotSupportedGit(String),
 }
