@@ -707,7 +707,7 @@ mod test {
             PreviewMode::Enabled,
         )
         .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?
-        .unwrap())
+        .context("Missing workspace")?)
     }
 
     fn format_err(input: &str) -> String {
