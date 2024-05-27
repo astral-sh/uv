@@ -10,8 +10,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
-use uv_distribution::ProjectWorkspace;
+use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_interpreter::{PythonEnvironment, SystemPython};
+use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
 use uv_resolver::ExcludeNewer;
 use uv_warnings::warn_user;
@@ -29,6 +30,7 @@ pub(crate) async fn run(
     python: Option<String>,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
+    package: Option<PackageName>,
     isolated: bool,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -41,11 +43,21 @@ pub(crate) async fn run(
 
     // Discover and sync the project.
     let project_env = if isolated {
+        // package is `None`, isolated and package are marked as conflicting in clap.
         None
     } else {
         debug!("Syncing project environment.");
 
-        let project = ProjectWorkspace::discover(std::env::current_dir()?, None).await?;
+        let project = if let Some(package) = package {
+            // We need a workspace, but we don't need to have a current package, we can be e.g. in
+            // the root of a virtual workspace and then switch into the selected package.
+            Workspace::discover(&std::env::current_dir()?, None)
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?
+        } else {
+            ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
+        };
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
         // Lock and sync the environment.

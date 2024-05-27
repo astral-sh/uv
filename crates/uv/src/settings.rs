@@ -105,6 +105,7 @@ pub(crate) struct RunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) package: Option<PackageName>,
 }
 
 impl RunSettings {
@@ -126,6 +127,7 @@ impl RunSettings {
             upgrade_package,
             python,
             exclude_newer,
+            package,
         } = args;
 
         Self {
@@ -140,6 +142,7 @@ impl RunSettings {
             with,
             python,
             exclude_newer,
+            package,
         }
     }
 }
