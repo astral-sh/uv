@@ -893,7 +893,7 @@ impl<'a> ManagedClient<'a> {
     }
 }
 
-/// Returns the value of the Content-Length header for the request.
+/// Returns the value of the `Content-Length` header from the [`reqwest::Request`], if present.
 fn content_length(req: &reqwest::Request) -> Option<u64> {
     req.headers()
         .get(reqwest::header::CONTENT_LENGTH)

@@ -165,7 +165,7 @@ impl From<Printer> for DownloadReporter {
         progress.set_style(
             ProgressStyle::with_template("{spinner:.white} {msg:.dim} ({pos}/{len})")
                 .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         progress.set_message("Downloading packages...");
 
