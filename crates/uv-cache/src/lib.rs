@@ -129,7 +129,7 @@ impl Cache {
     pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
         Ok(Self {
             root: root.into(),
-            refresh: Refresh::None,
+            refresh: Refresh::None(Timestamp::now()),
             _temp_dir_drop: None,
         })
     }
@@ -139,7 +139,7 @@ impl Cache {
         let temp_dir = tempdir()?;
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
-            refresh: Refresh::None,
+            refresh: Refresh::None(Timestamp::now()),
             _temp_dir_drop: Some(Arc::new(temp_dir)),
         })
     }
@@ -183,13 +183,16 @@ impl Cache {
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
     pub fn must_revalidate(&self, package: &PackageName) -> bool {
         match &self.refresh {
-            Refresh::None => false,
+            Refresh::None(_) => false,
             Refresh::All(_) => true,
             Refresh::Packages(packages, _) => packages.contains(package),
         }
     }
 
-    /// Returns `true` if a cache entry is up-to-date given the [`Refresh`] policy.
+    /// Returns the [`Freshness`] for a cache entry, validating it against the [`Refresh`] policy.
+    ///
+    /// A cache entry is considered fresh if it was created after the cache itself was
+    /// initialized, or if the [`Refresh`] policy does not require revalidation.
     pub fn freshness(
         &self,
         entry: &CacheEntry,
@@ -197,7 +200,7 @@ impl Cache {
     ) -> io::Result<Freshness> {
         // Grab the cutoff timestamp, if it's relevant.
         let timestamp = match &self.refresh {
-            Refresh::None => return Ok(Freshness::Fresh),
+            Refresh::None(_) => return Ok(Freshness::Fresh),
             Refresh::All(timestamp) => timestamp,
             Refresh::Packages(packages, timestamp) => {
                 if package.map_or(true, |package| packages.contains(package)) {
@@ -217,6 +220,26 @@ impl Cache {
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Freshness::Missing),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Returns `true` if a cache entry is up-to-date. Unlike [`Cache::freshness`], this method does
+    /// not take the [`Refresh`] policy into account.
+    ///
+    /// A cache entry is considered up-to-date if it was created after the cache itself was
+    /// initialized.
+    pub fn is_fresh(&self, entry: &CacheEntry) -> io::Result<bool> {
+        // Grab the cutoff timestamp.
+        let timestamp = match &self.refresh {
+            Refresh::None(timestamp) => timestamp,
+            Refresh::All(timestamp) => timestamp,
+            Refresh::Packages(_packages, timestamp) => timestamp,
+        };
+
+        match fs::metadata(entry.path()) {
+            Ok(metadata) => Ok(Timestamp::from_metadata(&metadata) >= *timestamp),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
             Err(err) => Err(err),
         }
     }
@@ -900,7 +923,7 @@ impl Freshness {
 #[derive(Debug, Clone)]
 pub enum Refresh {
     /// Don't refresh any entries.
-    None,
+    None(Timestamp),
     /// Refresh entries linked to the given packages, if created before the given timestamp.
     Packages(Vec<PackageName>, Timestamp),
     /// Refresh all entries created before the given timestamp.
@@ -910,14 +933,15 @@ pub enum Refresh {
 impl Refresh {
     /// Determine the refresh strategy to use based on the command-line arguments.
     pub fn from_args(refresh: Option<bool>, refresh_package: Vec<PackageName>) -> Self {
+        let timestamp = Timestamp::now();
         match refresh {
-            Some(true) => Self::All(Timestamp::now()),
-            Some(false) => Self::None,
+            Some(true) => Self::All(timestamp),
+            Some(false) => Self::None(timestamp),
             None => {
                 if refresh_package.is_empty() {
-                    Self::None
+                    Self::None(timestamp)
                 } else {
-                    Self::Packages(refresh_package, Timestamp::now())
+                    Self::Packages(refresh_package, timestamp)
                 }
             }
         }
@@ -925,6 +949,6 @@ impl Refresh {
 
     /// Returns `true` if no packages should be reinstalled.
     pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
+        matches!(self, Self::None(_))
     }
 }

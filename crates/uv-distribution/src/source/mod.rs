@@ -869,9 +869,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
-            .source_tree_revision(source, resource, &cache_shard)
-            .await?;
+        let revision = self.source_tree_revision(resource, &cache_shard).await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -935,9 +933,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
-            .source_tree_revision(source, resource, &cache_shard)
-            .await?;
+        let revision = self.source_tree_revision(resource, &cache_shard).await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -994,7 +990,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`Revision`] for a local source tree, refreshing it if necessary.
     async fn source_tree_revision(
         &self,
-        source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         cache_shard: &CacheShard,
     ) -> Result<Revision, Error> {
@@ -1005,16 +1000,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::DirWithoutEntrypoint(resource.path.to_path_buf()));
         };
 
-        // Read the existing metadata from the cache.
+        // Read the existing metadata from the cache. We treat source trees as if `--refresh` is
+        // always set, since they're mutable.
         let entry = cache_shard.entry(LOCAL_REVISION);
-        let freshness = self
+        let is_fresh = self
             .build_context
             .cache()
-            .freshness(&entry, source.name())
+            .is_fresh(&entry)
             .map_err(Error::CacheRead)?;
 
         // If the revision is fresh, return it.
-        if freshness.is_fresh() {
+        if is_fresh {
             if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
                 if pointer.timestamp == modified.timestamp() {
                     return Ok(pointer.into_revision());
@@ -1054,9 +1050,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
-            .source_tree_revision(source, resource, &cache_shard)
-            .await?;
+        let revision = self.source_tree_revision(resource, &cache_shard).await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -1117,9 +1111,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
-            .source_tree_revision(source, resource, &cache_shard)
-            .await?;
+        let revision = self.source_tree_revision(resource, &cache_shard).await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.

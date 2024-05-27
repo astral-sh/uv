@@ -2218,6 +2218,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
@@ -2266,10 +2267,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+    Audited 3 packages in [TIME]
     "###
     );
 
@@ -2462,6 +2460,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
