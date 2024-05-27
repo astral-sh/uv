@@ -49,11 +49,6 @@ impl PubGrubDependencies {
         Ok(Self(dependencies))
     }
 
-    /// Add a [`PubGrubPackage`] and [`PubGrubVersion`] range into the dependencies.
-    pub(crate) fn push(&mut self, package: PubGrubPackage, version: Range<Version>) {
-        self.0.push((package, version));
-    }
-
     /// Iterate over the dependencies.
     pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, Range<Version>)> {
         self.0.iter()

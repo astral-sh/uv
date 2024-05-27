@@ -1,8 +1,11 @@
-use anyhow::Result;
-use cache_key::{CanonicalUrl, RepositoryUrl};
 use std::fmt::Debug;
+use std::path::Path;
+
+use anyhow::Result;
+use serde::Deserialize;
 use tracing::{debug, trace};
 
+use cache_key::{CanonicalUrl, RepositoryUrl};
 use distribution_types::{InstalledDirectUrlDist, InstalledDist, RequirementSource};
 use pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
@@ -12,6 +15,7 @@ pub(crate) enum RequirementSatisfaction {
     Mismatch,
     Satisfied,
     OutOfDate,
+    Dynamic,
 }
 
 impl RequirementSatisfaction {
@@ -187,9 +191,59 @@ impl RequirementSatisfaction {
                     return Ok(Self::OutOfDate);
                 }
 
+                // Does the package have dynamic metadata?
+                if is_dynamic(path) {
+                    return Ok(Self::Dynamic);
+                }
+
                 // Otherwise, assume the requirement is up-to-date.
                 Ok(Self::Satisfied)
             }
         }
     }
+}
+
+/// Returns `true` if the source tree at the given path contains dynamic metadata.
+fn is_dynamic(path: &Path) -> bool {
+    // If there's no `pyproject.toml`, we assume it's dynamic.
+    let Ok(contents) = fs_err::read_to_string(path.join("pyproject.toml")) else {
+        return true;
+    };
+    let Ok(pyproject_toml) = toml::from_str::<PyProjectToml>(&contents) else {
+        return true;
+    };
+    // If `[project]` is not present, we assume it's dynamic.
+    let Some(project) = pyproject_toml.project else {
+        // ...unless it appears to be a Poetry project.
+        return pyproject_toml
+            .tool
+            .map_or(true, |tool| tool.poetry.is_none());
+    };
+    // `[project.dynamic]` must be present and non-empty.
+    project.dynamic.is_some_and(|dynamic| !dynamic.is_empty())
+}
+
+/// A pyproject.toml as specified in PEP 517.
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct PyProjectToml {
+    project: Option<Project>,
+    tool: Option<Tool>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Project {
+    dynamic: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Tool {
+    poetry: Option<ToolPoetry>,
+}
+
+#[derive(Deserialize, Debug)]
+struct ToolPoetry {
+    #[allow(dead_code)]
+    name: Option<String>,
 }

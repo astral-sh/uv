@@ -7,8 +7,7 @@ use rustc_hash::FxHashMap;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, DistributionMetadata, LocalEditable, Name, SourceDist,
-    VersionOrUrlRef,
+    BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 
@@ -43,7 +42,7 @@ impl BarState {
 }
 
 impl ProgressReporter {
-    fn on_any_build_start(&self, color_string: &str) -> usize {
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
         let mut state = self.state.lock().unwrap();
         let id = state.id();
 
@@ -53,21 +52,29 @@ impl ProgressReporter {
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!("{} {}", "Building".bold().cyan(), color_string));
+        progress.set_message(format!(
+            "{} {}",
+            "Building".bold().cyan(),
+            source.to_color_string()
+        ));
 
         state.headers += 1;
         state.bars.insert(id, progress);
         id
     }
 
-    fn on_any_build_complete(&self, color_string: &str, id: usize) {
+    fn on_build_complete(&self, source: &BuildableSource, id: usize) {
         let progress = {
             let mut state = self.state.lock().unwrap();
             state.headers -= 1;
             state.bars.remove(&id).unwrap()
         };
 
-        progress.finish_with_message(format!("   {} {}", "Built".bold().green(), color_string));
+        progress.finish_with_message(format!(
+            "   {} {}",
+            "Built".bold().green(),
+            source.to_color_string()
+        ));
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
@@ -198,21 +205,11 @@ impl uv_installer::DownloadReporter for DownloadReporter {
     }
 
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_any_build_start(&source.to_color_string())
+        self.reporter.on_build_start(source)
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter
-            .on_any_build_complete(&source.to_color_string(), id);
-    }
-
-    fn on_editable_build_start(&self, dist: &LocalEditable) -> usize {
-        self.reporter.on_any_build_start(&dist.to_color_string())
-    }
-
-    fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize) {
-        self.reporter
-            .on_any_build_complete(&dist.to_color_string(), id);
+        self.reporter.on_build_complete(source, id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
@@ -290,12 +287,11 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_any_build_start(&source.to_color_string())
+        self.reporter.on_build_start(source)
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter
-            .on_any_build_complete(&source.to_color_string(), id);
+        self.reporter.on_build_complete(source, id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -321,12 +317,11 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
 
 impl uv_distribution::Reporter for ResolverReporter {
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_any_build_start(&source.to_color_string())
+        self.reporter.on_build_start(source)
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter
-            .on_any_build_complete(&source.to_color_string(), id);
+        self.reporter.on_build_complete(source, id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
@@ -404,11 +399,5 @@ impl ColorDisplay for BuildableSource<'_> {
             BuildableSource::Dist(dist) => dist.to_color_string(),
             BuildableSource::Url(url) => url.to_string(),
         }
-    }
-}
-
-impl ColorDisplay for LocalEditable {
-    fn to_color_string(&self) -> String {
-        format!("{}", self.to_string().dimmed())
     }
 }

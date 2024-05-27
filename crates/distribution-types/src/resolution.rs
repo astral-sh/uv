@@ -1,11 +1,9 @@
 use std::collections::BTreeMap;
 
-use pep508_rs::VerbatimUrl;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::{
-    BuiltDist, Diagnostic, DirectorySourceDist, Dist, InstalledDirectUrlDist, InstalledDist,
-    LocalEditable, Name, Requirement, RequirementSource, ResolvedDist, SourceDist,
+    BuiltDist, Diagnostic, Dist, Name, Requirement, RequirementSource, ResolvedDist, SourceDist,
 };
 
 /// A set of packages pinned at specific versions.
@@ -66,35 +64,6 @@ impl Resolution {
     /// Return the [`ResolutionDiagnostic`]s that were produced during resolution.
     pub fn diagnostics(&self) -> &[ResolutionDiagnostic] {
         &self.diagnostics
-    }
-
-    /// Return an iterator over the [`LocalEditable`] entities in this resolution.
-    pub fn editables(&self) -> impl Iterator<Item = LocalEditable> + '_ {
-        self.packages.values().filter_map(|dist| match dist {
-            ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
-                DirectorySourceDist {
-                    path,
-                    url,
-                    editable: true,
-                    ..
-                },
-            ))) => Some(LocalEditable {
-                url: url.clone(),
-                path: path.clone(),
-                extras: vec![],
-            }),
-            ResolvedDist::Installed(InstalledDist::Url(InstalledDirectUrlDist {
-                path,
-                url,
-                editable: true,
-                ..
-            })) => Some(LocalEditable {
-                url: VerbatimUrl::from_url(url.clone()),
-                path: path.clone(),
-                extras: vec![],
-            }),
-            _ => None,
-        })
     }
 }
 
