@@ -1,5 +1,5 @@
-use distribution_types::VerbatimParsedUrl;
 use pep508_rs::MarkerTree;
+use pypi_types::VerbatimParsedUrl;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;

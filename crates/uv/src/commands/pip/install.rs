@@ -2,12 +2,12 @@ use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
+use distribution_types::{IndexLocations, Resolution};
 use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;

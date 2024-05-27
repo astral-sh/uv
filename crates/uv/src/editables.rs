@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use owo_colors::OwoColorize;
 
 use distribution_types::{
-    InstalledDist, LocalEditable, LocalEditables, Name, ParsedUrlError, Requirement, Requirements,
+    InstalledDist, LocalEditable, LocalEditables, Name, Requirement, Requirements,
 };
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
@@ -159,7 +159,7 @@ impl ResolvedEditables {
         })
     }
 
-    pub(crate) fn as_metadata(&self) -> Result<Vec<BuiltEditableMetadata>, Box<ParsedUrlError>> {
+    pub(crate) fn as_metadata(&self) -> Vec<BuiltEditableMetadata> {
         self.iter()
             .map(|editable| {
                 let dependencies: Vec<_> = editable
@@ -167,16 +167,16 @@ impl ResolvedEditables {
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()?;
-                Ok::<_, Box<ParsedUrlError>>(BuiltEditableMetadata {
+                    .map(Requirement::from)
+                    .collect();
+                BuiltEditableMetadata {
                     built: editable.local().clone(),
                     metadata: editable.metadata().clone(),
                     requirements: Requirements {
                         dependencies,
                         optional_dependencies: IndexMap::default(),
                     },
-                })
+                }
             })
             .collect()
     }

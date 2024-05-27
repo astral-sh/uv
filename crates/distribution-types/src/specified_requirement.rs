@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
 use uv_normalize::ExtraName;
 
-use crate::{ParsedUrl, ParsedUrlError, Requirement, RequirementSource};
+use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
 
 /// An [`UnresolvedRequirement`] with additional metadata from `requirements.txt`, currently only
 /// hashes but in the future also editable and similar information.
@@ -29,7 +29,7 @@ pub enum UnresolvedRequirement {
     /// `tool.uv.sources`.
     Named(Requirement),
     /// A PEP 508-like, direct URL dependency specifier.
-    Unnamed(UnnamedRequirement),
+    Unnamed(UnnamedRequirement<VerbatimParsedUrl>),
 }
 
 impl Display for UnresolvedRequirement {
@@ -64,17 +64,13 @@ impl UnresolvedRequirement {
     }
 
     /// Return the version specifier or URL for the requirement.
-    pub fn source(&self) -> Result<Cow<'_, RequirementSource>, Box<ParsedUrlError>> {
-        // TODO(konsti): This is a bad place to raise errors, we should have parsed the url earlier.
+    pub fn source(&self) -> Cow<'_, RequirementSource> {
         match self {
-            Self::Named(requirement) => Ok(Cow::Borrowed(&requirement.source)),
-            Self::Unnamed(requirement) => {
-                let parsed_url = ParsedUrl::try_from(requirement.url.to_url())?;
-                Ok(Cow::Owned(RequirementSource::from_parsed_url(
-                    parsed_url,
-                    requirement.url.clone(),
-                )))
-            }
+            Self::Named(requirement) => Cow::Borrowed(&requirement.source),
+            Self::Unnamed(requirement) => Cow::Owned(RequirementSource::from_parsed_url(
+                requirement.url.parsed_url.clone(),
+                requirement.url.verbatim.clone(),
+            )),
         }
     }
 }

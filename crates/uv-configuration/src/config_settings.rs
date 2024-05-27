@@ -12,11 +12,11 @@ pub struct ConfigSettingEntry {
 }
 
 impl FromStr for ConfigSettingEntry {
-    type Err = anyhow::Error;
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let Some((key, value)) = s.split_once('=') else {
-            return Err(anyhow::anyhow!(
+            return Err(format!(
                 "Invalid config setting: {s} (expected `KEY=VALUE`)"
             ));
         };

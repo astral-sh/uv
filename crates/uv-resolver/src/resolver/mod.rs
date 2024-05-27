@@ -1063,8 +1063,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .requires_dist
                         .iter()
                         .cloned()
-                        .map(Requirement::from_pep508)
-                        .collect::<Result<_, _>>()?;
+                        .map(Requirement::from)
+                        .collect();
                     let dependencies = PubGrubDependencies::from_requirements(
                         &requirements,
                         &self.constraints,
@@ -1170,8 +1170,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()?;
+                    .map(Requirement::from)
+                    .collect();
                 let dependencies = PubGrubDependencies::from_requirements(
                     &requirements,
                     &self.constraints,

@@ -1,5 +1,4 @@
 use std::env;
-use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -11,7 +10,6 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 use tracing_durations_export::plot::PlotConfig;
 use tracing_durations_export::DurationsLayerBuilder;
-use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -21,6 +19,7 @@ use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
 use crate::fetch_python::FetchPythonArgs;
 use crate::generate_json_schema::GenerateJsonSchemaArgs;
+#[cfg(feature = "render")]
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
 
@@ -56,8 +55,6 @@ enum Cli {
     Build(BuildArgs),
     /// Display the metadata for a `.whl` at a given URL.
     WheelMetadata(WheelMetadataArgs),
-    /// Render the benchmarks.
-    RenderBenchmarks(RenderBenchmarksArgs),
     /// Compile all `.py` to `.pyc` files in the tree.
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
@@ -66,6 +63,9 @@ enum Cli {
     FetchPython(FetchPythonArgs),
     /// Generate JSON schema for the TOML configuration file.
     GenerateJSONSchema(GenerateJsonSchemaArgs),
+    #[cfg(feature = "render")]
+    /// Render the benchmarks.
+    RenderBenchmarks(RenderBenchmarksArgs),
 }
 
 #[instrument] // Anchor span to check for overhead
@@ -77,11 +77,12 @@ async fn run() -> Result<()> {
             println!("Wheel built to {}", target.display());
         }
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
-        Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
         Cli::FetchPython(args) => fetch_python::fetch_python(args).await?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
+        #[cfg(feature = "render")]
+        Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
     }
     Ok(())
 }
@@ -116,11 +117,6 @@ async fn main() -> ExitCode {
         (None, None)
     };
 
-    let indicatif_layer = IndicatifLayer::new();
-    let indicatif_compatible_writer_layer = tracing_subscriber::fmt::layer()
-        .with_writer(indicatif_layer.get_stderr_writer())
-        .with_ansi(std::io::stderr().is_terminal())
-        .with_target(false);
     let filter_layer = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::builder()
             // Show only the important spans
@@ -130,8 +126,6 @@ async fn main() -> ExitCode {
     tracing_subscriber::registry()
         .with(duration_layer)
         .with(filter_layer)
-        .with(indicatif_compatible_writer_layer)
-        .with(indicatif_layer)
         .init();
 
     let start = Instant::now();

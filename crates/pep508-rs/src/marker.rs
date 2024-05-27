@@ -1550,6 +1550,11 @@ impl FromStr for MarkerTree {
 }
 
 impl MarkerTree {
+    /// Like [`FromStr::from_str`], but the caller chooses the return type generic.
+    pub fn parse_str<T: Pep508Url>(markers: &str) -> Result<Self, Pep508Error<T>> {
+        parse_markers(markers, &mut TracingReporter)
+    }
+
     /// Parse a [`MarkerTree`] from a string with the given reporter.
     pub fn parse_reporter(
         markers: &str,

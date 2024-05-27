@@ -3,9 +3,11 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use uv_normalize::PackageName;
 
+pub use build_tag::{BuildTag, BuildTagError};
 pub use source_dist::{SourceDistExtension, SourceDistFilename, SourceDistFilenameError};
 pub use wheel::{WheelFilename, WheelFilenameError};
 
+mod build_tag;
 mod source_dist;
 mod wheel;
 

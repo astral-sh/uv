@@ -110,7 +110,7 @@ impl HashStrategy {
                 }
                 UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
-                    PackageId::from_url(&requirement.url)
+                    PackageId::from_url(&requirement.url.verbatim)
                 }
             };
 

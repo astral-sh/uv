@@ -7,12 +7,12 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, Name, ParsedUrlError, Requirement, ResolutionDiagnostic,
-    ResolvedDist, VersionId, VersionOrUrlRef,
+    Dist, DistributionMetadata, Name, Requirement, ResolutionDiagnostic, ResolvedDist, VersionId,
+    VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::MarkerEnvironment;
-use pypi_types::Yanked;
+use pypi_types::{ParsedUrlError, Yanked};
 use uv_normalize::PackageName;
 
 use crate::dependency_provider::UvDependencyProvider;
@@ -512,8 +512,8 @@ impl ResolutionGraph {
                 .requires_dist
                 .iter()
                 .cloned()
-                .map(Requirement::from_pep508)
-                .collect::<anyhow::Result<_, _>>()?;
+                .map(Requirement::from)
+                .collect();
             for req in manifest.apply(requirements.iter()) {
                 let Some(ref marker_tree) = req.marker else {
                     continue;

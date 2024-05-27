@@ -395,6 +395,7 @@ dependencies = [
  "criterion",
  "distribution-filename",
  "distribution-types",
+ "install-wheel-rs",
  "once_cell",
  "pep508_rs",
  "platform-tags",
@@ -402,6 +403,7 @@ dependencies = [
  "uv-cache",
  "uv-client",
  "uv-configuration",
+ "uv-dispatch",
  "uv-distribution",
  "uv-interpreter",
  "uv-resolver",
@@ -1102,7 +1104,6 @@ dependencies = [
  "cache-key",
  "distribution-filename",
  "fs-err",
- "git2",
  "indexmap",
  "itertools 0.13.0",
  "once_cell",
@@ -1805,7 +1806,6 @@ dependencies = [
  "number_prefix",
  "portable-atomic",
  "unicode-width",
- "vt100",
 ]
 
 [[package]]
@@ -2487,6 +2487,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "path-slash"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e91099d4268b0e11973f036e885d652fb0b21fedcf69738c627f94db6a44f42"
+
+[[package]]
 name = "pathdiff"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2858,7 +2864,9 @@ dependencies = [
 name = "pypi-types"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "chrono",
+ "git2",
  "indexmap",
  "mailparse",
  "once_cell",
@@ -2871,6 +2879,7 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+ "uv-git",
  "uv-normalize",
 ]
 
@@ -3074,12 +3083,12 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "pep508_rs",
+ "pypi-types",
  "regex",
  "reqwest",
  "reqwest-middleware",
  "tempfile",
  "test-case",
- "thiserror",
  "tokio",
  "tracing",
  "unscanny",
@@ -4233,18 +4242,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-indicatif"
-version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "069580424efe11d97c3fef4197fa98c004fa26672cc71ad8770d224e23b1951d"
-dependencies = [
- "indicatif",
- "tracing",
- "tracing-core",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "tracing-log"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4474,7 +4471,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4499,10 +4496,10 @@ dependencies = [
  "miette",
  "mimalloc",
  "owo-colors",
- "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "predicates",
+ "pypi-types",
  "rayon",
  "regex",
  "requirements-txt",
@@ -4577,6 +4574,7 @@ dependencies = [
  "once_cell",
  "pep440_rs",
  "pep508_rs",
+ "pypi-types",
  "regex",
  "rustc-hash",
  "serde",
@@ -4672,7 +4670,7 @@ dependencies = [
  "anyhow",
  "clap",
  "distribution-types",
- "itertools 0.13.0",
+ "either",
  "pep508_rs",
  "platform-tags",
  "rustc-hash",
@@ -4702,6 +4700,7 @@ dependencies = [
  "pep508_rs",
  "poloto",
  "pretty_assertions",
+ "pypi-types",
  "resvg",
  "rustc-hash",
  "schemars",
@@ -4712,7 +4711,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-durations-export",
- "tracing-indicatif",
  "tracing-subscriber",
  "uv-build",
  "uv-cache",
@@ -4818,12 +4816,14 @@ dependencies = [
  "backoff",
  "cachedir",
  "dunce",
+ "either",
  "encoding_rs_io",
  "fs-err",
  "fs2",
  "junction",
  "once_cell",
  "path-absolutize",
+ "path-slash",
  "tempfile",
  "tracing",
  "urlencoding",
@@ -5056,7 +5056,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.2"
+version = "0.2.4"
 
 [[package]]
 name = "uv-virtualenv"
@@ -5122,39 +5122,6 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
-
-[[package]]
-name = "vt100"
-version = "0.15.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84cd863bf0db7e392ba3bd04994be3473491b31e66340672af5d11943c6274de"
-dependencies = [
- "itoa",
- "log",
- "unicode-width",
- "vte",
-]
-
-[[package]]
-name = "vte"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5022b5fbf9407086c180e9557be968742d839e68346af7792b8592489732197"
-dependencies = [
- "arrayvec",
- "utf8parse",
- "vte_generate_state_changes",
-]
-
-[[package]]
-name = "vte_generate_state_changes"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d257817081c7dffcdbab24b9e62d2def62e2ff7d00b1c20062551e6cccc145ff"
-dependencies = [
- "proc-macro2",
- "quote",
-]
 
 [[package]]
 name = "wait-timeout"

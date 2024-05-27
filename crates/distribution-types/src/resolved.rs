@@ -45,6 +45,14 @@ impl ResolvedDist {
         }
     }
 
+    /// Return true if the distribution refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::Installable(dist) => dist.is_local(),
+            Self::Installed(dist) => dist.is_local(),
+        }
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {

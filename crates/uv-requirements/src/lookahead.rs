@@ -24,8 +24,6 @@ pub enum LookaheadError {
     DownloadAndBuild(SourceDist, #[source] uv_distribution::Error),
     #[error(transparent)]
     UnsupportedUrl(#[from] distribution_types::Error),
-    #[error(transparent)]
-    InvalidRequirement(#[from] Box<distribution_types::ParsedUrlError>),
 }
 
 /// A resolver for resolving lookahead requirements from direct URLs.
@@ -211,8 +209,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()?
+                    .map(Requirement::from)
+                    .collect()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
@@ -233,10 +231,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .distributions()
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                requires_dist
-                    .into_iter()
-                    .map(Requirement::from_pep508)
-                    .collect::<Result<_, _>>()?
+                requires_dist.into_iter().map(Requirement::from).collect()
             }
         };
 

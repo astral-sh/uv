@@ -73,7 +73,7 @@ derivative = { version = "2.2.0" }
 directories = { version = "5.0.1" }
 dirs-sys = { version = "0.4.1" }
 dunce = { version = "1.0.4" }
-either = { version = "1.9.0" }
+either = { version = "1.12.0" }
 encoding_rs_io = { version = "0.1.7" }
 flate2 = { version = "1.0.28", default-features = false }
 fs-err = { version = "2.11.0" }
@@ -98,6 +98,7 @@ nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
 owo-colors = { version = "4.0.0" }
 path-absolutize = { version = "3.1.1" }
+path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
@@ -134,7 +135,6 @@ tokio-util = { version = "0.7.10", features = ["compat"] }
 toml = { version = "0.8.12" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.2.0", features = ["plot"] }
-tracing-indicatif = { version = "0.3.6" }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
 tracing-tree = { version = "0.3.0" }
 unicode-width = { version = "0.1.11" }

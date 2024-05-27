@@ -220,6 +220,7 @@ pub enum IndexStrategy {
     ///
     /// See: <https://peps.python.org/pep-0708/>
     #[cfg_attr(feature = "clap", clap(alias = "unsafe-any-match"))]
+    #[serde(alias = "unsafe-any-match")]
     UnsafeFirstMatch,
     /// Search for every package name across all indexes, preferring the "best" version found. If a
     /// package version is in multiple indexes, only look at the entry for the first index.
