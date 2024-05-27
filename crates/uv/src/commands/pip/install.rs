@@ -90,7 +90,7 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         editables,
-        source_trees,
+        dynamic_requirements_files,
         index_url,
         extra_index_urls,
         no_index,
@@ -164,7 +164,7 @@ pub(crate) async fn pip_install(
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none()
         && upgrade.is_none()
-        && source_trees.is_empty()
+        && dynamic_requirements_files.is_empty()
         && overrides.is_empty()
         && uv_lock.is_none()
     {
@@ -363,7 +363,7 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
-            source_trees,
+            dynamic_requirements_files,
             project,
             extras,
             &editables,

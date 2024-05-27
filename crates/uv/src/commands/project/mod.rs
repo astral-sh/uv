@@ -115,7 +115,7 @@ pub(crate) async fn update_environment(
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_executable(&venv)?;
-    if spec.source_trees.is_empty() {
+    if spec.dynamic_requirements_files.is_empty() {
         match site_packages.satisfies(&spec.requirements, &spec.editables, &spec.constraints)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
@@ -219,7 +219,7 @@ pub(crate) async fn update_environment(
         spec.requirements,
         spec.constraints,
         spec.overrides,
-        spec.source_trees,
+        spec.dynamic_requirements_files,
         spec.project,
         &extras,
         &editables,

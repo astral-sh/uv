@@ -30,8 +30,8 @@ use uv_installer::{Downloader, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
-    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    DynamicRequirementsResolver, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
+    RequirementsSource, RequirementsSpecification,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -77,7 +77,7 @@ pub(crate) async fn read_requirements(
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
-    if spec.source_trees.is_empty() {
+    if spec.dynamic_requirements_files.is_empty() {
         if let ExtrasSpecification::Some(extras) = extras {
             let mut unused_extras = extras
                 .iter()
@@ -105,7 +105,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<Requirement>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    source_trees: Vec<PathBuf>,
+    dynamic_requirements_files: Vec<PathBuf>,
     project: Option<PackageName>,
     extras: &ExtrasSpecification,
     editables: &ResolvedEditables,
@@ -140,10 +140,10 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         .await?;
 
         // Resolve any source trees into requirements.
-        if !source_trees.is_empty() {
+        if !dynamic_requirements_files.is_empty() {
             requirements.extend(
-                SourceTreeResolver::new(
-                    source_trees,
+                DynamicRequirementsResolver::new(
+                    dynamic_requirements_files,
                     extras,
                     hasher,
                     index,

@@ -23,9 +23,9 @@ use crate::ExtrasSpecification;
 ///
 /// Used, e.g., to determine the input requirements when a user specifies a `pyproject.toml`
 /// file, which may require running PEP 517 build hooks to extract metadata.
-pub struct SourceTreeResolver<'a, Context: BuildContext> {
+pub struct DynamicRequirementsResolver<'a, Context: BuildContext> {
     /// The requirements for the project.
-    source_trees: Vec<PathBuf>,
+    dynamic_requirements_files: Vec<PathBuf>,
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
     /// The hash policy to enforce.
@@ -36,17 +36,17 @@ pub struct SourceTreeResolver<'a, Context: BuildContext> {
     database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
-    /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
+impl<'a, Context: BuildContext> DynamicRequirementsResolver<'a, Context> {
+    /// Instantiate a new [`DynamicRequirementsResolver`] for a given set of `dynamic_requirements_files`.
     pub fn new(
-        source_trees: Vec<PathBuf>,
+        dynamic_requirements_files: Vec<PathBuf>,
         extras: &'a ExtrasSpecification,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
-            source_trees,
+            dynamic_requirements_files,
             extras,
             hasher,
             index,
@@ -66,7 +66,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Resolve the requirements from the provided source trees.
     pub async fn resolve(self) -> Result<Vec<Requirement>> {
         let requirements: Vec<_> = self
-            .source_trees
+            .dynamic_requirements_files
             .iter()
             .map(|source_tree| async { self.resolve_source_tree(source_tree).await })
             .collect::<FuturesOrdered<_>>()

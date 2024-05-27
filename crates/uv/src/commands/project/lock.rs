@@ -125,7 +125,7 @@ pub(crate) async fn lock(
         spec.requirements,
         spec.constraints,
         spec.overrides,
-        spec.source_trees,
+        spec.dynamic_requirements_files,
         spec.project,
         &extras,
         &editables,

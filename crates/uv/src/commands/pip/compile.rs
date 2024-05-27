@@ -41,8 +41,8 @@ use uv_interpreter::{
 use uv_interpreter::{PythonVersion, SourceSelector};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
-    upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
-    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
+    upgrade::read_lockfile, DynamicRequirementsResolver, ExtrasSpecification, LookaheadResolver,
+    NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
 };
 use uv_resolver::{
     AnnotationStyle, BuiltEditableMetadata, DependencyMode, DisplayResolutionGraph, ExcludeNewer,
@@ -124,7 +124,7 @@ pub(crate) async fn pip_compile(
         constraints,
         overrides,
         editables,
-        source_trees,
+        dynamic_requirements_files,
         extras: used_extras,
         index_url,
         extra_index_urls,
@@ -144,7 +144,7 @@ pub(crate) async fn pip_compile(
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
-    if source_trees.is_empty() {
+    if dynamic_requirements_files.is_empty() {
         if let ExtrasSpecification::Some(extras) = &extras {
             let mut unused_extras = extras
                 .iter()
@@ -351,10 +351,10 @@ pub(crate) async fn pip_compile(
         .await?;
 
         // Resolve any source trees into requirements.
-        if !source_trees.is_empty() {
+        if !dynamic_requirements_files.is_empty() {
             requirements.extend(
-                SourceTreeResolver::new(
-                    source_trees,
+                DynamicRequirementsResolver::new(
+                    dynamic_requirements_files,
                     &extras,
                     &hasher,
                     &top_level_index,

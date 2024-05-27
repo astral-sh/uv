@@ -87,7 +87,7 @@ pub(crate) async fn pip_sync(
         constraints,
         overrides,
         editables,
-        source_trees,
+        dynamic_requirements_files,
         index_url,
         extra_index_urls,
         no_index,
@@ -106,7 +106,7 @@ pub(crate) async fn pip_sync(
     .await?;
 
     // Validate that the requirements are non-empty.
-    let num_requirements = requirements.len() + source_trees.len() + editables.len();
+    let num_requirements = requirements.len() + dynamic_requirements_files.len() + editables.len();
     if num_requirements == 0 {
         writeln!(printer.stderr(), "No requirements found")?;
         return Ok(ExitStatus::Success);
@@ -307,7 +307,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        source_trees,
+        dynamic_requirements_files,
         project,
         &extras,
         &editables,

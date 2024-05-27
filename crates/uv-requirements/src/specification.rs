@@ -36,8 +36,8 @@ pub struct RequirementsSpecification {
     pub overrides: Vec<UnresolvedRequirementSpecification>,
     /// Package to install as editable installs
     pub editables: Vec<EditableRequirement>,
-    /// The source trees from which to extract requirements.
-    pub source_trees: Vec<PathBuf>,
+    /// The source trees from which to extract requirements, without including the package itself.
+    pub dynamic_requirements_files: Vec<PathBuf>,
     /// The extras used to collect requirements.
     pub extras: FxHashSet<ExtraName>,
     /// The index URL to use for fetching packages.
@@ -126,7 +126,7 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?
             }
             RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => Self {
-                source_trees: vec![path.clone()],
+                dynamic_requirements_files: vec![path.clone()],
                 ..Self::default()
             },
             RequirementsSource::SourceTree(path) => Self {
@@ -220,7 +220,7 @@ impl RequirementsSpecification {
                 Ok(Self {
                     project: None,
                     requirements: vec![],
-                    source_trees: vec![pyproject_path.to_path_buf()],
+                    dynamic_requirements_files: vec![pyproject_path.to_path_buf()],
                     ..Self::default()
                 })
             }
@@ -249,7 +249,8 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
             spec.editables.extend(source.editables);
-            spec.source_trees.extend(source.source_trees);
+            spec.dynamic_requirements_files
+                .extend(source.dynamic_requirements_files);
 
             // Use the first project name discovered.
             if spec.project.is_none() {
