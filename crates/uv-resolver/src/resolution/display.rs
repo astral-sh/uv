@@ -94,7 +94,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             .collect::<Vec<_>>();
 
         // Sort the nodes by name, but with editable packages first.
-        nodes.sort_unstable_by_key(|(index, node)| (!node.dist.is_editable(), node.name(), *index));
+        nodes.sort_unstable_by_key(|(index, node)| (node.to_comparator(), *index));
 
         // Print out the dependency graph.
         for (index, node) in nodes {

@@ -848,9 +848,8 @@ fn install_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -928,8 +927,8 @@ fn install_editable_and_registry() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
@@ -993,8 +992,8 @@ fn install_editable_no_binary() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1019,8 +1018,8 @@ fn install_editable_compatible_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1047,9 +1046,8 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require black==0.1.0 and black>0.1.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -1074,7 +1072,6 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     error: Requirements contain conflicting URLs for package `black`:
     - [WORKSPACE]/scripts/packages/black_editable
     - https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
@@ -1725,8 +1722,8 @@ fn only_binary_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###
@@ -1754,8 +1751,8 @@ fn only_binary_dependent_editables() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 2 editables in [TIME]
     Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
      + second-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/second_editable)
@@ -1779,9 +1776,8 @@ fn only_binary_editable_setup_py() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 8 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Downloaded 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + anyio==4.3.0
      + certifi==2024.2.2
@@ -1949,8 +1945,8 @@ fn no_deps_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -2408,9 +2404,8 @@ fn config_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
@@ -2437,9 +2432,8 @@ fn config_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
@@ -2575,9 +2569,8 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -2620,9 +2613,8 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
@@ -2667,9 +2659,8 @@ dependencies = {file = ["requirements.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2837,9 +2828,8 @@ requires-python = ">=3.11,<3.13"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2875,11 +2865,13 @@ requires-python = "<=3.8"
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Editable `example` requires Python <=3.8, but 3.12.[X] is installed
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -4688,8 +4680,7 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `aiohttp`
+    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
     "###
     );
 
@@ -4953,9 +4944,8 @@ fn tool_uv_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 9 packages in [TIME]
-    Downloaded 8 packages in [TIME]
+    Downloaded 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + anyio==4.3.0
      + boltons==24.0.1.dev0 (from git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0)

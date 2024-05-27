@@ -1446,8 +1446,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source.name().is_some_and(|name| packages.contains(name))
             }
         };
+
         if no_build {
-            return Err(Error::NoBuild);
+            if source.is_editable() {
+                debug!("Allowing build for editable source distribution: {source}");
+            } else {
+                return Err(Error::NoBuild);
+            }
         }
 
         // Build the wheel.

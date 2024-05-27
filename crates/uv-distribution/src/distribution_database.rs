@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info_span, instrument, warn, Instrument};
+use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
 
 use distribution_filename::WheelFilename;
@@ -406,7 +406,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Optimization: Skip source dist download when we must not build them anyway.
         if no_build {
-            return Err(Error::NoBuild);
+            if source.is_editable() {
+                debug!("Allowing build for editable source distribution: {source}");
+            } else {
+                return Err(Error::NoBuild);
+            }
         }
 
         let lock = self.locks.acquire(source).await;

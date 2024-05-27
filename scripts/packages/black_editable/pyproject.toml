@@ -5,7 +5,7 @@ description = "Default template for a Flit project"
 authors = [
     {name = "konstin", email = "konstin@mailbox.org"},
 ]
-dependencies = ["anyio"]
+dependencies = []
 requires-python = ">=3.11,<3.13"
 license = {text = "MIT"}
 

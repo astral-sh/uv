@@ -2198,9 +2198,8 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 3 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + boltons==23.1.1
      + numpy==1.26.2
@@ -2218,7 +2217,6 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2268,7 +2266,10 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
@@ -2329,8 +2330,8 @@ fn sync_editable_and_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.1.0
@@ -2416,8 +2417,8 @@ fn sync_editable_and_local() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "###
@@ -2460,7 +2461,6 @@ fn sync_editable_and_local() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3099,8 +3099,8 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
@@ -3139,8 +3139,8 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -3262,11 +3262,13 @@ requires-python = "<=3.5"
     uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
         .arg("requirements.in"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Editable `example` requires Python <=3.5, but 3.12.[X] is installed
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -4208,7 +4210,7 @@ fn require_hashes_unnamed() -> Result<()> {
     Ok(())
 }
 
-/// We allow `--require-hashes` for editables, as long as no dependencies are included.
+/// We disallow `--require-hashes` for editables.
 #[test]
 fn require_hashes_editable() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -4224,15 +4226,12 @@ fn require_hashes_editable() -> Result<()> {
     uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
         .arg(requirements_txt.path())
         .arg("--require-hashes"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
     "###
     );
 
