@@ -39,7 +39,7 @@ pub enum Pep621Error {
     #[error("Must specify a `[project]` section alongside `[tool.uv.sources]`")]
     MissingProjectSection,
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
-    CantBeDynamic(&'static str),
+    DynamicNotAllowed(&'static str),
     #[error("Failed to parse entry for: `{0}`")]
     LoweringError(PackageName, #[source] LoweringError),
 }
@@ -269,7 +269,7 @@ impl Pep621Metadata {
             // If the project specifies dynamic dependencies, we can't extract the requirements.
             if dynamic.iter().any(|field| field == "dependencies") {
                 return if has_sources {
-                    Err(Pep621Error::CantBeDynamic("project.dependencies"))
+                    Err(Pep621Error::DynamicNotAllowed("project.dependencies"))
                 } else {
                     Ok(None)
                 };
@@ -278,7 +278,9 @@ impl Pep621Metadata {
             // extract the requirements.
             if !extras.is_empty() && dynamic.iter().any(|field| field == "optional-dependencies") {
                 return if has_sources {
-                    Err(Pep621Error::CantBeDynamic("project.optional-dependencies"))
+                    Err(Pep621Error::DynamicNotAllowed(
+                        "project.optional-dependencies",
+                    ))
                 } else {
                     Ok(None)
                 };

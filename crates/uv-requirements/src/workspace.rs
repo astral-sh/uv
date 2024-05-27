@@ -29,7 +29,7 @@ pub enum WorkspaceError {
     #[error("No `project` table found in: `{}`", _0.simplified_display())]
     MissingProject(PathBuf),
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
-    CantBeDynamic(&'static str),
+    DynamicNotAllowed(&'static str),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
 }
