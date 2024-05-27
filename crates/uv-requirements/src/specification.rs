@@ -92,8 +92,8 @@ impl RequirementsSpecification {
                     requirements: requirements_txt
                         .requirements
                         .into_iter()
-                        .map(UnresolvedRequirementSpecification::try_from)
-                        .collect::<Result<_, _>>()?,
+                        .map(UnresolvedRequirementSpecification::from)
+                        .collect(),
                     constraints: requirements_txt
                         .constraints
                         .into_iter()
