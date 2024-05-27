@@ -77,7 +77,7 @@ pub enum LoweringError {
     #[error("`tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it")]
     MissingPreview,
     #[error("`editable = false` is not yet supported")]
-    NonEditableWorkspaceDep,
+    NonEditableWorkspaceDependency,
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -569,7 +569,7 @@ fn path_source(
         .to_path_buf();
     if !editable {
         // TODO(konsti): Support this.
-        return Err(LoweringError::NonEditableWorkspaceDep);
+        return Err(LoweringError::NonEditableWorkspaceDependency);
     }
     Ok(RequirementSource::Path {
         path: path_buf,
