@@ -364,8 +364,8 @@ impl GitCheckout {
             // Make sure to pass the local file path and not a file://... url. If given a url,
             // Git treats the repository as a remote origin and gets confused because we don't
             // have a HEAD checked out.
-            .arg(&database.repo.path)
-            .arg(into)
+            .arg(database.repo.path.portable_display().to_string())
+            .arg(into.portable_display().to_string())
             .exec_with_streaming(&mut silent, &mut silent, true)?;
 
         let repo = GitRepository::open(into)?;
