@@ -1602,7 +1602,7 @@ impl MarkerTree {
     /// the marker will be simplified to `sys_platform == 'linux'`.
     pub fn simplify_extras(self, extras: &[ExtraName]) -> Option<MarkerTree> {
         /// Returns `true` if the given expression is always `true` given the set of extras.
-        pub fn is_true(expression: &MarkerExpression, extras: &[ExtraName]) -> bool {
+        fn is_true(expression: &MarkerExpression, extras: &[ExtraName]) -> bool {
             match expression {
                 MarkerExpression::Extra {
                     operator: ExtraOperator::Equal,

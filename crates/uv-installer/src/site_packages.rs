@@ -151,36 +151,6 @@ impl SitePackages {
             .collect()
     }
 
-    /// Returns the editable distribution installed from the given URL, if any.
-    pub fn get_editables(&self, url: &Url) -> Vec<&InstalledDist> {
-        let Some(indexes) = self.by_url.get(url) else {
-            return Vec::new();
-        };
-        indexes
-            .iter()
-            .flat_map(|&index| &self.distributions[index])
-            .filter(|dist| dist.is_editable())
-            .collect()
-    }
-
-    /// Remove the editable distribution installed from the given URL, if any.
-    pub fn remove_editables(&mut self, url: &Url) -> Vec<InstalledDist> {
-        let Some(indexes) = self.by_url.get(url) else {
-            return Vec::new();
-        };
-        indexes
-            .iter()
-            .filter_map(|index| {
-                let dist = &mut self.distributions[*index];
-                if dist.as_ref().is_some_and(InstalledDist::is_editable) {
-                    std::mem::take(dist)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
     /// Returns `true` if there are any installed packages.
     pub fn any(&self) -> bool {
         self.distributions.iter().any(Option::is_some)
@@ -500,9 +470,5 @@ impl InstalledPackagesProvider for SitePackages {
 
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
         self.get_packages(name)
-    }
-
-    fn get_editables(&self, url: &Url) -> Vec<&InstalledDist> {
-        self.get_editables(url)
     }
 }

@@ -7,8 +7,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, Name, Requirement, ResolutionDiagnostic, ResolvedDist, VersionId,
-    VersionOrUrlRef,
+    Dist, DistributionMetadata, Name, Requirement, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::MarkerEnvironment;
@@ -364,15 +363,6 @@ impl ResolutionGraph {
         self.petgraph
             .node_indices()
             .any(|index| self.petgraph[index].name() == name)
-    }
-
-    /// Iterate over the [`ResolvedDist`] entities in this resolution.
-    pub fn into_distributions(self) -> impl Iterator<Item = ResolvedDist> {
-        self.petgraph
-            .into_nodes_edges()
-            .0
-            .into_iter()
-            .map(|node| node.weight.dist)
     }
 
     /// Return the [`ResolutionDiagnostic`]s that were encountered while building the graph.
