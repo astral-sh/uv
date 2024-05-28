@@ -266,6 +266,9 @@ impl uv_installer::DownloadReporter for DownloadReporter {
     }
 
     fn on_complete(&self) {
+        // Need an extra call to `set_message` here to fully clear avoid leaving ghost output
+        // in Jupyter notebooks.
+        self.reporter.root.set_message("");
         self.reporter.root.finish_and_clear();
     }
 
@@ -340,6 +343,7 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_complete(&self) {
+        self.reporter.root.set_message("");
         self.reporter.root.finish_and_clear();
     }
 
@@ -433,6 +437,7 @@ impl uv_installer::InstallReporter for InstallReporter {
     }
 
     fn on_install_complete(&self) {
+        self.progress.set_message("");
         self.progress.finish_and_clear();
     }
 }
