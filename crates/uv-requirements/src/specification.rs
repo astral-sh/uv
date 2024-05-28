@@ -182,6 +182,14 @@ impl RequirementsSpecification {
         let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
             .with_context(|| format!("Failed to parse: `{name}`"))?;
 
+        // If we're not in preview mode, return the editable without searching for a workspace.
+        if preview.is_disabled() {
+            return Ok(Self {
+                requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
+                ..Self::default()
+            });
+        }
+
         // First try to find the project in the existing workspace (if any), then try workspace
         // discovery.
         let project_in_exiting_workspace = workspace.and_then(|workspace| {
@@ -196,6 +204,11 @@ impl RequirementsSpecification {
 
         let editable_spec = if let Some((pyproject_toml, workspace)) = project_in_exiting_workspace
         {
+            debug!(
+                "Found project in workspace at: `{}`",
+                requirement.path.user_display()
+            );
+
             Self::parse_direct_pyproject_toml(
                 pyproject_toml,
                 workspace,
@@ -207,6 +220,11 @@ impl RequirementsSpecification {
         } else if let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(&requirement.path).await?
         {
+            debug!(
+                "Found project at workspace root: `{}`",
+                requirement.path.user_display()
+            );
+
             let pyproject_toml = project_workspace.current_project().pyproject_toml();
             let workspace = project_workspace.workspace();
             Self::parse_direct_pyproject_toml(
@@ -224,6 +242,7 @@ impl RequirementsSpecification {
                 "pyproject.toml has dynamic metadata at: `{}`",
                 requirement.path.user_display()
             );
+
             return Ok(Self {
                 requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
                 ..Self::default()
@@ -278,17 +297,22 @@ impl RequirementsSpecification {
                     preview,
                 )
                 .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
-                // The workspace discovery succeeds even with dynamic metadata, in which case we
-                // fall back to building here.
-                let dynamic_pyproject_toml = Self {
-                    source_trees: vec![path.to_path_buf()],
-                    ..Self::default()
-                };
-                Ok(static_pyproject_toml.unwrap_or(dynamic_pyproject_toml))
+
+                if let Some(static_pyproject_toml) = static_pyproject_toml {
+                    Ok(static_pyproject_toml)
+                } else {
+                    debug!("Dynamic pyproject.toml at: `{}`", path.user_display());
+                    Ok(Self {
+                        source_trees: vec![path.to_path_buf()],
+                        ..Self::default()
+                    })
+                }
             }
             Err(WorkspaceError::MissingProject(_)) => {
-                // The dependencies are dynamic, we have to build to get the actual list.
-                debug!("Dynamic pyproject.toml at: `{}`", path.user_display());
+                debug!(
+                    "Missing `project` table from pyproject.toml at: `{}`",
+                    path.user_display()
+                );
                 Ok(Self {
                     source_trees: vec![path.to_path_buf()],
                     ..Self::default()
@@ -339,10 +363,7 @@ impl RequirementsSpecification {
                 requirements: project
                     .requirements
                     .into_iter()
-                    .map(|requirement| UnresolvedRequirementSpecification {
-                        requirement: UnresolvedRequirement::Named(requirement),
-                        hashes: vec![],
-                    })
+                    .map(UnresolvedRequirementSpecification::from)
                     .collect(),
                 extras: project.used_extras,
                 ..Self::default()
