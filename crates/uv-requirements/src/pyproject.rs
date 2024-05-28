@@ -574,7 +574,8 @@ fn path_source(
         .map_err(|err| LoweringError::AbsolutizeError(path.as_ref().to_path_buf(), err))?
         .to_path_buf();
     if !editable {
-        // TODO(konsti): Support this.
+        // TODO(konsti): Support this. Currently we support `{ workspace = true }`, but we don't
+        //  support `{ workspace = true, editable = false }` since we only collect editables.
         return Err(LoweringError::NonEditableWorkspaceDependency);
     }
     Ok(RequirementSource::Path {
