@@ -14,7 +14,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .build()
         .unwrap();
 
-    let cache = &Cache::from_path("../../.cache").unwrap().init().unwrap();
+    let cache = &Cache::from_path("../../.cache").init().unwrap();
     let venv = PythonEnvironment::from_virtualenv(cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![Requirement::from(
@@ -43,7 +43,7 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
         .build()
         .unwrap();
 
-    let cache = &Cache::from_path("../../.cache").unwrap().init().unwrap();
+    let cache = &Cache::from_path("../../.cache").init().unwrap();
     let venv = PythonEnvironment::from_virtualenv(cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![

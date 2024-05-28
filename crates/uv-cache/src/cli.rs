@@ -39,11 +39,11 @@ impl Cache {
         if no_cache {
             Cache::temp()
         } else if let Some(cache_dir) = cache_dir {
-            Cache::from_path(cache_dir)
+            Ok(Cache::from_path(cache_dir))
         } else if let Some(project_dirs) = ProjectDirs::from("", "", "uv") {
-            Cache::from_path(project_dirs.cache_dir())
+            Ok(Cache::from_path(project_dirs.cache_dir()))
         } else {
-            Cache::from_path(".uv_cache")
+            Ok(Cache::from_path(".uv_cache"))
         }
     }
 }
