@@ -126,12 +126,12 @@ pub struct Cache {
 
 impl Cache {
     /// A persistent cache directory at `root`.
-    pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
-        Ok(Self {
+    pub fn from_path(root: impl Into<PathBuf>) -> Self {
+        Self {
             root: root.into(),
             refresh: Refresh::None,
             _temp_dir_drop: None,
-        })
+        }
     }
 
     /// Create a temporary cache directory.
