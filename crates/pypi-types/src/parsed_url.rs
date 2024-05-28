@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
-use uv_git::{GitSha, GitUrl};
+use uv_git::GitUrl;
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -238,12 +238,6 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
         .split('&')
         .find_map(|fragment| fragment.strip_prefix("subdirectory="))?;
     Some(PathBuf::from(subdirectory))
-}
-
-/// Return the Git reference of the given URL, if it exists.
-pub fn git_reference(url: Url) -> Result<Option<GitSha>, Box<ParsedUrlError>> {
-    let ParsedGitUrl { url, .. } = ParsedGitUrl::try_from(url)?;
-    Ok(url.precise())
 }
 
 impl TryFrom<Url> for ParsedUrl {
