@@ -23,6 +23,14 @@ use crate::{Error, Layout};
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
+#[cfg(all(windows, target_arch = "x86"))]
+const LAUNCHER_I686_GUI: &[u8] =
+    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-gui.exe");
+
+#[cfg(all(windows, target_arch = "x86"))]
+const LAUNCHER_I686_CONSOLE: &[u8] =
+    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-console.exe");
+
 #[cfg(all(windows, target_arch = "x86_64"))]
 const LAUNCHER_X86_64_GUI: &[u8] =
     include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-gui.exe");
@@ -161,6 +169,14 @@ pub(crate) fn windows_script_launcher(
     }
 
     let launcher_bin: &[u8] = match env::consts::ARCH {
+        #[cfg(all(windows, target_arch = "x86"))]
+        "x86" => {
+            if is_gui {
+                LAUNCHER_I686_GUI
+            } else {
+                LAUNCHER_I686_CONSOLE
+            }
+        }
         #[cfg(all(windows, target_arch = "x86_64"))]
         "x86_64" => {
             if is_gui {
