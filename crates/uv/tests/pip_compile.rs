@@ -2871,7 +2871,7 @@ fn override_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Derived test for `override_dependency
+/// Derived test for `override_dependency`
 /// Check if the configuration can be read from pyproject.toml.
 #[test]
 fn override_dependency_from_pyproject() -> Result<()> {
@@ -2928,7 +2928,7 @@ fn override_dependency_from_pyproject() -> Result<()> {
     Ok(())
 }
 
-/// Derived test for `override_dependency
+/// Derived test for `override_dependency`
 /// Check if the configuration can be read from uv.toml specified in the argument.
 #[test]
 fn override_dependency_from_specific_uvtoml() -> Result<()> {
@@ -2993,7 +2993,7 @@ fn override_dependency_from_specific_uvtoml() -> Result<()> {
     Ok(())
 }
 
-/// Derivation test of `override_dependency
+/// Derivation test of `override_dependency`
 /// Check if the configuration can be read from uv.toml in workspace.
 #[test]
 fn override_dependency_from_workspace_uvtoml() -> Result<()> {
