@@ -26,7 +26,10 @@ overridden in the `tool.uv.sources` of a specific project.
 
 ## Common usage
 
-There a two main usage patterns: A root package and helpers, and the flat workspace.
+There a two main usage patterns: A root package and helpers, and the flat workspace. The root
+workspace layout defines one main package in the root of the repository, with helper packages in
+`packages`. In the flat layout, all packages are in the `packages` directory, and the root
+`pyproject.toml` defines a so-called virtual workspace.
 
 Root package and helpers: In this layout `albatross/pyproject.toml` has both a `project` section and
 a `tool.uv.workspace` section.
@@ -54,8 +57,8 @@ albatross
         └── main.py
 ```
 
-Flat workspace: In this layout `albatross/pyproject.toml` has only `tool.uv.workspace` section, but
-no `project`.
+Flat workspace: In this layout `albatross/pyproject.toml` has only a `tool.uv.workspace` section,
+but no `project`.
 
 ```
 albatross
