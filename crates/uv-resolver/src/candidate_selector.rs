@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::version_set::VersionSet;
 use tracing::debug;
 
 use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
@@ -12,6 +12,7 @@ use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::Preferences;
 use crate::prerelease_mode::PreReleaseStrategy;
+use crate::pubgrub::PubGrubRange;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options};
@@ -83,7 +84,7 @@ impl CandidateSelector {
     pub(crate) fn select<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &PubGrubRange,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
@@ -107,7 +108,7 @@ impl CandidateSelector {
     /// installed version.
     fn get_preferred<'a, InstalledPackages: InstalledPackagesProvider>(
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &PubGrubRange,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
@@ -209,7 +210,7 @@ impl CandidateSelector {
     pub(crate) fn select_no_preference<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &PubGrubRange,
         version_maps: &'a [VersionMap],
     ) -> Option<Candidate> {
         tracing::trace!(
@@ -281,7 +282,7 @@ impl CandidateSelector {
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &PubGrubRange,
         allow_prerelease: AllowPreRelease,
     ) -> Option<Candidate<'a>> {
         #[derive(Debug)]

@@ -1,7 +1,6 @@
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
-use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -10,7 +9,7 @@ use distribution_types::{
     Dist, DistributionMetadata, Name, Requirement, ResolutionDiagnostic, ResolvedDist, VersionId,
     VersionOrUrlRef,
 };
-use pep440_rs::{Version, VersionSpecifier};
+use pep440_rs::VersionSpecifier;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{ParsedUrlError, Yanked};
 use uv_normalize::PackageName;
@@ -19,7 +18,7 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
-use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
+use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner, PubGrubRange};
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::FxOnceMap;
@@ -33,7 +32,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    pub(crate) petgraph: petgraph::graph::Graph<AnnotatedDist, Range<Version>, petgraph::Directed>,
+    pub(crate) petgraph: petgraph::graph::Graph<AnnotatedDist, PubGrubRange, petgraph::Directed>,
     /// The set of editable requirements in this resolution.
     pub(crate) editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
