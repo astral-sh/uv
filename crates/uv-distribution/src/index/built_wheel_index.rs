@@ -92,7 +92,11 @@ impl<'a> BuiltWheelIndex<'a> {
     ) -> Result<Option<CachedWheel>, Error> {
         let cache_shard = self.cache.shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Path(&source_dist.url).root(),
+            if source_dist.editable {
+                WheelCache::Editable(&source_dist.url).root()
+            } else {
+                WheelCache::Path(&source_dist.url).root()
+            },
         );
 
         // Read the revision from the cache.

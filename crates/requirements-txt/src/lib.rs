@@ -47,9 +47,9 @@ use url::Url;
 use distribution_types::{Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep508_rs::{
     expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
-    RequirementOrigin, Scheme, VerbatimUrl,
+    RequirementOrigin, Scheme, UnnamedRequirement, VerbatimUrl,
 };
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::{ParsedPathUrl, ParsedUrl, VerbatimParsedUrl};
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
@@ -414,6 +414,27 @@ impl From<RequirementEntry> for UnresolvedRequirementSpecification {
                 }
             },
             hashes: value.hashes,
+        }
+    }
+}
+
+impl From<EditableRequirement> for UnresolvedRequirementSpecification {
+    fn from(value: EditableRequirement) -> Self {
+        Self {
+            requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                url: VerbatimParsedUrl {
+                    parsed_url: ParsedUrl::Path(ParsedPathUrl {
+                        url: value.url.to_url(),
+                        path: value.path,
+                        editable: true,
+                    }),
+                    verbatim: value.url,
+                },
+                extras: value.extras,
+                marker: value.marker,
+                origin: value.origin,
+            }),
+            hashes: vec![],
         }
     }
 }

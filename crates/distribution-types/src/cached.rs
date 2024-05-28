@@ -131,14 +131,6 @@ impl CachedDist {
         }
     }
 
-    /// Returns `true` if the distribution is editable.
-    pub fn editable(&self) -> bool {
-        match self {
-            Self::Registry(_) => false,
-            Self::Url(dist) => dist.editable,
-        }
-    }
-
     /// Returns the [`WheelFilename`] of the distribution.
     pub fn filename(&self) -> &WheelFilename {
         match self {

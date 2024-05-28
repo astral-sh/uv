@@ -2,7 +2,6 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
-use fs_err as fs;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, trace, warn};
 
@@ -148,25 +147,6 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
         )
     })?;
     Ok(())
-}
-
-/// Remove the file or directory at `path`, if it exists.
-///
-/// Returns `true` if the file or directory was removed, and `false` if the path did not exist.
-pub fn force_remove_all(path: impl AsRef<Path>) -> Result<bool, std::io::Error> {
-    let path = path.as_ref();
-
-    let Some(metadata) = metadata_if_exists(path)? else {
-        return Ok(false);
-    };
-
-    if metadata.is_dir() {
-        fs::remove_dir_all(path)?;
-    } else {
-        fs::remove_file(path)?;
-    }
-
-    Ok(true)
 }
 
 /// Rename a file, retrying (on Windows) if it fails due to transient operating system errors.
@@ -325,16 +305,5 @@ impl Drop for LockedFile {
                 err
             );
         }
-    }
-}
-
-/// Given a path, return its metadata if the file exists, or `None` if it does not.
-///
-/// If the file exists but cannot be read, returns an error.
-pub fn metadata_if_exists(path: impl AsRef<Path>) -> std::io::Result<Option<std::fs::Metadata>> {
-    match fs::metadata(path) {
-        Ok(metadata) => Ok(Some(metadata)),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(err),
     }
 }

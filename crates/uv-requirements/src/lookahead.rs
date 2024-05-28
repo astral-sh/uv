@@ -4,6 +4,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use thiserror::Error;
+use tracing::trace;
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, GitSourceDist, Requirement, RequirementSource,
@@ -13,7 +14,7 @@ use pep508_rs::MarkerEnvironment;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_git::GitUrl;
-use uv_resolver::{BuiltEditableMetadata, InMemoryIndex, MetadataResponse};
+use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 #[derive(Debug, Error)]
@@ -49,8 +50,6 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     constraints: &'a Constraints,
     /// The overrides for the project.
     overrides: &'a Overrides,
-    /// The editable requirements for the project.
-    editables: &'a [BuiltEditableMetadata],
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -66,7 +65,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
-        editables: &'a [BuiltEditableMetadata],
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -75,7 +73,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             requirements,
             constraints,
             overrides,
-            editables,
             hasher,
             index,
             database,
@@ -110,13 +107,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .constraints
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-            .chain(self.editables.iter().flat_map(|editable| {
-                self.constraints
-                    .apply(self.overrides.apply(&editable.requirements.dependencies))
-                    .filter(|requirement| {
-                        requirement.evaluate_markers(markers, &editable.built.extras)
-                    })
-            }))
             .cloned()
             .collect();
 
@@ -152,6 +142,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
     ) -> Result<Option<RequestedRequirements>, LookaheadError> {
+        trace!("Performing lookahead for {requirement}");
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
         let dist = match requirement.source {
@@ -160,7 +151,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 subdirectory,
                 location,
                 url,
-            } => Dist::from_http_url(requirement.name, location, subdirectory, url)?,
+            } => Dist::from_http_url(requirement.name, url, location, subdirectory)?,
             RequirementSource::Git {
                 repository,
                 reference,
@@ -182,9 +173,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             RequirementSource::Path {
                 path,
                 url,
-                // TODO(konsti): Figure out why we lose the editable here (does it matter?)
-                editable: _,
-            } => Dist::from_file_url(requirement.name, &path, false, url)?,
+                editable,
+            } => Dist::from_file_url(requirement.name, url, &path, editable)?,
         };
 
         // Fetch the metadata for the distribution.

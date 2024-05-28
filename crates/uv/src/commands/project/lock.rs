@@ -16,7 +16,6 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::{pip, project, ExitStatus};
-use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Resolve the project requirements into a lockfile.
@@ -31,7 +30,7 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
+    let project = ProjectWorkspace::discover(std::env::current_dir()?).await?;
 
     // Discover or create the virtual environment.
     let venv = project::init_environment(&project, preview, cache, printer)?;
@@ -43,9 +42,13 @@ pub(crate) async fn lock(
     // TODO(zanieb): Consider allowing constraints and extras
     // TODO(zanieb): Allow specifying extras somehow
     let spec = RequirementsSpecification::from_sources(
+        // TODO(konsti): With workspace (just like with extras), these are the requirements for
+        // syncing. For locking, we want to use the entire workspace with all extras.
+        // See https://github.com/astral-sh/uv/issues/3700
         &project.requirements(),
         &[],
         &[],
+        None,
         &ExtrasSpecification::None,
         &client_builder,
         preview,
@@ -100,26 +103,6 @@ pub(crate) async fn lock(
         concurrency,
     );
 
-    // Build all editable distributions. The editables are shared between resolution and
-    // installation, and should live for the duration of the command.
-    let editables = ResolvedEditables::resolve(
-        spec.editables
-            .iter()
-            .cloned()
-            .map(ResolvedEditables::from_requirement),
-        &EmptyInstalledPackages,
-        &reinstall,
-        &hasher,
-        &interpreter,
-        tags,
-        cache,
-        &client,
-        &build_dispatch,
-        concurrency,
-        printer,
-    )
-    .await?;
-
     // Resolve the requirements.
     let resolution = pip::operations::resolve(
         spec.requirements,
@@ -128,7 +111,6 @@ pub(crate) async fn lock(
         spec.source_trees,
         spec.project,
         &extras,
-        &editables,
         EmptyInstalledPackages,
         &hasher,
         &reinstall,

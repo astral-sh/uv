@@ -31,7 +31,6 @@ use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::ExitStatus;
-use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -86,7 +85,6 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        editables,
         source_trees,
         index_url,
         extra_index_urls,
@@ -99,6 +97,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        None,
         &ExtrasSpecification::default(),
         &client_builder,
         preview,
@@ -106,7 +105,7 @@ pub(crate) async fn pip_sync(
     .await?;
 
     // Validate that the requirements are non-empty.
-    let num_requirements = requirements.len() + source_trees.len() + editables.len();
+    let num_requirements = requirements.len() + source_trees.len();
     if num_requirements == 0 {
         writeln!(printer.stderr(), "No requirements found")?;
         return Ok(ExitStatus::Success);
@@ -276,25 +275,6 @@ pub(crate) async fn pip_sync(
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;
 
-    // Build all editable distributions. The editables are shared between resolution and
-    // installation, and should live for the duration of the command.
-    let editables = ResolvedEditables::resolve(
-        editables
-            .into_iter()
-            .map(ResolvedEditables::from_requirement),
-        &site_packages,
-        reinstall,
-        &hasher,
-        venv.interpreter(),
-        &tags,
-        &cache,
-        &client,
-        &resolve_dispatch,
-        concurrency,
-        printer,
-    )
-    .await?;
-
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
@@ -310,7 +290,6 @@ pub(crate) async fn pip_sync(
         source_trees,
         project,
         &extras,
-        &editables,
         site_packages.clone(),
         &hasher,
         reinstall,
@@ -368,7 +347,6 @@ pub(crate) async fn pip_sync(
     // Sync the environment.
     operations::install(
         &resolution,
-        &editables,
         site_packages,
         Modifications::Exact,
         reinstall,

@@ -300,7 +300,6 @@ async fn black_mypy_extensions() -> Result<()> {
         Overrides::default(),
         vec![],
         None,
-        vec![],
         Exclusions::default(),
         vec![],
     );
@@ -341,7 +340,6 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         Overrides::default(),
         vec![],
         None,
-        vec![],
         Exclusions::default(),
         vec![],
     );
@@ -382,7 +380,6 @@ async fn black_flake8() -> Result<()> {
         Overrides::default(),
         vec![],
         None,
-        vec![],
         Exclusions::default(),
         vec![],
     );
@@ -480,7 +477,6 @@ async fn black_respect_preference() -> Result<()> {
             Version::from_str("23.9.0")?,
         )],
         None,
-        vec![],
         Exclusions::default(),
         vec![],
     );
@@ -521,7 +517,6 @@ async fn black_ignore_preference() -> Result<()> {
             Version::from_str("23.9.2")?,
         )],
         None,
-        vec![],
         Exclusions::default(),
         vec![],
     );

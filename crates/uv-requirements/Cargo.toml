@@ -16,7 +16,7 @@ distribution-types = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
-requirements-txt = { workspace = true, features = ["reqwest"] }
+requirements-txt = { workspace = true, features = ["http"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
@@ -35,9 +35,9 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 glob = { workspace = true }
 indexmap = { workspace = true }
-itertools = { workspace = true }
 path-absolutize = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
@@ -52,6 +52,7 @@ schemars = ["dep:schemars"]
 indoc = "2.0.5"
 insta = { version = "1.38.0", features = ["filters", "redactions", "json"] }
 regex = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

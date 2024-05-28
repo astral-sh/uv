@@ -43,12 +43,6 @@ impl BaseUrl {
     pub fn as_url(&self) -> &Url {
         &self.0
     }
-
-    /// Convert to the underlying [`Url`].
-    #[must_use]
-    pub fn into_url(self) -> Url {
-        self.0
-    }
 }
 
 impl From<Url> for BaseUrl {

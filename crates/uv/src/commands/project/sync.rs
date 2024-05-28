@@ -16,7 +16,6 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{pip, project, ExitStatus};
-use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Sync the project environment.
@@ -31,7 +30,7 @@ pub(crate) async fn sync(
     }
 
     // Find the project requirements.
-    let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
+    let project = ProjectWorkspace::discover(std::env::current_dir()?).await?;
 
     // Discover or create the virtual environment.
     let venv = project::init_environment(&project, preview, cache, printer)?;
@@ -90,28 +89,9 @@ pub(crate) async fn sync(
 
     let site_packages = SitePackages::from_executable(&venv)?;
 
-    // Build any editables.
-    let editables = ResolvedEditables::resolve(
-        resolution.editables(),
-        &site_packages,
-        &reinstall,
-        &hasher,
-        venv.interpreter(),
-        tags,
-        cache,
-        &client,
-        &build_dispatch,
-        concurrency,
-        printer,
-    )
-    .await?;
-
-    let site_packages = SitePackages::from_executable(&venv)?;
-
     // Sync the environment.
     pip::operations::install(
         &resolution,
-        &editables,
         site_packages,
         Modifications::Sufficient,
         &reinstall,

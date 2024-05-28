@@ -236,6 +236,17 @@ impl TestContext {
             .assert()
     }
 
+    /// Run the given python file and check whether it succeeds.
+    pub fn assert_file(&self, file: impl AsRef<Path>) -> Assert {
+        std::process::Command::new(venv_to_interpreter(&self.venv))
+            // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
+            // https://github.com/python/cpython/issues/75953
+            .arg("-B")
+            .arg(file.as_ref())
+            .current_dir(&self.temp_dir)
+            .assert()
+    }
+
     /// Assert a package is installed with the given version.
     pub fn assert_installed(&self, package: &'static str, version: &'static str) {
         self.assert_command(
@@ -385,7 +396,7 @@ pub fn python_path_with_versions(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())?.init()?;
+    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;
     let selected_pythons = python_versions
         .iter()
         .flat_map(|python_version| {

@@ -51,7 +51,6 @@ pub use crate::any::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
 pub use crate::diagnostic::*;
-pub use crate::editable::*;
 pub use crate::error::*;
 pub use crate::file::*;
 pub use crate::hash::*;
@@ -70,7 +69,6 @@ mod any;
 mod buildable;
 mod cached;
 mod diagnostic;
-mod editable;
 mod error;
 mod file;
 mod hash;
@@ -287,9 +285,9 @@ impl Dist {
     /// URL.
     pub fn from_http_url(
         name: PackageName,
+        url: VerbatimUrl,
         location: Url,
         subdirectory: Option<PathBuf>,
-        url: VerbatimUrl,
     ) -> Result<Dist, Error> {
         if Path::new(url.path())
             .extension()
@@ -323,9 +321,9 @@ impl Dist {
     /// A local built or source distribution from a `file://` URL.
     pub fn from_file_url(
         name: PackageName,
+        url: VerbatimUrl,
         path: &Path,
         editable: bool,
-        url: VerbatimUrl,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
         let path = match path.canonicalize() {
@@ -399,24 +397,15 @@ impl Dist {
     pub fn from_url(name: PackageName, url: VerbatimParsedUrl) -> Result<Self, Error> {
         match url.parsed_url {
             ParsedUrl::Archive(archive) => {
-                Self::from_http_url(name, archive.url, archive.subdirectory, url.verbatim)
+                Self::from_http_url(name, url.verbatim, archive.url, archive.subdirectory)
             }
-            ParsedUrl::Path(file) => Self::from_file_url(name, &file.path, false, url.verbatim),
+            ParsedUrl::Path(file) => {
+                Self::from_file_url(name, url.verbatim, &file.path, file.editable)
+            }
             ParsedUrl::Git(git) => {
                 Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)
             }
         }
-    }
-
-    /// Create a [`Dist`] for a local editable distribution.
-    pub fn from_editable(name: PackageName, editable: LocalEditable) -> Result<Self, Error> {
-        let LocalEditable { url, path, .. } = editable;
-        Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
-            name,
-            url,
-            path,
-            editable: true,
-        })))
     }
 
     /// Return true if the distribution is editable.

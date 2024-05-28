@@ -19,12 +19,11 @@ use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
 use uv_requirements::{
-    ExtrasSpecification, ProjectWorkspace, RequirementsSource, RequirementsSpecification,
+    ExtrasSpecification, ProjectWorkspace, RequirementsSource, RequirementsSpecification, Workspace,
 };
 use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
-use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 pub(crate) mod lock;
@@ -92,6 +91,7 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
+    workspace: Option<&Workspace>,
     preview: PreviewMode,
     connectivity: Connectivity,
     cache: &Cache,
@@ -107,6 +107,7 @@ pub(crate) async fn update_environment(
         requirements,
         &[],
         &[],
+        workspace,
         &ExtrasSpecification::None,
         &client_builder,
         preview,
@@ -116,7 +117,7 @@ pub(crate) async fn update_environment(
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_executable(&venv)?;
     if spec.source_trees.is_empty() {
-        match site_packages.satisfies(&spec.requirements, &spec.editables, &spec.constraints)? {
+        match site_packages.satisfies(&spec.requirements, &spec.constraints)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -129,12 +130,6 @@ pub(crate) async fn update_environment(
                         .sorted()
                         .join(" | ")
                 );
-                if !spec.editables.is_empty() {
-                    debug!(
-                        "All editables satisfied: {}",
-                        spec.editables.iter().map(ToString::to_string).join(", ")
-                    );
-                }
                 return Ok(venv);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
@@ -194,26 +189,6 @@ pub(crate) async fn update_environment(
         concurrency,
     );
 
-    // Build all editable distributions. The editables are shared between resolution and
-    // installation, and should live for the duration of the command.
-    let editables = ResolvedEditables::resolve(
-        spec.editables
-            .iter()
-            .cloned()
-            .map(ResolvedEditables::from_requirement),
-        &site_packages,
-        &reinstall,
-        &hasher,
-        &interpreter,
-        tags,
-        cache,
-        &client,
-        &resolve_dispatch,
-        concurrency,
-        printer,
-    )
-    .await?;
-
     // Resolve the requirements.
     let resolution = match pip::operations::resolve(
         spec.requirements,
@@ -222,7 +197,6 @@ pub(crate) async fn update_environment(
         spec.source_trees,
         spec.project,
         &extras,
-        &editables,
         site_packages.clone(),
         &hasher,
         &reinstall,
@@ -273,7 +247,6 @@ pub(crate) async fn update_environment(
     // Sync the environment.
     pip::operations::install(
         &resolution,
-        &editables,
         site_packages,
         pip::operations::Modifications::Sufficient,
         &reinstall,

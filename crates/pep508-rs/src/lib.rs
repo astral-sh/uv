@@ -361,23 +361,6 @@ impl PyRequirement {
 }
 
 impl<T: Pep508Url> Requirement<T> {
-    /// Returns `true` if the [`Version`] satisfies the [`Requirement`].
-    pub fn is_satisfied_by(&self, version: &Version) -> bool {
-        let Some(version_or_url) = self.version_or_url.as_ref() else {
-            return true;
-        };
-
-        let specifiers = match version_or_url {
-            VersionOrUrl::VersionSpecifier(specifiers) => specifiers,
-            // TODO(charlie): Support URL dependencies.
-            VersionOrUrl::Url(_) => return false,
-        };
-
-        specifiers
-            .iter()
-            .all(|specifier| specifier.contains(version))
-    }
-
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         if let Some(marker) = &self.marker {
@@ -527,32 +510,6 @@ impl<T: Pep508Url> Requirement<T> {
             Some(working_dir.as_ref()),
             reporter,
         )
-    }
-
-    /// Convert a requirement with one URL type into one with another URL type.
-    ///
-    /// Example: `Requirement<Url>` to `Requirement<VerbatimUrl>`.
-    pub fn convert_url<U: Pep508Url + From<T>>(self) -> Requirement<U> {
-        let Requirement {
-            name,
-            extras,
-            version_or_url,
-            marker,
-            origin,
-        } = self;
-        Requirement {
-            name,
-            extras,
-            version_or_url: match version_or_url {
-                None => None,
-                Some(VersionOrUrl::VersionSpecifier(specifier)) => {
-                    Some(VersionOrUrl::VersionSpecifier(specifier))
-                }
-                Some(VersionOrUrl::Url(url)) => Some(VersionOrUrl::Url(U::from(url))),
-            },
-            marker,
-            origin,
-        }
     }
 }
 
