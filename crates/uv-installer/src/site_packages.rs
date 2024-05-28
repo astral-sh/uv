@@ -13,13 +13,10 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::VerbatimParsedUrl;
-use requirements_txt::EditableRequirement;
-use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
-use crate::is_dynamic;
 use crate::satisfies::RequirementSatisfaction;
 
 /// An index over the packages installed in an environment.
@@ -289,7 +286,6 @@ impl SitePackages {
     pub fn satisfies(
         &self,
         requirements: &[UnresolvedRequirementSpecification],
-        editables: &[EditableRequirement],
         constraints: &[Requirement],
     ) -> Result<SatisfiesResult> {
         let mut stack = Vec::with_capacity(requirements.len());
@@ -304,58 +300,6 @@ impl SitePackages {
             {
                 if seen.insert(entry.clone()) {
                     stack.push(entry.clone());
-                }
-            }
-        }
-
-        // Verify that all editable requirements are met.
-        for requirement in editables {
-            let installed = self.get_editables(requirement.raw());
-            match installed.as_slice() {
-                [] => {
-                    // The package isn't installed.
-                    return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
-                }
-                [distribution] => {
-                    // Is the editable out-of-date?
-                    if !ArchiveTimestamp::up_to_date_with(
-                        &requirement.path,
-                        ArchiveTarget::Install(distribution),
-                    )? {
-                        return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
-                    }
-
-                    // Does the editable have dynamic metadata?
-                    if is_dynamic(&requirement.path) {
-                        return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
-                    }
-
-                    // Recurse into the dependencies.
-                    let metadata = distribution
-                        .metadata()
-                        .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
-
-                    // Add the dependencies to the queue.
-                    for dependency in metadata.requires_dist {
-                        if dependency.evaluate_markers(
-                            self.venv.interpreter().markers(),
-                            &requirement.extras,
-                        ) {
-                            let dependency = UnresolvedRequirementSpecification {
-                                requirement: UnresolvedRequirement::Named(Requirement::from(
-                                    dependency,
-                                )),
-                                hashes: vec![],
-                            };
-                            if seen.insert(dependency.clone()) {
-                                stack.push(dependency);
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    // There are multiple installed distributions for the same package.
-                    return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                 }
             }
         }
@@ -378,7 +322,9 @@ impl SitePackages {
                         distribution,
                         entry.requirement.source().as_ref(),
                     )? {
-                        RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
+                        RequirementSatisfaction::Mismatch
+                        | RequirementSatisfaction::OutOfDate
+                        | RequirementSatisfaction::Dynamic => {
                             return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))
                         }
                         RequirementSatisfaction::Satisfied => {}
@@ -387,7 +333,8 @@ impl SitePackages {
                     for constraint in constraints {
                         match RequirementSatisfaction::check(distribution, &constraint.source)? {
                             RequirementSatisfaction::Mismatch
-                            | RequirementSatisfaction::OutOfDate => {
+                            | RequirementSatisfaction::OutOfDate
+                            | RequirementSatisfaction::Dynamic => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     entry.requirement.to_string(),
                                 ))

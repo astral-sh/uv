@@ -848,9 +848,8 @@ fn install_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -928,8 +927,8 @@ fn install_editable_and_registry() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
@@ -993,8 +992,8 @@ fn install_editable_no_binary() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1019,8 +1018,8 @@ fn install_editable_compatible_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1047,9 +1046,8 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require black==0.1.0 and black>0.1.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -1074,7 +1072,6 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     error: Requirements contain conflicting URLs for package `black`:
     - [WORKSPACE]/scripts/packages/black_editable
     - https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
@@ -1725,8 +1722,8 @@ fn only_binary_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###
@@ -1739,26 +1736,26 @@ fn only_binary_dependent_editables() {
     let context = TestContext::new("3.12");
     let root_path = context
         .workspace_root
-        .join("scripts/packages/dependent_editables");
+        .join("scripts/packages/dependent_locals");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.install()
         .arg("--only-binary")
         .arg(":all:")
         .arg("-e")
-        .arg(root_path.join("first_editable"))
+        .arg(root_path.join("first_local"))
         .arg("-e")
-        .arg(root_path.join("second_editable")), @r###"
+        .arg(root_path.join("second_local")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Built 2 editables in [TIME]
     Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
-     + second-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/second_editable)
+     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
     );
 }
@@ -1779,9 +1776,8 @@ fn only_binary_editable_setup_py() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 8 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Downloaded 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + anyio==4.3.0
      + certifi==2024.2.2
@@ -1949,8 +1945,8 @@ fn no_deps_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -2408,9 +2404,8 @@ fn config_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
@@ -2437,9 +2432,8 @@ fn config_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
@@ -2575,9 +2569,8 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -2620,9 +2613,8 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
@@ -2667,9 +2659,8 @@ dependencies = {file = ["requirements.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2687,8 +2678,8 @@ dependencies = {file = ["requirements.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2708,9 +2699,8 @@ dependencies = {file = ["requirements.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
@@ -2837,9 +2827,8 @@ requires-python = ">=3.11,<3.13"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2875,11 +2864,13 @@ requires-python = "<=3.8"
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Editable `example` requires Python <=3.8, but 3.12.[X] is installed
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -3889,11 +3880,12 @@ fn already_installed_dependent_editable() {
     let context = TestContext::new("3.12");
     let root_path = context
         .workspace_root
-        .join("scripts/packages/dependent_editables");
+        .join("scripts/packages/dependent_locals");
 
     // Install the first editable
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("first_editable")), @r###"
+        .arg("-e")
+        .arg(root_path.join("first_local")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3902,14 +3894,15 @@ fn already_installed_dependent_editable() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
+     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 
     // Install the second editable which depends on the first editable
     // The already installed first editable package should satisfy the requirement
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("second_editable"))
+        .arg("-e")
+        .arg(root_path.join("second_local"))
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
@@ -3922,14 +3915,15 @@ fn already_installed_dependent_editable() {
     Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + second-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/second_editable)
+     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
     );
 
     // Request install of the first editable by full path again
     // We should audit the installed package
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("first_editable")), @r###"
+        .arg("-e")
+        .arg(root_path.join("first_local")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3940,11 +3934,12 @@ fn already_installed_dependent_editable() {
     );
 
     // Request reinstallation of the first package during install of the second
-    // It's not available on an index and the user has not specified the path so we fail
+    // It's not available on an index and the user has not specified the path so we fail.
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("second_editable"))
+        .arg("-e")
+        .arg(root_path.join("second_local"))
         .arg("--reinstall-package")
-        .arg("first-editable")
+        .arg("first-local")
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
@@ -3955,27 +3950,29 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-editable was not found in the provided package locations and second-editable==0.0.1 depends on first-editable, we can conclude that second-editable==0.0.1 cannot be used.
-          And because only second-editable==0.0.1 is available and you require second-editable, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
+          And because only second-local==0.1.0 is available and you require second-local, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
     // Request reinstallation of the first package
     // We include it in the install command with a full path so we should succeed
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("first_editable"))
+        .arg("-e")
+        .arg(root_path.join("first_local"))
         .arg("--reinstall-package")
-        .arg("first-editable"), @r###"
+        .arg("first-local"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
-     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
+     - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 }
@@ -4070,6 +4067,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4198,6 +4196,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -4235,6 +4234,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
@@ -4688,8 +4688,7 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `aiohttp`
+    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
     "###
     );
 
@@ -4953,9 +4952,8 @@ fn tool_uv_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 9 packages in [TIME]
-    Downloaded 8 packages in [TIME]
+    Downloaded 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + anyio==4.3.0
      + boltons==24.0.1.dev0 (from git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0)

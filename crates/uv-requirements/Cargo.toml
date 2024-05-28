@@ -16,7 +16,7 @@ distribution-types = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
-requirements-txt = { workspace = true, features = ["reqwest"] }
+requirements-txt = { workspace = true, features = ["http"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }

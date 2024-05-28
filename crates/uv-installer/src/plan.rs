@@ -5,14 +5,13 @@ use std::str::FromStr;
 
 use anyhow::{bail, Result};
 use rustc_hash::FxHashMap;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
     CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, InstalledMetadata,
-    InstalledVersion, Name, PathBuiltDist, PathSourceDist, RemoteSource, Requirement,
-    RequirementSource, Verbatim,
+    Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, Name, PathBuiltDist,
+    PathSourceDist, RemoteSource, Requirement, RequirementSource, Verbatim,
 };
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
@@ -26,32 +25,18 @@ use uv_interpreter::PythonEnvironment;
 use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;
-use crate::{ResolvedEditable, SitePackages};
+use crate::SitePackages;
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]
 pub struct Planner<'a> {
     requirements: &'a [Requirement],
-    editable_requirements: &'a [ResolvedEditable],
 }
 
 impl<'a> Planner<'a> {
     /// Set the requirements use in the [`Plan`].
-    #[must_use]
-    pub fn with_requirements(requirements: &'a [Requirement]) -> Self {
-        Self {
-            requirements,
-            editable_requirements: &[],
-        }
-    }
-
-    /// Set the editable requirements use in the [`Plan`].
-    #[must_use]
-    pub fn with_editable_requirements(self, editable_requirements: &'a [ResolvedEditable]) -> Self {
-        Self {
-            editable_requirements,
-            ..self
-        }
+    pub fn new(requirements: &'a [Requirement]) -> Self {
+        Self { requirements }
     }
 
     /// Partition a set of requirements into those that should be linked from the cache, those that
@@ -90,56 +75,6 @@ impl<'a> Planner<'a> {
             BuildHasherDefault::default(),
         );
 
-        // Remove any editable requirements.
-        for requirement in self.editable_requirements {
-            // If we see the same requirement twice, then we have a conflict.
-            let specifier = Specifier::Editable(requirement.installed_version());
-            match seen.entry(requirement.name().clone()) {
-                Entry::Occupied(value) => {
-                    if value.get() == &specifier {
-                        continue;
-                    }
-                    bail!(
-                        "Detected duplicate package in requirements: {}",
-                        requirement.name()
-                    );
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(specifier);
-                }
-            }
-
-            match requirement {
-                ResolvedEditable::Installed(installed) => {
-                    debug!("Treating editable requirement as immutable: {installed}");
-
-                    // Remove from the site-packages index, to avoid marking as extraneous.
-                    let Some(editable) = installed.wheel.as_editable() else {
-                        warn!("Editable requirement is not editable: {installed}");
-                        continue;
-                    };
-                    let existing = site_packages.remove_editables(editable);
-                    if existing.is_empty() {
-                        warn!("Editable requirement is not installed: {installed}");
-                        continue;
-                    }
-                }
-                ResolvedEditable::Built(built) => {
-                    debug!("Treating editable requirement as mutable: {built}");
-
-                    // Remove any editables.
-                    let existing = site_packages.remove_editables(built.editable.raw());
-                    reinstalls.extend(existing);
-
-                    // Remove any non-editable installs of the same package.
-                    let existing = site_packages.remove_packages(built.name());
-                    reinstalls.extend(existing);
-
-                    cached.push(built.wheel.clone());
-                }
-            }
-        }
-
         for requirement in self.requirements {
             // Filter out incompatible requirements.
             if !requirement.evaluate_markers(Some(venv.interpreter().markers()), &[]) {
@@ -147,10 +82,9 @@ impl<'a> Planner<'a> {
             }
 
             // If we see the same requirement twice, then we have a conflict.
-            let specifier = Specifier::NonEditable(&requirement.source);
             match seen.entry(requirement.name.clone()) {
                 Entry::Occupied(value) => {
-                    if value.get() == &specifier {
+                    if value.get() == &&requirement.source {
                         continue;
                     }
                     bail!(
@@ -159,7 +93,7 @@ impl<'a> Planner<'a> {
                     );
                 }
                 Entry::Vacant(entry) => {
-                    entry.insert(specifier);
+                    entry.insert(&requirement.source);
                 }
             }
 
@@ -194,6 +128,9 @@ impl<'a> Planner<'a> {
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {distribution}");
+                            }
+                            RequirementSatisfaction::Dynamic => {
+                                debug!("Requirement installed, but dynamic: {distribution}");
                             }
                         }
                         reinstalls.push(distribution.clone());
@@ -332,7 +269,7 @@ impl<'a> Planner<'a> {
                         continue;
                     }
                 }
-                RequirementSource::Path { url, .. } => {
+                RequirementSource::Path { url, editable, .. } => {
                     // Store the canonicalized path, which also serves to validate that it exists.
                     let path = match url
                         .to_file_path()
@@ -352,7 +289,7 @@ impl<'a> Planner<'a> {
                             name: requirement.name.clone(),
                             url: url.clone(),
                             path,
-                            editable: false,
+                            editable: *editable,
                         };
 
                         // Find the most-compatible wheel from the cache, since we don't know
@@ -476,14 +413,6 @@ impl<'a> Planner<'a> {
             extraneous,
         })
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum Specifier<'a> {
-    /// An editable requirement, marked by the installed version of the package.
-    Editable(InstalledVersion<'a>),
-    /// A non-editable requirement, marked by the version or URL specifier.
-    NonEditable(&'a RequirementSource),
 }
 
 #[derive(Debug, Default)]

@@ -44,6 +44,11 @@ impl Requirement {
             true
         }
     }
+
+    /// Returns `true` if the requirement is editable.
+    pub fn is_editable(&self) -> bool {
+        self.source.is_editable()
+    }
 }
 
 impl From<pep508_rs::Requirement<VerbatimParsedUrl>> for Requirement {
@@ -190,7 +195,7 @@ impl RequirementSource {
             ParsedUrl::Path(local_file) => RequirementSource::Path {
                 path: local_file.path,
                 url,
-                editable: false,
+                editable: local_file.editable,
             },
             ParsedUrl::Git(git) => RequirementSource::Git {
                 url,

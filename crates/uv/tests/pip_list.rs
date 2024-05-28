@@ -165,9 +165,8 @@ fn list_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -218,9 +217,8 @@ fn list_editable_only() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -309,9 +307,8 @@ fn list_exclude() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -413,9 +410,8 @@ fn list_format_json() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -520,9 +516,8 @@ fn list_format_freeze() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6

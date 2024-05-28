@@ -33,6 +33,13 @@ pub struct VerbatimParsedUrl {
     pub verbatim: VerbatimUrl,
 }
 
+impl VerbatimParsedUrl {
+    /// Returns `true` if the URL is editable.
+    pub fn is_editable(&self) -> bool {
+        self.parsed_url.is_editable()
+    }
+}
+
 impl Pep508Url for VerbatimParsedUrl {
     type Err = ParsedUrlError;
 
@@ -148,6 +155,13 @@ pub enum ParsedUrl {
     /// The direct URL is a URL to a source archive (e.g., a `.tar.gz` file) or built archive
     /// (i.e., a `.whl` file).
     Archive(ParsedArchiveUrl),
+}
+
+impl ParsedUrl {
+    /// Returns `true` if the URL is editable.
+    pub fn is_editable(&self) -> bool {
+        matches!(self, Self::Path(ParsedPathUrl { editable: true, .. }))
+    }
 }
 
 /// A local path url

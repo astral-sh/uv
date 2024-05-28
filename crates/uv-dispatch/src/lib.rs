@@ -199,7 +199,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             remote,
             reinstalls,
             extraneous: _,
-        } = Planner::with_requirements(&requirements).build(
+        } = Planner::new(&requirements).build(
             site_packages,
             &Reinstall::None,
             &NoBinary::None,
