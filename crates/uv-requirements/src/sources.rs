@@ -24,6 +24,8 @@ pub enum RequirementsSource {
     SetupCfg(PathBuf),
     /// Dependencies were provided via a path to a source tree (e.g., `pip install .`).
     SourceTree(PathBuf),
+    /// Dependencies were provided via a workspace config file (e.g. pyproject.toml/uv.toml).
+    WorkSpacePackage(String),
 }
 
 impl RequirementsSource {
@@ -124,6 +126,11 @@ impl RequirementsSource {
         Self::Package(name)
     }
 
+    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a package in workspace config.
+    pub fn from_workspace_package(name: String) -> Self {
+        Self::WorkSpacePackage(Self::from_package(name).to_string())
+    }
+
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a path to a source
     /// tree.
     pub fn from_source_tree(path: PathBuf) -> Self {
@@ -142,7 +149,7 @@ impl RequirementsSource {
 impl std::fmt::Display for RequirementsSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Package(package) => write!(f, "{package}"),
+            Self::Package(package) | Self::WorkSpacePackage(package) => write!(f, "{package}"),
             Self::Editable(path) => write!(f, "-e {path}"),
             Self::RequirementsTxt(path)
             | Self::PyprojectToml(path)

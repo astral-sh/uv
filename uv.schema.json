@@ -28,6 +28,15 @@
         "null"
       ]
     },
+    "override-dependencies": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "pip": {
       "anyOf": [
         {

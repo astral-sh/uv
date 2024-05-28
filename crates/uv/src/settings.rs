@@ -16,6 +16,7 @@ use uv_configuration::{
 use uv_interpreter::{PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_requirements::ExtrasSpecification;
+use uv_requirements::RequirementsSource;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_workspace::{Combine, PipOptions, Workspace};
 
@@ -183,7 +184,7 @@ pub(crate) struct PipCompileSettings {
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
     // Override dependencies from workspace.
-    pub(crate) override_from_workspace: Vec<String>,
+    pub(crate) override_from_workspace: Vec<RequirementsSource>,
 }
 
 impl PipCompileSettings {
@@ -254,11 +255,20 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
-        let override_from_workspace: Vec<String> = workspace
-            .as_ref()
-            .and_then(|ws| ws.options.override_dependencies.as_ref())
-            .cloned()
-            .unwrap_or_else(Vec::new);
+        let override_from_workspace = if let Some(ws) = workspace.as_ref() {
+            ws.options
+                .override_dependencies
+                .as_ref()
+                .map_or_else(Vec::new, |deps| {
+                    deps.iter()
+                        .map(|name: &std::string::String| {
+                            RequirementsSource::from_workspace_package(name.to_string())
+                        })
+                        .collect::<Vec<_>>()
+                })
+        } else {
+            Vec::new()
+        };
 
         Self {
             // CLI-only settings.
@@ -466,7 +476,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) uv_lock: Option<String>,
-    pub(crate) override_from_workspace: Vec<String>,
+    pub(crate) override_from_workspace: Vec<RequirementsSource>,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -534,11 +544,20 @@ impl PipInstallSettings {
             compat_args: _,
         } = args;
 
-        let override_from_workspace: Vec<String> = workspace
-            .as_ref()
-            .and_then(|ws| ws.options.override_dependencies.as_ref())
-            .cloned()
-            .unwrap_or_else(Vec::new);
+        let override_from_workspace = if let Some(ws) = workspace.as_ref() {
+            ws.options
+                .override_dependencies
+                .as_ref()
+                .map_or_else(Vec::new, |deps| {
+                    deps.iter()
+                        .map(|name: &std::string::String| {
+                            RequirementsSource::from_workspace_package(name.to_string())
+                        })
+                        .collect::<Vec<_>>()
+                })
+        } else {
+            Vec::new()
+        };
 
         Self {
             // CLI-only settings.

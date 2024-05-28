@@ -9,6 +9,8 @@ pub enum RequirementOrigin {
     File(PathBuf),
     /// The requirement was provided via a local project (e.g., a `pyproject.toml` file).
     Project(PathBuf, PackageName),
+    /// The requirement was provided via a workspace config file (e.g., a `pyproject.toml/uv.toml` file).
+    Workspace,
 }
 
 impl RequirementOrigin {
@@ -17,6 +19,7 @@ impl RequirementOrigin {
         match self {
             RequirementOrigin::File(path) => path.as_path(),
             RequirementOrigin::Project(path, _) => path.as_path(),
+            _ => panic!("Unsupported RequirementOrigin variant"),
         }
     }
 }

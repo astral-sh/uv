@@ -27,13 +27,22 @@ impl std::fmt::Display for SourceAnnotation {
                 RequirementOrigin::Project(path, project_name) => {
                     write!(f, "{project_name} ({})", path.portable_display())
                 }
+                RequirementOrigin::Workspace => panic!("Unsupported RequirementOrigin variant"),
             },
             Self::Constraint(origin) => {
                 write!(f, "-c {}", origin.path().portable_display())
             }
-            Self::Override(origin) => {
-                write!(f, "--override {}", origin.path().portable_display())
-            }
+            Self::Override(origin) => match origin {
+                RequirementOrigin::File(path) => {
+                    write!(f, "--override {}", path.portable_display())
+                }
+                RequirementOrigin::Workspace => {
+                    write!(f, "--override (from workspace)")
+                }
+                RequirementOrigin::Project(_path, _project_name) => {
+                    panic!("Unsupported RequirementOrigin variant")
+                }
+            },
         }
     }
 }

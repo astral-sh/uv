@@ -110,6 +110,20 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
+            RequirementsSource::WorkSpacePackage(name) => {
+                let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
+                    .with_context(|| format!("Failed to parse: `{name}`"))?
+                    .with_origin(pep508_rs::RequirementOrigin::Workspace);
+                Self {
+                    requirements: vec![UnresolvedRequirementSpecification::from(
+                        RequirementEntry {
+                            requirement,
+                            hashes: vec![],
+                        },
+                    )],
+                    ..Self::default()
+                }
+            }
             RequirementsSource::Editable(name) => {
                 Self::from_editable_source(name, extras, workspace, preview).await?
             }
