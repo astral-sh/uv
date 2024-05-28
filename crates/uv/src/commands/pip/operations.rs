@@ -31,7 +31,7 @@ use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    RequirementsSpecification, SourceTreeResolver, Workspace,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -51,6 +51,7 @@ pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    workspace: Option<&Workspace>,
     extras: &ExtrasSpecification,
     client_builder: &BaseClientBuilder<'_>,
     preview: PreviewMode,
@@ -69,6 +70,7 @@ pub(crate) async fn read_requirements(
         requirements,
         constraints,
         overrides,
+        workspace,
         extras,
         client_builder,
         preview,

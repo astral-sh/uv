@@ -99,6 +99,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        None,
         &ExtrasSpecification::default(),
         &client_builder,
         preview,

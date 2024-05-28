@@ -56,7 +56,7 @@ pub(crate) async fn run(
     } else {
         debug!("Syncing project environment.");
 
-        let project = ProjectWorkspace::discover(std::env::current_dir()?)?;
+        let project = ProjectWorkspace::discover(std::env::current_dir()?).await?;
 
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
@@ -65,6 +65,7 @@ pub(crate) async fn run(
             project::update_environment(
                 venv,
                 &project.requirements(),
+                Some(project.workspace()),
                 preview,
                 connectivity,
                 cache,
@@ -111,8 +112,16 @@ pub(crate) async fn run(
 
         // Install the ephemeral requirements.
         Some(
-            project::update_environment(venv, &requirements, preview, connectivity, cache, printer)
-                .await?,
+            project::update_environment(
+                venv,
+                &requirements,
+                None,
+                preview,
+                connectivity,
+                cache,
+                printer,
+            )
+            .await?,
         )
     };
 

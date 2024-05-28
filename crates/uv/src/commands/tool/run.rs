@@ -71,8 +71,18 @@ pub(crate) async fn run(
     )?;
 
     // Install the ephemeral requirements.
-    let ephemeral_env =
-        Some(update_environment(venv, &requirements, preview, connectivity, cache, printer).await?);
+    let ephemeral_env = Some(
+        update_environment(
+            venv,
+            &requirements,
+            None,
+            preview,
+            connectivity,
+            cache,
+            printer,
+        )
+        .await?,
+    );
 
     // TODO(zanieb): Determine the command via the package entry points
     let command = target;
