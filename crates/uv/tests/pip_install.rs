@@ -2588,7 +2588,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited 2 packages in [TIME]
     "###
     );
 
@@ -3950,8 +3950,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because first-local was not found in the provided package locations and you require first-local, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
