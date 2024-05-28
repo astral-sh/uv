@@ -7,6 +7,7 @@ use tracing::debug;
 
 use distribution_types::{Diagnostic, InstalledDist};
 use uv_cache::Cache;
+use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
 use uv_interpreter::{PythonEnvironment, SystemPython};
@@ -18,6 +19,7 @@ use crate::printer::Printer;
 pub(crate) fn pip_check(
     python: Option<&str>,
     system: bool,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -29,7 +31,7 @@ pub(crate) fn pip_check(
     } else {
         SystemPython::Allowed
     };
-    let venv = PythonEnvironment::find(python, system, cache)?;
+    let venv = PythonEnvironment::find(python, system, preview, cache)?;
 
     debug!(
         "Using Python {} environment at {}",

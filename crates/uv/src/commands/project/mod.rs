@@ -19,7 +19,7 @@ use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
 use uv_requirements::{
-    ExtrasSpecification, ProjectWorkspace, RequirementsSource, RequirementsSpecification,
+    ExtrasSpecification, ProjectWorkspace, RequirementsSource, RequirementsSpecification, Workspace,
 };
 use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -46,6 +46,7 @@ pub(crate) enum Error {
 /// Initialize a virtual environment for the current project.
 pub(crate) fn init_environment(
     project: &ProjectWorkspace,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, Error> {
@@ -57,7 +58,7 @@ pub(crate) fn init_environment(
         Ok(venv) => Ok(venv),
         Err(uv_interpreter::Error::NotFound(_)) => {
             // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
-            let interpreter = find_default_interpreter(cache)
+            let interpreter = find_default_interpreter(preview, cache)
                 .map_err(uv_interpreter::Error::from)?
                 .map_err(uv_interpreter::Error::from)?
                 .into_interpreter();
@@ -91,6 +92,7 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
+    workspace: Option<&Workspace>,
     preview: PreviewMode,
     connectivity: Connectivity,
     cache: &Cache,
@@ -106,6 +108,7 @@ pub(crate) async fn update_environment(
         requirements,
         &[],
         &[],
+        workspace,
         &ExtrasSpecification::None,
         &client_builder,
         preview,

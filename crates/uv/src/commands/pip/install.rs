@@ -102,6 +102,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        None,
         extras,
         &client_builder,
         preview,
@@ -114,7 +115,7 @@ pub(crate) async fn pip_install(
     } else {
         SystemPython::Explicit
     };
-    let venv = PythonEnvironment::find(python.as_deref(), system, &cache)?;
+    let venv = PythonEnvironment::find(python.as_deref(), system, preview, &cache)?;
 
     debug!(
         "Using Python {} environment at {}",

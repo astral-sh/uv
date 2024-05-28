@@ -440,6 +440,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -463,6 +464,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -481,6 +483,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -497,6 +500,7 @@ async fn run() -> Result<ExitStatus> {
             commands::pip_check(
                 args.shared.python.as_deref(),
                 args.shared.system,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -546,6 +550,7 @@ async fn run() -> Result<ExitStatus> {
                 args.allow_existing,
                 args.shared.exclude_newer,
                 globals.native_tls,
+                globals.preview,
                 &cache,
                 printer,
             )

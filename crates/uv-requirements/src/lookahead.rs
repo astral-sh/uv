@@ -4,6 +4,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use thiserror::Error;
+use tracing::trace;
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, GitSourceDist, Requirement, RequirementSource,
@@ -152,6 +153,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
     ) -> Result<Option<RequestedRequirements>, LookaheadError> {
+        trace!("Performing lookahead for {requirement}");
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
         let dist = match requirement.source {
@@ -160,7 +162,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 subdirectory,
                 location,
                 url,
-            } => Dist::from_http_url(requirement.name, location, subdirectory, url)?,
+            } => Dist::from_http_url(requirement.name, url, location, subdirectory)?,
             RequirementSource::Git {
                 repository,
                 reference,
@@ -184,7 +186,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 url,
                 // TODO(konsti): Figure out why we lose the editable here (does it matter?)
                 editable: _,
-            } => Dist::from_file_url(requirement.name, &path, false, url)?,
+            } => Dist::from_file_url(requirement.name, url, &path, false)?,
         };
 
         // Fetch the metadata for the distribution.

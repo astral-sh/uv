@@ -30,7 +30,7 @@ use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user_once;
 
-use crate::ExtrasSpecification;
+use crate::{ExtrasSpecification, Workspace};
 
 #[derive(Debug, Error)]
 pub enum Pep621Error {
@@ -39,7 +39,7 @@ pub enum Pep621Error {
     #[error("Must specify a `[project]` section alongside `[tool.uv.sources]`")]
     MissingProjectSection,
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
-    CantBeDynamic(&'static str),
+    DynamicNotAllowed(&'static str),
     #[error("Failed to parse entry for: `{0}`")]
     LoweringError(PackageName, #[source] LoweringError),
 }
@@ -68,14 +68,16 @@ pub enum LoweringError {
     InvalidVerbatimUrl(#[from] pep508_rs::VerbatimUrlError),
     #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
     ConflictingUrls,
-    #[error("Could not normalize path: `{0}`")]
-    AbsolutizeError(String, #[source] io::Error),
+    #[error("Could not normalize path: `{}`", _0.user_display())]
+    AbsolutizeError(PathBuf, #[source] io::Error),
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
     #[error("`tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it")]
     MissingPreview,
+    #[error("`editable = false` is not yet supported")]
+    NonEditableWorkspaceDependency,
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -241,12 +243,11 @@ impl Pep621Metadata {
     ///
     /// Returns an error if the requirements are not valid PEP 508 requirements.
     pub(crate) fn try_from(
-        pyproject: PyProjectToml,
+        pyproject: &PyProjectToml,
         extras: &ExtrasSpecification,
         pyproject_path: &Path,
         project_dir: &Path,
-        workspace_sources: &BTreeMap<PackageName, Source>,
-        workspace_packages: &BTreeMap<PackageName, String>,
+        workspace: &Workspace,
         preview: PreviewMode,
     ) -> Result<Option<Self>, Pep621Error> {
         let project_sources = pyproject
@@ -255,9 +256,9 @@ impl Pep621Metadata {
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.sources.clone());
 
-        let has_sources = project_sources.is_some() || !workspace_sources.is_empty();
+        let has_sources = project_sources.is_some() || !workspace.sources().is_empty();
 
-        let Some(project) = pyproject.project else {
+        let Some(project) = &pyproject.project else {
             return if has_sources {
                 Err(Pep621Error::MissingProjectSection)
             } else {
@@ -268,7 +269,7 @@ impl Pep621Metadata {
             // If the project specifies dynamic dependencies, we can't extract the requirements.
             if dynamic.iter().any(|field| field == "dependencies") {
                 return if has_sources {
-                    Err(Pep621Error::CantBeDynamic("project.dependencies"))
+                    Err(Pep621Error::DynamicNotAllowed("project.dependencies"))
                 } else {
                     Ok(None)
                 };
@@ -277,7 +278,9 @@ impl Pep621Metadata {
             // extract the requirements.
             if !extras.is_empty() && dynamic.iter().any(|field| field == "optional-dependencies") {
                 return if has_sources {
-                    Err(Pep621Error::CantBeDynamic("project.optional-dependencies"))
+                    Err(Pep621Error::DynamicNotAllowed(
+                        "project.optional-dependencies",
+                    ))
                 } else {
                     Ok(None)
                 };
@@ -285,14 +288,13 @@ impl Pep621Metadata {
         }
 
         let requirements = lower_requirements(
-            &project.dependencies.unwrap_or_default(),
-            &project.optional_dependencies.unwrap_or_default(),
+            project.dependencies.as_deref(),
+            project.optional_dependencies.as_ref(),
             pyproject_path,
             &project.name,
             project_dir,
             &project_sources.unwrap_or_default(),
-            workspace_sources,
-            workspace_packages,
+            workspace,
             preview,
         )?;
 
@@ -316,7 +318,7 @@ impl Pep621Metadata {
         }
 
         Ok(Some(Self {
-            name: project.name,
+            name: project.name.clone(),
             requirements: requirements_with_extras,
             used_extras,
         }))
@@ -325,18 +327,18 @@ impl Pep621Metadata {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_requirements(
-    dependencies: &[String],
-    optional_dependencies: &IndexMap<ExtraName, Vec<String>>,
+    dependencies: Option<&[String]>,
+    optional_dependencies: Option<&IndexMap<ExtraName, Vec<String>>>,
     pyproject_path: &Path,
     project_name: &PackageName,
     project_dir: &Path,
     project_sources: &BTreeMap<PackageName, Source>,
-    workspace_sources: &BTreeMap<PackageName, Source>,
-    workspace_packages: &BTreeMap<PackageName, String>,
+    workspace: &Workspace,
     preview: PreviewMode,
 ) -> Result<Requirements, Pep621Error> {
     let dependencies = dependencies
-        .iter()
+        .into_iter()
+        .flatten()
         .map(|dependency| {
             let requirement = pep508_rs::Requirement::from_str(dependency)?.with_origin(
                 RequirementOrigin::Project(pyproject_path.to_path_buf(), project_name.clone()),
@@ -347,15 +349,15 @@ pub(crate) fn lower_requirements(
                 project_name,
                 project_dir,
                 project_sources,
-                workspace_sources,
-                workspace_packages,
+                workspace,
                 preview,
             )
             .map_err(|err| Pep621Error::LoweringError(name, err))
         })
         .collect::<Result<_, Pep621Error>>()?;
     let optional_dependencies = optional_dependencies
-        .iter()
+        .into_iter()
+        .flatten()
         .map(|(extra_name, dependencies)| {
             let dependencies: Vec<_> = dependencies
                 .iter()
@@ -372,8 +374,7 @@ pub(crate) fn lower_requirements(
                         project_name,
                         project_dir,
                         project_sources,
-                        workspace_sources,
-                        workspace_packages,
+                        workspace,
                         preview,
                     )
                     .map_err(|err| Pep621Error::LoweringError(name, err))
@@ -394,29 +395,35 @@ pub(crate) fn lower_requirement(
     project_name: &PackageName,
     project_dir: &Path,
     project_sources: &BTreeMap<PackageName, Source>,
-    workspace_sources: &BTreeMap<PackageName, Source>,
-    workspace_packages: &BTreeMap<PackageName, String>,
+    workspace: &Workspace,
     preview: PreviewMode,
 ) -> Result<Requirement, LoweringError> {
     let source = project_sources
         .get(&requirement.name)
-        .or(workspace_sources.get(&requirement.name))
+        .or(workspace.sources().get(&requirement.name))
         .cloned();
 
-    if !matches!(
-        source,
-        Some(Source::Workspace {
-            // By using toml, we technically support `workspace = false`.
-            workspace: true,
-            ..
-        })
-    ) && workspace_packages.contains_key(&requirement.name)
-    {
+    let workspace_package_declared =
+        // We require that when you use a package that's part of the workspace, ...
+        !workspace.packages().contains_key(&requirement.name)
+        // ... it must be declared as a workspace dependency (`workspace = true`), ...
+        || matches!(
+            source,
+            Some(Source::Workspace {
+                // By using toml, we technically support `workspace = false`.
+                workspace: true,
+                ..
+            })
+        )
+        // ... except for recursive self-inclusion (extras that activate other extras), e.g.
+        // `framework[machine_learning]` depends on `framework[cuda]`.
+        || &requirement.name == project_name;
+    if !workspace_package_declared {
         return Err(LoweringError::UndeclaredWorkspacePackage);
     }
 
     let Some(source) = source else {
-        let has_sources = !project_sources.is_empty() || !workspace_sources.is_empty();
+        let has_sources = !project_sources.is_empty() || !workspace.sources().is_empty();
         // Support recursive editable inclusions.
         if has_sources && requirement.version_or_url.is_none() && &requirement.name != project_name
         {
@@ -523,20 +530,21 @@ pub(crate) fn lower_requirement(
             Some(VersionOrUrl::Url(_)) => return Err(LoweringError::ConflictingUrls),
         },
         Source::Workspace {
-            workspace,
+            workspace: is_workspace,
             editable,
         } => {
-            if !workspace {
+            if !is_workspace {
                 return Err(LoweringError::WorkspaceFalse);
             }
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                 return Err(LoweringError::ConflictingUrls);
             }
-            let path = workspace_packages
+            let path = workspace
+                .packages()
                 .get(&requirement.name)
                 .ok_or(LoweringError::UndeclaredWorkspacePackage)?
                 .clone();
-            path_source(path, project_dir, editable.unwrap_or(true))?
+            path_source(path.root(), workspace.root(), editable.unwrap_or(true))?
         }
         Source::CatchAll { .. } => {
             // Emit a dedicated error message, which is an improvement over Serde's default error.
@@ -554,16 +562,22 @@ pub(crate) fn lower_requirement(
 
 /// Convert a path string to a path section.
 fn path_source(
-    path: String,
+    path: impl AsRef<Path>,
     project_dir: &Path,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
-    let url = VerbatimUrl::parse_path(&path, project_dir)?.with_given(path.clone());
-    let path_buf = PathBuf::from(&path);
+    let url = VerbatimUrl::parse_path(path.as_ref(), project_dir)?
+        .with_given(path.as_ref().to_string_lossy().to_string());
+    let path_buf = path.as_ref().to_path_buf();
     let path_buf = path_buf
         .absolutize_from(project_dir)
-        .map_err(|err| LoweringError::AbsolutizeError(path, err))?
+        .map_err(|err| LoweringError::AbsolutizeError(path.as_ref().to_path_buf(), err))?
         .to_path_buf();
+    if !editable {
+        // TODO(konsti): Support this. Currently we support `{ workspace = true }`, but we don't
+        //  support `{ workspace = true, editable = false }` since we only collect editables.
+        return Err(LoweringError::NonEditableWorkspaceDependency);
+    }
     Ok(RequirementSource::Path {
         path: path_buf,
         url,
@@ -663,6 +677,7 @@ mod serde_from_and_to_string {
 #[cfg(test)]
 mod test {
     use std::path::Path;
+    use std::str::FromStr;
 
     use anyhow::Context;
     use indoc::indoc;
@@ -670,7 +685,9 @@ mod test {
 
     use uv_configuration::PreviewMode;
     use uv_fs::Simplified;
+    use uv_normalize::PackageName;
 
+    use crate::ProjectWorkspace;
     use crate::{ExtrasSpecification, RequirementsSpecification};
 
     fn from_source(
@@ -679,13 +696,19 @@ mod test {
         extras: &ExtrasSpecification,
     ) -> anyhow::Result<RequirementsSpecification> {
         let path = uv_fs::absolutize_path(path.as_ref())?;
+        let project_workspace =
+            ProjectWorkspace::dummy(path.as_ref(), &PackageName::from_str("foo").unwrap());
+        let pyproject_toml =
+            toml::from_str(contents).context("Failed to parse: `pyproject.toml`")?;
         RequirementsSpecification::parse_direct_pyproject_toml(
-            contents,
+            &pyproject_toml,
+            project_workspace.workspace(),
             extras,
             path.as_ref(),
             PreviewMode::Enabled,
         )
-        .with_context(|| format!("Failed to parse: `{}`", path.user_display()))
+        .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?
+        .context("Missing workspace")
     }
 
     fn format_err(input: &str) -> String {
@@ -803,7 +826,6 @@ mod test {
               "tqdm",
             ]
         "#};
-
         assert!(from_source(input, "pyproject.toml", &ExtrasSpecification::None).is_ok());
     }
 

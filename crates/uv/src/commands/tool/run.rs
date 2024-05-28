@@ -51,10 +51,10 @@ pub(crate) async fn run(
 
     // Discover an interpreter.
     let interpreter = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, SystemPython::Allowed, cache)?
+        PythonEnvironment::from_requested_python(python, SystemPython::Allowed, preview, cache)?
             .into_interpreter()
     } else {
-        PythonEnvironment::from_default_python(cache)?.into_interpreter()
+        PythonEnvironment::from_default_python(preview, cache)?.into_interpreter()
     };
 
     // Create a virtual environment
@@ -71,8 +71,18 @@ pub(crate) async fn run(
     )?;
 
     // Install the ephemeral requirements.
-    let ephemeral_env =
-        Some(update_environment(venv, &requirements, preview, connectivity, cache, printer).await?);
+    let ephemeral_env = Some(
+        update_environment(
+            venv,
+            &requirements,
+            None,
+            preview,
+            connectivity,
+            cache,
+            printer,
+        )
+        .await?,
+    );
 
     // TODO(zanieb): Determine the command via the package entry points
     let command = target;
