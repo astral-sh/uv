@@ -70,8 +70,8 @@ impl ProgressReporter {
         };
 
         ProgressReporter {
-            root,
             printer,
+            root,
             mode,
         }
     }
@@ -168,7 +168,7 @@ impl ProgressReporter {
             return;
         };
 
-        state.lock().unwrap().bars[&id].inc(bytes)
+        state.lock().unwrap().bars[&id].inc(bytes);
     }
 
     fn on_download_complete(&self, id: usize) {
