@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.5
+
+### Enhancements
+
+- Add support for x86 Windows ([#3873](https://github.com/astral-sh/uv/pull/3873))
+- Add support for `prepare_metadata_for_build_editable` hook ([#3870](https://github.com/astral-sh/uv/pull/3870))
+- Add concurrent progress bars for downloads ([#3252](https://github.com/astral-sh/uv/pull/3252))
+
+### Bug fixes
+
+- Update bundled Python URLs and add `"arm"` architecture variant ([#3855](https://github.com/astral-sh/uv/pull/3855))
+
 ## 0.2.4
 
 ### CLI
