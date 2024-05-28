@@ -21,8 +21,8 @@ use crate::cli::{SelfCommand, SelfNamespace};
 use crate::commands::ExitStatus;
 use crate::compat::CompatArgs;
 use crate::settings::{
-    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
-    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
+    CacheSettings, GlobalSettings, PipCompileSettings, PipFreezeSettings, PipInstallSettings,
+    PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
 };
 
 #[cfg(target_os = "windows")]
@@ -234,8 +234,8 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.exclude_newer,
                 args.shared.annotation_style,
                 args.shared.link_mode,
-                args.shared.python,
-                args.shared.system,
+                globals.python,
+                globals.system,
                 args.shared.concurrency,
                 args.uv_lock,
                 globals.native_tls,
@@ -292,8 +292,8 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.python_platform,
                 args.shared.strict,
                 args.shared.exclude_newer,
-                args.shared.python,
-                args.shared.system,
+                globals.python,
+                globals.system,
                 args.shared.break_system_packages,
                 args.shared.target,
                 args.shared.concurrency,
@@ -367,8 +367,8 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.python_platform,
                 args.shared.strict,
                 args.shared.exclude_newer,
-                args.shared.python,
-                args.shared.system,
+                globals.python,
+                globals.system,
                 args.shared.break_system_packages,
                 args.shared.target,
                 args.shared.concurrency,
@@ -402,8 +402,8 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
             commands::pip_uninstall(
                 &sources,
-                args.shared.python,
-                args.shared.system,
+                globals.python,
+                globals.system,
                 args.shared.break_system_packages,
                 args.shared.target,
                 cache,
@@ -419,7 +419,7 @@ async fn run() -> Result<ExitStatus> {
             command: PipCommand::Freeze(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipFreezeSettings::resolve(args, workspace);
+            let args = PipFreezeSettings::resolve(&args, workspace);
 
             // Initialize the cache.
             let cache = cache.init()?;
@@ -427,8 +427,8 @@ async fn run() -> Result<ExitStatus> {
             commands::pip_freeze(
                 args.exclude_editable,
                 args.shared.strict,
-                args.shared.python.as_deref(),
-                args.shared.system,
+                globals.python.as_deref(),
+                globals.system,
                 globals.preview,
                 &cache,
                 printer,
@@ -451,8 +451,8 @@ async fn run() -> Result<ExitStatus> {
                 &args.exclude,
                 &args.format,
                 args.shared.strict,
-                args.shared.python.as_deref(),
-                args.shared.system,
+                globals.python.as_deref(),
+                globals.system,
                 globals.preview,
                 &cache,
                 printer,
@@ -470,25 +470,22 @@ async fn run() -> Result<ExitStatus> {
             commands::pip_show(
                 args.package,
                 args.shared.strict,
-                args.shared.python.as_deref(),
-                args.shared.system,
+                globals.python.as_deref(),
+                globals.system,
                 globals.preview,
                 &cache,
                 printer,
             )
         }
         Commands::Pip(PipNamespace {
-            command: PipCommand::Check(args),
+            command: PipCommand::Check,
         }) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCheckSettings::resolve(args, workspace);
-
             // Initialize the cache.
             let cache = cache.init()?;
 
             commands::pip_check(
-                args.shared.python.as_deref(),
-                args.shared.system,
+                globals.python.as_deref(),
+                globals.system,
                 globals.preview,
                 &cache,
                 printer,
@@ -527,7 +524,7 @@ async fn run() -> Result<ExitStatus> {
 
             commands::venv(
                 &args.name,
-                args.shared.python.as_deref(),
+                globals.python.as_deref(),
                 args.shared.link_mode,
                 &args.shared.index_locations,
                 args.shared.index_strategy,
@@ -576,7 +573,7 @@ async fn run() -> Result<ExitStatus> {
                 args.target,
                 args.args,
                 requirements,
-                args.python,
+                globals.python,
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,
@@ -624,7 +621,7 @@ async fn run() -> Result<ExitStatus> {
             commands::run_tool(
                 args.target,
                 args.args,
-                args.python,
+                globals.python,
                 args.from,
                 args.with,
                 globals.isolated,

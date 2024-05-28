@@ -20,9 +20,8 @@ use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode,
 use uv_workspace::{Combine, PipOptions, Workspace};
 
 use crate::cli::{
-    ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
-    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs,
-    VenvArgs,
+    ColorChoice, GlobalArgs, LockArgs, Maybe, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -36,6 +35,8 @@ pub(crate) struct GlobalSettings {
     pub(crate) native_tls: bool,
     pub(crate) connectivity: Connectivity,
     pub(crate) isolated: bool,
+    pub(crate) python: Option<String>,
+    pub(crate) system: bool,
     pub(crate) preview: PreviewMode,
 }
 
@@ -52,20 +53,32 @@ impl GlobalSettings {
             },
             native_tls: flag(args.native_tls, args.no_native_tls)
                 .combine(workspace.and_then(|workspace| workspace.options.native_tls))
-                .unwrap_or(false),
+                .unwrap_or_default(),
             connectivity: if flag(args.offline, args.no_offline)
                 .combine(workspace.and_then(|workspace| workspace.options.offline))
-                .unwrap_or(false)
+                .unwrap_or_default()
             {
                 Connectivity::Offline
             } else {
                 Connectivity::Online
             },
             isolated: args.isolated,
+            python: args.python.combine(
+                workspace
+                    .and_then(|workspace| workspace.options.pip.as_ref())
+                    .and_then(|pip| pip.python.clone()),
+            ),
+            system: flag(args.system, args.no_system)
+                .combine(
+                    workspace
+                        .and_then(|workspace| workspace.options.pip.as_ref())
+                        .and_then(|pip| pip.system),
+                )
+                .unwrap_or_default(),
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
                     .combine(workspace.and_then(|workspace| workspace.options.preview))
-                    .unwrap_or(false),
+                    .unwrap_or_default(),
             ),
         }
     }
@@ -86,7 +99,7 @@ impl CacheSettings {
             no_cache: args.no_cache
                 || workspace
                     .and_then(|workspace| workspace.options.no_cache)
-                    .unwrap_or(false),
+                    .unwrap_or_default(),
             cache_dir: args
                 .cache_dir
                 .or_else(|| workspace.and_then(|workspace| workspace.options.cache_dir.clone())),
@@ -102,26 +115,19 @@ pub(crate) struct RunSettings {
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
-    pub(crate) python: Option<String>,
 }
 
 impl RunSettings {
     /// Resolve the [`RunSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, _workspace: Option<Workspace>) -> Self {
-        let RunArgs {
-            target,
-            args,
-            with,
-            python,
-        } = args;
+        let RunArgs { target, args, with } = args;
 
         Self {
             // CLI-only settings.
             target,
             args,
             with,
-            python,
         }
     }
 }
@@ -129,42 +135,30 @@ impl RunSettings {
 /// The resolved settings to use for a `sync` invocation.
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
-pub(crate) struct SyncSettings {
-    // CLI-only settings.
-    pub(crate) python: Option<String>,
-}
+pub(crate) struct SyncSettings;
 
 impl SyncSettings {
     /// Resolve the [`SyncSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: SyncArgs, _workspace: Option<Workspace>) -> Self {
-        let SyncArgs { python } = args;
+        let SyncArgs {} = args;
 
-        Self {
-            // CLI-only settings.
-            python,
-        }
+        Self {}
     }
 }
 
 /// The resolved settings to use for a `lock` invocation.
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
-pub(crate) struct LockSettings {
-    // CLI-only settings.
-    pub(crate) python: Option<String>,
-}
+pub(crate) struct LockSettings;
 
 impl LockSettings {
     /// Resolve the [`LockSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, _workspace: Option<Workspace>) -> Self {
-        let LockArgs { python } = args;
+        let LockArgs {} = args;
 
-        Self {
-            // CLI-only settings.
-            python,
-        }
+        Self {}
     }
 }
 
@@ -208,7 +202,6 @@ impl PipCompileSettings {
             header,
             annotation_style,
             custom_compile_command,
-
             refresh,
             no_refresh,
             refresh_package,
@@ -219,9 +212,6 @@ impl PipCompileSettings {
             index_strategy,
             keyring_provider,
             find_links,
-            python,
-            system,
-            no_system,
             upgrade,
             no_upgrade,
             upgrade_package,
@@ -262,14 +252,11 @@ impl PipCompileSettings {
             r#override,
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
-            uv_lock: flag(unstable_uv_lock_file, no_unstable_uv_lock_file).unwrap_or(false),
+            uv_lock: flag(unstable_uv_lock_file, no_unstable_uv_lock_file).unwrap_or_default(),
 
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    python,
-                    system: flag(system, no_system),
-
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -360,9 +347,6 @@ impl PipSyncSettings {
             require_hashes,
             no_require_hashes,
             keyring_provider,
-            python,
-            system,
-            no_system,
             break_system_packages,
             no_break_system_packages,
             target,
@@ -400,8 +384,6 @@ impl PipSyncSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    python,
-                    system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
 
@@ -497,9 +479,6 @@ impl PipInstallSettings {
             require_hashes,
             no_require_hashes,
             keyring_provider,
-            python,
-            system,
-            no_system,
             break_system_packages,
             no_break_system_packages,
             target,
@@ -543,8 +522,6 @@ impl PipInstallSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    python,
-                    system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
 
@@ -611,10 +588,7 @@ impl PipUninstallSettings {
         let PipUninstallArgs {
             package,
             requirement,
-            python,
             keyring_provider,
-            system,
-            no_system,
             break_system_packages,
             no_break_system_packages,
             target,
@@ -628,11 +602,8 @@ impl PipUninstallSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    python,
-                    system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-
                     keyring_provider,
                     ..PipOptions::default()
                 },
@@ -654,15 +625,12 @@ pub(crate) struct PipFreezeSettings {
 
 impl PipFreezeSettings {
     /// Resolve the [`PipFreezeSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipFreezeArgs, workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: &PipFreezeArgs, workspace: Option<Workspace>) -> Self {
         let PipFreezeArgs {
             exclude_editable,
             strict,
             no_strict,
-            python,
-            system,
-            no_system,
-        } = args;
+        } = *args;
 
         Self {
             // CLI-only settings.
@@ -671,8 +639,6 @@ impl PipFreezeSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    python,
-                    system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
@@ -706,9 +672,6 @@ impl PipListSettings {
             format,
             strict,
             no_strict,
-            python,
-            system,
-            no_system,
             compat_args: _,
         } = args;
 
@@ -722,8 +685,6 @@ impl PipListSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    python,
-                    system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
@@ -751,9 +712,6 @@ impl PipShowSettings {
             package,
             strict,
             no_strict,
-            python,
-            system,
-            no_system,
         } = args;
 
         Self {
@@ -763,42 +721,7 @@ impl PipShowSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    python,
-                    system: flag(system, no_system),
                     strict: flag(strict, no_strict),
-                    ..PipOptions::default()
-                },
-                workspace,
-            ),
-        }
-    }
-}
-
-/// The resolved settings to use for a `pip check` invocation.
-#[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone)]
-pub(crate) struct PipCheckSettings {
-    // CLI-only settings.
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
-}
-
-impl PipCheckSettings {
-    /// Resolve the [`PipCheckSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipCheckArgs, workspace: Option<Workspace>) -> Self {
-        let PipCheckArgs {
-            python,
-            system,
-            no_system,
-        } = args;
-
-        Self {
-            // Shared settings.
-            shared: PipSharedSettings::combine(
-                PipOptions {
-                    python,
-                    system: flag(system, no_system),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -826,9 +749,6 @@ impl VenvSettings {
     /// Resolve the [`VenvSettings`] from the CLI and workspace configuration.
     pub(crate) fn resolve(args: VenvArgs, workspace: Option<Workspace>) -> Self {
         let VenvArgs {
-            python,
-            system,
-            no_system,
             seed,
             allow_existing,
             name,
@@ -856,9 +776,6 @@ impl VenvSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    python,
-                    system: flag(system, no_system),
-
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -886,8 +803,6 @@ impl VenvSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipSharedSettings {
     pub(crate) index_locations: IndexLocations,
-    pub(crate) python: Option<String>,
-    pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
@@ -927,8 +842,8 @@ impl PipSharedSettings {
     /// Resolve the [`PipSharedSettings`] from the CLI and workspace configuration.
     pub(crate) fn combine(args: PipOptions, workspace: Option<Workspace>) -> Self {
         let PipOptions {
-            python,
-            system,
+            python: _,
+            system: _,
             break_system_packages,
             target,
             index_url,
@@ -1067,8 +982,6 @@ impl PipSharedSettings {
                 .require_hashes
                 .combine(require_hashes)
                 .unwrap_or_default(),
-            python: args.python.combine(python),
-            system: args.system.combine(system).unwrap_or_default(),
             break_system_packages: args
                 .break_system_packages
                 .combine(break_system_packages)
