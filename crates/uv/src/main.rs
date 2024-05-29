@@ -573,6 +573,7 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
+                args.extras,
                 args.target,
                 args.args,
                 requirements,
@@ -588,12 +589,12 @@ async fn run() -> Result<ExitStatus> {
         }
         Commands::Sync(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let _args = settings::SyncSettings::resolve(args, workspace);
+            let args = settings::SyncSettings::resolve(args, workspace);
 
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::sync(globals.preview, &cache, printer).await
+            commands::sync(args.extras, globals.preview, &cache, printer).await
         }
         Commands::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.

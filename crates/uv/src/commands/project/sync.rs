@@ -5,7 +5,8 @@ use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
-    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
+    Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
+    SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
@@ -23,6 +24,7 @@ use crate::printer::Printer;
 /// Sync the project environment.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync(
+    extras: ExtrasSpecification,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -45,7 +47,7 @@ pub(crate) async fn sync(
     };
 
     // Perform the sync operation.
-    do_sync(&project, &venv, &lock, cache, printer).await?;
+    do_sync(&project, &venv, &lock, extras, cache, printer).await?;
 
     Ok(ExitStatus::Success)
 }
@@ -55,6 +57,7 @@ pub(super) async fn do_sync(
     project: &ProjectWorkspace,
     venv: &PythonEnvironment,
     lock: &Lock,
+    extras: ExtrasSpecification,
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
@@ -62,7 +65,12 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(markers, tags, project.project_name());
+    let extras = match extras {
+        ExtrasSpecification::None => vec![],
+        ExtrasSpecification::All => project.project_extras().to_vec(),
+        ExtrasSpecification::Some(extras) => extras,
+    };
+    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras);
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.

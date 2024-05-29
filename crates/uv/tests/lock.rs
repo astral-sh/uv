@@ -698,6 +698,25 @@ fn lock_extra() -> Result<()> {
         source = "registry+https://pypi.org/simple"
 
         [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        extra = "test"
+        source = "editable+file://[TEMP_DIR]/"
+
+        [distribution.sdist]
+        url = "file://[TEMP_DIR]/"
+
+        [[distribution.dependencies]]
+        name = "anyio"
+        version = "3.7.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "pytest"
+        version = "8.1.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
         name = "pytest"
         version = "8.1.1"
         source = "registry+https://pypi.org/simple"
@@ -745,7 +764,7 @@ fn lock_extra() -> Result<()> {
         );
     });
 
-    // Install from the lockfile.
+    // Install the base dependencies from the lockfile.
     uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
@@ -759,6 +778,22 @@ fn lock_extra() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+    "###);
+
+    // Install the extras from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("test"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Downloaded 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
     "###);
 
     Ok(())
