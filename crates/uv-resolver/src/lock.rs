@@ -20,7 +20,7 @@ use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
 use uv_git::{GitReference, GitSha};
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolution::AnnotatedDist;
 
@@ -57,18 +57,18 @@ impl Lock {
         marker_env: &MarkerEnvironment,
         tags: &Tags,
         root_name: &PackageName,
+        extras: &[ExtraName],
     ) -> Resolution {
-        let root = self
-            .find_by_name(root_name)
-            // TODO: In the future, we should derive the root distribution
-            // from the pyproject.toml, but I don't think the infrastructure
-            // for that is in place yet. For now, we ask the caller to specify
-            // the root package name explicitly, and we assume here that it is
-            // correct.
-            .expect("found too many distributions matching root")
-            .expect("could not find root");
         let mut queue: VecDeque<&Distribution> = VecDeque::new();
-        queue.push_back(root);
+
+        // Add the root distribution to the queue.
+        for extra in std::iter::once(None).chain(extras.iter().map(Some)) {
+            let root = self
+                .find_by_name(root_name, extra)
+                .expect("found too many distributions matching root")
+                .expect("could not find root");
+            queue.push_back(root);
+        }
 
         let mut map = BTreeMap::default();
         while let Some(dist) = queue.pop_front() {
@@ -87,12 +87,20 @@ impl Lock {
     /// Returns the distribution with the given name. If there are multiple
     /// matching distributions, then an error is returned. If there are no
     /// matching distributions, then `Ok(None)` is returned.
-    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Distribution>, String> {
+    fn find_by_name(
+        &self,
+        name: &PackageName,
+        extra: Option<&ExtraName>,
+    ) -> Result<Option<&Distribution>, String> {
         let mut found_dist = None;
         for dist in &self.distributions {
-            if &dist.id.name == name {
+            if &dist.id.name == name && dist.id.extra.as_ref() == extra {
                 if found_dist.is_some() {
-                    return Err(format!("found multiple distributions matching `{name}`"));
+                    return Err(if let Some(extra) = extra {
+                        format!("found multiple distributions matching `{name}[{extra}]`")
+                    } else {
+                        format!("found multiple distributions matching `{name}`")
+                    });
                 }
                 found_dist = Some(dist);
             }
@@ -407,6 +415,8 @@ impl Distribution {
 pub(crate) struct DistributionId {
     pub(crate) name: PackageName,
     pub(crate) version: Version,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) extra: Option<ExtraName>,
     pub(crate) source: Source,
 }
 
@@ -414,10 +424,12 @@ impl DistributionId {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> DistributionId {
         let name = annotated_dist.metadata.name.clone();
         let version = annotated_dist.metadata.version.clone();
+        let extra = annotated_dist.extra.clone();
         let source = Source::from_resolved_dist(&annotated_dist.dist);
         DistributionId {
             name,
             version,
+            extra,
             source,
         }
     }

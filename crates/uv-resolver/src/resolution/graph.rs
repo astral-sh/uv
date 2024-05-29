@@ -47,7 +47,11 @@ impl ResolutionGraph {
         preferences: &Preferences,
     ) -> anyhow::Result<Self, ResolveError> {
         // Add every package to the graph.
-        let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
+        let mut petgraph =
+            petgraph::graph::Graph::<AnnotatedDist, (), petgraph::Directed>::with_capacity(
+                selection.len(),
+                selection.len(),
+            );
         let mut inverse =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         let mut diagnostics = Vec::new();
@@ -248,23 +252,30 @@ impl ResolutionGraph {
                         continue;
                     };
 
-                    let PubGrubPackageInner::Package {
-                        name: dependency_name,
-                        extra: dependency_extra,
-                        ..
-                    } = &**dependency_package
-                    else {
-                        continue;
-                    };
+                    match &**dependency_package {
+                        PubGrubPackageInner::Package {
+                            name: dependency_name,
+                            extra: dependency_extra,
+                            ..
+                        } => {
+                            let self_index = &inverse[&(self_name, self_extra)];
+                            let dependency_index = &inverse[&(dependency_name, dependency_extra)];
+                            petgraph.update_edge(*self_index, *dependency_index, ());
+                        }
 
-                    // For extras, we include a dependency between the extra and the base package.
-                    if self_name == dependency_name {
-                        continue;
+                        PubGrubPackageInner::Extra {
+                            name: dependency_name,
+                            extra: dependency_extra,
+                            ..
+                        } => {
+                            let self_index = &inverse[&(self_name, self_extra)];
+                            let dependency_extra = Some(dependency_extra.clone());
+                            let dependency_index = &inverse[&(dependency_name, &dependency_extra)];
+                            petgraph.update_edge(*self_index, *dependency_index, ());
+                        }
+
+                        _ => {}
                     }
-
-                    let self_index = &inverse[&(self_name, self_extra)];
-                    let dependency_index = &inverse[&(dependency_name, dependency_extra)];
-                    petgraph.update_edge(*self_index, *dependency_index, ());
                 }
             }
         }
@@ -445,10 +456,6 @@ impl ResolutionGraph {
         let mut locked_dists = vec![];
         for node_index in self.petgraph.node_indices() {
             let dist = &self.petgraph[node_index];
-            if dist.extra.is_some() {
-                continue;
-            }
-
             let mut locked_dist = lock::Distribution::from_annotated_dist(dist)?;
             for edge in self.petgraph.neighbors(node_index) {
                 let dependency_dist = &self.petgraph[edge];

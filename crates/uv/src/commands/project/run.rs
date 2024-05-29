@@ -9,7 +9,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::PreviewMode;
+use uv_configuration::{ExtrasSpecification, PreviewMode};
 use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_requirements::{ProjectWorkspace, RequirementsSource};
 use uv_resolver::ExcludeNewer;
@@ -21,6 +21,7 @@ use crate::printer::Printer;
 /// Run a command.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
+    extras: ExtrasSpecification,
     target: Option<String>,
     mut args: Vec<OsString>,
     requirements: Vec<RequirementsSource>,
@@ -47,7 +48,7 @@ pub(crate) async fn run(
 
         // Lock and sync the environment.
         let lock = project::lock::do_lock(&project, &venv, exclude_newer, cache, printer).await?;
-        project::sync::do_sync(&project, &venv, &lock, cache, printer).await?;
+        project::sync::do_sync(&project, &venv, &lock, extras, cache, printer).await?;
 
         Some(venv)
     };

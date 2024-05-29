@@ -853,7 +853,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for generating the lock file.
-
                     let dist = match url {
                         Some(url) => PubGrubDistribution::from_url(name, url),
                         None => PubGrubDistribution::from_registry(name, version),
