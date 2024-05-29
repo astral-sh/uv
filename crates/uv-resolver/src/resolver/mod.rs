@@ -590,7 +590,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let PubGrubPackageInner::Package {
                 name,
                 extra: None,
-                marker: None,
+                marker: _marker,
                 url: None,
             } = &**package
             else {
@@ -919,7 +919,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             PubGrubPackageInner::Package {
                 name,
                 extra,
-                marker: _marker,
+                marker,
                 url,
             } => {
                 // If we're excluding transitive dependencies, short-circuit.
@@ -1024,7 +1024,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .cloned()
                     .map(Requirement::from)
                     .collect();
-                let dependencies = PubGrubDependencies::from_requirements(
+                let mut dependencies = PubGrubDependencies::from_requirements(
                     &requirements,
                     &self.constraints,
                     &self.overrides,
@@ -1045,6 +1045,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     self.visit_package(dep_package, request_sink)?;
                 }
 
+                // If a package has a marker, add a dependency from it to the
+                // same package without markers.
+                //
+                // At time of writing, AG doesn't fully understand why we need
+                // this, but one explanation is that without it, there is no
+                // way to connect two different `PubGrubPackage` values with
+                // the same package name but different markers. With different
+                // markers, they would be considered wholly distinct packages.
+                // But this dependency-on-itself-without-markers forces PubGrub
+                // to unify the constraints across what would otherwise be two
+                // distinct packages.
+                if marker.is_some() {
+                    dependencies.push(
+                        PubGrubPackage::from(PubGrubPackageInner::Package {
+                            name: name.clone(),
+                            extra: extra.clone(),
+                            marker: None,
+                            url: url.clone(),
+                        }),
+                        Range::singleton(version.clone()),
+                    );
+                }
+
                 Ok(Dependencies::Available(dependencies.into()))
             }
 
@@ -1052,14 +1075,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             PubGrubPackageInner::Extra {
                 name,
                 extra,
-                marker: _marker,
+                marker,
                 url,
             } => Ok(Dependencies::Available(vec![
                 (
                     PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: name.clone(),
                         extra: None,
-                        marker: None,
+                        marker: marker.clone(),
                         url: url.clone(),
                     }),
                     Range::singleton(version.clone()),
@@ -1068,7 +1091,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: name.clone(),
                         extra: Some(extra.clone()),
-                        marker: None,
+                        marker: marker.clone(),
                         url: url.clone(),
                     }),
                     Range::singleton(version.clone()),

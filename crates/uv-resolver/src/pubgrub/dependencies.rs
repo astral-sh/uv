@@ -49,6 +49,11 @@ impl PubGrubDependencies {
         Ok(Self(dependencies))
     }
 
+    /// Add a [`PubGrubPackage`] and [`PubGrubVersion`] range into the dependencies.
+    pub(crate) fn push(&mut self, package: PubGrubPackage, version: Range<Version>) {
+        self.0.push((package, version));
+    }
+
     /// Iterate over the dependencies.
     pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, Range<Version>)> {
         self.0.iter()
@@ -221,7 +226,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from_package(
                         requirement.name.clone(),
                         extra,
-                        None,
+                        requirement.marker.clone(),
                         urls,
                     ),
                     version,
@@ -247,7 +252,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        marker: None,
+                        marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
                     version: Range::full(),
@@ -273,7 +278,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        marker: None,
+                        marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
                     version: Range::full(),
@@ -299,7 +304,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        marker: None,
+                        marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
                     version: Range::full(),
