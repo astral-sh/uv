@@ -10,7 +10,6 @@ use url::Url;
 use distribution_types::{BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId};
 use pep508_rs::RequirementOrigin;
 use pypi_types::Requirement;
-use pypi_types::VerbatimParsedUrl;
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_fs::Simplified;
@@ -78,10 +77,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn resolve_source_tree(
-        &self,
-        path: &Path,
-    ) -> Result<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>> {
+    async fn resolve_source_tree(&self, path: &Path) -> Result<Vec<Requirement>> {
         // Convert to a buildable source.
         let source_tree = fs_err::canonicalize(path).with_context(|| {
             format!(
@@ -165,7 +161,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             ExtrasSpecification::All => Ok(metadata
                 .requires_dist
                 .into_iter()
-                .map(|requirement| pep508_rs::Requirement {
+                .map(|requirement| Requirement {
                     origin: Some(origin.clone()),
                     marker: requirement
                         .marker
@@ -176,7 +172,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             ExtrasSpecification::Some(extras) => Ok(metadata
                 .requires_dist
                 .into_iter()
-                .map(|requirement| pep508_rs::Requirement {
+                .map(|requirement| Requirement {
                     origin: Some(origin.clone()),
                     marker: requirement
                         .marker

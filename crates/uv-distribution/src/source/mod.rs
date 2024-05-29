@@ -29,7 +29,7 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, NoBuild};
+use uv_configuration::{BuildKind, NoBuild, PreviewMode};
 use uv_extract::hash::Hasher;
 use uv_fs::{write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
@@ -39,7 +39,7 @@ use crate::error::Error;
 use crate::git::{fetch_git_archive, resolve_precise};
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
-use crate::{ArchiveMetadata, Reporter};
+use crate::{ArchiveMetadataLowered, Metadata23Lowered, Reporter};
 
 mod built_wheel_metadata;
 mod revision;
@@ -243,7 +243,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<ArchiveMetadata, Error> {
+    ) -> Result<ArchiveMetadataLowered, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
                 // For registry source distributions, shard by package, then version.
@@ -466,7 +466,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<ArchiveMetadata, Error> {
+    ) -> Result<ArchiveMetadataLowered, Error> {
         let _lock = lock_shard(cache_shard).await?;
 
         // Fetch the revision for the source distribution.
@@ -491,7 +491,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata {
+            return Ok(ArchiveMetadataLowered {
                 metadata,
                 hashes: revision.into_hashes(),
             });
@@ -514,8 +514,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(ArchiveMetadata {
-                metadata,
+            return Ok(ArchiveMetadataLowered {
+                metadata: Metadata23Lowered::from_plain(metadata),
                 hashes: revision.into_hashes(),
             });
         }
@@ -541,8 +541,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
-        Ok(ArchiveMetadata {
-            metadata,
+        Ok(ArchiveMetadataLowered {
+            metadata: Metadata23Lowered::from_plain(metadata),
             hashes: revision.into_hashes(),
         })
     }
@@ -694,7 +694,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
-    ) -> Result<ArchiveMetadata, Error> {
+    ) -> Result<ArchiveMetadataLowered, Error> {
         let _lock = lock_shard(cache_shard).await?;
 
         // Fetch the revision for the source distribution.
@@ -719,7 +719,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata {
+            return Ok(ArchiveMetadataLowered {
                 metadata,
                 hashes: revision.into_hashes(),
             });
@@ -741,8 +741,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(ArchiveMetadata {
-                metadata,
+            return Ok(ArchiveMetadataLowered {
+                metadata: Metadata23Lowered::from_plain(metadata),
                 hashes: revision.into_hashes(),
             });
         }
@@ -768,8 +768,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(ArchiveMetadata {
-            metadata,
+        Ok(ArchiveMetadataLowered {
+            metadata: Metadata23Lowered::from_plain(metadata),
             hashes: revision.into_hashes(),
         })
     }
@@ -901,7 +901,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         hashes: HashPolicy<'_>,
-    ) -> Result<ArchiveMetadata, Error> {
+    ) -> Result<ArchiveMetadataLowered, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
@@ -929,7 +929,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata::from(metadata));
+            return Ok(ArchiveMetadataLowered::from(metadata));
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -946,7 +946,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(ArchiveMetadata::from(metadata));
+            return Ok(ArchiveMetadataLowered::from(
+                Metadata23Lowered::from_tool_uv(
+                    metadata,
+                    resource.path.as_ref(),
+                    PreviewMode::Enabled,
+                )
+                .await?,
+            ));
         }
 
         // Otherwise, we need to build a wheel.
@@ -970,7 +977,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(ArchiveMetadata::from(metadata))
+        Ok(ArchiveMetadataLowered::from(
+            Metadata23Lowered::from_tool_uv(metadata, resource.path.as_ref(), PreviewMode::Enabled)
+                .await?,
+        ))
     }
 
     /// Return the [`Revision`] for a local source tree, refreshing it if necessary.
@@ -1096,7 +1106,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitSourceUrl<'_>,
         hashes: HashPolicy<'_>,
-    ) -> Result<ArchiveMetadata, Error> {
+    ) -> Result<ArchiveMetadataLowered, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
@@ -1137,7 +1147,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for: {source}");
-                return Ok(ArchiveMetadata::from(metadata));
+                return Ok(ArchiveMetadataLowered::from(metadata));
             }
         }
 
@@ -1155,7 +1165,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(ArchiveMetadata::from(metadata));
+            return Ok(ArchiveMetadataLowered::from(
+                Metadata23Lowered::from_tool_uv(metadata, fetch.path(), PreviewMode::Enabled)
+                    .await?,
+            ));
         }
 
         // Otherwise, we need to build a wheel.
@@ -1179,7 +1192,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(ArchiveMetadata::from(metadata))
+        Ok(ArchiveMetadataLowered::from(
+            Metadata23Lowered::from_tool_uv(metadata, fetch.path(), PreviewMode::Enabled).await?,
+        ))
     }
 
     /// Download and unzip a source distribution into the cache from an HTTP response.
@@ -1590,9 +1605,11 @@ async fn read_pyproject_toml(
 }
 
 /// Read an existing cached [`Metadata23`], if it exists.
-async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<Metadata23>, Error> {
+async fn read_cached_metadata(
+    cache_entry: &CacheEntry,
+) -> Result<Option<Metadata23Lowered>, Error> {
     match fs::read(&cache_entry.path()).await {
-        Ok(cached) => Ok(Some(rmp_serde::from_slice::<Metadata23>(&cached)?)),
+        Ok(cached) => Ok(Some(rmp_serde::from_slice(&cached)?)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(Error::CacheRead(err)),
     }

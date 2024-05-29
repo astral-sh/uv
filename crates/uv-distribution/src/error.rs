@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use tokio::task::JoinError;
 use zip::result::ZipError;
 
+use crate::MetadataLoweringError;
 use distribution_filename::WheelFilenameError;
 use pep440_rs::Version;
 use pypi_types::HashDigest;
@@ -77,6 +78,8 @@ pub enum Error {
     DynamicPyprojectToml(#[source] pypi_types::MetadataError),
     #[error("Unsupported scheme in URL: {0}")]
     UnsupportedScheme(String),
+    #[error(transparent)]
+    MetadataLowering(#[from] MetadataLoweringError),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.

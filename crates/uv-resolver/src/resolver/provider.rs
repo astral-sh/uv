@@ -5,7 +5,7 @@ use anyhow::Result;
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
 use uv_configuration::{NoBinary, NoBuild};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::{ArchiveMetadataLowered, DistributionDatabase};
 use uv_normalize::PackageName;
 use uv_types::{BuildContext, HashStrategy};
 
@@ -34,7 +34,7 @@ pub enum VersionsResponse {
 #[derive(Debug)]
 pub enum MetadataResponse {
     /// The wheel metadata was found and parsed successfully.
-    Found(ArchiveMetadata),
+    Found(ArchiveMetadataLowered),
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Box<pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
