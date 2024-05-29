@@ -1601,17 +1601,42 @@ impl MarkerTree {
     /// For example, if `dev` is a provided extra, given `sys_platform == 'linux' and extra == 'dev'`,
     /// the marker will be simplified to `sys_platform == 'linux'`.
     pub fn simplify_extras(self, extras: &[ExtraName]) -> Option<MarkerTree> {
+        self.simplify_extras_with(|name| extras.contains(name))
+    }
+
+    /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
+    ///
+    /// Any `extra` markers that are always `true` given the provided predicate will be removed.
+    /// Any `extra` markers that are always `false` given the provided predicate will be left
+    /// unchanged.
+    ///
+    /// For example, if `is_extra('dev')` is true, given
+    /// `sys_platform == 'linux' and extra == 'dev'`, the marker will be simplified to
+    /// `sys_platform == 'linux'`.
+    pub fn simplify_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> Option<MarkerTree> {
+        // Because `simplify_extras_with_impl` is recursive, and we need to use
+        // our predicate in recursive calls, we need the predicate itself to
+        // have some indirection (or else we'd have to clone it). To avoid a
+        // recursive type at codegen time, we just introduce the indirection
+        // here, but keep the calling API ergonomic.
+        self.simplify_extras_with_impl(&is_extra)
+    }
+
+    fn simplify_extras_with_impl(
+        self,
+        is_extra: &impl Fn(&ExtraName) -> bool,
+    ) -> Option<MarkerTree> {
         /// Returns `true` if the given expression is always `true` given the set of extras.
-        fn is_true(expression: &MarkerExpression, extras: &[ExtraName]) -> bool {
+        fn is_true(expression: &MarkerExpression, is_extra: impl Fn(&ExtraName) -> bool) -> bool {
             match expression {
                 MarkerExpression::Extra {
                     operator: ExtraOperator::Equal,
                     name,
-                } => extras.contains(name),
+                } => is_extra(name),
                 MarkerExpression::Extra {
                     operator: ExtraOperator::NotEqual,
                     name,
-                } => !extras.contains(name),
+                } => !is_extra(name),
                 _ => false,
             }
         }
@@ -1619,7 +1644,7 @@ impl MarkerTree {
         match self {
             Self::Expression(expression) => {
                 // If the expression is true, we can remove the marker entirely.
-                if is_true(&expression, extras) {
+                if is_true(&expression, is_extra) {
                     None
                 } else {
                     // If not, return the original marker.
@@ -1630,7 +1655,7 @@ impl MarkerTree {
                 // Remove any expressions that are _true_ due to the presence of an extra.
                 let simplified = expressions
                     .into_iter()
-                    .filter_map(|marker| marker.simplify_extras(extras))
+                    .filter_map(|marker| marker.simplify_extras_with_impl(is_extra))
                     .collect::<Vec<_>>();
 
                 // If there are no expressions left, return None.
@@ -1650,7 +1675,7 @@ impl MarkerTree {
                 // Remove any expressions that are _true_ due to the presence of an extra.
                 let simplified = expressions
                     .into_iter()
-                    .filter_map(|marker| marker.simplify_extras(extras))
+                    .filter_map(|marker| marker.simplify_extras_with_impl(is_extra))
                     .collect::<Vec<_>>();
 
                 // If _any_ of the expressions are true (i.e., if any of the markers were filtered
