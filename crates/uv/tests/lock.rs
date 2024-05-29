@@ -707,11 +707,6 @@ fn lock_extra() -> Result<()> {
         url = "file://[TEMP_DIR]/"
 
         [[distribution.dependencies]]
-        name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution.dependencies]]
         name = "pytest"
         version = "8.1.1"
         source = "registry+https://pypi.org/simple"

@@ -77,6 +77,11 @@ fn add_requirements(
                 if !requirement.evaluate_markers(env, std::slice::from_ref(source_extra)) {
                     continue;
                 }
+
+                // If the extra is not _required_ to enable the requirement, skip it.
+                if requirement.evaluate_markers(env, &[]) {
+                    continue;
+                }
             }
             None => {
                 if !requirement.evaluate_markers(env, &[]) {
@@ -138,6 +143,11 @@ fn add_requirements(
                 match source_extra {
                     Some(source_extra) => {
                         if !constraint.evaluate_markers(env, std::slice::from_ref(source_extra)) {
+                            continue;
+                        }
+
+                        // If the extra is not _required_ to enable the requirement, skip it.
+                        if constraint.evaluate_markers(env, &[]) {
                             continue;
                         }
                     }
