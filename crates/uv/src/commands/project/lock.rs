@@ -41,7 +41,7 @@ pub(crate) async fn lock(
     let venv = project::init_environment(&project, preview, cache, printer)?;
 
     // Perform the lock operation.
-    match do_lock(&project, &venv, upgrade, exclude_newer, cache, printer).await {
+    match do_lock(&project, &venv, upgrade, exclude_newer, preview, cache, printer).await {
         Ok(_) => Ok(ExitStatus::Success),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
@@ -61,6 +61,7 @@ pub(super) async fn do_lock(
     venv: &PythonEnvironment,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<Lock, ProjectError> {

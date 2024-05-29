@@ -16,7 +16,7 @@ use uv_requirements::RequirementsSource;
 use uv_resolver::ExcludeNewer;
 use uv_warnings::warn_user;
 
-use crate::commands::{ExitStatus, project};
+use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 
 /// Run a command.
@@ -50,8 +50,8 @@ pub(crate) async fn run(
 
         // Lock and sync the environment.
         let lock =
-            project::lock::do_lock(&project, &venv, upgrade, exclude_newer, cache, printer).await?;
-        project::sync::do_sync(&project, &venv, &lock, extras, cache, printer).await?;
+            project::lock::do_lock(&project, &venv, upgrade, exclude_newer, preview, cache, printer).await?;
+        project::sync::do_sync(&project, &venv, &lock, extras,preview, cache, printer).await?;
 
         Some(venv)
     };

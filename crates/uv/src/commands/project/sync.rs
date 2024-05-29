@@ -47,7 +47,7 @@ pub(crate) async fn sync(
     };
 
     // Perform the sync operation.
-    do_sync(&project, &venv, &lock, extras, cache, printer).await?;
+    do_sync(&project, &venv, &lock, extras, preview, cache, printer).await?;
 
     Ok(ExitStatus::Success)
 }
@@ -58,6 +58,7 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: ExtrasSpecification,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {

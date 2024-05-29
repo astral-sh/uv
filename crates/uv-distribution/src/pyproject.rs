@@ -16,7 +16,7 @@ use url::Url;
 
 use pep508_rs::Pep508Error;
 use pypi_types::VerbatimParsedUrl;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::LoweringError;
 
@@ -56,6 +56,8 @@ pub struct PyProjectToml {
 pub struct Project {
     /// The name of the project
     pub name: PackageName,
+    /// The optional dependencies of the project.
+    pub optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
