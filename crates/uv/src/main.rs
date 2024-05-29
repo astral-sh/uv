@@ -577,6 +577,7 @@ async fn run() -> Result<ExitStatus> {
                 args.args,
                 requirements,
                 args.python,
+                args.exclude_newer,
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,
@@ -596,12 +597,12 @@ async fn run() -> Result<ExitStatus> {
         }
         Commands::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let _args = settings::LockSettings::resolve(args, workspace);
+            let args = settings::LockSettings::resolve(args, workspace);
 
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::lock(globals.preview, &cache, printer).await
+            commands::lock(args.exclude_newer, globals.preview, &cache, printer).await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {

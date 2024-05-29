@@ -12,6 +12,7 @@ use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_requirements::{ProjectWorkspace, RequirementsSource};
+use uv_resolver::ExcludeNewer;
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
@@ -24,6 +25,7 @@ pub(crate) async fn run(
     mut args: Vec<OsString>,
     requirements: Vec<RequirementsSource>,
     python: Option<String>,
+    exclude_newer: Option<ExcludeNewer>,
     isolated: bool,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -44,7 +46,8 @@ pub(crate) async fn run(
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
         // Lock and sync the environment.
-        let lock = project::lock::do_lock(&project, &venv, preview, cache, printer).await?;
+        let lock =
+            project::lock::do_lock(&project, &venv, exclude_newer, preview, cache, printer).await?;
         project::sync::do_sync(&project, &venv, &lock, cache, printer).await?;
 
         Some(venv)

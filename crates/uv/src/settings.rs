@@ -97,11 +97,11 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
-    // CLI-only settings.
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 }
 
 impl RunSettings {
@@ -113,14 +113,15 @@ impl RunSettings {
             args,
             with,
             python,
+            exclude_newer,
         } = args;
 
         Self {
-            // CLI-only settings.
             target,
             args,
             with,
             python,
+            exclude_newer,
         }
     }
 }
@@ -129,7 +130,6 @@ impl RunSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    // CLI-only settings.
     pub(crate) python: Option<String>,
 }
 
@@ -139,10 +139,7 @@ impl SyncSettings {
     pub(crate) fn resolve(args: SyncArgs, _workspace: Option<Workspace>) -> Self {
         let SyncArgs { python } = args;
 
-        Self {
-            // CLI-only settings.
-            python,
-        }
+        Self { python }
     }
 }
 
@@ -150,7 +147,7 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
-    // CLI-only settings.
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) python: Option<String>,
 }
 
@@ -158,10 +155,13 @@ impl LockSettings {
     /// Resolve the [`LockSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, _workspace: Option<Workspace>) -> Self {
-        let LockArgs { python } = args;
+        let LockArgs {
+            exclude_newer,
+            python,
+        } = args;
 
         Self {
-            // CLI-only settings.
+            exclude_newer,
             python,
         }
     }
@@ -207,7 +207,6 @@ impl PipCompileSettings {
             header,
             annotation_style,
             custom_compile_command,
-
             refresh,
             no_refresh,
             refresh_package,

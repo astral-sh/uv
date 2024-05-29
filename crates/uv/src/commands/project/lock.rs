@@ -12,7 +12,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
 use uv_requirements::{ProjectWorkspace, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, Lock, Options};
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -23,6 +23,7 @@ use crate::printer::Printer;
 /// Resolve the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
+    exclude_newer: Option<ExcludeNewer>,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -38,7 +39,7 @@ pub(crate) async fn lock(
     let venv = project::init_environment(&project, preview, cache, printer)?;
 
     // Perform the lock operation.
-    match do_lock(&project, &venv, preview, cache, printer).await {
+    match do_lock(&project, &venv, exclude_newer, preview, cache, printer).await {
         Ok(_) => Ok(ExitStatus::Success),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
@@ -56,6 +57,7 @@ pub(crate) async fn lock(
 pub(super) async fn do_lock(
     project: &ProjectWorkspace,
     venv: &PythonEnvironment,
+    exclude_newer: Option<ExcludeNewer>,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -98,17 +100,18 @@ pub(super) async fn do_lock(
     let config_settings = ConfigSettings::default();
     let extras = ExtrasSpecification::default();
     let flat_index = FlatIndex::default();
-    let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
     let index_locations = IndexLocations::default();
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
-    let options = Options::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
     let upgrade = Upgrade::default();
+
+    let hasher = HashStrategy::Generate;
+    let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
