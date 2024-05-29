@@ -63,36 +63,13 @@ pub(crate) async fn read_requirements(
     }
 
     // Read all requirements from the provided sources.
-    let spec = RequirementsSpecification::from_sources(
+    Ok(RequirementsSpecification::from_sources(
         requirements,
         constraints,
         overrides,
         client_builder,
     )
-    .await?;
-
-    // If all the metadata could be statically resolved, validate that every extra was used. If we
-    // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
-    if spec.source_trees.is_empty() {
-        if let ExtrasSpecification::Some(extras) = extras {
-            let mut unused_extras = extras
-                .iter()
-                .filter(|extra| !spec.extras.contains(extra))
-                .collect::<Vec<_>>();
-            if !unused_extras.is_empty() {
-                unused_extras.sort_unstable();
-                unused_extras.dedup();
-                let s = if unused_extras.len() == 1 { "" } else { "s" };
-                return Err(anyhow!(
-                    "Requested extra{s} not found: {}",
-                    unused_extras.iter().join(", ")
-                )
-                .into());
-            }
-        }
-    }
-
-    Ok(spec)
+    .await?)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -102,7 +79,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     constraints: Vec<Requirement>,
     overrides: Vec<UnresolvedRequirementSpecification>,
     source_trees: Vec<PathBuf>,
-    project: Option<PackageName>,
+    mut project: Option<PackageName>,
     extras: &ExtrasSpecification,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
@@ -138,23 +115,53 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
+            let resolutions = SourceTreeResolver::new(
+                source_trees,
+                extras,
+                hasher,
+                index,
+                DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve()
+            .await?;
+
+            // If we resolved a single project, use it for the project name.
+            project = project.or_else(|| {
+                if let [resolution] = &resolutions[..] {
+                    Some(resolution.project.clone())
+                } else {
+                    None
+                }
+            });
+
+            // If any of the extras were unused, surface a warning.
+            if let ExtrasSpecification::Some(extras) = extras {
+                let mut unused_extras = extras
+                    .iter()
+                    .filter(|extra| {
+                        !resolutions
+                            .iter()
+                            .any(|resolution| resolution.extras.contains(extra))
+                    })
+                    .collect::<Vec<_>>();
+                if !unused_extras.is_empty() {
+                    unused_extras.sort_unstable();
+                    unused_extras.dedup();
+                    let s = if unused_extras.len() == 1 { "" } else { "s" };
+                    return Err(anyhow!(
+                        "Requested extra{s} not found: {}",
+                        unused_extras.iter().join(", ")
+                    )
+                    .into());
+                }
+            }
+
+            // Extend the requirements with the resolved source trees.
             requirements.extend(
-                SourceTreeResolver::new(
-                    source_trees,
-                    extras,
-                    hasher,
-                    index,
-                    DistributionDatabase::new(
-                        client,
-                        build_dispatch,
-                        concurrency.downloads,
-                        preview,
-                    ),
-                    preview,
-                )
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?,
+                resolutions
+                    .into_iter()
+                    .flat_map(|resolution| resolution.requirements),
             );
         }
 

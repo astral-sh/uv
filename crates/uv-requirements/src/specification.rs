@@ -99,7 +99,6 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::Editable(name) => {
-                // Self::from_editable_source(name, extras, workspace, preview).await?
                 let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
@@ -147,11 +146,9 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
-            RequirementsSource::PyprojectToml(path) => Self {
-                source_trees: vec![path.clone()],
-                ..Self::default()
-            },
-            RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => Self {
+            RequirementsSource::PyprojectToml(path)
+            | RequirementsSource::SetupPy(path)
+            | RequirementsSource::SetupCfg(path) => Self {
                 source_trees: vec![path.clone()],
                 ..Self::default()
             },

@@ -177,6 +177,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "project"
+version = "0.1.0"
 dependencies = [
     "anyio==3.7.0",
 ]
@@ -216,6 +217,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "project"
+version = "0.1.0"
 dependencies = [
     "anyio==3.7.0",
 ]
@@ -405,6 +407,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "project"
+version = "0.1.0"
 dependencies = []
 optional-dependencies.foo = [
     "anyio==3.7.0",
@@ -447,6 +450,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "project"
+version = "0.1.0"
 dependencies = []
 optional-dependencies."FrIeNdLy-._.-bArD" = [
     "anyio==3.7.0",
@@ -489,6 +493,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "project"
+version = "0.1.0"
 dependencies = []
 optional-dependencies.foo = [
     "anyio==3.7.0",
@@ -765,7 +770,8 @@ dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to build: `file://[TEMP_DIR]/`
+      Caused by: Invalid `pyproject.toml`
       Caused by: TOML parse error at line 5, column 8
       |
     5 | name = "!project"
@@ -789,6 +795,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "project"
+version = "0.1.0"
 dependencies = []
 optional-dependencies.foo = [
     "anyio==3.7.0",
@@ -2165,6 +2172,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "project"
+version = "0.1.0"
 dependencies = ["anyio==3.7.0"]
 optional-dependencies.foo = [
     "iniconfig==1.1.1",
@@ -2220,6 +2228,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "project"
+version = "0.1.0"
 dependencies = ["anyio==3.7.0"]
 optional-dependencies.foo = [
     "iniconfig==1.1.1",
@@ -2309,6 +2318,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "my-project"
+version = "0.1.0"
 dependencies = ["anyio==3.7.0", "anyio==4.0.0"]
 "#,
     )?;
@@ -2340,6 +2350,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "my-project"
+version = "0.1.0"
 dependencies = ["anyio==300.1.4"]
 "#,
     )?;
@@ -6236,19 +6247,19 @@ fn compile_pyproject_toml_recursive_extra() -> Result<()> {
     pyproject_toml.write_str(
         r#"
 [project]
-name = "my-project"
+name = "project"
 version = "0.0.1"
 dependencies = [
-    "tomli>=2,<3",
+    "anyio"
 ]
 
 [project.optional-dependencies]
 test = [
-    "pep517>=0.13,<0.14",
-    "my-project[dev]"
+    "iniconfig",
+    "project[dev]"
 ]
 dev = [
-    "my-project[test]",
+    "project[test]",
 ]
 "#,
     )?;
