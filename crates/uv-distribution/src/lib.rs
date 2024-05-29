@@ -116,7 +116,7 @@ impl Metadata23Lowered {
                 lower_requirement(
                     requirement,
                     &metadata.name,
-                    project_root,
+                    project_workspace.project_root(),
                     &sources,
                     project_workspace.workspace(),
                     preview_mode,

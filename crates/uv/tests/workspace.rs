@@ -218,7 +218,7 @@ fn test_albatross_root_workspace() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Audited 1 package in [TIME]
     "###
     );
 
@@ -257,7 +257,7 @@ fn test_albatross_root_workspace_bird_feeder() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Audited 1 package in [TIME]
     "###
     );
 
@@ -296,7 +296,7 @@ fn test_albatross_root_workspace_albatross() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Audited 1 package in [TIME]
     "###
     );
 
@@ -335,7 +335,7 @@ fn test_albatross_virtual_workspace() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Audited 1 package in [TIME]
     "###
     );
 

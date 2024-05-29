@@ -41,8 +41,7 @@ pub(crate) async fn pip_uninstall(
         .keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
-    let spec =
-        RequirementsSpecification::from_simple_sources(sources, &client_builder, preview).await?;
+    let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Detect the current Python interpreter.
     let system = if system {

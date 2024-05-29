@@ -97,10 +97,8 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        None,
         &extras,
         &client_builder,
-        preview,
     )
     .await?;
 

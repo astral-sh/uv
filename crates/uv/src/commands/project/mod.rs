@@ -14,7 +14,7 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{ProjectWorkspace, Workspace};
+use uv_distribution::ProjectWorkspace;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
@@ -108,8 +108,6 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
-    workspace: Option<&Workspace>,
-    preview: PreviewMode,
     connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
@@ -120,16 +118,8 @@ pub(crate) async fn update_environment(
     // Read all requirements from the provided sources.
     // TODO(zanieb): Consider allowing constraints and extras
     // TODO(zanieb): Allow specifying extras somehow
-    let spec = RequirementsSpecification::from_sources(
-        requirements,
-        &[],
-        &[],
-        workspace,
-        &ExtrasSpecification::None,
-        &client_builder,
-        preview,
-    )
-    .await?;
+    let spec =
+        RequirementsSpecification::from_sources(requirements, &[], &[], &client_builder).await?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_executable(&venv)?;

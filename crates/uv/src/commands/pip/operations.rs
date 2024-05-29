@@ -21,11 +21,10 @@ use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, NoBinary, Overrides, PreviewMode, Reinstall,
-    Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, NoBinary, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, Workspace};
+use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
@@ -50,10 +49,8 @@ pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
-    workspace: Option<&Workspace>,
     extras: &ExtrasSpecification,
     client_builder: &BaseClientBuilder<'_>,
-    preview: PreviewMode,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
@@ -69,10 +66,7 @@ pub(crate) async fn read_requirements(
         requirements,
         constraints,
         overrides,
-        workspace,
-        extras,
         client_builder,
-        preview,
     )
     .await?;
 

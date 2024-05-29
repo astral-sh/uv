@@ -128,10 +128,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
-        None,
-        &extras,
         &client_builder,
-        preview,
     )
     .await?;
 
