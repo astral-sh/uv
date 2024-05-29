@@ -12,12 +12,11 @@ use distribution_types::{
 };
 use pep508_rs::RequirementOrigin;
 use pypi_types::VerbatimParsedUrl;
+use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_fs::Simplified;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
-
-use crate::ExtrasSpecification;
 
 /// A resolver for requirements specified via source trees.
 ///

@@ -6,11 +6,11 @@ use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
-    Upgrade,
+    Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
+    SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_requirements::{ExtrasSpecification, ProjectWorkspace, RequirementsSpecification};
+use uv_requirements::{ProjectWorkspace, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;

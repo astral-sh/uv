@@ -2,20 +2,20 @@ use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
-use distribution_types::{IndexLocations, Resolution};
 use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
+use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy, Upgrade,
+    Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary, NoBuild,
+    PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -23,7 +23,7 @@ use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
 use uv_normalize::PackageName;
-use uv_requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode,
     ResolutionMode,

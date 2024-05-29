@@ -13,15 +13,15 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy, Upgrade,
+    Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary, NoBuild,
+    PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
-use uv_requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
     ResolutionMode,
@@ -98,7 +98,7 @@ pub(crate) async fn pip_sync(
         constraints,
         overrides,
         None,
-        &ExtrasSpecification::default(),
+        &extras,
         &client_builder,
         preview,
     )

@@ -47,13 +47,13 @@ use requirements_txt::{
     EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
 };
 use uv_client::BaseClientBuilder;
-use uv_configuration::{NoBinary, NoBuild, PreviewMode};
+use uv_configuration::{ExtrasSpecification, NoBinary, NoBuild, PreviewMode};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::pyproject::{Pep621Metadata, PyProjectToml};
 use crate::ProjectWorkspace;
-use crate::{ExtrasSpecification, RequirementsSource, Workspace, WorkspaceError};
+use crate::{RequirementsSource, Workspace, WorkspaceError};
 
 #[derive(Debug, Default)]
 pub struct RequirementsSpecification {
