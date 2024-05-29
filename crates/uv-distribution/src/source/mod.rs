@@ -932,7 +932,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadata::from(
-                Metadata::from_tool_uv(metadata, resource.path.as_ref(), self.preview_mode).await?,
+                Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode)
+                    .await?,
             ));
         }
 
@@ -951,7 +952,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_tool_uv(metadata, resource.path.as_ref(), self.preview_mode).await?,
+                Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode)
+                    .await?,
             ));
         }
 
@@ -977,7 +979,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_tool_uv(metadata, resource.path.as_ref(), self.preview_mode).await?,
+            Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode).await?,
         ))
     }
 
@@ -1146,7 +1148,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_tool_uv(metadata, fetch.path(), self.preview_mode).await?,
+                    Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
                 ));
             }
         }
@@ -1166,7 +1168,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_tool_uv(metadata, fetch.path(), self.preview_mode).await?,
+                Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
             ));
         }
 
@@ -1192,7 +1194,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_tool_uv(metadata, fetch.path(), self.preview_mode).await?,
+            Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
         ))
     }
 

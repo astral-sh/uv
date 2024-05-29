@@ -68,7 +68,7 @@ impl Metadata {
 
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    pub async fn from_tool_uv(
+    pub async fn from_workspace(
         metadata: Metadata23,
         project_root: &Path,
         preview_mode: PreviewMode,
