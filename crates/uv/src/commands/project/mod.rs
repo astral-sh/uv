@@ -5,25 +5,23 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use crate::commands::pip;
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
-    Upgrade,
+    Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
+    SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
-use uv_requirements::{
-    ExtrasSpecification, ProjectWorkspace, RequirementsSource, RequirementsSpecification, Workspace,
-};
+use uv_requirements::{ProjectWorkspace, RequirementsSource, RequirementsSpecification, Workspace};
 use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
+use crate::commands::pip;
 use crate::printer::Printer;
 
 pub(crate) mod lock;

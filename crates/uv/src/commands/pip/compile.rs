@@ -20,8 +20,8 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides,
-    PreviewMode, SetupPyStrategy, Upgrade,
+    Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy, NoBinary,
+    NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -34,8 +34,8 @@ use uv_interpreter::{
 use uv_interpreter::{PythonVersion, SourceSelector};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
-    upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
-    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
+    upgrade::read_lockfile, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex,

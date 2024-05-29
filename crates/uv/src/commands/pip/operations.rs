@@ -21,7 +21,8 @@ use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    Concurrency, Constraints, NoBinary, Overrides, PreviewMode, Reinstall, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, NoBinary, Overrides, PreviewMode, Reinstall,
+    Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -30,8 +31,8 @@ use uv_installer::{Downloader, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
-    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver, Workspace,
+    LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
+    SourceTreeResolver, Workspace,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,

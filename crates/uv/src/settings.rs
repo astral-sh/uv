@@ -10,12 +10,11 @@ use install_wheel_rs::linker::LinkMode;
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild,
-    PreviewMode, Reinstall, SetupPyStrategy, TargetTriple, Upgrade,
+    Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, KeyringProviderType, NoBinary,
+    NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple, Upgrade,
 };
 use uv_interpreter::{PythonVersion, Target};
 use uv_normalize::PackageName;
-use uv_requirements::ExtrasSpecification;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_workspace::{Combine, PipOptions, Workspace};
 
