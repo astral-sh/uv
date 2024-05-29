@@ -436,9 +436,6 @@ impl ProjectWorkspace {
             pyproject_toml: PyProjectToml {
                 project: Some(crate::pyproject::Project {
                     name: project_name.clone(),
-                    dependencies: None,
-                    optional_dependencies: None,
-                    dynamic: None,
                 }),
                 tool: None,
             },

@@ -81,8 +81,7 @@ fn missing_requirements_txt() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `requirements.txt`
-      Caused by: No such file or directory (os error 2)
+    error: File not found: `requirements.txt`
     "###
     );
 
@@ -177,41 +176,6 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
       | ^^^^^^^^^
     missing field `name`
 
-    "###
-    );
-
-    Ok(())
-}
-
-/// For user controlled pyproject.toml files, we enforce PEP 621.
-#[test]
-fn invalid_pyproject_toml_requirement_direct() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"[project]
-name = "project"
-dependencies = ["flask==1.0.x"]
-"#,
-    )?;
-
-    let filters = [("exit status", "exit code")]
-        .into_iter()
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.install()
-        .arg("-r")
-        .arg("pyproject.toml"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: after parsing '1.0', found '.x', which is not part of a valid version
-    flask==1.0.x
-         ^^^^^^^
     "###
     );
 

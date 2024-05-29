@@ -109,7 +109,11 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
-                if !(path == Path::new("-") || path.is_file()) {
+                if !(path == Path::new("-")
+                    || path.starts_with("http://")
+                    || path.starts_with("https://")
+                    || path.is_file())
+                {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 

@@ -10,14 +10,13 @@ use std::collections::BTreeMap;
 use std::ops::Deref;
 
 use glob::Pattern;
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
 use pep508_rs::Pep508Error;
 use pypi_types::VerbatimParsedUrl;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::PackageName;
 
 use crate::LoweringError;
 
@@ -51,22 +50,12 @@ pub struct PyProjectToml {
 
 /// PEP 621 project metadata (`project`).
 ///
-/// This is a subset of the full metadata specification, and only includes the fields that are
-/// relevant for extracting static requirements.
-///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct Project {
     /// The name of the project
     pub name: PackageName,
-    /// Project dependencies
-    pub dependencies: Option<Vec<String>>,
-    /// Optional dependencies
-    pub optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
-    /// Specifies which fields listed by PEP 621 were intentionally unspecified
-    /// so another tool can/will provide such metadata dynamically.
-    pub dynamic: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
