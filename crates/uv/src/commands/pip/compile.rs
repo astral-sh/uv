@@ -355,6 +355,7 @@ pub(crate) async fn pip_compile(
                         concurrency.downloads,
                         preview,
                     ),
+                    preview,
                 )
                 .with_reporter(ResolverReporter::from(printer))
                 .resolve()

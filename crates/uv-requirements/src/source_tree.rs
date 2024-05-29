@@ -9,10 +9,13 @@ use url::Url;
 
 use distribution_types::{BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId};
 use pep508_rs::RequirementOrigin;
-use pypi_types::Requirement;
-use uv_configuration::ExtrasSpecification;
-use uv_distribution::{DistributionDatabase, Reporter};
+use pypi_types::{Requirement, Requirements};
+use uv_configuration::{ExtrasSpecification, PreviewMode};
+use uv_distribution::{
+    lower_requirements, DistributionDatabase, Metadata23Lowered, ProjectWorkspace, Reporter,
+};
 use uv_fs::Simplified;
+use uv_normalize::PackageName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
@@ -31,6 +34,7 @@ pub struct SourceTreeResolver<'a, Context: BuildContext> {
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
     database: DistributionDatabase<'a, Context>,
+    preview: PreviewMode,
 }
 
 impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
@@ -41,6 +45,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
+        preview: PreviewMode,
     ) -> Self {
         Self {
             source_trees,
@@ -48,6 +53,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             hasher,
             index,
             database,
+            preview,
         }
     }
 
@@ -76,8 +82,124 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .collect())
     }
 
-    /// Infer the package name for a given "unnamed" requirement.
+    async fn read_static_metadata(
+        &self,
+        path: &Path,
+    ) -> Result<Option<(Requirements, PackageName)>> {
+        if !path
+            .file_name()
+            .is_some_and(|file_name| file_name == "pyproject.toml")
+        {
+            return Ok(None);
+        }
+        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+            path.parent().expect("`pyproject.toml` must have a parent"),
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+
+        let Some(project) = &project_workspace.current_project().pyproject_toml().project else {
+            return Ok(None);
+        };
+
+        // TODO(konsti): Only check for optional-dependencies if there are extras
+        if project.dynamic.as_ref().is_some_and(|dynamic| {
+            dynamic.contains(&"dependencies".to_string())
+                || dynamic.contains(&"optional-dependencies".to_string())
+        }) {
+            return Ok(None);
+        }
+
+        let sources = project_workspace
+            .current_project()
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.clone())
+            .unwrap_or_default();
+
+        let requirements = lower_requirements(
+            project.dependencies.as_deref(),
+            project.optional_dependencies.as_ref(),
+            path,
+            &project.name,
+            project_workspace.project_root(),
+            &sources,
+            project_workspace.workspace(),
+            self.preview,
+        )?;
+        Ok(Some((requirements, project.name.clone())))
+    }
+
+    /// Infer the dependencies for a directory dependency.
+    ///
+    /// The dependencies may be declared statically in a `pyproject.toml` (fast path), or we build
+    /// the path distribution and read the metadata from the build.
+    ///
+    /// TODO(konsti): Shouldn't we also read setup.cfg and such?
     async fn resolve_source_tree(&self, path: &Path) -> Result<Vec<Requirement>> {
+        if let Some((requirements, project_name)) = self.read_static_metadata(&path).await? {
+            // Extract the origin.
+            let origin = RequirementOrigin::Project(path.to_path_buf(), project_name);
+            // Collect the mandatory requirements and the optional requirements for the activated
+            // extras and add the origin to all requirements
+            Ok(requirements
+                .dependencies
+                .into_iter()
+                .chain(
+                    requirements
+                        .optional_dependencies
+                        .into_iter()
+                        .filter_map(|(key, optional_dependencies)| match self.extras {
+                            ExtrasSpecification::None => None,
+                            ExtrasSpecification::All => Some(optional_dependencies),
+                            ExtrasSpecification::Some(extras) => {
+                                if extras.contains(&key) {
+                                    Some(optional_dependencies)
+                                } else {
+                                    None
+                                }
+                            }
+                        })
+                        .flatten(),
+                )
+                .map(|requirement| requirement.with_origin(origin.clone()))
+                .collect())
+        } else {
+            let metadata = self.resolve_by_build(path).await?;
+            let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
+            // Determine the appropriate requirements to return based on the extras. This involves
+            // evaluating the `extras` expression in any markers, but preserving the remaining marker
+            // conditions.
+            Ok(metadata
+                .requires_dist
+                .into_iter()
+                .map(|requirement| match self.extras {
+                    ExtrasSpecification::None => requirement.with_origin(origin.clone()),
+                    ExtrasSpecification::All => Requirement {
+                        origin: Some(origin.clone()),
+                        marker: requirement
+                            .marker
+                            .and_then(|marker| marker.simplify_extras(&metadata.provides_extras)),
+                        ..requirement
+                    },
+                    ExtrasSpecification::Some(extras) => Requirement {
+                        origin: Some(origin.clone()),
+                        marker: requirement
+                            .marker
+                            .and_then(|marker| marker.simplify_extras(extras)),
+                        ..requirement
+                    },
+                })
+                .collect())
+        }
+    }
+
+    // Extract the origin.
+    async fn resolve_by_build(&self, path: &Path) -> Result<Metadata23Lowered> {
         // Convert to a buildable source.
         let source_tree = fs_err::canonicalize(path).with_context(|| {
             format!(
@@ -146,40 +268,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         };
 
-        // Extract the origin.
-        let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
-
-        // Determine the appropriate requirements to return based on the extras. This involves
-        // evaluating the `extras` expression in any markers, but preserving the remaining marker
-        // conditions.
-        match self.extras {
-            ExtrasSpecification::None => Ok(metadata
-                .requires_dist
-                .into_iter()
-                .map(|requirement| requirement.with_origin(origin.clone()))
-                .collect()),
-            ExtrasSpecification::All => Ok(metadata
-                .requires_dist
-                .into_iter()
-                .map(|requirement| Requirement {
-                    origin: Some(origin.clone()),
-                    marker: requirement
-                        .marker
-                        .and_then(|marker| marker.simplify_extras(&metadata.provides_extras)),
-                    ..requirement
-                })
-                .collect()),
-            ExtrasSpecification::Some(extras) => Ok(metadata
-                .requires_dist
-                .into_iter()
-                .map(|requirement| Requirement {
-                    origin: Some(origin.clone()),
-                    marker: requirement
-                        .marker
-                        .and_then(|marker| marker.simplify_extras(extras)),
-                    ..requirement
-                })
-                .collect()),
-        }
+        Ok(metadata)
     }
 }

@@ -150,6 +150,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         concurrency.downloads,
                         preview,
                     ),
+                    preview,
                 )
                 .with_reporter(ResolverReporter::from(printer))
                 .resolve()
