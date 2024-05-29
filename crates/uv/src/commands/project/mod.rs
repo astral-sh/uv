@@ -31,7 +31,7 @@ pub(crate) mod run;
 pub(crate) mod sync;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum Error {
+pub(crate) enum ProjectError {
     #[error(transparent)]
     Interpreter(#[from] uv_interpreter::Error),
 
@@ -48,7 +48,7 @@ pub(crate) fn init_environment(
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
-) -> Result<PythonEnvironment, Error> {
+) -> Result<PythonEnvironment, ProjectError> {
     let venv = project.workspace().root().join(".venv");
 
     // Discover or create the virtual environment.
