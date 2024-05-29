@@ -6,9 +6,10 @@ use url::Url;
 
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
-use pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_git::{GitReference, GitSha};
 use uv_normalize::{ExtraName, PackageName};
+
+use crate::{ParsedUrl, VerbatimParsedUrl};
 
 /// The requirements of a distribution, an extension over PEP 508's requirements.
 #[derive(Debug, Clone, Eq, PartialEq)]

@@ -3,12 +3,9 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{
-    DistributionMetadata, HashPolicy, PackageId, Requirement, RequirementSource,
-    UnresolvedRequirement,
-};
+use distribution_types::{DistributionMetadata, HashPolicy, PackageId, UnresolvedRequirement};
 use pep508_rs::MarkerEnvironment;
-use pypi_types::{HashDigest, HashError};
+use pypi_types::{HashDigest, HashError, Requirement, RequirementSource};
 use uv_normalize::PackageName;
 
 #[derive(Debug, Default, Clone)]

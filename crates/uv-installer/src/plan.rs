@@ -11,9 +11,10 @@ use distribution_filename::WheelFilename;
 use distribution_types::{
     CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, Name, PathBuiltDist,
-    PathSourceDist, RemoteSource, Requirement, RequirementSource, Verbatim,
+    PathSourceDist, RemoteSource, Verbatim,
 };
 use platform_tags::Tags;
+use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_configuration::{NoBinary, Reinstall};
 use uv_distribution::{

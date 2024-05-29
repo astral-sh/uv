@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use bench::criterion::black_box;
 use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
-use distribution_types::Requirement;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_interpreter::PythonEnvironment;

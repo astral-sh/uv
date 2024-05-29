@@ -1,28 +1,28 @@
 use std::hash::BuildHasherDefault;
 
+use petgraph::{
+    Directed,
+    graph::{Graph, NodeIndex},
+};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, Name, Requirement, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
+    Dist, DistributionMetadata, Name, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
-use petgraph::{
-    graph::{Graph, NodeIndex},
-    Directed,
-};
-use pypi_types::{ParsedUrlError, Yanked};
+use pypi_types::{ParsedUrlError, Requirement, Yanked};
 use uv_normalize::{ExtraName, PackageName};
 
+use crate::{
+    InMemoryIndex, lock, Lock, LockError, Manifest, MetadataResponse, ResolveError,
+    VersionsResponse,
+};
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::Resolution;
-use crate::{
-    lock, InMemoryIndex, Lock, LockError, Manifest, MetadataResponse, ResolveError,
-    VersionsResponse,
-};
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.

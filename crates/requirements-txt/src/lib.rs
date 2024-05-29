@@ -44,12 +44,12 @@ use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use distribution_types::{Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification};
+use distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep508_rs::{
     expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
     RequirementOrigin, Scheme, UnnamedRequirement, VerbatimUrl,
 };
-use pypi_types::{ParsedPathUrl, ParsedUrl, VerbatimParsedUrl};
+use pypi_types::{ParsedPathUrl, ParsedUrl, Requirement, VerbatimParsedUrl};
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;

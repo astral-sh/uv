@@ -12,10 +12,10 @@ use tracing::debug;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
-    RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
-    UnresolvedRequirementSpecification, VersionId,
+    RemoteSource, SourceUrl, UnresolvedRequirement, UnresolvedRequirementSpecification, VersionId,
 };
 use pep508_rs::{UnnamedRequirement, VersionOrUrl};
+use pypi_types::Requirement;
 use pypi_types::{Metadata10, ParsedUrl, VerbatimParsedUrl};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;

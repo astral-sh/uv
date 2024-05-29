@@ -11,7 +11,8 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, IndexLocations, Name, Requirement, Resolution, SourceDist};
+use distribution_types::{CachedDist, IndexLocations, Name, Resolution, SourceDist};
+use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;

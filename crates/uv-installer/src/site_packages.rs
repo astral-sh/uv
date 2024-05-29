@@ -8,11 +8,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
 
 use distribution_types::{
-    Diagnostic, InstalledDist, Name, Requirement, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    Diagnostic, InstalledDist, Name, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use pep440_rs::{Version, VersionSpecifiers};
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;

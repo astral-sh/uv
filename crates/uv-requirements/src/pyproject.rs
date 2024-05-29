@@ -20,10 +20,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{Requirement, RequirementSource, Requirements};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{Pep508Error, RequirementOrigin, VerbatimUrl, VersionOrUrl};
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::{Requirement, RequirementSource, Requirements, VerbatimParsedUrl};
 use uv_configuration::{ExtrasSpecification, PreviewMode};
 use uv_fs::Simplified;
 use uv_git::GitReference;

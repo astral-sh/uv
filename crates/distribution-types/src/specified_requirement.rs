@@ -2,9 +2,10 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
+use pypi_types::{Requirement, RequirementSource};
 use uv_normalize::ExtraName;
 
-use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
+use crate::VerbatimParsedUrl;
 
 /// An [`UnresolvedRequirement`] with additional metadata from `requirements.txt`, currently only
 /// hashes but in the future also editable and similar information.

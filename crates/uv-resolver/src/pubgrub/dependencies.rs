@@ -3,9 +3,10 @@ use pubgrub::range::Range;
 use rustc_hash::FxHashSet;
 use tracing::warn;
 
-use distribution_types::{Requirement, RequirementSource, Verbatim};
+use distribution_types::Verbatim;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
+use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{ExtraName, PackageName};
 

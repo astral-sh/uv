@@ -7,10 +7,9 @@ use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
 use url::Url;
 
-use distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashPolicy, Requirement, SourceUrl, VersionId,
-};
+use distribution_types::{BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId};
 use pep508_rs::RequirementOrigin;
+use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, Reporter};

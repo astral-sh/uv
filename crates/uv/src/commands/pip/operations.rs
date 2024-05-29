@@ -9,8 +9,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, Requirement, ResolutionDiagnostic,
-    UnresolvedRequirementSpecification,
+    CachedDist, Diagnostic, InstalledDist, ResolutionDiagnostic, UnresolvedRequirementSpecification,
 };
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, Name, Resolution,
@@ -18,6 +17,7 @@ use distribution_types::{
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{

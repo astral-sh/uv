@@ -38,11 +38,11 @@ use tracing::{debug, instrument, trace};
 
 use cache_key::CanonicalUrl;
 use distribution_types::{
-    FlatIndexLocation, IndexUrl, Requirement, RequirementSource, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    FlatIndexLocation, IndexUrl, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use pep508_rs::{UnnamedRequirement, UnnamedRequirementUrl};
 use pypi_types::VerbatimParsedUrl;
+use pypi_types::{Requirement, RequirementSource};
 use requirements_txt::{
     EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
 };
