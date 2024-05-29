@@ -1541,6 +1541,25 @@ pub enum MarkerTree {
     Or(Vec<MarkerTree>),
 }
 
+impl<'de> Deserialize<'de> for MarkerTree {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        FromStr::from_str(&s).map_err(de::Error::custom)
+    }
+}
+
+impl Serialize for MarkerTree {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 impl FromStr for MarkerTree {
     type Err = Pep508Error;
 

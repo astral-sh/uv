@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
@@ -22,12 +23,13 @@ pub struct Requirements {
 ///
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
 /// [`VersionOrUrl`], which collapses all URL sources into a single stringly type.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Hash, Debug, Clone, Eq, PartialEq)]
 pub struct Requirement {
     pub name: PackageName,
     pub extras: Vec<ExtraName>,
     pub marker: Option<MarkerTree>,
     pub source: RequirementSource,
+    #[serde(skip)]
     pub origin: Option<RequirementOrigin>,
 }
 
