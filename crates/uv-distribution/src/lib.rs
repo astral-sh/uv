@@ -86,15 +86,15 @@ impl Metadata23Lowered {
         }
     }
 
-    /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for git and directory
+    /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    // TODO(konsti): Workspace caching
     pub async fn from_tool_uv(
         metadata: Metadata23,
         project_root: &Path,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataLoweringError> {
-        // TODO(konsti): Limit discovery for git checkouts to git root.
+        // TODO(konsti): Limit discovery for Git checkouts to Git root.
+        // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(project_root).await?
         else {

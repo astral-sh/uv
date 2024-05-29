@@ -116,8 +116,7 @@ fn missing_requirements_in() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `requirements.in`
-      Caused by: No such file or directory (os error 2)
+    error: File not found: `requirements.in`
     "###
     );
 
@@ -770,8 +769,7 @@ dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `file://[TEMP_DIR]/`
-      Caused by: Invalid `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 5, column 8
       |
     5 | name = "!project"

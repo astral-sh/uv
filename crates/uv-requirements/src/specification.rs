@@ -27,7 +27,7 @@
 //! * `setup.py` or `setup.cfg` instead of `pyproject.toml`: Directory is an entry in
 //!   `source_trees`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
@@ -45,6 +45,8 @@ use requirements_txt::{
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
+use uv_distribution::PyProjectToml;
+use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::RequirementsSource;
@@ -107,6 +109,10 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
+                if !(path == Path::new("-") || path.is_file()) {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                }
+
                 let requirements_txt =
                     RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
                 Self {
@@ -146,25 +152,60 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
-            RequirementsSource::PyprojectToml(path)
-            | RequirementsSource::SetupPy(path)
-            | RequirementsSource::SetupCfg(path) => Self {
-                source_trees: vec![path.clone()],
-                ..Self::default()
-            },
-            RequirementsSource::SourceTree(path) => Self {
-                project: None,
-                requirements: vec![UnresolvedRequirementSpecification {
-                    requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                        url: VerbatimParsedUrl::parse_absolute_path(path)?,
-                        extras: vec![],
-                        marker: None,
-                        origin: None,
-                    }),
-                    hashes: vec![],
-                }],
-                ..Self::default()
-            },
+            RequirementsSource::PyprojectToml(path) => {
+                let contents = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(contents) => contents,
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    }
+                    Err(err) => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to read `{}`: {}",
+                            path.user_display(),
+                            err
+                        ));
+                    }
+                };
+                let _ = toml::from_str::<PyProjectToml>(&contents)
+                    .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
+
+                Self {
+                    source_trees: vec![path.clone()],
+                    ..Self::default()
+                }
+            }
+            RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
+                if !path.is_file() {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                }
+
+                Self {
+                    source_trees: vec![path.clone()],
+                    ..Self::default()
+                }
+            }
+            RequirementsSource::SourceTree(path) => {
+                if !path.is_dir() {
+                    return Err(anyhow::anyhow!(
+                        "Directory not found: `{}`",
+                        path.user_display()
+                    ));
+                }
+
+                Self {
+                    project: None,
+                    requirements: vec![UnresolvedRequirementSpecification {
+                        requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                            url: VerbatimParsedUrl::parse_absolute_path(path)?,
+                            extras: vec![],
+                            marker: None,
+                            origin: None,
+                        }),
+                        hashes: vec![],
+                    }],
+                    ..Self::default()
+                }
+            }
         })
     }
 
