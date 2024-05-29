@@ -576,7 +576,7 @@ fn lock_extra() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [project.optional-dependencies]
-        test = ["pytest"]
+        test = ["iniconfig"]
         "#,
     )?;
 
@@ -587,7 +587,7 @@ fn lock_extra() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning.
-    Resolved 8 packages in [TIME]
+    Resolved 5 packages in [TIME]
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -655,36 +655,6 @@ fn lock_extra() -> Result<()> {
         size = 5892
 
         [[distribution]]
-        name = "packaging"
-        version = "24.0"
-        source = "registry+https://pypi.org/simple"
-
-        [distribution.sdist]
-        url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz"
-        hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9"
-        size = 147882
-
-        [[distribution.wheel]]
-        url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl"
-        hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5"
-        size = 53488
-
-        [[distribution]]
-        name = "pluggy"
-        version = "1.4.0"
-        source = "registry+https://pypi.org/simple"
-
-        [distribution.sdist]
-        url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz"
-        hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be"
-        size = 65812
-
-        [[distribution.wheel]]
-        url = "https://files.pythonhosted.org/packages/a5/5b/0cc789b59e8cc1bf288b38111d002d8c5917123194d45b29dcdac64723cc/pluggy-1.4.0-py3-none-any.whl"
-        hash = "sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981"
-        size = 20120
-
-        [[distribution]]
         name = "project"
         version = "0.1.0"
         source = "editable+file://[TEMP_DIR]/"
@@ -698,33 +668,22 @@ fn lock_extra() -> Result<()> {
         source = "registry+https://pypi.org/simple"
 
         [[distribution]]
-        name = "pytest"
-        version = "8.1.1"
-        source = "registry+https://pypi.org/simple"
+        name = "project"
+        version = "0.1.0"
+        extra = "test"
+        source = "editable+file://[TEMP_DIR]/"
 
         [distribution.sdist]
-        url = "https://files.pythonhosted.org/packages/30/b7/7d44bbc04c531dcc753056920e0988032e5871ac674b5a84cb979de6e7af/pytest-8.1.1.tar.gz"
-        hash = "sha256:ac978141a75948948817d360297b7aae0fcb9d6ff6bc9ec6d514b85d5a65c044"
-        size = 1409703
+        url = "file://[TEMP_DIR]/"
 
-        [[distribution.wheel]]
-        url = "https://files.pythonhosted.org/packages/4d/7e/c79cecfdb6aa85c6c2e3cf63afc56d0f165f24f5c66c03c695c4d9b84756/pytest-8.1.1-py3-none-any.whl"
-        hash = "sha256:2a8386cfc11fa9d2c50ee7b2a57e7d898ef90470a7a34c4b949ff59662bb78b7"
-        size = 337359
+        [[distribution.dependencies]]
+        name = "anyio"
+        version = "3.7.0"
+        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "iniconfig"
         version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution.dependencies]]
-        name = "packaging"
-        version = "24.0"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution.dependencies]]
-        name = "pluggy"
-        version = "1.4.0"
         source = "registry+https://pypi.org/simple"
 
         [[distribution]]
@@ -745,7 +704,7 @@ fn lock_extra() -> Result<()> {
         );
     });
 
-    // Install from the lockfile.
+    // Install the base dependencies from the lockfile.
     uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
@@ -759,6 +718,19 @@ fn lock_extra() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+    "###);
+
+    // Install the extras from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("test"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     "###);
 
     Ok(())

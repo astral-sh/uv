@@ -12,6 +12,7 @@ Ok(
                         "anyio",
                     ),
                     version: "4.3.0",
+                    extra: None,
                     source: Source {
                         kind: Path,
                         url: Url {
@@ -78,6 +79,7 @@ Ok(
                     "anyio",
                 ),
                 version: "4.3.0",
+                extra: None,
                 source: Source {
                     kind: Path,
                     url: Url {

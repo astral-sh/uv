@@ -323,7 +323,7 @@ pub(crate) async fn pip_install(
         let root = PackageName::new(root.to_string())?;
         let encoded = fs::tokio::read_to_string("uv.lock").await?;
         let lock: Lock = toml::from_str(&encoded)?;
-        lock.to_resolution(&markers, &tags, &root)
+        lock.to_resolution(&markers, &tags, &root, &[])
     } else {
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)

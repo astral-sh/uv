@@ -1764,6 +1764,17 @@ pub(crate) struct VenvArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
+    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub(crate) extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    #[arg(long, conflicts_with = "extra")]
+    pub(crate) all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub(crate) no_all_extras: bool,
+
     /// The command to run.
     pub(crate) target: Option<String>,
 
@@ -1800,6 +1811,17 @@ pub(crate) struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct SyncArgs {
+    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub(crate) extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    #[arg(long, conflicts_with = "extra")]
+    pub(crate) all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub(crate) no_all_extras: bool,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent

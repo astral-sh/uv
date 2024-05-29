@@ -97,6 +97,7 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
+    pub(crate) extras: ExtrasSpecification,
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
@@ -109,6 +110,9 @@ impl RunSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, _workspace: Option<Workspace>) -> Self {
         let RunArgs {
+            extra,
+            all_extras,
+            no_all_extras,
             target,
             args,
             with,
@@ -117,6 +121,10 @@ impl RunSettings {
         } = args;
 
         Self {
+            extras: ExtrasSpecification::from_args(
+                flag(all_extras, no_all_extras).unwrap_or_default(),
+                extra.unwrap_or_default(),
+            ),
             target,
             args,
             with,
@@ -130,6 +138,7 @@ impl RunSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
+    pub(crate) extras: ExtrasSpecification,
     pub(crate) python: Option<String>,
 }
 
@@ -137,9 +146,20 @@ impl SyncSettings {
     /// Resolve the [`SyncSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: SyncArgs, _workspace: Option<Workspace>) -> Self {
-        let SyncArgs { python } = args;
+        let SyncArgs {
+            extra,
+            all_extras,
+            no_all_extras,
+            python,
+        } = args;
 
-        Self { python }
+        Self {
+            extras: ExtrasSpecification::from_args(
+                flag(all_extras, no_all_extras).unwrap_or_default(),
+                extra.unwrap_or_default(),
+            ),
+            python,
+        }
     }
 }
 
