@@ -118,7 +118,7 @@ pub enum Error {
 }
 
 #[derive(Debug)]
-pub enum MissingLibrary {
+enum MissingLibrary {
     Header(String),
     Linker(String),
     PythonPackage(String),
@@ -213,11 +213,11 @@ impl Error {
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub struct PyProjectToml {
+struct PyProjectToml {
     /// Build-related data
-    pub build_system: Option<BuildSystem>,
+    build_system: Option<BuildSystem>,
     /// Project metadata
-    pub project: Option<Project>,
+    project: Option<Project>,
 }
 
 /// The `[project]` section of a pyproject.toml as specified in PEP 621.
@@ -226,26 +226,26 @@ pub struct PyProjectToml {
 /// informing wheel builds.
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub struct Project {
+struct Project {
     /// The name of the project
-    pub name: PackageName,
+    name: PackageName,
     /// The version of the project as supported by PEP 440
-    pub version: Option<Version>,
+    version: Option<Version>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified so another tool
     /// can/will provide such metadata dynamically.
-    pub dynamic: Option<Vec<String>>,
+    dynamic: Option<Vec<String>>,
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub struct BuildSystem {
+struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
-    pub requires: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+    requires: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
     /// A string naming a Python object that will be used to perform the build.
-    pub build_backend: Option<String>,
+    build_backend: Option<String>,
     /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
-    pub backend_path: Option<BackendPath>,
+    backend_path: Option<BackendPath>,
 }
 
 impl BackendPath {
@@ -256,7 +256,7 @@ impl BackendPath {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BackendPath(Vec<String>);
+struct BackendPath(Vec<String>);
 
 impl<'de> Deserialize<'de> for BackendPath {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
