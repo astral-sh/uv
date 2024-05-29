@@ -30,24 +30,6 @@ mod requirement_lowering;
 mod source;
 mod workspace;
 
-/// The metadata associated with an archive.
-#[derive(Debug, Clone)]
-pub struct ArchiveMetadata {
-    /// The [`Metadata23`] for the underlying distribution.
-    pub metadata: Metadata23,
-    /// The hashes of the source or built archive.
-    pub hashes: Vec<HashDigest>,
-}
-
-impl From<Metadata23> for ArchiveMetadata {
-    fn from(metadata: Metadata23) -> Self {
-        Self {
-            metadata,
-            hashes: vec![],
-        }
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum MetadataLoweringError {
     #[error(transparent)]
@@ -57,7 +39,7 @@ pub enum MetadataLoweringError {
 }
 
 #[derive(Debug, Clone)]
-pub struct Metadata23Lowered {
+pub struct Metadata {
     // Mandatory fields
     pub name: PackageName,
     pub version: Version,
@@ -67,10 +49,10 @@ pub struct Metadata23Lowered {
     pub provides_extras: Vec<ExtraName>,
 }
 
-impl Metadata23Lowered {
+impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_plain(metadata: Metadata23) -> Self {
+    pub fn from_metadata23(metadata: Metadata23) -> Self {
         Self {
             name: metadata.name,
             version: metadata.version,
@@ -96,7 +78,7 @@ impl Metadata23Lowered {
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(project_root).await?
         else {
-            return Ok(Self::from_plain(metadata));
+            return Ok(Self::from_metadata23(metadata));
         };
 
         let sources = project_workspace
@@ -134,42 +116,26 @@ impl Metadata23Lowered {
 
 /// The metadata associated with an archive.
 #[derive(Debug, Clone)]
-pub struct ArchiveMetadataLowered {
-    /// The [`Metadata23`] for the underlying distribution.
-    pub metadata: Metadata23Lowered,
+pub struct ArchiveMetadata {
+    /// The [`Metadata`] for the underlying distribution.
+    pub metadata: Metadata,
     /// The hashes of the source or built archive.
     pub hashes: Vec<HashDigest>,
 }
 
-impl ArchiveMetadataLowered {
+impl ArchiveMetadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_plain(metadata: ArchiveMetadata) -> Self {
+    pub fn from_metadata23(metadata: Metadata23) -> Self {
         Self {
-            metadata: Metadata23Lowered::from_plain(metadata.metadata),
-            hashes: metadata.hashes,
+            metadata: Metadata::from_metadata23(metadata),
+            hashes: vec![],
         }
-    }
-
-    /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for git and directory
-    /// dependencies.
-    // TODO(konsti): Workspace caching
-    pub async fn from_tool_uv(
-        metadata: ArchiveMetadata,
-        project_root: &Path,
-        preview_mode: PreviewMode,
-    ) -> Result<Self, MetadataLoweringError> {
-        let metadata_lowered =
-            Metadata23Lowered::from_tool_uv(metadata.metadata, project_root, preview_mode).await?;
-        Ok(Self {
-            metadata: metadata_lowered,
-            hashes: metadata.hashes,
-        })
     }
 }
 
-impl From<Metadata23Lowered> for ArchiveMetadataLowered {
-    fn from(metadata: Metadata23Lowered) -> Self {
+impl From<Metadata> for ArchiveMetadata {
+    fn from(metadata: Metadata) -> Self {
         Self {
             metadata,
             hashes: vec![],

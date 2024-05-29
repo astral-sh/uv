@@ -1143,8 +1143,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions().done(
                         dist.version_id(),
-                        Arc::new(MetadataResponse::Found(ArchiveMetadataLowered::from_plain(
-                            ArchiveMetadata::from(metadata),
+                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from_metadata23(
+                            metadata,
                         ))),
                     );
                 }

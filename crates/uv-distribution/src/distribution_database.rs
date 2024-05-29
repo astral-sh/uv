@@ -33,9 +33,7 @@ use uv_types::BuildContext;
 use crate::archive::Archive;
 use crate::locks::Locks;
 use crate::source::SourceDistributionBuilder;
-use crate::{
-    ArchiveMetadata, ArchiveMetadataLowered, Error, LocalWheel, Reporter,
-};
+use crate::{ArchiveMetadata, Error, LocalWheel, Metadata, Reporter, };
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -127,7 +125,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         dist: &Dist,
         hashes: HashPolicy<'_>,
-    ) -> Result<ArchiveMetadataLowered, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {
@@ -356,7 +354,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
-    ) -> Result<ArchiveMetadataLowered, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         // If hash generation is enabled, and the distribution isn't hosted on an index, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
         // is hosted on an index, the hashes will be included in the simple metadata response.
@@ -367,10 +365,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let wheel = self.get_wheel(dist, hashes).await?;
             let metadata = wheel.metadata()?;
             let hashes = wheel.hashes;
-            return Ok(ArchiveMetadataLowered::from_plain(ArchiveMetadata {
-                metadata,
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata),
                 hashes,
-            }));
+            });
         }
 
         let result = self
@@ -379,9 +377,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await;
 
         match result {
-            Ok(metadata) => Ok(ArchiveMetadataLowered::from_plain(ArchiveMetadata::from(
-                metadata,
-            ))),
+            Ok(metadata) => Ok(ArchiveMetadata::from_metadata23(metadata)),
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
 
@@ -390,10 +386,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel = self.get_wheel(dist, hashes).await?;
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
-                Ok(ArchiveMetadataLowered::from_plain(ArchiveMetadata {
-                    metadata,
+                Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(metadata),
                     hashes,
-                }))
+                })
             }
             Err(err) => Err(err.into()),
         }
@@ -407,7 +403,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
-    ) -> Result<ArchiveMetadataLowered, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         let no_build = match self.build_context.no_build() {
             NoBuild::All => true,
             NoBuild::None => false,
