@@ -1,0 +1,8 @@
+[project]
+name = "b"
+version = "1.2.3"
+dependencies = ["boltons==24"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
