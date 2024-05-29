@@ -8,22 +8,18 @@
 
 use std::collections::BTreeMap;
 use std::ops::Deref;
-use std::path::Path;
 
 use glob::Pattern;
 use indexmap::IndexMap;
-use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
 use pep508_rs::Pep508Error;
-use pypi_types::{Requirement, VerbatimParsedUrl};
-use uv_configuration::{ExtrasSpecification, PreviewMode};
+use pypi_types::VerbatimParsedUrl;
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::requirement_lowering::LoweringError;
-use crate::{requirement_lowering, Workspace};
+use crate::LoweringError;
 
 #[derive(Debug, Error)]
 pub enum Pep621Error {
@@ -184,172 +180,6 @@ pub enum Source {
         workspace: bool,
     },
 }
-
-/// The PEP 621 project metadata, with static requirements extracted in advance, joined
-/// with `tool.uv.sources`.
-#[derive(Debug)]
-pub(crate) struct Pep621Metadata {
-    /// The name of the project.
-    pub(crate) name: PackageName,
-    /// The requirements extracted from the project.
-    pub(crate) requirements: Vec<Requirement>,
-    /// The extras used to collect requirements.
-    pub(crate) used_extras: FxHashSet<ExtraName>,
-}
-
-impl Pep621Metadata {
-    /// Extract the static [`Pep621Metadata`] from a [`Project`] and [`ExtrasSpecification`], if
-    /// possible.
-    ///
-    /// If the project specifies dynamic dependencies, or if the project specifies dynamic optional
-    /// dependencies and the extras are requested, the requirements cannot be extracted.
-    ///
-    /// Returns an error if the requirements are not valid PEP 508 requirements.
-    pub(crate) fn try_from(
-        pyproject: &PyProjectToml,
-        extras: &ExtrasSpecification,
-        pyproject_path: &Path,
-        project_dir: &Path,
-        workspace: &Workspace,
-        preview: PreviewMode,
-    ) -> Result<Option<Self>, Pep621Error> {
-        let project_sources = pyproject
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.clone());
-
-        let has_sources = project_sources.is_some() || !workspace.sources().is_empty();
-
-        let Some(project) = &pyproject.project else {
-            return if has_sources {
-                Err(Pep621Error::MissingProjectSection)
-            } else {
-                Ok(None)
-            };
-        };
-        if let Some(dynamic) = project.dynamic.as_ref() {
-            // If the project specifies dynamic dependencies, we can't extract the requirements.
-            if dynamic.iter().any(|field| field == "dependencies") {
-                return if has_sources {
-                    Err(Pep621Error::DynamicNotAllowed("project.dependencies"))
-                } else {
-                    Ok(None)
-                };
-            }
-            // If we requested extras, and the project specifies dynamic optional dependencies, we can't
-            // extract the requirements.
-            if !extras.is_empty() && dynamic.iter().any(|field| field == "optional-dependencies") {
-                return if has_sources {
-                    Err(Pep621Error::DynamicNotAllowed(
-                        "project.optional-dependencies",
-                    ))
-                } else {
-                    Ok(None)
-                };
-            }
-        }
-
-        let requirements = requirement_lowering::lower_requirements(
-            project.dependencies.as_deref(),
-            project.optional_dependencies.as_ref(),
-            pyproject_path,
-            &project.name,
-            project_dir,
-            &project_sources.unwrap_or_default(),
-            workspace,
-            preview,
-        )?;
-
-        // Parse out the project requirements.
-        let mut requirements_with_extras = requirements.dependencies;
-
-        // Include any optional dependencies specified in `extras`.
-        let mut used_extras = FxHashSet::default();
-        if !extras.is_empty() {
-            // Include the optional dependencies if the extras are requested.
-            for (extra, optional_requirements) in &requirements.optional_dependencies {
-                if extras.contains(extra) {
-                    used_extras.insert(extra.clone());
-                    requirements_with_extras.extend(flatten_extra(
-                        &project.name,
-                        optional_requirements,
-                        &requirements.optional_dependencies,
-                    ));
-                }
-            }
-        }
-
-        Ok(Some(Self {
-            name: project.name.clone(),
-            requirements: requirements_with_extras,
-            used_extras,
-        }))
-    }
-}
-
-/// Given an extra in a project that may contain references to the project itself, flatten it into
-/// a list of requirements.
-///
-/// For example:
-/// ```toml
-/// [project]
-/// name = "my-project"
-/// version = "0.0.1"
-/// dependencies = [
-///     "tomli",
-/// ]
-///
-/// [project.optional-dependencies]
-/// test = [
-///     "pep517",
-/// ]
-/// dev = [
-///     "my-project[test]",
-/// ]
-/// ```
-fn flatten_extra(
-    project_name: &PackageName,
-    requirements: &[Requirement],
-    extras: &IndexMap<ExtraName, Vec<Requirement>>,
-) -> Vec<Requirement> {
-    fn inner(
-        project_name: &PackageName,
-        requirements: &[Requirement],
-        extras: &IndexMap<ExtraName, Vec<Requirement>>,
-        seen: &mut FxHashSet<ExtraName>,
-    ) -> Vec<Requirement> {
-        let mut flattened = Vec::with_capacity(requirements.len());
-        for requirement in requirements {
-            if requirement.name == *project_name {
-                for extra in &requirement.extras {
-                    // Avoid infinite recursion on mutually recursive extras.
-                    if !seen.insert(extra.clone()) {
-                        continue;
-                    }
-
-                    // Flatten the extra requirements.
-                    for (other_extra, extra_requirements) in extras {
-                        if other_extra == extra {
-                            flattened.extend(inner(project_name, extra_requirements, extras, seen));
-                        }
-                    }
-                }
-            } else {
-                flattened.push(requirement.clone());
-            }
-        }
-        flattened
-    }
-
-    inner(
-        project_name,
-        requirements,
-        extras,
-        &mut FxHashSet::default(),
-    )
-}
-
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 mod serde_from_and_to_string {
     use std::fmt::Display;

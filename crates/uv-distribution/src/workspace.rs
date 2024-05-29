@@ -3,17 +3,17 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use distribution_types::{Requirement, RequirementSource};
 use glob::{glob, GlobError, PatternError};
-use pep508_rs::{VerbatimUrl, VerbatimUrlError};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
 
+use pep508_rs::{VerbatimUrl, VerbatimUrlError};
+use pypi_types::{Requirement, RequirementSource};
 use uv_fs::{absolutize_path, Simplified};
 use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user;
 
-use crate::pyproject::{PyProjectToml, Source, ToolUvWorkspace};
+use crate::{PyProjectToml, Source, ToolUvWorkspace};
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -427,8 +427,8 @@ impl ProjectWorkspace {
         })
     }
 
-    #[cfg(test)]
-    pub(crate) fn dummy(root: &Path, project_name: &PackageName) -> Self {
+    /// Used in tests.
+    pub fn dummy(root: &Path, project_name: &PackageName) -> Self {
         // This doesn't necessarily match the exact test case, but we don't use the other fields
         // for the test cases atm.
         let root_member = WorkspaceMember {

@@ -10,15 +10,15 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution::ProjectWorkspace;
 use uv_interpreter::PythonEnvironment;
 use uv_requirements::upgrade::read_lockfile;
-use uv_requirements::ProjectWorkspace;
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::{ExitStatus, pip, project};
 use crate::commands::project::ProjectError;
-use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
 
 /// Resolve the project requirements into a lockfile.

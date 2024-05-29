@@ -9,9 +9,9 @@ use uv_configuration::{
     SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution::ProjectWorkspace;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
-use uv_requirements::ProjectWorkspace;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;

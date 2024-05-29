@@ -14,10 +14,11 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
-use uv_requirements::{ProjectWorkspace, RequirementsSource, RequirementsSpecification, Workspace};
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 

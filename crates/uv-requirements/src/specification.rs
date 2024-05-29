@@ -31,6 +31,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use indexmap::IndexMap;
 use path_absolutize::Absolutize;
 use rustc_hash::FxHashSet;
 use same_file::is_same_file;
@@ -48,12 +49,13 @@ use requirements_txt::{
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::{ExtrasSpecification, NoBinary, NoBuild, PreviewMode};
+use uv_distribution::{
+    lower_requirements, Pep621Error, ProjectWorkspace, PyProjectToml, Workspace, WorkspaceError,
+};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::pyproject::{Pep621Metadata, PyProjectToml};
-use crate::ProjectWorkspace;
-use crate::{RequirementsSource, Workspace, WorkspaceError};
+use crate::RequirementsSource;
 
 #[derive(Debug, Default)]
 pub struct RequirementsSpecification {
@@ -578,5 +580,453 @@ impl RequirementsSpecification {
             preview,
         )
         .await
+    }
+}
+
+/// The PEP 621 project metadata, with static requirements extracted in advance, joined
+/// with `tool.uv.sources`.
+#[derive(Debug)]
+
+struct Pep621Metadata {
+    /// The name of the project.
+    name: PackageName,
+    /// The requirements extracted from the project.
+    requirements: Vec<Requirement>,
+    /// The extras used to collect requirements.
+    used_extras: FxHashSet<ExtraName>,
+}
+
+impl Pep621Metadata {
+    /// Extract the static [`Pep621Metadata`] from a [`Project`] and [`ExtrasSpecification`], if
+    /// possible.
+    ///
+    /// If the project specifies dynamic dependencies, or if the project specifies dynamic optional
+    /// dependencies and the extras are requested, the requirements cannot be extracted.
+    ///
+    /// Returns an error if the requirements are not valid PEP 508 requirements.
+    fn try_from(
+        pyproject: &PyProjectToml,
+        extras: &ExtrasSpecification,
+        pyproject_path: &Path,
+        project_dir: &Path,
+        workspace: &Workspace,
+        preview: PreviewMode,
+    ) -> std::result::Result<Option<Self>, Pep621Error> {
+        let project_sources = pyproject
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.clone());
+
+        let has_sources = project_sources.is_some() || !workspace.sources().is_empty();
+
+        let Some(project) = &pyproject.project else {
+            return if has_sources {
+                Err(Pep621Error::MissingProjectSection)
+            } else {
+                Ok(None)
+            };
+        };
+        if let Some(dynamic) = project.dynamic.as_ref() {
+            // If the project specifies dynamic dependencies, we can't extract the requirements.
+            if dynamic.iter().any(|field| field == "dependencies") {
+                return if has_sources {
+                    Err(Pep621Error::DynamicNotAllowed("project.dependencies"))
+                } else {
+                    Ok(None)
+                };
+            }
+            // If we requested extras, and the project specifies dynamic optional dependencies, we can't
+            // extract the requirements.
+            if !extras.is_empty() && dynamic.iter().any(|field| field == "optional-dependencies") {
+                return if has_sources {
+                    Err(Pep621Error::DynamicNotAllowed(
+                        "project.optional-dependencies",
+                    ))
+                } else {
+                    Ok(None)
+                };
+            }
+        }
+
+        let requirements = lower_requirements(
+            project.dependencies.as_deref(),
+            project.optional_dependencies.as_ref(),
+            pyproject_path,
+            &project.name,
+            project_dir,
+            &project_sources.unwrap_or_default(),
+            workspace,
+            preview,
+        )?;
+
+        // Parse out the project requirements.
+        let mut requirements_with_extras = requirements.dependencies;
+
+        // Include any optional dependencies specified in `extras`.
+        let mut used_extras = FxHashSet::default();
+        if !extras.is_empty() {
+            // Include the optional dependencies if the extras are requested.
+            for (extra, optional_requirements) in &requirements.optional_dependencies {
+                if extras.contains(extra) {
+                    used_extras.insert(extra.clone());
+                    requirements_with_extras.extend(flatten_extra(
+                        &project.name,
+                        optional_requirements,
+                        &requirements.optional_dependencies,
+                    ));
+                }
+            }
+        }
+
+        Ok(Some(Self {
+            name: project.name.clone(),
+            requirements: requirements_with_extras,
+            used_extras,
+        }))
+    }
+}
+
+/// Given an extra in a project that may contain references to the project itself, flatten it into
+/// a list of requirements.
+///
+/// For example:
+/// ```toml
+/// [project]
+/// name = "my-project"
+/// version = "0.0.1"
+/// dependencies = [
+///     "tomli",
+/// ]
+///
+/// [project.optional-dependencies]
+/// test = [
+///     "pep517",
+/// ]
+/// dev = [
+///     "my-project[test]",
+/// ]
+/// ```
+fn flatten_extra(
+    project_name: &PackageName,
+    requirements: &[Requirement],
+    extras: &IndexMap<ExtraName, Vec<Requirement>>,
+) -> Vec<Requirement> {
+    fn inner(
+        project_name: &PackageName,
+        requirements: &[Requirement],
+        extras: &IndexMap<ExtraName, Vec<Requirement>>,
+        seen: &mut FxHashSet<ExtraName>,
+    ) -> Vec<Requirement> {
+        let mut flattened = Vec::with_capacity(requirements.len());
+        for requirement in requirements {
+            if requirement.name == *project_name {
+                for extra in &requirement.extras {
+                    // Avoid infinite recursion on mutually recursive extras.
+                    if !seen.insert(extra.clone()) {
+                        continue;
+                    }
+
+                    // Flatten the extra requirements.
+                    for (other_extra, extra_requirements) in extras {
+                        if other_extra == extra {
+                            flattened.extend(inner(project_name, extra_requirements, extras, seen));
+                        }
+                    }
+                }
+            } else {
+                flattened.push(requirement.clone());
+            }
+        }
+        flattened
+    }
+
+    inner(
+        project_name,
+        requirements,
+        extras,
+        &mut FxHashSet::default(),
+    )
+}
+
+#[cfg(test)]
+mod test {
+    use std::path::Path;
+    use std::str::FromStr;
+
+    use anyhow::Context;
+    use indoc::indoc;
+    use insta::assert_snapshot;
+
+    use uv_configuration::{ExtrasSpecification, PreviewMode};
+    use uv_distribution::ProjectWorkspace;
+    use uv_fs::Simplified;
+    use uv_normalize::PackageName;
+
+    use crate::RequirementsSpecification;
+
+    fn from_source(
+        contents: &str,
+        path: impl AsRef<Path>,
+        extras: &ExtrasSpecification,
+    ) -> anyhow::Result<RequirementsSpecification> {
+        let path = uv_fs::absolutize_path(path.as_ref())?;
+        let project_workspace =
+            ProjectWorkspace::dummy(path.as_ref(), &PackageName::from_str("foo").unwrap());
+        let pyproject_toml =
+            toml::from_str(contents).context("Failed to parse: `pyproject.toml`")?;
+        RequirementsSpecification::parse_direct_pyproject_toml(
+            &pyproject_toml,
+            project_workspace.workspace(),
+            extras,
+            path.as_ref(),
+            PreviewMode::Enabled,
+        )
+        .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?
+        .context("Missing workspace")
+    }
+
+    fn format_err(input: &str) -> String {
+        let err = from_source(input, "pyproject.toml", &ExtrasSpecification::None).unwrap_err();
+        let mut causes = err.chain();
+        let mut message = String::new();
+        message.push_str(&format!("error: {}\n", causes.next().unwrap()));
+        for err in causes {
+            message.push_str(&format!("  Caused by: {err}\n"));
+        }
+        message
+    }
+
+    #[test]
+    fn conflict_project_and_sources() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm @ git+https://github.com/tqdm/tqdm",
+            ]
+
+            [tool.uv.sources]
+            tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
+        "#};
+
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: Failed to parse entry for: `tqdm`
+          Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
+        "###);
+    }
+
+    #[test]
+    fn too_many_git_specs() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm",
+            ]
+
+            [tool.uv.sources]
+            tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
+        "#};
+
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: Failed to parse entry for: `tqdm`
+          Caused by: Can only specify one of rev, tag, or branch
+        "###);
+    }
+
+    #[test]
+    fn too_many_git_typo() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm",
+            ]
+
+            [tool.uv.sources]
+            tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
+        "#};
+
+        // TODO(konsti): This should tell you the set of valid fields
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: TOML parse error at line 9, column 8
+          |
+        9 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
+          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        data did not match any variant of untagged enum Source
+
+        "###);
+    }
+
+    #[test]
+    fn you_cant_mix_those() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm",
+            ]
+
+            [tool.uv.sources]
+            tqdm = { path = "tqdm", index = "torch" }
+        "#};
+
+        // TODO(konsti): This should tell you the set of valid fields
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: TOML parse error at line 9, column 8
+          |
+        9 | tqdm = { path = "tqdm", index = "torch" }
+          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        data did not match any variant of untagged enum Source
+
+        "###);
+    }
+
+    #[test]
+    fn missing_constraint() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm",
+            ]
+        "#};
+        assert!(from_source(input, "pyproject.toml", &ExtrasSpecification::None).is_ok());
+    }
+
+    #[test]
+    fn invalid_syntax() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm ==4.66.0",
+            ]
+
+            [tool.uv.sources]
+            tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
+        "#};
+
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: TOML parse error at line 9, column 16
+          |
+        9 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
+          |                ^
+        invalid string
+        expected `"`, `'`
+
+        "###);
+    }
+
+    #[test]
+    fn invalid_url() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm ==4.66.0",
+            ]
+
+            [tool.uv.sources]
+            tqdm = { url = "§invalid#+#*Ä" }
+        "#};
+
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: TOML parse error at line 9, column 8
+          |
+        9 | tqdm = { url = "§invalid#+#*Ä" }
+          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        data did not match any variant of untagged enum Source
+
+        "###);
+    }
+
+    #[test]
+    fn workspace_and_url_spec() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm @ git+https://github.com/tqdm/tqdm",
+            ]
+
+            [tool.uv.sources]
+            tqdm = { workspace = true }
+        "#};
+
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: Failed to parse entry for: `tqdm`
+          Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
+        "###);
+    }
+
+    #[test]
+    fn missing_workspace_package() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm ==4.66.0",
+            ]
+
+            [tool.uv.sources]
+            tqdm = { workspace = true }
+        "#};
+
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: Failed to parse entry for: `tqdm`
+          Caused by: Package is not included as workspace package in `tool.uv.workspace`
+        "###);
+    }
+
+    #[test]
+    fn cant_be_dynamic() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dynamic = [
+                "dependencies"
+            ]
+
+            [tool.uv.sources]
+            tqdm = { workspace = true }
+        "#};
+
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: pyproject.toml section is declared as dynamic, but must be static: `project.dependencies`
+        "###);
+    }
+
+    #[test]
+    fn missing_project_section() {
+        let input = indoc! {"
+            [tool.uv.sources]
+            tqdm = { workspace = true }
+        "};
+
+        assert_snapshot!(format_err(input), @r###"
+        error: Failed to parse: `pyproject.toml`
+          Caused by: Must specify a `[project]` section alongside `[tool.uv.sources]`
+        "###);
     }
 }

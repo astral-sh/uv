@@ -25,14 +25,14 @@ use uv_configuration::{
     Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, Workspace};
 use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver, Workspace,
+    SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -42,8 +42,7 @@ use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::DryRunEvent;
-use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, DryRunEvent};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.

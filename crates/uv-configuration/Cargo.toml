@@ -13,7 +13,6 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }

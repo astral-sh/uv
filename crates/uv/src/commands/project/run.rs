@@ -10,12 +10,13 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
+use uv_distribution::ProjectWorkspace;
 use uv_interpreter::{PythonEnvironment, SystemPython};
-use uv_requirements::{ProjectWorkspace, RequirementsSource};
+use uv_requirements::RequirementsSource;
 use uv_resolver::ExcludeNewer;
 use uv_warnings::warn_user;
 
-use crate::commands::{project, ExitStatus};
+use crate::commands::{ExitStatus, project};
 use crate::printer::Printer;
 
 /// Run a command.
