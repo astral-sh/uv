@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.2.4"
+version = "0.2.5"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -19,7 +19,6 @@ install-wheel-rs = { workspace = true, features = ["clap"], default-features = f
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
-requirements-txt = { workspace = true, features = ["http"] }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
@@ -45,7 +44,6 @@ clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 clap_complete_command = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
-indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }

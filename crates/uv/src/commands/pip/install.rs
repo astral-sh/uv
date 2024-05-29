@@ -2,20 +2,20 @@ use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
-use distribution_types::{IndexLocations, Resolution};
 use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
+use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy, Upgrade,
+    Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary, NoBuild,
+    PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -23,7 +23,7 @@ use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
 use uv_normalize::PackageName;
-use uv_requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode,
     ResolutionMode,
@@ -33,7 +33,6 @@ use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{elapsed, ExitStatus};
-use crate::editables::ResolvedEditables;
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
@@ -89,7 +88,6 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
-        editables,
         source_trees,
         index_url,
         extra_index_urls,
@@ -169,7 +167,7 @@ pub(crate) async fn pip_install(
         && overrides.is_empty()
         && uv_lock.is_none()
     {
-        match site_packages.satisfies(&requirements, &editables, &constraints)? {
+        match site_packages.satisfies(&requirements, &constraints)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -183,13 +181,7 @@ pub(crate) async fn pip_install(
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
-                if !editables.is_empty() {
-                    debug!(
-                        "All editables satisfied: {}",
-                        editables.iter().map(ToString::to_string).join(" | ")
-                    );
-                }
-                let num_requirements = requirements.len() + editables.len();
+                let num_requirements = requirements.len();
                 let s = if num_requirements == 1 { "" } else { "s" };
                 writeln!(
                     printer.stderr(),
@@ -326,25 +318,6 @@ pub(crate) async fn pip_install(
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
-    // Build all editable distributions. The editables are shared between resolution and
-    // installation, and should live for the duration of the command.
-    let editables = ResolvedEditables::resolve(
-        editables
-            .into_iter()
-            .map(ResolvedEditables::from_requirement),
-        &site_packages,
-        &reinstall,
-        &hasher,
-        venv.interpreter(),
-        &tags,
-        &cache,
-        &client,
-        &resolve_dispatch,
-        concurrency,
-        printer,
-    )
-    .await?;
-
     // Resolve the requirements.
     let resolution = if let Some(ref root) = uv_lock {
         let root = PackageName::new(root.to_string())?;
@@ -367,7 +340,6 @@ pub(crate) async fn pip_install(
             source_trees,
             project,
             extras,
-            &editables,
             site_packages.clone(),
             &hasher,
             &reinstall,
@@ -426,7 +398,6 @@ pub(crate) async fn pip_install(
     // Sync the environment.
     operations::install(
         &resolution,
-        &editables,
         site_packages,
         Modifications::Sufficient,
         &reinstall,

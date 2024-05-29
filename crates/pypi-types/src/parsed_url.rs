@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
-use uv_git::{GitSha, GitUrl};
+use uv_git::GitUrl;
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -31,6 +31,13 @@ pub enum ParsedUrlError {
 pub struct VerbatimParsedUrl {
     pub parsed_url: ParsedUrl,
     pub verbatim: VerbatimUrl,
+}
+
+impl VerbatimParsedUrl {
+    /// Returns `true` if the URL is editable.
+    pub fn is_editable(&self) -> bool {
+        self.parsed_url.is_editable()
+    }
 }
 
 impl Pep508Url for VerbatimParsedUrl {
@@ -150,6 +157,13 @@ pub enum ParsedUrl {
     Archive(ParsedArchiveUrl),
 }
 
+impl ParsedUrl {
+    /// Returns `true` if the URL is editable.
+    pub fn is_editable(&self) -> bool {
+        matches!(self, Self::Path(ParsedPathUrl { editable: true, .. }))
+    }
+}
+
 /// A local path url
 ///
 /// Examples:
@@ -224,12 +238,6 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
         .split('&')
         .find_map(|fragment| fragment.strip_prefix("subdirectory="))?;
     Some(PathBuf::from(subdirectory))
-}
-
-/// Return the Git reference of the given URL, if it exists.
-pub fn git_reference(url: Url) -> Result<Option<GitSha>, Box<ParsedUrlError>> {
-    let ParsedGitUrl { url, .. } = ParsedGitUrl::try_from(url)?;
-    Ok(url.precise())
 }
 
 impl TryFrom<Url> for ParsedUrl {

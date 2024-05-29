@@ -16,8 +16,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, DirectorySourceDist, DirectorySourceUrl, Dist, FileLocation, GitSourceUrl,
-    HashPolicy, Hashed, LocalEditable, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
+    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
@@ -369,7 +369,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .boxed_local()
                     .await?
             }
-
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
@@ -825,7 +824,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(revision)
     }
 
-    /// Build a source distribution from a local source tree (i.e., directory).
+    /// Build a source distribution from a local source tree (i.e., directory), either editable or
+    /// non-editable.
     async fn source_tree(
         &self,
         source: &BuildableSource<'_>,
@@ -840,15 +840,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Path(resource.url).root(),
+            if resource.editable {
+                WheelCache::Editable(resource.url).root()
+            } else {
+                WheelCache::Path(resource.url).root()
+            },
         );
 
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
-            .source_tree_revision(source, resource, &cache_shard)
-            .await?;
+        let revision = self.source_tree_revision(resource, &cache_shard).await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -889,7 +891,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         })
     }
 
-    /// Build the source distribution's metadata from a local source tree (i.e., a directory).
+    /// Build the source distribution's metadata from a local source tree (i.e., a directory),
+    /// either editable or non-editable.
     ///
     /// If the build backend supports `prepare_metadata_for_build_wheel`, this method will avoid
     /// building the wheel.
@@ -906,15 +909,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Path(resource.url).root(),
+            if resource.editable {
+                WheelCache::Editable(resource.url).root()
+            } else {
+                WheelCache::Path(resource.url).root()
+            },
         );
 
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
-            .source_tree_revision(source, resource, &cache_shard)
-            .await?;
+        let revision = self.source_tree_revision(resource, &cache_shard).await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -971,7 +976,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`Revision`] for a local source tree, refreshing it if necessary.
     async fn source_tree_revision(
         &self,
-        source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         cache_shard: &CacheShard,
     ) -> Result<Revision, Error> {
@@ -982,16 +986,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::DirWithoutEntrypoint(resource.path.to_path_buf()));
         };
 
-        // Read the existing metadata from the cache.
+        // Read the existing metadata from the cache. We treat source trees as if `--refresh` is
+        // always set, since they're mutable.
         let entry = cache_shard.entry(LOCAL_REVISION);
-        let freshness = self
+        let is_fresh = self
             .build_context
             .cache()
-            .freshness(&entry, source.name())
+            .is_fresh(&entry)
             .map_err(Error::CacheRead)?;
 
         // If the revision is fresh, return it.
-        if freshness.is_fresh() {
+        if is_fresh {
             if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
                 if pointer.timestamp == modified.timestamp() {
                     return Ok(pointer.into_revision());
@@ -1299,8 +1304,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source.name().is_some_and(|name| packages.contains(name))
             }
         };
+
         if no_build {
-            return Err(Error::NoBuild);
+            if source.is_editable() {
+                debug!("Allowing build for editable source distribution: {source}");
+            } else {
+                return Err(Error::NoBuild);
+            }
         }
 
         // Build the wheel.
@@ -1314,7 +1324,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 subdirectory,
                 &source.to_string(),
                 source.as_dist(),
-                BuildKind::Wheel,
+                if source.is_editable() {
+                    BuildKind::Editable
+                } else {
+                    BuildKind::Wheel
+                },
             )
             .await
             .map_err(|err| Error::Build(source.to_string(), err))?
@@ -1383,7 +1397,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 subdirectory,
                 &source.to_string(),
                 source.as_dist(),
-                BuildKind::Wheel,
+                if source.is_editable() {
+                    BuildKind::Editable
+                } else {
+                    BuildKind::Wheel
+                },
             )
             .await
             .map_err(|err| Error::Build(source.to_string(), err))?;
@@ -1408,49 +1426,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         validate(source, &metadata)?;
 
         Ok(Some(metadata))
-    }
-
-    /// Build a single directory into an editable wheel
-    pub async fn build_editable(
-        &self,
-        editable: &LocalEditable,
-        editable_wheel_dir: &Path,
-    ) -> Result<(Dist, String, WheelFilename, Metadata23), Error> {
-        debug!("Building (editable) {editable}");
-
-        // Verify that the editable exists.
-        if !editable.path.exists() {
-            return Err(Error::NotFound(editable.path.clone()));
-        }
-
-        // Build the wheel.
-        let disk_filename = self
-            .build_context
-            .setup_build(
-                &editable.path,
-                None,
-                &editable.to_string(),
-                None,
-                BuildKind::Editable,
-            )
-            .await
-            .map_err(|err| Error::BuildEditable(editable.to_string(), err))?
-            .wheel(editable_wheel_dir)
-            .await
-            .map_err(|err| Error::BuildEditable(editable.to_string(), err))?;
-        let filename = WheelFilename::from_str(&disk_filename)?;
-
-        // We finally have the name of the package and can construct the dist.
-        let dist = Dist::Source(SourceDist::Directory(DirectorySourceDist {
-            name: filename.name.clone(),
-            url: editable.url().clone(),
-            path: editable.path.clone(),
-            editable: true,
-        }));
-        let metadata = read_wheel_metadata(&filename, editable_wheel_dir.join(&disk_filename))?;
-
-        debug!("Finished building (editable): {dist}");
-        Ok((dist, disk_filename, filename, metadata))
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.

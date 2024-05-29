@@ -37,14 +37,13 @@ use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
-use crate::editables::Editables;
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPackageInner,
-    PubGrubPriorities, PubGrubPython, PubGrubRequirement, PubGrubSpecifier,
+    PubGrubPriorities, PubGrubPython, PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
@@ -85,7 +84,6 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     overrides: Overrides,
     preferences: Preferences,
     exclusions: Exclusions,
-    editables: Editables,
     urls: Urls,
     locals: Locals,
     dependency_mode: DependencyMode,
@@ -192,7 +190,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             overrides: manifest.overrides,
             preferences: Preferences::from_iter(manifest.preferences, markers),
             exclusions: manifest.exclusions,
-            editables: Editables::from_requirements(manifest.editables),
             hasher: hasher.clone(),
             markers: markers.cloned(),
             python_requirement: python_requirement.clone(),
@@ -343,7 +340,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     self.index.distributions(),
                     &state.pubgrub,
                     &self.preferences,
-                    self.editables.clone(),
                 );
             };
             state.next = highest_priority_pkg;
@@ -560,11 +556,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
-                // If the package is an editable, we don't need to fetch metadata.
-                if self.editables.contains(name) {
-                    return Ok(());
-                }
-
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
                 if self.index.distributions().register(dist.version_id()) {
@@ -648,31 +639,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     "Searching for a compatible version of {package} @ {} ({range})",
                     url.verbatim
                 );
-
-                // If the dist is an editable, return the version from the editable metadata.
-                if let Some(editable) = self.editables.get(name) {
-                    let version = &editable.metadata.version;
-
-                    // The version is incompatible with the requirement.
-                    if !range.contains(version) {
-                        return Ok(None);
-                    }
-
-                    // The version is incompatible due to its Python requirement.
-                    if let Some(requires_python) = editable.metadata.requires_python.as_ref() {
-                        let target = self.python_requirement.target();
-                        if !requires_python.contains(target) {
-                            return Ok(Some(ResolverVersion::Unavailable(
-                                version.clone(),
-                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
-                                    IncompatibleSource::RequiresPython(requires_python.clone()),
-                                )),
-                            )));
-                        }
-                    }
-
-                    return Ok(Some(ResolverVersion::Available(version.clone())));
-                }
 
                 let dist = PubGrubDistribution::from_url(name, url);
                 let response = self
@@ -853,7 +819,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     self.markers.as_ref(),
                 );
 
-                let mut dependencies = match dependencies {
+                let dependencies = match dependencies {
                     Ok(dependencies) => dependencies,
                     Err(err) => {
                         return Ok(Dependencies::Unavailable(
@@ -872,54 +838,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     self.visit_package(package, request_sink)?;
                 }
 
-                // Add a dependency on each editable.
-                for editable in self.editables.iter() {
-                    let package = PubGrubPackage::from_package(
-                        editable.metadata.name.clone(),
-                        None,
-                        None,
-                        &self.urls,
-                    );
-                    let version = Range::singleton(editable.metadata.version.clone());
-
-                    // Update the package priorities.
-                    priorities.insert(&package, &version);
-
-                    // Add the editable as a direct dependency.
-                    dependencies.push(package, version);
-
-                    // Add a dependency on each extra.
-                    for extra in &editable.built.extras {
-                        dependencies.push(
-                            PubGrubPackage::from_package(
-                                editable.metadata.name.clone(),
-                                Some(extra.clone()),
-                                None,
-                                &self.urls,
-                            ),
-                            Range::singleton(editable.metadata.version.clone()),
-                        );
-                    }
-
-                    // Add any constraints.
-                    for constraint in self
-                        .constraints
-                        .get(&editable.metadata.name)
-                        .into_iter()
-                        .flatten()
-                    {
-                        if constraint.evaluate_markers(self.markers.as_ref(), &[]) {
-                            let PubGrubRequirement { package, version } =
-                                PubGrubRequirement::from_constraint(
-                                    constraint,
-                                    &self.urls,
-                                    &self.locals,
-                                )?;
-                            dependencies.push(package, version);
-                        }
-                    }
-                }
-
                 Ok(Dependencies::Available(dependencies.into()))
             }
 
@@ -935,55 +853,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for generating the lock file.
-                    if !self.editables.contains(name) {
-                        // Determine the distribution to lookup.
-                        let dist = match url {
-                            Some(url) => PubGrubDistribution::from_url(name, url),
-                            None => PubGrubDistribution::from_registry(name, version),
-                        };
-                        let version_id = dist.version_id();
 
-                        // Wait for the metadata to be available.
-                        self.index
-                            .distributions()
-                            .wait_blocking(&version_id)
-                            .ok_or(ResolveError::Unregistered)?;
-                    }
+                    let dist = match url {
+                        Some(url) => PubGrubDistribution::from_url(name, url),
+                        None => PubGrubDistribution::from_registry(name, version),
+                    };
+                    let version_id = dist.version_id();
+
+                    // Wait for the metadata to be available.
+                    self.index
+                        .distributions()
+                        .wait_blocking(&version_id)
+                        .ok_or(ResolveError::Unregistered)?;
 
                     return Ok(Dependencies::Available(Vec::default()));
-                }
-
-                // Determine if the distribution is editable.
-                if let Some(editable) = self.editables.get(name) {
-                    let requirements: Vec<_> = editable
-                        .metadata
-                        .requires_dist
-                        .iter()
-                        .cloned()
-                        .map(Requirement::from)
-                        .collect();
-                    let dependencies = PubGrubDependencies::from_requirements(
-                        &requirements,
-                        &self.constraints,
-                        &self.overrides,
-                        Some(name),
-                        extra.as_ref(),
-                        &self.urls,
-                        &self.locals,
-                        self.markers.as_ref(),
-                    )?;
-
-                    for (dep_package, dep_version) in dependencies.iter() {
-                        debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
-
-                        // Update the package priorities.
-                        priorities.insert(dep_package, dep_version);
-
-                        // Emit a request to fetch the metadata for this package.
-                        self.visit_package(dep_package, request_sink)?;
-                    }
-
-                    return Ok(Dependencies::Available(dependencies.into()));
                 }
 
                 // Determine the distribution to lookup.
@@ -1232,6 +1115,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             ResolveError::FetchAndBuild(Box::new(source_dist), err)
                         }
                     })?;
+
                 Ok(Some(Response::Dist { dist, metadata }))
             }
 
@@ -1320,6 +1204,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         ResolveError::FetchAndBuild(Box::new(source_dist), err)
                                     }
                                 })?;
+
                             Response::Dist { dist, metadata }
                         }
                         ResolvedDist::Installed(dist) => {

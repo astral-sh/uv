@@ -155,14 +155,6 @@ impl VerbatimUrl {
     pub fn to_url(&self) -> Url {
         self.url.clone()
     }
-
-    /// Create a [`VerbatimUrl`] from a [`Url`].
-    ///
-    /// This method should be used sparingly (ideally, not at all), as it represents a loss of the
-    /// verbatim representation.
-    pub fn unknown(url: Url) -> Self {
-        Self { given: None, url }
-    }
 }
 
 // This impl is written out because the `derive` doesn't seem to get it right.

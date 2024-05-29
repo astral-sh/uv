@@ -11,6 +11,7 @@ package manager to install LLD and add the `rustup` targets:
 
 ```shell
 sudo apt install llvm clang lld
+rustup target add i686-pc-windows-msvc
 rustup target add x86_64-pc-windows-msvc
 rustup target add aarch64-pc-windows-msvc
 ```
@@ -18,8 +19,9 @@ rustup target add aarch64-pc-windows-msvc
 Then, build the trampolines for both supported architectures:
 
 ```shell
-cargo +nightly-2024-03-19 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2024-03-19 xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Cross-compiling from macOS
@@ -29,6 +31,7 @@ package manager to install LLVM and add the `rustup` targets:
 
 ```shell
 brew install llvm
+rustup target add i686-pc-windows-msvc
 rustup target add x86_64-pc-windows-msvc
 rustup target add aarch64-pc-windows-msvc
 ```
@@ -36,8 +39,9 @@ rustup target add aarch64-pc-windows-msvc
 Then, build the trampolines for both supported architectures:
 
 ```shell
-cargo +nightly-2024-03-19 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2024-03-19 xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target i686-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Updating the prebuilt executables
@@ -49,6 +53,8 @@ cp target/aarch64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/
 cp target/aarch64-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-aarch64-gui.exe
 cp target/x86_64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-x86_64-console.exe
 cp target/x86_64-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-x86_64-gui.exe
+cp target/i686-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-i686-console.exe
+cp target/i686-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-i686-gui.exe
 ```
 
 ### Testing the trampolines
@@ -167,6 +173,7 @@ might not realize that, and still emit references to the unwinding helper
 exist.
 
 ```
+cargo build --release --target i686-pc-windows-msvc
 cargo build --release --target x86_64-pc-windows-msvc
 cargo build --release --target aarch64-pc-windows-msvc
 ```

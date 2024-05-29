@@ -24,13 +24,13 @@ use distribution_types::{Requirement, RequirementSource, Requirements};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{Pep508Error, RequirementOrigin, VerbatimUrl, VersionOrUrl};
 use pypi_types::VerbatimParsedUrl;
-use uv_configuration::PreviewMode;
+use uv_configuration::{ExtrasSpecification, PreviewMode};
 use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user_once;
 
-use crate::{ExtrasSpecification, Workspace};
+use crate::Workspace;
 
 #[derive(Debug, Error)]
 pub enum Pep621Error {
@@ -683,12 +683,12 @@ mod test {
     use indoc::indoc;
     use insta::assert_snapshot;
 
-    use uv_configuration::PreviewMode;
+    use uv_configuration::{ExtrasSpecification, PreviewMode};
     use uv_fs::Simplified;
     use uv_normalize::PackageName;
 
     use crate::ProjectWorkspace;
-    use crate::{ExtrasSpecification, RequirementsSpecification};
+    use crate::RequirementsSpecification;
 
     fn from_source(
         contents: &str,

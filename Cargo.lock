@@ -4470,7 +4470,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4486,7 +4486,6 @@ dependencies = [
  "filetime",
  "flate2",
  "fs-err",
- "indexmap",
  "indicatif",
  "indoc",
  "insta",
@@ -4501,7 +4500,6 @@ dependencies = [
  "pypi-types",
  "rayon",
  "regex",
- "requirements-txt",
  "reqwest",
  "rustc-hash",
  "serde",
@@ -4868,7 +4866,6 @@ dependencies = [
  "platform-tags",
  "pypi-types",
  "rayon",
- "requirements-txt",
  "rustc-hash",
  "serde",
  "tempfile",
@@ -5067,7 +5064,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.4"
+version = "0.2.5"
 
 [[package]]
 name = "uv-virtualenv"

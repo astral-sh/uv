@@ -7,33 +7,26 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anstream::{eprint, AutoStream, StripStream};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use fs_err as fs;
-use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{
-    IndexLocations, LocalEditable, LocalEditables, SourceAnnotation, SourceAnnotations, Verbatim,
-};
-use distribution_types::{Requirement, Requirements};
+use distribution_types::{IndexLocations, SourceAnnotation, SourceAnnotations, Verbatim};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
-use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides,
-    PreviewMode, SetupPyStrategy, Upgrade,
+    Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy, NoBinary,
+    NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
-use uv_installer::Downloader;
 use uv_interpreter::{
     find_best_interpreter, find_interpreter, InterpreterRequest, PythonEnvironment, SystemPython,
     VersionRequest,
@@ -41,19 +34,19 @@ use uv_interpreter::{
 use uv_interpreter::{PythonVersion, SourceSelector};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
-    upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
-    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
+    upgrade::read_lockfile, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    AnnotationStyle, BuiltEditableMetadata, DependencyMode, DisplayResolutionGraph, ExcludeNewer,
-    Exclusions, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode,
-    PythonRequirement, ResolutionMode, Resolver,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex,
+    InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
+    Resolver,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::operations;
-use crate::commands::reporters::{DownloadReporter, ResolverReporter};
+use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
@@ -123,7 +116,6 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
-        editables,
         source_trees,
         extras: used_extras,
         index_url,
@@ -420,97 +412,9 @@ pub(crate) async fn pip_compile(
         }
     }
 
-    for editable in &editables {
-        if let Some(origin) = &editable.origin {
-            sources.add_editable(
-                editable.url(),
-                SourceAnnotation::Requirement(origin.clone()),
-            );
-        }
-    }
-
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
-
-    // Build the editables and add their requirements
-    let editables = if editables.is_empty() {
-        Vec::new()
-    } else {
-        let start = std::time::Instant::now();
-
-        let editables = LocalEditables::from_editables(editables.into_iter().map(|editable| {
-            let EditableRequirement {
-                url,
-                extras,
-                path,
-                marker: _,
-                origin: _,
-            } = editable;
-            LocalEditable { url, path, extras }
-        }));
-
-        let downloader = Downloader::new(
-            &cache,
-            &tags,
-            &hasher,
-            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-        )
-        .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
-
-        // Build all editables.
-        let editable_wheel_dir = tempdir_in(cache.root())?;
-        let editables: Vec<BuiltEditableMetadata> = downloader
-            .build_editables(editables, editable_wheel_dir.path())
-            .await
-            .context("Failed to build editables")?
-            .into_iter()
-            .map(|built_editable| {
-                let requirements = Requirements {
-                    dependencies: built_editable
-                        .metadata
-                        .requires_dist
-                        .iter()
-                        .cloned()
-                        .map(Requirement::from)
-                        .collect(),
-                    optional_dependencies: IndexMap::default(),
-                };
-                BuiltEditableMetadata {
-                    built: built_editable.editable,
-                    metadata: built_editable.metadata,
-                    requirements,
-                }
-            })
-            .collect();
-
-        // Validate that the editables are compatible with the target Python version.
-        for editable in &editables {
-            if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
-                if !python_requires.contains(python_requirement.target()) {
-                    return Err(anyhow!(
-                        "Editable `{}` requires Python {}, but resolution targets Python {}",
-                        editable.metadata.name,
-                        python_requires,
-                        python_requirement.target()
-                    ));
-                }
-            }
-        }
-
-        let s = if editables.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Built {} in {}",
-                format!("{} editable{}", editables.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-        editables
-    };
 
     // Determine any lookahead requirements.
     let lookaheads = match dependency_mode {
@@ -519,7 +423,6 @@ pub(crate) async fn pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
-                &editables,
                 &hasher,
                 &top_level_index,
                 DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
@@ -538,7 +441,6 @@ pub(crate) async fn pip_compile(
         overrides,
         preferences,
         project,
-        editables,
         // Do not consider any installed packages during resolution.
         Exclusions::All,
         lookaheads,

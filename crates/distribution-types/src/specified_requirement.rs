@@ -73,4 +73,21 @@ impl UnresolvedRequirement {
             )),
         }
     }
+
+    /// Returns `true` if the requirement is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Named(requirement) => requirement.is_editable(),
+            Self::Unnamed(requirement) => requirement.url.is_editable(),
+        }
+    }
+}
+
+impl From<Requirement> for UnresolvedRequirementSpecification {
+    fn from(requirement: Requirement) -> Self {
+        Self {
+            requirement: UnresolvedRequirement::Named(requirement),
+            hashes: Vec::new(),
+        }
+    }
 }

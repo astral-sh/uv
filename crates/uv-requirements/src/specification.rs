@@ -28,7 +28,6 @@
 //!   `source_trees`.
 
 use std::collections::VecDeque;
-use std::iter;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -48,13 +47,13 @@ use requirements_txt::{
     EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
 };
 use uv_client::BaseClientBuilder;
-use uv_configuration::{NoBinary, NoBuild, PreviewMode};
+use uv_configuration::{ExtrasSpecification, NoBinary, NoBuild, PreviewMode};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::pyproject::{Pep621Metadata, PyProjectToml};
 use crate::ProjectWorkspace;
-use crate::{ExtrasSpecification, RequirementsSource, Workspace, WorkspaceError};
+use crate::{RequirementsSource, Workspace, WorkspaceError};
 
 #[derive(Debug, Default)]
 pub struct RequirementsSpecification {
@@ -66,8 +65,6 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<Requirement>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
-    /// Package to install as editable installs
-    pub editables: Vec<EditableRequirement>,
     /// The source trees from which to extract requirements.
     pub source_trees: Vec<PathBuf>,
     /// The extras used to collect requirements.
@@ -135,13 +132,18 @@ impl RequirementsSpecification {
                         .requirements
                         .into_iter()
                         .map(UnresolvedRequirementSpecification::from)
+                        .chain(
+                            requirements_txt
+                                .editables
+                                .into_iter()
+                                .map(UnresolvedRequirementSpecification::from),
+                        )
                         .collect(),
                     constraints: requirements_txt
                         .constraints
                         .into_iter()
                         .map(Requirement::from)
                         .collect(),
-                    editables: requirements_txt.editables,
                     index_url: requirements_txt.index_url.map(IndexUrl::from),
                     extra_index_urls: requirements_txt
                         .extra_index_urls
@@ -194,6 +196,14 @@ impl RequirementsSpecification {
         let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
             .with_context(|| format!("Failed to parse: `{name}`"))?;
 
+        // If we're not in preview mode, return the editable without searching for a workspace.
+        if preview.is_disabled() {
+            return Ok(Self {
+                requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
+                ..Self::default()
+            });
+        }
+
         // First try to find the project in the existing workspace (if any), then try workspace
         // discovery.
         let project_in_exiting_workspace = workspace.and_then(|workspace| {
@@ -205,8 +215,14 @@ impl RequirementsSpecification {
                 .find(|member| is_same_file(member.root(), &requirement.path).unwrap_or(false))
                 .map(|member| (member.pyproject_toml(), workspace))
         });
+
         let editable_spec = if let Some((pyproject_toml, workspace)) = project_in_exiting_workspace
         {
+            debug!(
+                "Found project in workspace at: `{}`",
+                requirement.path.user_display()
+            );
+
             Self::parse_direct_pyproject_toml(
                 pyproject_toml,
                 workspace,
@@ -218,6 +234,11 @@ impl RequirementsSpecification {
         } else if let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(&requirement.path).await?
         {
+            debug!(
+                "Found project at workspace root: `{}`",
+                requirement.path.user_display()
+            );
+
             let pyproject_toml = project_workspace.current_project().pyproject_toml();
             let workspace = project_workspace.workspace();
             Self::parse_direct_pyproject_toml(
@@ -235,23 +256,25 @@ impl RequirementsSpecification {
                 "pyproject.toml has dynamic metadata at: `{}`",
                 requirement.path.user_display()
             );
+
             return Ok(Self {
-                editables: vec![requirement],
+                requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
                 ..Self::default()
             });
         };
 
         if let Some(editable_spec) = editable_spec {
-            // We only collect the editables here to keep the count of root packages
-            // correct.
+            // We only collect the editables here to keep the count of root packages correct.
             // TODO(konsti): Collect all workspace packages, even the non-editable ones.
-            let editables = editable_spec
-                .editables
-                .into_iter()
-                .chain(iter::once(requirement))
-                .collect();
             Ok(Self {
-                editables,
+                requirements: editable_spec
+                    .requirements
+                    .into_iter()
+                    .chain(std::iter::once(UnresolvedRequirementSpecification::from(
+                        requirement,
+                    )))
+                    .filter(|entry| entry.requirement.is_editable())
+                    .collect(),
                 ..Self::default()
             })
         } else {
@@ -260,7 +283,7 @@ impl RequirementsSpecification {
                 requirement.path.user_display()
             );
             Ok(Self {
-                editables: vec![requirement],
+                requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
                 ..Self::default()
             })
         }
@@ -288,17 +311,22 @@ impl RequirementsSpecification {
                     preview,
                 )
                 .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
-                // The workspace discovery succeeds even with dynamic metadata, in which case we
-                // fall back to building here.
-                let dynamic_pyproject_toml = Self {
-                    source_trees: vec![path.to_path_buf()],
-                    ..Self::default()
-                };
-                Ok(static_pyproject_toml.unwrap_or(dynamic_pyproject_toml))
+
+                if let Some(static_pyproject_toml) = static_pyproject_toml {
+                    Ok(static_pyproject_toml)
+                } else {
+                    debug!("Dynamic pyproject.toml at: `{}`", path.user_display());
+                    Ok(Self {
+                        source_trees: vec![path.to_path_buf()],
+                        ..Self::default()
+                    })
+                }
             }
             Err(WorkspaceError::MissingProject(_)) => {
-                // The dependencies are dynamic, we have to build to get the actual list.
-                debug!("Dynamic pyproject.toml at: `{}`", path.user_display());
+                debug!(
+                    "Missing `project` table from pyproject.toml at: `{}`",
+                    path.user_display()
+                );
                 Ok(Self {
                     source_trees: vec![path.to_path_buf()],
                     ..Self::default()
@@ -349,10 +377,7 @@ impl RequirementsSpecification {
                 requirements: project
                     .requirements
                     .into_iter()
-                    .map(|requirement| UnresolvedRequirementSpecification {
-                        requirement: UnresolvedRequirement::Named(requirement),
-                        hashes: vec![],
-                    })
+                    .map(UnresolvedRequirementSpecification::from)
                     .collect(),
                 extras: project.used_extras,
                 ..Self::default()
@@ -375,14 +400,13 @@ impl RequirementsSpecification {
         preview: PreviewMode,
         project: Pep621Metadata,
     ) -> Result<RequirementsSpecification> {
-        let mut seen_editables = FxHashSet::from_iter([project.name.clone()]);
+        let mut seen = FxHashSet::from_iter([project.name.clone()]);
         let mut queue = VecDeque::from([project.name.clone()]);
-        let mut editables = Vec::new();
         let mut requirements = Vec::new();
         let mut used_extras = FxHashSet::default();
 
         while let Some(project_name) = queue.pop_front() {
-            let Some(current) = &workspace.packages().get(&project_name) else {
+            let Some(current) = workspace.packages().get(&project_name) else {
                 continue;
             };
             trace!("Processing metadata for workspace package {project_name}");
@@ -410,40 +434,30 @@ impl RequirementsSpecification {
                     current.root().user_display()
                 )
             })?;
-            used_extras.extend(project.used_extras);
 
-            // Partition into editable and non-editable requirements.
-            for requirement in project.requirements {
-                if let RequirementSource::Path {
-                    path,
-                    editable: true,
-                    url,
-                } = requirement.source
-                {
-                    editables.push(EditableRequirement {
-                        url,
-                        path,
-                        marker: requirement.marker,
-                        extras: requirement.extras,
-                        origin: requirement.origin,
-                    });
-
-                    if seen_editables.insert(requirement.name.clone()) {
+            // Recurse into any editables.
+            for requirement in &project.requirements {
+                if matches!(
+                    requirement.source,
+                    RequirementSource::Path { editable: true, .. }
+                ) {
+                    if seen.insert(requirement.name.clone()) {
                         queue.push_back(requirement.name.clone());
                     }
-                } else {
-                    requirements.push(UnresolvedRequirementSpecification {
-                        requirement: UnresolvedRequirement::Named(requirement),
-                        hashes: vec![],
-                    });
                 }
             }
+
+            // Collect the requirements and extras.
+            used_extras.extend(project.used_extras);
+            requirements.extend(project.requirements);
         }
 
         let spec = Self {
             project: Some(project.name),
-            editables,
-            requirements,
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
             extras: used_extras,
             ..Self::default()
         };
@@ -473,7 +487,6 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
-            spec.editables.extend(source.editables);
             spec.source_trees.extend(source.source_trees);
 
             // Use the first project name discovered.

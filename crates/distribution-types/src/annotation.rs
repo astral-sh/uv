@@ -1,8 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use url::Url;
-
-use pep508_rs::{RequirementOrigin, VerbatimUrl};
+use pep508_rs::RequirementOrigin;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
@@ -49,35 +47,19 @@ impl std::fmt::Display for SourceAnnotation {
 
 /// A collection of source annotations.
 #[derive(Default, Debug, Clone)]
-pub struct SourceAnnotations {
-    packages: BTreeMap<PackageName, BTreeSet<SourceAnnotation>>,
-    editables: BTreeMap<Url, BTreeSet<SourceAnnotation>>,
-}
+pub struct SourceAnnotations(BTreeMap<PackageName, BTreeSet<SourceAnnotation>>);
 
 impl SourceAnnotations {
     /// Add a source annotation to the collection for the given package.
     pub fn add(&mut self, package: &PackageName, annotation: SourceAnnotation) {
-        self.packages
+        self.0
             .entry(package.clone())
-            .or_default()
-            .insert(annotation);
-    }
-
-    /// Add an source annotation to the collection for the given editable.
-    pub fn add_editable(&mut self, url: &VerbatimUrl, annotation: SourceAnnotation) {
-        self.editables
-            .entry(url.to_url())
             .or_default()
             .insert(annotation);
     }
 
     /// Return the source annotations for a given package.
     pub fn get(&self, package: &PackageName) -> Option<&BTreeSet<SourceAnnotation>> {
-        self.packages.get(package)
-    }
-
-    /// Return the source annotations for a given editable.
-    pub fn get_editable(&self, url: &VerbatimUrl) -> Option<&BTreeSet<SourceAnnotation>> {
-        self.editables.get(url.raw())
+        self.0.get(package)
     }
 }

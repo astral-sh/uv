@@ -1,3 +1,4 @@
+use std::env;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -7,8 +8,7 @@ use rustc_hash::FxHashMap;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, DistributionMetadata, LocalEditable, Name, SourceDist,
-    VersionOrUrlRef,
+    BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 
@@ -18,8 +18,18 @@ use crate::printer::Printer;
 struct ProgressReporter {
     printer: Printer,
     root: ProgressBar,
-    multi_progress: MultiProgress,
-    state: Arc<Mutex<BarState>>,
+    mode: ProgressMode,
+}
+
+#[derive(Debug)]
+enum ProgressMode {
+    // Reports top-level progress.
+    Single,
+    // Reports progress of all concurrent download/build/checkout processes.
+    Multi {
+        multi_progress: MultiProgress,
+        state: Arc<Mutex<BarState>>,
+    },
 }
 
 #[derive(Default, Debug)]
@@ -43,41 +53,91 @@ impl BarState {
 }
 
 impl ProgressReporter {
-    fn on_any_build_start(&self, color_string: &str) -> usize {
-        let mut state = self.state.lock().unwrap();
+    fn new(mut root: ProgressBar, printer: Printer) -> ProgressReporter {
+        let mode = if env::var("JPY_SESSION_NAME").is_ok() {
+            // Disable concurrent progress bars when running inside a Jupyter notebook
+            // because the Jupyter terminal does not support clearing previous lines.
+            // See: https://github.com/astral-sh/uv/issues/3887.
+            ProgressMode::Single
+        } else {
+            let multi_progress = MultiProgress::with_draw_target(printer.target());
+            root = multi_progress.add(root);
+
+            ProgressMode::Multi {
+                state: Arc::default(),
+                multi_progress,
+            }
+        };
+
+        ProgressReporter {
+            printer,
+            root,
+            mode,
+        }
+    }
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
+        let ProgressMode::Multi {
+            multi_progress,
+            state,
+        } = &self.mode
+        else {
+            return 0;
+        };
+
+        let mut state = state.lock().unwrap();
         let id = state.id();
 
-        let progress = self.multi_progress.insert_before(
+        let progress = multi_progress.insert_before(
             &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!("{} {}", "Building".bold().cyan(), color_string));
+        progress.set_message(format!(
+            "{} {}",
+            "Building".bold().cyan(),
+            source.to_color_string()
+        ));
 
         state.headers += 1;
         state.bars.insert(id, progress);
         id
     }
 
-    fn on_any_build_complete(&self, color_string: &str, id: usize) {
+    fn on_build_complete(&self, source: &BuildableSource, id: usize) {
+        let ProgressMode::Multi { state, .. } = &self.mode else {
+            return;
+        };
+
         let progress = {
-            let mut state = self.state.lock().unwrap();
+            let mut state = state.lock().unwrap();
             state.headers -= 1;
             state.bars.remove(&id).unwrap()
         };
 
-        progress.finish_with_message(format!("   {} {}", "Built".bold().green(), color_string));
+        progress.finish_with_message(format!(
+            "   {} {}",
+            "Built".bold().green(),
+            source.to_color_string()
+        ));
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
-        let mut state = self.state.lock().unwrap();
+        let ProgressMode::Multi {
+            multi_progress,
+            state,
+        } = &self.mode
+        else {
+            return 0;
+        };
+
+        let mut state = state.lock().unwrap();
 
         // Preserve ascending order.
         let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
         state.sizes.insert(position, size.unwrap_or(0));
 
-        let progress = self.multi_progress.insert(
+        let progress = multi_progress.insert(
             // Make sure not to reorder the initial "Downloading..." bar, or any previous bars.
             position + 1 + state.headers,
             ProgressBar::with_draw_target(size, self.printer.target()),
@@ -104,19 +164,35 @@ impl ProgressReporter {
     }
 
     fn on_download_progress(&self, id: usize, bytes: u64) {
-        self.state.lock().unwrap().bars[&id].inc(bytes);
+        let ProgressMode::Multi { state, .. } = &self.mode else {
+            return;
+        };
+
+        state.lock().unwrap().bars[&id].inc(bytes);
     }
 
     fn on_download_complete(&self, id: usize) {
-        let progress = self.state.lock().unwrap().bars.remove(&id).unwrap();
+        let ProgressMode::Multi { state, .. } = &self.mode else {
+            return;
+        };
+
+        let progress = state.lock().unwrap().bars.remove(&id).unwrap();
         progress.finish_and_clear();
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
-        let mut state = self.state.lock().unwrap();
+        let ProgressMode::Multi {
+            multi_progress,
+            state,
+        } = &self.mode
+        else {
+            return 0;
+        };
+
+        let mut state = state.lock().unwrap();
         let id = state.id();
 
-        let progress = self.multi_progress.insert_before(
+        let progress = multi_progress.insert_before(
             &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
@@ -136,8 +212,12 @@ impl ProgressReporter {
     }
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+        let ProgressMode::Multi { state, .. } = &self.mode else {
+            return;
+        };
+
         let progress = {
-            let mut state = self.state.lock().unwrap();
+            let mut state = state.lock().unwrap();
             state.headers -= 1;
             state.bars.remove(&id).unwrap()
         };
@@ -158,24 +238,16 @@ pub(crate) struct DownloadReporter {
 
 impl From<Printer> for DownloadReporter {
     fn from(printer: Printer) -> Self {
-        let multi_progress = MultiProgress::with_draw_target(printer.target());
-
-        let progress = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
-        progress.enable_steady_tick(Duration::from_millis(200));
-        progress.set_style(
+        let root = ProgressBar::with_draw_target(None, printer.target());
+        root.enable_steady_tick(Duration::from_millis(200));
+        root.set_style(
             ProgressStyle::with_template("{spinner:.white} {msg:.dim} ({pos}/{len})")
                 .unwrap()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
-        progress.set_message("Downloading packages...");
+        root.set_message("Downloading packages...");
 
-        let reporter = ProgressReporter {
-            printer,
-            multi_progress,
-            root: progress,
-            state: Arc::default(),
-        };
-
+        let reporter = ProgressReporter::new(root, printer);
         Self { reporter }
     }
 }
@@ -194,25 +266,18 @@ impl uv_installer::DownloadReporter for DownloadReporter {
     }
 
     fn on_complete(&self) {
+        // Need an extra call to `set_message` here to fully clear avoid leaving ghost output
+        // in Jupyter notebooks.
+        self.reporter.root.set_message("");
         self.reporter.root.finish_and_clear();
     }
 
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_any_build_start(&source.to_color_string())
+        self.reporter.on_build_start(source)
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter
-            .on_any_build_complete(&source.to_color_string(), id);
-    }
-
-    fn on_editable_build_start(&self, dist: &LocalEditable) -> usize {
-        self.reporter.on_any_build_start(&dist.to_color_string())
-    }
-
-    fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize) {
-        self.reporter
-            .on_any_build_complete(&dist.to_color_string(), id);
+        self.reporter.on_build_complete(source, id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
@@ -251,9 +316,7 @@ impl ResolverReporter {
 
 impl From<Printer> for ResolverReporter {
     fn from(printer: Printer) -> Self {
-        let multi_progress = MultiProgress::with_draw_target(printer.target());
-
-        let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
+        let root = ProgressBar::with_draw_target(None, printer.target());
         root.enable_steady_tick(Duration::from_millis(200));
         root.set_style(
             ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
@@ -262,14 +325,8 @@ impl From<Printer> for ResolverReporter {
         );
         root.set_message("Resolving dependencies...");
 
-        let reporter = ProgressReporter {
-            root,
-            printer,
-            multi_progress,
-            state: Arc::default(),
-        };
-
-        ResolverReporter { reporter }
+        let reporter = ProgressReporter::new(root, printer);
+        Self { reporter }
     }
 }
 
@@ -286,16 +343,16 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_complete(&self) {
+        self.reporter.root.set_message("");
         self.reporter.root.finish_and_clear();
     }
 
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_any_build_start(&source.to_color_string())
+        self.reporter.on_build_start(source)
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter
-            .on_any_build_complete(&source.to_color_string(), id);
+        self.reporter.on_build_complete(source, id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -321,12 +378,11 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
 
 impl uv_distribution::Reporter for ResolverReporter {
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_any_build_start(&source.to_color_string())
+        self.reporter.on_build_start(source)
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter
-            .on_any_build_complete(&source.to_color_string(), id);
+        self.reporter.on_build_complete(source, id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
@@ -381,6 +437,7 @@ impl uv_installer::InstallReporter for InstallReporter {
     }
 
     fn on_install_complete(&self) {
+        self.progress.set_message("");
         self.progress.finish_and_clear();
     }
 }
@@ -404,11 +461,5 @@ impl ColorDisplay for BuildableSource<'_> {
             BuildableSource::Dist(dist) => dist.to_color_string(),
             BuildableSource::Url(url) => url.to_string(),
         }
-    }
-}
-
-impl ColorDisplay for LocalEditable {
-    fn to_color_string(&self) -> String {
-        format!("{}", self.to_string().dimmed())
     }
 }

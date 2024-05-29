@@ -12,12 +12,11 @@ use distribution_types::{
 };
 use pep508_rs::RequirementOrigin;
 use pypi_types::VerbatimParsedUrl;
+use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_fs::Simplified;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
-
-use crate::ExtrasSpecification;
 
 /// A resolver for requirements specified via source trees.
 ///
@@ -104,6 +103,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         let source = SourceUrl::Directory(DirectorySourceUrl {
             url: &url,
             path: Cow::Borrowed(source_tree),
+            editable: false,
         });
 
         // Determine the hash policy. Since we don't have a package name, we perform a
