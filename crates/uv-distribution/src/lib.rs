@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use archive::Archive;
@@ -57,8 +56,7 @@ pub enum MetadataLoweringError {
     Lowering(#[from] LoweringError),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone)]
 pub struct Metadata23Lowered {
     // Mandatory fields
     pub name: PackageName,
