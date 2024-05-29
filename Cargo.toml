@@ -120,7 +120,7 @@ rustc-hash = { version = "1.1.0" }
 same-file = { version = "1.0.6" }
 schemars = { version = "0.8.16", features = ["url"] }
 seahash = { version = "4.1.0" }
-serde = { version = "1.0.197" }
+serde = { version = "1.0.197", features = ["derive"] }
 serde_json = { version = "1.0.114" }
 sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
