@@ -1,7 +1,6 @@
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
-use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -9,7 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use distribution_types::{
     Dist, DistributionMetadata, Name, Requirement, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
 };
-use pep440_rs::{Version, VersionSpecifier};
+use pep440_rs::VersionSpecifier;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{ParsedUrlError, Yanked};
 use uv_normalize::PackageName;
@@ -31,7 +30,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    pub(crate) petgraph: petgraph::graph::Graph<AnnotatedDist, Range<Version>, petgraph::Directed>,
+    pub(crate) petgraph: petgraph::graph::Graph<AnnotatedDist, (), petgraph::Directed>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
 }
@@ -295,12 +294,8 @@ impl ResolutionGraph {
         // Add every edge to the graph.
         for (package, version) in selection {
             for id in &state.incompatibilities[package] {
-                if let Kind::FromDependencyOf(
-                    self_package,
-                    self_version,
-                    dependency_package,
-                    dependency_range,
-                ) = &state.incompatibility_store[*id].kind
+                if let Kind::FromDependencyOf(self_package, self_version, dependency_package, ..) =
+                    &state.incompatibility_store[*id].kind
                 {
                     // `Kind::FromDependencyOf` will include inverse dependencies. That is, if we're
                     // looking for a package `A`, this list will include incompatibilities of
@@ -332,11 +327,7 @@ impl ResolutionGraph {
                     if self_version.contains(version) {
                         let self_index = &inverse[self_name];
                         let dependency_index = &inverse[dependency_name];
-                        petgraph.update_edge(
-                            *self_index,
-                            *dependency_index,
-                            dependency_range.clone(),
-                        );
+                        petgraph.update_edge(*self_index, *dependency_index, ());
                     }
                 }
             }
