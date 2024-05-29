@@ -157,31 +157,50 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
+        // Determine the extras to include when resolving the requirements.
+        let extras = match self.extras {
+            ExtrasSpecification::All => metadata.provides_extras.as_slice(),
+            ExtrasSpecification::None => &[],
+            ExtrasSpecification::Some(extras) => extras,
+        };
+
         // Determine the appropriate requirements to return based on the extras. This involves
         // evaluating the `extras` expression in any markers, but preserving the remaining marker
         // conditions.
-        let requirements = metadata
+        let mut requirements: Vec<Requirement> = metadata
             .requires_dist
             .into_iter()
-            .map(|requirement| match self.extras {
-                ExtrasSpecification::None => requirement.with_origin(origin.clone()),
-                ExtrasSpecification::All => Requirement {
-                    origin: Some(origin.clone()),
-                    marker: requirement
-                        .marker
-                        .and_then(|marker| marker.simplify_extras(&metadata.provides_extras)),
-                    ..requirement
-                },
-                ExtrasSpecification::Some(extras) => Requirement {
-                    origin: Some(origin.clone()),
-                    marker: requirement
-                        .marker
-                        .and_then(|marker| marker.simplify_extras(extras)),
-                    ..requirement
-                },
+            .map(|requirement| Requirement {
+                origin: Some(origin.clone()),
+                marker: requirement
+                    .marker
+                    .and_then(|marker| marker.simplify_extras(extras)),
+                ..requirement
             })
-            .map(Requirement::from)
             .collect();
+
+        // Resolve any recursive extras.
+        loop {
+            // Find the first recursive requirement.
+            // TODO(charlie): Respect markers on recursive extras.
+            let Some(index) = requirements.iter().position(|requirement| {
+                requirement.name == metadata.name && requirement.marker.is_none()
+            }) else {
+                break;
+            };
+
+            // Remove the requirement that points to us.
+            let recursive = requirements.remove(index);
+
+            // Re-simplify the requirements.
+            for requirement in &mut requirements {
+                requirement.marker = requirement
+                    .marker
+                    .take()
+                    .and_then(|marker| marker.simplify_extras(&recursive.extras));
+            }
+        }
+
         let project = metadata.name;
         let extras = metadata.provides_extras;
 
