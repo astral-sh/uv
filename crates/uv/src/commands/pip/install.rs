@@ -316,6 +316,7 @@ pub(crate) async fn pip_install(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
@@ -356,6 +357,7 @@ pub(crate) async fn pip_install(
             concurrency,
             options,
             printer,
+            preview,
         )
         .await
         {
@@ -393,6 +395,7 @@ pub(crate) async fn pip_install(
             &no_build,
             &no_binary,
             concurrency,
+            preview,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
@@ -417,6 +420,7 @@ pub(crate) async fn pip_install(
         &venv,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 

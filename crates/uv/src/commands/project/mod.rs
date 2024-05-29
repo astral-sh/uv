@@ -111,6 +111,7 @@ pub(crate) async fn update_environment(
     connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<PythonEnvironment> {
     // TODO(zanieb): Support client configuration
     let client_builder = BaseClientBuilder::default().connectivity(connectivity);
@@ -195,6 +196,7 @@ pub(crate) async fn update_environment(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     );
 
     // Resolve the requirements.
@@ -220,6 +222,7 @@ pub(crate) async fn update_environment(
         concurrency,
         options,
         printer,
+        preview,
     )
     .await
     {
@@ -250,6 +253,7 @@ pub(crate) async fn update_environment(
             &no_build,
             &no_binary,
             concurrency,
+            preview,
         )
     };
 
@@ -273,6 +277,7 @@ pub(crate) async fn update_environment(
         &venv,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 

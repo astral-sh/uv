@@ -156,7 +156,12 @@ async fn resolve(
         &hashes,
         &build_context,
         installed_packages,
-        DistributionDatabase::new(&client, &build_context, concurrency.downloads),
+        DistributionDatabase::new(
+            &client,
+            &build_context,
+            concurrency.downloads,
+            PreviewMode::Disabled,
+        ),
     )?;
     Ok(resolver.resolve().await?)
 }

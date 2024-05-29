@@ -112,6 +112,7 @@ pub(super) async fn do_sync(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     );
 
     let site_packages = SitePackages::from_executable(venv)?;
@@ -136,6 +137,7 @@ pub(super) async fn do_sync(
         venv,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 

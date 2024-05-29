@@ -92,7 +92,10 @@ pub(crate) async fn run(
         )?;
 
         // Install the ephemeral requirements.
-        Some(project::update_environment(venv, &requirements, connectivity, cache, printer).await?)
+        Some(
+            project::update_environment(venv, &requirements, connectivity, cache, printer, preview)
+                .await?,
+        )
     };
 
     // Construct the command

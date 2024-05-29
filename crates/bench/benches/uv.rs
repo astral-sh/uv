@@ -80,7 +80,9 @@ mod resolver {
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{Concurrency, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+    use uv_configuration::{
+        Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+    };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
     use uv_interpreter::PythonEnvironment;
@@ -149,6 +151,7 @@ mod resolver {
             &NoBuild::None,
             &NoBinary::None,
             concurrency,
+            PreviewMode::Disabled,
         );
 
         let resolver = Resolver::new(
@@ -162,7 +165,12 @@ mod resolver {
             &hashes,
             &build_context,
             installed_packages,
-            DistributionDatabase::new(client, &build_context, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                &build_context,
+                concurrency.downloads,
+                PreviewMode::Disabled,
+            ),
         )?;
 
         Ok(resolver.resolve().await?)

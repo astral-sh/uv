@@ -48,6 +48,7 @@ mod revision;
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     reporter: Option<Arc<dyn Reporter>>,
+    preview_mode: PreviewMode,
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
@@ -61,10 +62,11 @@ pub(crate) const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
-    pub(crate) fn new(build_context: &'a T) -> Self {
+    pub(crate) fn new(build_context: &'a T, preview_mode: PreviewMode) -> Self {
         Self {
             build_context,
             reporter: None,
+            preview_mode,
         }
     }
 
@@ -950,7 +952,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata23Lowered::from_tool_uv(
                     metadata,
                     resource.path.as_ref(),
-                    PreviewMode::Enabled,
+                    self.preview_mode,
                 )
                 .await?,
             ));
@@ -978,7 +980,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadataLowered::from(
-            Metadata23Lowered::from_tool_uv(metadata, resource.path.as_ref(), PreviewMode::Enabled)
+            Metadata23Lowered::from_tool_uv(metadata, resource.path.as_ref(), self.preview_mode)
                 .await?,
         ))
     }
@@ -1166,8 +1168,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadataLowered::from(
-                Metadata23Lowered::from_tool_uv(metadata, fetch.path(), PreviewMode::Enabled)
-                    .await?,
+                Metadata23Lowered::from_tool_uv(metadata, fetch.path(), self.preview_mode).await?,
             ));
         }
 
@@ -1193,7 +1194,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadataLowered::from(
-            Metadata23Lowered::from_tool_uv(metadata, fetch.path(), PreviewMode::Enabled).await?,
+            Metadata23Lowered::from_tool_uv(metadata, fetch.path(), self.preview_mode).await?,
         ))
     }
 

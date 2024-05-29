@@ -222,6 +222,7 @@ async fn venv_impl(
             &NoBuild::All,
             &NoBinary::None,
             concurrency,
+            preview,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 

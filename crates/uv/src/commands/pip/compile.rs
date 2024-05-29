@@ -324,6 +324,7 @@ pub(crate) async fn pip_compile(
         &no_build,
         &NoBinary::None,
         concurrency,
+        preview,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
@@ -334,7 +335,7 @@ pub(crate) async fn pip_compile(
             requirements,
             &hasher,
             &top_level_index,
-            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
         )
         .with_reporter(ResolverReporter::from(printer))
         .resolve()
@@ -348,7 +349,12 @@ pub(crate) async fn pip_compile(
                     &extras,
                     &hasher,
                     &top_level_index,
-                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+                    DistributionDatabase::new(
+                        &client,
+                        &build_dispatch,
+                        concurrency.downloads,
+                        preview,
+                    ),
                 )
                 .with_reporter(ResolverReporter::from(printer))
                 .resolve()
@@ -364,7 +370,7 @@ pub(crate) async fn pip_compile(
         overrides,
         &hasher,
         &top_level_index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
@@ -422,7 +428,7 @@ pub(crate) async fn pip_compile(
                 &overrides,
                 &hasher,
                 &top_level_index,
-                DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+                DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve(marker_filter)
@@ -463,7 +469,7 @@ pub(crate) async fn pip_compile(
         &hasher,
         &build_dispatch,
         EmptyInstalledPackages,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
     )?
     .with_reporter(ResolverReporter::from(printer));
 

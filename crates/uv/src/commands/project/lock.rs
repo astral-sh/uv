@@ -124,6 +124,7 @@ pub(super) async fn do_lock(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     );
 
     // Resolve the requirements.
@@ -149,6 +150,7 @@ pub(super) async fn do_lock(
         concurrency,
         options,
         printer,
+        preview,
     )
     .await?;
 

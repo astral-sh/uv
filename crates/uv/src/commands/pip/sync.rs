@@ -267,6 +267,7 @@ pub(crate) async fn pip_sync(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
@@ -306,6 +307,7 @@ pub(crate) async fn pip_sync(
         concurrency,
         options,
         printer,
+        preview,
     )
     .await
     {
@@ -342,6 +344,7 @@ pub(crate) async fn pip_sync(
             &no_build,
             &no_binary,
             concurrency,
+            preview,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
@@ -366,6 +369,7 @@ pub(crate) async fn pip_sync(
         &venv,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 
