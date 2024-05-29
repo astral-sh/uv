@@ -9,7 +9,7 @@ use rustc_hash::FxHashMap;
 use distribution_types::{Name, SourceAnnotations};
 use uv_normalize::PackageName;
 
-use crate::resolution::AnnotatedDist;
+use crate::resolution::RequirementsTxtDist;
 use crate::ResolutionGraph;
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
@@ -87,7 +87,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // node.
         let petgraph = {
             let mut petgraph =
-                petgraph::graph::Graph::<AnnotatedDist, (), petgraph::Directed>::with_capacity(
+                petgraph::graph::Graph::<RequirementsTxtDist, (), petgraph::Directed>::with_capacity(
                     self.resolution.petgraph.node_count(),
                     self.resolution.petgraph.edge_count(),
                 );
@@ -101,12 +101,14 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 let dist = &self.resolution.petgraph[index];
 
                 if let Some(index) = inverse.get(dist.name()) {
-                    let node: &mut AnnotatedDist = &mut petgraph[*index];
-                    node.extras.extend(dist.extras.iter().cloned());
-                    node.extras.sort_unstable();
-                    node.extras.dedup();
+                    if let Some(extra) = dist.extra.as_ref() {
+                        let node: &mut RequirementsTxtDist = &mut petgraph[*index];
+                        node.extras.push(extra.clone());
+                        node.extras.sort_unstable();
+                        node.extras.dedup();
+                    }
                 } else {
-                    let index = petgraph.add_node(dist.clone());
+                    let index = petgraph.add_node(RequirementsTxtDist::from(dist));
                     inverse.insert(dist.name(), index);
                 }
             }

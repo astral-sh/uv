@@ -138,13 +138,10 @@ impl ResolutionGraph {
                         }
                     }
 
-                    // Extract the extras.
-                    let extras = extra.clone().map(|extra| vec![extra]).unwrap_or_default();
-
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(AnnotatedDist {
                         dist,
-                        extras,
+                        extra: extra.clone(),
                         hashes,
                         metadata,
                     });
@@ -210,13 +207,10 @@ impl ResolutionGraph {
                         }
                     }
 
-                    // Extract the extras.
-                    let extras = extra.clone().map(|extra| vec![extra]).unwrap_or_default();
-
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(AnnotatedDist {
                         dist: dist.into(),
-                        extras,
+                        extra: extra.clone(),
                         hashes,
                         metadata,
                     });
@@ -286,7 +280,7 @@ impl ResolutionGraph {
         self.petgraph
             .node_indices()
             .map(|index| &self.petgraph[index])
-            .filter(|dist| dist.extras.is_empty())
+            .filter(|dist| dist.extra.is_none())
             .count()
     }
 
