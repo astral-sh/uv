@@ -1788,6 +1788,13 @@ pub(crate) struct RunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub(crate) python: Option<String>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 }
 
 #[derive(Args)]
@@ -1824,6 +1831,13 @@ pub(crate) struct LockArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub(crate) python: Option<String>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 }
 
 #[derive(Args)]
