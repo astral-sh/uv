@@ -9,12 +9,14 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
+use uv_interpreter::PythonEnvironment;
 use uv_requirements::ProjectWorkspace;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::ProjectError;
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
 
@@ -34,16 +36,33 @@ pub(crate) async fn sync(
 
     // Discover or create the virtual environment.
     let venv = project::init_environment(&project, preview, cache, printer)?;
+
+    // Read the lockfile.
+    let lock: Lock = {
+        let encoded =
+            fs_err::tokio::read_to_string(project.workspace().root().join("uv.lock")).await?;
+        toml::from_str(&encoded)?
+    };
+
+    // Perform the sync operation.
+    do_sync(&project, &venv, &lock, cache, printer).await?;
+
+    Ok(ExitStatus::Success)
+}
+
+/// Sync a lockfile with an environment.
+pub(super) async fn do_sync(
+    project: &ProjectWorkspace,
+    venv: &PythonEnvironment,
+    lock: &Lock,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<(), ProjectError> {
     let markers = venv.interpreter().markers();
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = {
-        let encoded =
-            fs_err::tokio::read_to_string(project.workspace().root().join("uv.lock")).await?;
-        let lock: Lock = toml::from_str(&encoded)?;
-        lock.to_resolution(markers, tags, project.project_name())
-    };
+    let resolution = lock.to_resolution(markers, tags, project.project_name());
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
@@ -87,7 +106,7 @@ pub(crate) async fn sync(
         concurrency,
     );
 
-    let site_packages = SitePackages::from_executable(&venv)?;
+    let site_packages = SitePackages::from_executable(venv)?;
 
     // Sync the environment.
     pip::operations::install(
@@ -106,14 +125,11 @@ pub(crate) async fn sync(
         concurrency,
         &build_dispatch,
         cache,
-        &venv,
+        venv,
         dry_run,
         printer,
     )
     .await?;
 
-    // Notify the user of any resolution diagnostics.
-    pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
-
-    Ok(ExitStatus::Success)
+    Ok(())
 }

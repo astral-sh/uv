@@ -37,7 +37,25 @@ pub(crate) enum ProjectError {
     Virtualenv(#[from] uv_virtualenv::Error),
 
     #[error(transparent)]
+    Tags(#[from] platform_tags::TagsError),
+
+    #[error(transparent)]
+    Lock(#[from] uv_resolver::LockError),
+
+    #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Serialize(#[from] toml::ser::Error),
+
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    Operation(#[from] pip::operations::Error),
 }
 
 /// Initialize a virtual environment for the current project.
