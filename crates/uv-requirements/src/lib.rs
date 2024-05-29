@@ -8,6 +8,7 @@ pub use crate::workspace::*;
 mod confirm;
 mod lookahead;
 pub mod pyproject;
+mod requirement_lowering;
 mod source_tree;
 mod sources;
 mod specification;
