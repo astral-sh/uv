@@ -99,6 +99,41 @@ pub(crate) struct GlobalArgs {
     /// parent directories.
     #[arg(global = true, long, hide = true)]
     pub(crate) isolated: bool,
+
+    /// The Python interpreter to use for the current command.
+    ///
+    /// By default, `uv` searches for an active virtual environment, followed by a virtual
+    /// environment in the current working directory or any parent directory. The `--python` option
+    /// allows you to specify a different interpreter, which is intended for use in continuous
+    /// integration (CI) environments or other automated workflows.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(global = true, long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    pub(crate) python: Option<String>,
+
+    /// Use the system Python, rather than the Python found in the virtual environment.
+    ///
+    /// By default, `uv` searches for an active virtual environment, followed by a virtual
+    /// environment in the current working directory or any parent directory. The `--system` option
+    /// instructs `uv` to instead use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[arg(
+        global = true,
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub(crate) system: bool,
+
+    #[arg(global = true, long, overrides_with("system"), hide = true)]
+    pub(crate) no_system: bool,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -221,7 +256,7 @@ pub(crate) enum PipCommand {
     /// Show information about one or more installed packages.
     Show(PipShowArgs),
     /// Verify installed packages have compatible dependencies.
-    Check(PipCheckArgs),
+    Check,
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -453,37 +488,6 @@ pub(crate) struct PipCompileArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub(crate) keyring_provider: Option<KeyringProviderType>,
-
-    /// The Python interpreter against which to compile the requirements.
-    ///
-    /// By default, `uv` uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
-    /// Install packages into the system Python.
-    ///
-    /// By default, `uv` uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--system`
-    /// option instructs `uv` to avoid using a virtual environment Python and restrict its search to
-    /// the system path.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[arg(long, short = 'U', overrides_with("no_upgrade"))]
@@ -755,40 +759,6 @@ pub(crate) struct PipSyncArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub(crate) keyring_provider: Option<KeyringProviderType>,
 
-    /// The Python interpreter into which packages should be installed.
-    ///
-    /// By default, `uv` installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
-    /// Install packages into the system Python.
-    ///
-    /// By default, `uv` installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
-    /// found in the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution, as it can modify the system Python installation.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
-
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
     /// WARNING: `--break-system-packages` is intended for use in continuous integration (CI)
@@ -803,7 +773,7 @@ pub(crate) struct PipSyncArgs {
     )]
     pub(crate) break_system_packages: bool,
 
-    #[arg(long, overrides_with("break_system_packages"))]
+    #[arg(long, overrides_with("break_system_packages"), hide = true)]
     pub(crate) no_break_system_packages: bool,
 
     /// Install packages into the specified directory, rather than into the virtual environment
@@ -1142,40 +1112,6 @@ pub(crate) struct PipInstallArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub(crate) keyring_provider: Option<KeyringProviderType>,
 
-    /// The Python interpreter into which packages should be installed.
-    ///
-    /// By default, `uv` installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
-    /// Install packages into the system Python.
-    ///
-    /// By default, `uv` installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
-    /// found in the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution, as it can modify the system Python installation.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
-
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
     /// WARNING: `--break-system-packages` is intended for use in continuous integration (CI)
@@ -1350,21 +1286,6 @@ pub(crate) struct PipUninstallArgs {
     #[arg(long, short, group = "sources")]
     pub(crate) requirement: Vec<PathBuf>,
 
-    /// The Python interpreter from which packages should be uninstalled.
-    ///
-    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
     /// Attempt to use `keyring` for authentication for remote requirements files.
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
@@ -1373,25 +1294,6 @@ pub(crate) struct PipUninstallArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub(crate) keyring_provider: Option<KeyringProviderType>,
-
-    /// Use the system Python to uninstall packages.
-    ///
-    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
-    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
-    /// found in the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution, as it can modify the system Python installation.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
@@ -1430,40 +1332,6 @@ pub(crate) struct PipFreezeArgs {
 
     #[arg(long, overrides_with("strict"), hide = true)]
     pub(crate) no_strict: bool,
-
-    /// The Python interpreter for which packages should be listed.
-    ///
-    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
-    /// List packages for the system Python.
-    ///
-    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs `uv` to use the first Python found in the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
@@ -1493,80 +1361,8 @@ pub(crate) struct PipListArgs {
     #[arg(long, overrides_with("strict"), hide = true)]
     pub(crate) no_strict: bool,
 
-    /// The Python interpreter for which packages should be listed.
-    ///
-    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
-    /// List packages for the system Python.
-    ///
-    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs `uv` to use the first Python found in the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
-
     #[command(flatten)]
     pub(crate) compat_args: compat::PipListCompatArgs,
-}
-
-#[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipCheckArgs {
-    /// The Python interpreter for which packages should be listed.
-    ///
-    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
-    /// List packages for the system Python.
-    ///
-    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs `uv` to use the first Python found in the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
@@ -1582,77 +1378,11 @@ pub(crate) struct PipShowArgs {
 
     #[arg(long, overrides_with("strict"), hide = true)]
     pub(crate) no_strict: bool,
-
-    /// The Python interpreter for which packages should be listed.
-    ///
-    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
-    /// List packages for the system Python.
-    ///
-    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs `uv` to use the first Python found in the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct VenvArgs {
-    /// The Python interpreter to use for the virtual environment.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    ///
-    /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
-    /// doesn't look for a Python interpreter on disk.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-
-    /// Use the system Python to uninstall packages.
-    ///
-    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
-    /// any parent directory. The `--system` option instructs `uv` to use the first Python found in
-    /// the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution, as it can modify the system Python installation.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
-    )]
-    pub(crate) system: bool,
-
-    #[arg(long, overrides_with("system"))]
-    pub(crate) no_system: bool,
-
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
     #[arg(long)]
     pub(crate) seed: bool,
@@ -1774,57 +1504,15 @@ pub(crate) struct RunArgs {
     /// Run with the given packages installed.
     #[arg(long)]
     pub(crate) with: Vec<String>,
-
-    /// The Python interpreter to use to build the run environment.
-    ///
-    /// By default, `uv` uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct SyncArgs {
-    /// The Python interpreter to use to build the run environment.
-    ///
-    /// By default, `uv` uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-}
+pub(crate) struct SyncArgs;
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct LockArgs {
-    /// The Python interpreter to use to build the run environment.
-    ///
-    /// By default, `uv` uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
-}
+pub(crate) struct LockArgs;
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
@@ -1871,8 +1559,4 @@ pub(crate) struct ToolRunArgs {
     /// Include the following extra requirements.
     #[arg(long)]
     pub(crate) with: Vec<String>,
-
-    /// The Python interpreter to use to build the run environment.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
-    pub(crate) python: Option<String>,
 }
