@@ -4980,7 +4980,8 @@ fn tool_uv_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 6 packages in [TIME]
+    Resolved 9 packages in [TIME]
+    Audited 9 packages in [TIME]
     "###
     );
     Ok(())
@@ -5013,9 +5014,7 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: Failed to parse entry for: `tqdm`
-      Caused by: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    error: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
     "###
     );
 
