@@ -49,15 +49,6 @@ impl Requirement {
     pub fn is_editable(&self) -> bool {
         self.source.is_editable()
     }
-
-    /// Set the source file containing the requirement.
-    #[must_use]
-    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
-        Self {
-            origin: Some(origin),
-            ..self
-        }
-    }
 }
 
 impl From<pep508_rs::Requirement<VerbatimParsedUrl>> for Requirement {
