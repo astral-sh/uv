@@ -7,7 +7,7 @@ use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
 
-use pep508_rs::{VerbatimUrl, VerbatimUrlError};
+use pep508_rs::VerbatimUrl;
 use pypi_types::{Requirement, RequirementSource};
 use uv_fs::{absolutize_path, Simplified};
 use uv_normalize::{ExtraName, PackageName};
@@ -29,12 +29,8 @@ pub enum WorkspaceError {
     Toml(PathBuf, #[source] Box<toml::de::Error>),
     #[error("No `project` table found in: `{}`", _0.simplified_display())]
     MissingProject(PathBuf),
-    #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
-    DynamicNotAllowed(&'static str),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
-    #[error("Failed to normalize workspace member path")]
-    VerbatimUrl(#[from] VerbatimUrlError),
 }
 
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
