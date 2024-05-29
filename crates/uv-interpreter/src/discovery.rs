@@ -375,7 +375,7 @@ fn python_interpreters<'a>(
                     );
                 })
                 .map_err(Error::from)
-                .inspect_err(|err| trace!("{err}")),
+                .inspect_err(|err| debug!("{err}")),
             Err(err) => Err(err),
         })
         .filter(move |result| match result {
