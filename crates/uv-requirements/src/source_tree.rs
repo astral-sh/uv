@@ -83,9 +83,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     }
 
     /// Infer the dependencies for a directory dependency.
-    ///
-    /// The dependencies may be declared statically in a `pyproject.toml` (fast path), or we build
-    /// the path distribution and read the metadata from the build.
     async fn resolve_source_tree(&self, path: &Path) -> Result<SourceTreeResolution> {
         // Convert to a buildable source.
         let source_tree = fs_err::canonicalize(path).with_context(|| {
