@@ -6,7 +6,7 @@ use distribution_types::{
     Dist, DistributionMetadata, Name, Requirement, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, MarkerTree};
 use petgraph::{
     graph::{Graph, NodeIndex},
     Directed,
@@ -42,6 +42,26 @@ impl ResolutionGraph {
         preferences: &Preferences,
         resolution: Resolution,
     ) -> anyhow::Result<Self, ResolveError> {
+        // Collect all marker expressions from relevant pubgrub packages.
+        let mut markers: FxHashMap<(&PackageName, &Version, &Option<ExtraName>), MarkerTree> =
+            FxHashMap::default();
+        for (package, versions) in &resolution.packages {
+            if let PubGrubPackageInner::Package {
+                name,
+                marker: Some(marker),
+                extra,
+                ..
+            } = &**package
+            {
+                for version in versions {
+                    markers
+                        .entry((name, version, extra))
+                        .or_insert_with(|| MarkerTree::Or(vec![]))
+                        .or(marker.clone());
+                }
+            }
+        }
+
         // Add every package to the graph.
         let mut petgraph: Graph<AnnotatedDist, Version, Directed> =
             Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
@@ -142,11 +162,14 @@ impl ResolutionGraph {
                                 });
                             }
                         }
+                        // Extract the markers.
+                        let marker = markers.get(&(name, version, extra)).cloned();
 
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
                             dist,
                             extra: extra.clone(),
+                            marker,
                             hashes,
                             metadata,
                         });
@@ -216,11 +239,14 @@ impl ResolutionGraph {
                                 });
                             }
                         }
+                        // Extract the markers.
+                        let marker = markers.get(&(name, version, extra)).cloned();
 
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
                             dist: dist.into(),
                             extra: extra.clone(),
+                            marker,
                             hashes,
                             metadata,
                         });

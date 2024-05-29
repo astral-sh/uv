@@ -229,9 +229,7 @@ impl Distribution {
         let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
         Ok(Distribution {
             id,
-            // TODO: Refactoring is needed to get the marker expressions for a
-            // particular resolved dist to this point.
-            marker: None,
+            marker: annotated_dist.marker.as_ref().map(ToString::to_string),
             sdist,
             wheels,
             dependencies: vec![],

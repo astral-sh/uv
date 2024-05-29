@@ -113,10 +113,16 @@ impl PubGrubPackage {
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
-        marker: Option<MarkerTree>,
+        mut marker: Option<MarkerTree>,
         urls: &Urls,
     ) -> Self {
         let url = urls.get(&name).cloned();
+        // Remove all extra expressions from the marker, since we track extras
+        // separately. This also avoids an issue where packages added via
+        // extras end up having two distinct marker expressions, which in turn
+        // makes them two distinct packages. This results in PubGrub being
+        // unable to unify version constraints across such packages.
+        marker = marker.and_then(|m| m.simplify_extras_with(|_| true));
         if let Some(extra) = extra {
             Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
