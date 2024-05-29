@@ -652,6 +652,7 @@ impl CacheBucket {
             let Ok(metadata) = fs_err::read(path.join("metadata.msgpack")) else {
                 return false;
             };
+            // STOPSHIP(charlie): Shouldn't this be lowered?
             let Ok(metadata) = rmp_serde::from_slice::<Metadata23>(&metadata) else {
                 return false;
             };

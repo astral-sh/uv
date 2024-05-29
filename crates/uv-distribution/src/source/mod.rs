@@ -494,7 +494,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadataLowered {
-                metadata,
+                metadata: Metadata23Lowered::from_plain(metadata),
                 hashes: revision.into_hashes(),
             });
         }
@@ -722,7 +722,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadataLowered {
-                metadata,
+                metadata: Metadata23Lowered::from_plain(metadata),
                 hashes: revision.into_hashes(),
             });
         }
@@ -931,7 +931,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadataLowered::from(metadata));
+            return Ok(ArchiveMetadataLowered::from(
+                Metadata23Lowered::from_tool_uv(
+                    metadata,
+                    resource.path.as_ref(),
+                    self.preview_mode,
+                )
+                .await?,
+            ));
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -1149,7 +1156,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for: {source}");
-                return Ok(ArchiveMetadataLowered::from(metadata));
+                return Ok(ArchiveMetadataLowered::from(
+                    Metadata23Lowered::from_tool_uv(metadata, fetch.path(), self.preview_mode)
+                        .await?,
+                ));
             }
         }
 
@@ -1606,9 +1616,7 @@ async fn read_pyproject_toml(
 }
 
 /// Read an existing cached [`Metadata23`], if it exists.
-async fn read_cached_metadata(
-    cache_entry: &CacheEntry,
-) -> Result<Option<Metadata23Lowered>, Error> {
+async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<Metadata23>, Error> {
     match fs::read(&cache_entry.path()).await {
         Ok(cached) => Ok(Some(rmp_serde::from_slice(&cached)?)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
