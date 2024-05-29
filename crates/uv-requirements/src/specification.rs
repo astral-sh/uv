@@ -451,11 +451,13 @@ impl RequirementsSpecification {
     }
 
     /// Read the combined requirements and constraints from a set of sources.
+    ///
+    /// If a [`Workspace`] is provided, it will be used as-is without re-discovering a workspace
+    /// from the filesystem.
     pub async fn from_sources(
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
-        // Avoid re-discovering the workspace if we already loaded it.
         workspace: Option<&Workspace>,
         extras: &ExtrasSpecification,
         client_builder: &BaseClientBuilder<'_>,
