@@ -445,6 +445,10 @@ impl ResolutionGraph {
         let mut locked_dists = vec![];
         for node_index in self.petgraph.node_indices() {
             let dist = &self.petgraph[node_index];
+            if dist.extra.is_some() {
+                continue;
+            }
+
             let mut locked_dist = lock::Distribution::from_annotated_dist(dist)?;
             for edge in self.petgraph.neighbors(node_index) {
                 let dependency_dist = &self.petgraph[edge];

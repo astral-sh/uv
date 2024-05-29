@@ -3,16 +3,17 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use distribution_types::{Requirement, RequirementSource};
 use glob::{glob, GlobError, PatternError};
+use pep508_rs::{VerbatimUrl, VerbatimUrlError};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
 
 use uv_fs::{absolutize_path, Simplified};
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user;
 
 use crate::pyproject::{PyProjectToml, Source, ToolUvWorkspace};
-use crate::RequirementsSource;
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -32,6 +33,8 @@ pub enum WorkspaceError {
     DynamicNotAllowed(&'static str),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
+    #[error("Failed to normalize workspace member path")]
+    VerbatimUrl(#[from] VerbatimUrlError),
 }
 
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
@@ -172,6 +175,8 @@ pub struct ProjectWorkspace {
     project_root: PathBuf,
     /// The name of the package.
     project_name: PackageName,
+    /// The extras available in the project.
+    extras: Vec<ExtraName>,
     /// The workspace the project is part of.
     workspace: Workspace,
 }
@@ -235,31 +240,46 @@ impl ProjectWorkspace {
         ))
     }
 
-    /// The directory containing the closest `pyproject.toml`, defining the current project.
+    /// Returns the directory containing the closest `pyproject.toml` that defines the current
+    /// project.
     pub fn project_root(&self) -> &Path {
         &self.project_root
     }
 
-    /// The name of the current project.
+    /// Returns the [`PackageName`] of the current project.
     pub fn project_name(&self) -> &PackageName {
         &self.project_name
     }
 
-    /// The workspace definition.
+    /// Returns the extras available in the project.
+    pub fn project_extras(&self) -> &[ExtraName] {
+        &self.extras
+    }
+
+    /// Returns the [`Workspace`] containing the current project.
     pub fn workspace(&self) -> &Workspace {
         &self.workspace
     }
 
-    /// The current project.
+    /// Returns the current project as a [`WorkspaceMember`].
     pub fn current_project(&self) -> &WorkspaceMember {
         &self.workspace().packages[&self.project_name]
     }
 
-    /// Return the requirements for the project, which is the current project as editable.
-    pub fn requirements(&self) -> Vec<RequirementsSource> {
-        vec![RequirementsSource::Editable(
-            self.project_root.to_string_lossy().to_string(),
-        )]
+    /// Return the [`Requirement`] entries for the project, which is the current project as
+    /// editable.
+    pub fn requirements(&self) -> Vec<Requirement> {
+        vec![Requirement {
+            name: self.project_name.clone(),
+            extras: self.extras.clone(),
+            marker: None,
+            source: RequirementSource::Path {
+                path: self.project_root.clone(),
+                editable: true,
+                url: VerbatimUrl::from_path(&self.project_root).expect("path is valid URL"),
+            },
+            origin: None,
+        }]
     }
 
     /// Find the workspace for a project.
@@ -271,6 +291,18 @@ impl ProjectWorkspace {
         let project_path = absolutize_path(project_path)
             .map_err(WorkspaceError::Normalize)?
             .to_path_buf();
+
+        // Extract the extras available in the project.
+        let extras = project
+            .project
+            .as_ref()
+            .and_then(|project| project.optional_dependencies.as_ref())
+            .map(|optional_dependencies| {
+                let mut extras = optional_dependencies.keys().cloned().collect::<Vec<_>>();
+                extras.sort_unstable();
+                extras
+            })
+            .unwrap_or_default();
 
         let mut workspace_members = BTreeMap::new();
         // The current project is always a workspace member, especially in a single project
@@ -305,6 +337,7 @@ impl ProjectWorkspace {
             return Ok(Self {
                 project_root: project_path.clone(),
                 project_name,
+                extras,
                 workspace: Workspace {
                     root: project_path,
                     packages: workspace_members,
@@ -385,6 +418,7 @@ impl ProjectWorkspace {
         Ok(Self {
             project_root: project_path.clone(),
             project_name,
+            extras,
             workspace: Workspace {
                 root: workspace_root,
                 packages: workspace_members,
@@ -412,6 +446,7 @@ impl ProjectWorkspace {
         Self {
             project_root: root.to_path_buf(),
             project_name: project_name.clone(),
+            extras: Vec::new(),
             workspace: Workspace {
                 root: root.to_path_buf(),
                 packages: [(project_name.clone(), root_member)].into_iter().collect(),
@@ -627,6 +662,7 @@ mod tests {
         {
           "project_root": "[ROOT]/albatross-in-example/examples/bird-feeder",
           "project_name": "bird-feeder",
+          "extras": [],
           "workspace": {
             "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
             "packages": {
@@ -657,6 +693,7 @@ mod tests {
             {
               "project_root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
               "project_name": "bird-feeder",
+              "extras": [],
               "workspace": {
                 "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
                 "packages": {
@@ -686,6 +723,7 @@ mod tests {
             {
               "project_root": "[ROOT]/albatross-root-workspace",
               "project_name": "albatross",
+              "extras": [],
               "workspace": {
                 "root": "[ROOT]/albatross-root-workspace",
                 "packages": {
@@ -729,6 +767,7 @@ mod tests {
             {
               "project_root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
               "project_name": "albatross",
+              "extras": [],
               "workspace": {
                 "root": "[ROOT]/albatross-virtual-workspace",
                 "packages": {
@@ -766,6 +805,7 @@ mod tests {
             {
               "project_root": "[ROOT]/albatross-just-project",
               "project_name": "albatross",
+              "extras": [],
               "workspace": {
                 "root": "[ROOT]/albatross-just-project",
                 "packages": {

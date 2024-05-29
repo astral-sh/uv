@@ -1,17 +1,17 @@
 use anstream::eprint;
 use anyhow::Result;
 
-use distribution_types::IndexLocations;
+use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
-use uv_requirements::{ProjectWorkspace, RequirementsSpecification};
+use uv_requirements::ProjectWorkspace;
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -39,7 +39,7 @@ pub(crate) async fn lock(
     let venv = project::init_environment(&project, preview, cache, printer)?;
 
     // Perform the lock operation.
-    match do_lock(&project, &venv, exclude_newer, preview, cache, printer).await {
+    match do_lock(&project, &venv, exclude_newer, cache, printer).await {
         Ok(_) => Ok(ExitStatus::Success),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
@@ -58,29 +58,19 @@ pub(super) async fn do_lock(
     project: &ProjectWorkspace,
     venv: &PythonEnvironment,
     exclude_newer: Option<ExcludeNewer>,
-    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<Lock, ProjectError> {
-    // TODO(zanieb): Support client configuration
-    let client_builder = BaseClientBuilder::default();
-
-    // Read all requirements from the provided sources.
-    // TODO(zanieb): Consider allowing constraints and extras
-    // TODO(zanieb): Allow specifying extras somehow
-    let spec = RequirementsSpecification::from_sources(
-        // TODO(konsti): With workspace (just like with extras), these are the requirements for
-        // syncing. For locking, we want to use the entire workspace with all extras.
-        // See https://github.com/astral-sh/uv/issues/3700
-        &project.requirements(),
-        &[],
-        &[],
-        None,
-        &ExtrasSpecification::None,
-        &client_builder,
-        preview,
-    )
-    .await?;
+    // When locking, include the project itself (as editable).
+    let requirements = project
+        .requirements()
+        .into_iter()
+        .map(UnresolvedRequirementSpecification::from)
+        .collect::<Vec<_>>();
+    let constraints = vec![];
+    let overrides = vec![];
+    let source_trees = vec![];
+    let project_name = project.project_name().clone();
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter().clone();
@@ -133,11 +123,11 @@ pub(super) async fn do_lock(
 
     // Resolve the requirements.
     let resolution = pip::operations::resolve(
-        spec.requirements,
-        spec.constraints,
-        spec.overrides,
-        spec.source_trees,
-        spec.project,
+        requirements,
+        constraints,
+        overrides,
+        source_trees,
+        Some(project_name),
         &extras,
         EmptyInstalledPackages,
         &hasher,
