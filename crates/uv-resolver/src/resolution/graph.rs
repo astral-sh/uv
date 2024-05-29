@@ -46,102 +46,17 @@ impl ResolutionGraph {
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
     ) -> anyhow::Result<Self, ResolveError> {
-        // Collect and validate the extras.
-        let mut extras = FxHashMap::default();
-        let mut diagnostics = Vec::new();
-        for (package, version) in selection {
-            match &**package {
-                PubGrubPackageInner::Package {
-                    name,
-                    extra: Some(extra),
-                    marker: None,
-                    url: None,
-                } => {
-                    let dist = PubGrubDistribution::from_registry(name, version);
-
-                    let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
-                        panic!(
-                            "Every package should have metadata: {:?}",
-                            dist.version_id()
-                        )
-                    });
-
-                    let MetadataResponse::Found(archive) = &*response else {
-                        panic!(
-                            "Every package should have metadata: {:?}",
-                            dist.version_id()
-                        )
-                    };
-
-                    if archive.metadata.provides_extras.contains(extra) {
-                        extras
-                            .entry(name.clone())
-                            .or_insert_with(Vec::new)
-                            .push(extra.clone());
-                    } else {
-                        let dist = pins
-                            .get(name, version)
-                            .unwrap_or_else(|| panic!("Every package should be pinned: {name:?}"))
-                            .clone();
-
-                        diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                            dist,
-                            extra: extra.clone(),
-                        });
-                    }
-                }
-                PubGrubPackageInner::Package {
-                    name,
-                    extra: Some(extra),
-                    marker: None,
-                    url: Some(url),
-                } => {
-                    let dist = PubGrubDistribution::from_url(name, url);
-
-                    let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
-                        panic!(
-                            "Every package should have metadata: {:?}",
-                            dist.version_id()
-                        )
-                    });
-
-                    let MetadataResponse::Found(archive) = &*response else {
-                        panic!(
-                            "Every package should have metadata: {:?}",
-                            dist.version_id()
-                        )
-                    };
-
-                    if archive.metadata.provides_extras.contains(extra) {
-                        extras
-                            .entry(name.clone())
-                            .or_insert_with(Vec::new)
-                            .push(extra.clone());
-                    } else {
-                        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
-
-                        diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                            dist: dist.into(),
-                            extra: extra.clone(),
-                        });
-                    }
-                }
-                _ => {}
-            };
-        }
-
         // Add every package to the graph.
-        // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
-        // write our own graph, given that our requirements are so simple.
         let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
         let mut inverse =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
+        let mut diagnostics = Vec::new();
 
         for (package, version) in selection {
             match &**package {
                 PubGrubPackageInner::Package {
                     name,
-                    extra: None,
+                    extra,
                     marker: None,
                     url: None,
                 } => {
@@ -213,8 +128,18 @@ impl ResolutionGraph {
                         archive.metadata.clone()
                     };
 
+                    // Validate the extra.
+                    if let Some(extra) = extra {
+                        if !metadata.provides_extras.contains(extra) {
+                            diagnostics.push(ResolutionDiagnostic::MissingExtra {
+                                dist: dist.clone(),
+                                extra: extra.clone(),
+                            });
+                        }
+                    }
+
                     // Extract the extras.
-                    let extras = extras.get(name).cloned().unwrap_or_default();
+                    let extras = extra.clone().map(|extra| vec![extra]).unwrap_or_default();
 
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(AnnotatedDist {
@@ -223,16 +148,16 @@ impl ResolutionGraph {
                         hashes,
                         metadata,
                     });
-                    inverse.insert(name, index);
+                    inverse.insert((name, extra), index);
                 }
+
                 PubGrubPackageInner::Package {
                     name,
-                    extra: None,
+                    extra,
                     marker: None,
                     url: Some(url),
                 } => {
                     // Create the distribution.
-
                     let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
 
                     // Extract the hashes, preserving those that were already present in the
@@ -275,8 +200,18 @@ impl ResolutionGraph {
                         archive.metadata.clone()
                     };
 
+                    // Validate the extra.
+                    if let Some(extra) = extra {
+                        if !metadata.provides_extras.contains(extra) {
+                            diagnostics.push(ResolutionDiagnostic::MissingExtra {
+                                dist: dist.clone().into(),
+                                extra: extra.clone(),
+                            });
+                        }
+                    }
+
                     // Extract the extras.
-                    let extras = extras.get(name).cloned().unwrap_or_default();
+                    let extras = extra.clone().map(|extra| vec![extra]).unwrap_or_default();
 
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(AnnotatedDist {
@@ -285,8 +220,9 @@ impl ResolutionGraph {
                         hashes,
                         metadata,
                     });
-                    inverse.insert(name, index);
+                    inverse.insert((name, extra), index);
                 }
+
                 _ => {}
             };
         }
@@ -305,14 +241,22 @@ impl ResolutionGraph {
                         continue;
                     }
 
+                    if !self_version.contains(version) {
+                        continue;
+                    }
+
                     let PubGrubPackageInner::Package {
-                        name: self_name, ..
+                        name: self_name,
+                        extra: self_extra,
+                        ..
                     } = &**self_package
                     else {
                         continue;
                     };
+
                     let PubGrubPackageInner::Package {
                         name: dependency_name,
+                        extra: dependency_extra,
                         ..
                     } = &**dependency_package
                     else {
@@ -324,11 +268,9 @@ impl ResolutionGraph {
                         continue;
                     }
 
-                    if self_version.contains(version) {
-                        let self_index = &inverse[self_name];
-                        let dependency_index = &inverse[dependency_name];
-                        petgraph.update_edge(*self_index, *dependency_index, ());
-                    }
+                    let self_index = &inverse[&(self_name, self_extra)];
+                    let dependency_index = &inverse[&(dependency_name, dependency_extra)];
+                    petgraph.update_edge(*self_index, *dependency_index, ());
                 }
             }
         }
@@ -339,14 +281,18 @@ impl ResolutionGraph {
         })
     }
 
-    /// Return the number of packages in the graph.
+    /// Return the number of distinct packages in the graph.
     pub fn len(&self) -> usize {
-        self.petgraph.node_count()
+        self.petgraph
+            .node_indices()
+            .map(|index| &self.petgraph[index])
+            .filter(|dist| dist.extras.is_empty())
+            .count()
     }
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        self.petgraph.node_count() == 0
+        self.len() == 0
     }
 
     /// Returns `true` if the graph contains the given package.

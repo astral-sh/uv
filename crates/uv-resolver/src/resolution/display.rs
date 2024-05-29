@@ -1,12 +1,15 @@
 use std::collections::BTreeSet;
+use std::hash::BuildHasherDefault;
 
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
+use rustc_hash::FxHashMap;
 
 use distribution_types::{Name, SourceAnnotations};
 use uv_normalize::PackageName;
 
+use crate::resolution::AnnotatedDist;
 use crate::ResolutionGraph;
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
@@ -77,13 +80,53 @@ impl<'a> DisplayResolutionGraph<'a> {
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
 impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Reduce the graph, such that all nodes for a single package are combined, regardless of
+        // the extras.
+        //
+        // For example, `flask` and `flask[dotenv]` should be reduced into a single `flask[dotenv]`
+        // node.
+        let petgraph = {
+            let mut petgraph =
+                petgraph::graph::Graph::<AnnotatedDist, (), petgraph::Directed>::with_capacity(
+                    self.resolution.petgraph.node_count(),
+                    self.resolution.petgraph.edge_count(),
+                );
+            let mut inverse = FxHashMap::with_capacity_and_hasher(
+                self.resolution.petgraph.node_count(),
+                BuildHasherDefault::default(),
+            );
+
+            // Re-add the nodes to the reduced graph.
+            for index in self.resolution.petgraph.node_indices() {
+                let dist = &self.resolution.petgraph[index];
+
+                if let Some(index) = inverse.get(dist.name()) {
+                    let node: &mut AnnotatedDist = &mut petgraph[*index];
+                    node.extras.extend(dist.extras.iter().cloned());
+                    node.extras.sort_unstable();
+                    node.extras.dedup();
+                } else {
+                    let index = petgraph.add_node(dist.clone());
+                    inverse.insert(dist.name(), index);
+                }
+            }
+
+            // Re-add the edges to the reduced graph.
+            for edge in self.resolution.petgraph.edge_indices() {
+                let (source, target) = self.resolution.petgraph.edge_endpoints(edge).unwrap();
+                let source = inverse[self.resolution.petgraph[source].name()];
+                let target = inverse[self.resolution.petgraph[target].name()];
+                petgraph.update_edge(source, target, ());
+            }
+
+            petgraph
+        };
+
         // Collect all packages.
-        let mut nodes = self
-            .resolution
-            .petgraph
+        let mut nodes = petgraph
             .node_indices()
             .filter_map(|index| {
-                let dist = &self.resolution.petgraph[index];
+                let dist = &petgraph[index];
                 let name = dist.name();
                 if self.no_emit_packages.contains(name) {
                     return None;
@@ -119,11 +162,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // package (e.g., `# via mypy`).
             if self.include_annotations {
                 // Display all dependencies.
-                let mut edges = self
-                    .resolution
-                    .petgraph
+                let mut edges = petgraph
                     .edges_directed(index, Direction::Incoming)
-                    .map(|edge| &self.resolution.petgraph[edge.source()])
+                    .map(|edge| &petgraph[edge.source()])
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
 
