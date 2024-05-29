@@ -10,7 +10,6 @@ pub use git::{git_url_to_precise, is_same_reference};
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{HashDigest, Metadata23};
-pub use pyproject::*;
 pub use reporter::Reporter;
 pub use requirement_lowering::{lower_requirement, lower_requirements, LoweringError};
 use uv_configuration::PreviewMode;

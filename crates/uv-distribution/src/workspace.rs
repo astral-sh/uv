@@ -13,7 +13,7 @@ use uv_fs::{absolutize_path, Simplified};
 use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user;
 
-use crate::{PyProjectToml, Source, ToolUvWorkspace};
+use crate::pyproject::{PyProjectToml, Source, ToolUvWorkspace};
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {

@@ -17,7 +17,8 @@ use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user_once;
 
-use crate::{Pep621Error, Source, Workspace};
+use crate::pyproject::{Pep621Error, Source};
+use crate::Workspace;
 
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.

@@ -45,7 +45,7 @@ use requirements_txt::{
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
-use uv_distribution::PyProjectToml;
+use uv_distribution::pyproject::PyProjectToml;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
