@@ -10,11 +10,13 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
+use uv_interpreter::PythonEnvironment;
 use uv_requirements::{ProjectWorkspace, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, Options};
+use uv_resolver::{FlatIndex, InMemoryIndex, Lock, Options};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::project::ProjectError;
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
 
@@ -35,6 +37,29 @@ pub(crate) async fn lock(
     // Discover or create the virtual environment.
     let venv = project::init_environment(&project, preview, cache, printer)?;
 
+    // Perform the lock operation.
+    match do_lock(&project, &venv, preview, cache, printer).await {
+        Ok(_) => Ok(ExitStatus::Success),
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::NoSolution(err),
+        ))) => {
+            let report = miette::Report::msg(format!("{err}"))
+                .context("No solution found when resolving dependencies:");
+            eprint!("{report:?}");
+            Ok(ExitStatus::Failure)
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+/// Lock the project requirements into a lockfile.
+pub(super) async fn do_lock(
+    project: &ProjectWorkspace,
+    venv: &PythonEnvironment,
+    preview: PreviewMode,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<Lock, ProjectError> {
     // TODO(zanieb): Support client configuration
     let client_builder = BaseClientBuilder::default();
 
@@ -126,17 +151,10 @@ pub(crate) async fn lock(
         options,
         printer,
     )
-    .await;
+    .await?;
 
-    let resolution = match resolution {
-        Err(pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}"))
-                .context("No solution found when resolving dependencies:");
-            eprint!("{report:?}");
-            return Ok(ExitStatus::Failure);
-        }
-        result => result,
-    }?;
+    // Notify the user of any resolution diagnostics.
+    pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Write the lockfile to disk.
     let lock = resolution.lock()?;
@@ -147,5 +165,5 @@ pub(crate) async fn lock(
     )
     .await?;
 
-    Ok(ExitStatus::Success)
+    Ok(lock)
 }

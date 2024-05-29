@@ -34,22 +34,6 @@ pub(crate) async fn run(
         warn_user!("`uv run` is experimental and may change without warning.");
     }
 
-    let command = if let Some(target) = target {
-        let target_path = PathBuf::from(&target);
-        if target_path
-            .extension()
-            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
-            && target_path.exists()
-        {
-            args.insert(0, target_path.as_os_str().into());
-            "python".to_string()
-        } else {
-            target
-        }
-    } else {
-        "python".to_string()
-    };
-
     // Discover and sync the project.
     let project_env = if isolated {
         None
@@ -57,22 +41,13 @@ pub(crate) async fn run(
         debug!("Syncing project environment.");
 
         let project = ProjectWorkspace::discover(std::env::current_dir()?).await?;
-
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
-        // Install the project requirements.
-        Some(
-            project::update_environment(
-                venv,
-                &project.requirements(),
-                Some(project.workspace()),
-                preview,
-                connectivity,
-                cache,
-                printer,
-            )
-            .await?,
-        )
+        // Lock and sync the environment.
+        let lock = project::lock::do_lock(&project, &venv, preview, cache, printer).await?;
+        project::sync::do_sync(&project, &venv, &lock, cache, printer).await?;
+
+        Some(venv)
     };
 
     // If necessary, create an environment for the ephemeral requirements.
@@ -126,6 +101,22 @@ pub(crate) async fn run(
     };
 
     // Construct the command
+    let command = if let Some(target) = target {
+        let target_path = PathBuf::from(&target);
+        if target_path
+            .extension()
+            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
+            && target_path.exists()
+        {
+            args.insert(0, target_path.as_os_str().into());
+            "python".to_string()
+        } else {
+            target
+        }
+    } else {
+        "python".to_string()
+    };
+
     let mut process = Command::new(&command);
     process.args(&args);
 
