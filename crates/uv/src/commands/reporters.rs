@@ -53,16 +53,13 @@ impl BarState {
 }
 
 impl ProgressReporter {
-    fn new(mut root: ProgressBar, printer: Printer) -> ProgressReporter {
+    fn new(root: ProgressBar, multi_progress: MultiProgress, printer: Printer) -> ProgressReporter {
         let mode = if env::var("JPY_SESSION_NAME").is_ok() {
             // Disable concurrent progress bars when running inside a Jupyter notebook
             // because the Jupyter terminal does not support clearing previous lines.
             // See: https://github.com/astral-sh/uv/issues/3887.
             ProgressMode::Single
         } else {
-            let multi_progress = MultiProgress::with_draw_target(printer.target());
-            root = multi_progress.add(root);
-
             ProgressMode::Multi {
                 state: Arc::default(),
                 multi_progress,
@@ -238,7 +235,8 @@ pub(crate) struct DownloadReporter {
 
 impl From<Printer> for DownloadReporter {
     fn from(printer: Printer) -> Self {
-        let root = ProgressBar::with_draw_target(None, printer.target());
+        let multi_progress = MultiProgress::with_draw_target(printer.target());
+        let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
         root.enable_steady_tick(Duration::from_millis(200));
         root.set_style(
             ProgressStyle::with_template("{spinner:.white} {msg:.dim} ({pos}/{len})")
@@ -247,7 +245,7 @@ impl From<Printer> for DownloadReporter {
         );
         root.set_message("Downloading packages...");
 
-        let reporter = ProgressReporter::new(root, printer);
+        let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
 }
@@ -316,7 +314,8 @@ impl ResolverReporter {
 
 impl From<Printer> for ResolverReporter {
     fn from(printer: Printer) -> Self {
-        let root = ProgressBar::with_draw_target(None, printer.target());
+        let multi_progress = MultiProgress::with_draw_target(printer.target());
+        let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
         root.enable_steady_tick(Duration::from_millis(200));
         root.set_style(
             ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
@@ -325,7 +324,7 @@ impl From<Printer> for ResolverReporter {
         );
         root.set_message("Resolving dependencies...");
 
-        let reporter = ProgressReporter::new(root, printer);
+        let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
 }
