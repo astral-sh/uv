@@ -6,7 +6,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use anyhow::Result;
 use rustc_hash::FxHashMap;
+use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
 use distribution_filename::WheelFilename;
@@ -24,8 +26,8 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolution::AnnotatedDist;
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[serde(into = "LockWire", try_from = "LockWire")]
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(try_from = "LockWire")]
 pub struct Lock {
     version: u32,
     distributions: Vec<Distribution>,
@@ -123,7 +125,7 @@ impl Lock {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 struct LockWire {
     version: u32,
     #[serde(rename = "distribution")]
@@ -136,6 +138,72 @@ impl From<Lock> for LockWire {
             version: lock.version,
             distributions: lock.distributions,
         }
+    }
+}
+
+impl Lock {
+    /// Returns the TOML representation of this lock file.
+    pub fn to_toml(&self) -> Result<String> {
+        // We construct a TOML document manually instead of going through Serde to enable
+        // the use of inline tables.
+        let mut doc = toml_edit::DocumentMut::new();
+        doc.insert("version", value(i64::from(self.version)));
+
+        let mut distributions = ArrayOfTables::new();
+        for dist in &self.distributions {
+            let mut table = Table::new();
+
+            table.insert("name", value(dist.id.name.to_string()));
+            table.insert("version", value(dist.id.version.to_string()));
+            table.insert("source", value(dist.id.source.to_string()));
+            if let Some(ref extra) = dist.id.extra {
+                table.insert("extra", value(extra.to_string()));
+            }
+
+            if let Some(ref marker) = dist.marker {
+                table.insert("marker", value(marker.to_string()));
+            }
+
+            if let Some(ref sdist) = dist.sdist {
+                table.insert("sdist", value(sdist.to_toml()?));
+            }
+
+            if !dist.dependencies.is_empty() {
+                let deps = dist
+                    .dependencies
+                    .iter()
+                    .map(Dependency::to_toml)
+                    .collect::<ArrayOfTables>();
+                table.insert("dependencies", Item::ArrayOfTables(deps));
+            }
+
+            if !dist.wheels.is_empty() {
+                let wheels = dist
+                    .wheels
+                    .iter()
+                    .enumerate()
+                    .map(|(i, wheel)| {
+                        let mut table = wheel.to_toml()?;
+
+                        if dist.wheels.len() > 1 {
+                            // Indent each wheel on a new line.
+                            table.decor_mut().set_prefix("\n\t");
+                            if i == dist.wheels.len() - 1 {
+                                table.decor_mut().set_suffix("\n");
+                            }
+                        }
+
+                        Ok(table)
+                    })
+                    .collect::<Result<Array>>()?;
+                table.insert("wheels", value(wheels));
+            }
+
+            distributions.push(table);
+        }
+
+        doc.insert("distribution", Item::ArrayOfTables(distributions));
+        Ok(doc.to_string())
     }
 }
 
@@ -206,7 +274,7 @@ impl TryFrom<LockWire> for Lock {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 pub struct Distribution {
     #[serde(flatten)]
     pub(crate) id: DistributionId,
@@ -214,7 +282,7 @@ pub struct Distribution {
     pub(crate) marker: Option<String>,
     #[serde(default)]
     pub(crate) sdist: Option<SourceDist>,
-    #[serde(default, rename = "wheel", skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) wheels: Vec<Wheel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) dependencies: Vec<Dependency>,
@@ -412,9 +480,7 @@ impl Distribution {
     }
 }
 
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct DistributionId {
     pub(crate) name: PackageName,
     pub(crate) version: Version,
@@ -626,15 +692,6 @@ impl std::fmt::Display for Source {
     }
 }
 
-impl serde::Serialize for Source {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        s.collect_str(self)
-    }
-}
-
 impl<'de> serde::Deserialize<'de> for Source {
     fn deserialize<D>(d: D) -> Result<Source, D::Error>
     where
@@ -683,9 +740,7 @@ impl SourceKind {
     }
 }
 
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct DirectSource {
     subdirectory: Option<String>,
 }
@@ -758,9 +813,7 @@ impl GitSource {
     }
 }
 
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 enum GitSourceKind {
     Tag(String),
     Branch(String),
@@ -769,7 +822,7 @@ enum GitSourceKind {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 pub(crate) struct SourceDist {
     /// A URL or file path (via `file://`) where the source dist that was
     /// locked against was found. The location does not need to exist in the
@@ -789,6 +842,19 @@ pub(crate) struct SourceDist {
 }
 
 impl SourceDist {
+    /// Returns the TOML representation of this source distribution.
+    fn to_toml(&self) -> Result<InlineTable> {
+        let mut table = InlineTable::new();
+        table.insert("url", Value::from(self.url.to_string()));
+        if let Some(ref hash) = self.hash {
+            table.insert("hash", Value::from(hash.to_string()));
+        }
+        if let Some(size) = self.size {
+            table.insert("size", Value::from(i64::try_from(size)?));
+        }
+        Ok(table)
+    }
+
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
     ) -> Result<Option<SourceDist>, LockError> {
@@ -962,8 +1028,8 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[serde(into = "WheelWire", try_from = "WheelWire")]
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(try_from = "WheelWire")]
 pub(crate) struct Wheel {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
@@ -1088,7 +1154,7 @@ impl Wheel {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 struct WheelWire {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
@@ -1107,13 +1173,18 @@ struct WheelWire {
     size: Option<u64>,
 }
 
-impl From<Wheel> for WheelWire {
-    fn from(wheel: Wheel) -> WheelWire {
-        WheelWire {
-            url: wheel.url,
-            hash: wheel.hash,
-            size: wheel.size,
+impl Wheel {
+    /// Returns the TOML representation of this wheel.
+    fn to_toml(&self) -> Result<InlineTable> {
+        let mut table = InlineTable::new();
+        table.insert("url", Value::from(self.url.to_string()));
+        if let Some(ref hash) = self.hash {
+            table.insert("hash", Value::from(hash.to_string()));
         }
+        if let Some(size) = self.size {
+            table.insert("size", Value::from(i64::try_from(size)?));
+        }
+        Ok(table)
     }
 }
 
@@ -1139,7 +1210,7 @@ impl TryFrom<WheelWire> for Wheel {
 }
 
 /// A single dependency of a distribution in a lock file.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct Dependency {
     #[serde(flatten)]
     id: DistributionId,
@@ -1149,6 +1220,19 @@ impl Dependency {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Dependency {
         let id = DistributionId::from_annotated_dist(annotated_dist);
         Dependency { id }
+    }
+
+    /// Returns the TOML representation of this dependency.
+    fn to_toml(&self) -> Table {
+        let mut table = Table::new();
+        table.insert("name", value(self.id.name.to_string()));
+        table.insert("version", value(self.id.version.to_string()));
+        table.insert("source", value(self.id.source.to_string()));
+        if let Some(ref extra) = self.id.extra {
+            table.insert("extra", value(extra.to_string()));
+        }
+
+        table
     }
 }
 
@@ -1185,15 +1269,6 @@ impl std::str::FromStr for Hash {
 impl std::fmt::Display for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}:{}", self.0.algorithm, self.0.digest)
-    }
-}
-
-impl serde::Serialize for Hash {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        s.collect_str(self)
     }
 }
 
@@ -1506,9 +1581,7 @@ version = 1
 name = "anyio"
 version = "4.3.0"
 source = "registry+https://pypi.org/simple"
-
-[[distribution.wheel]]
-url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"
+wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
@@ -1523,10 +1596,7 @@ version = 1
 name = "anyio"
 version = "4.3.0"
 source = "path+file:///foo/bar"
-
-[[distribution.wheel]]
-url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl"
-hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);

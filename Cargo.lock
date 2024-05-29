@@ -5021,6 +5021,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "toml",
+ "toml_edit",
  "tracing",
  "url",
  "uv-cache",
