@@ -149,7 +149,7 @@ impl GitRepository {
         ProcessBuilder::new("git")
             .arg("rev-parse")
             .cwd(path)
-            .exec_with_streaming(&mut silent, &mut silent, true)?;
+            .exec_with_output()?;
 
         Ok(GitRepository {
             path: path.to_path_buf(),
@@ -168,7 +168,7 @@ impl GitRepository {
         ProcessBuilder::new("git")
             .arg("init")
             .cwd(path)
-            .exec_with_streaming(&mut silent, &mut silent, true)?;
+            .exec_with_output()?;
 
         Ok(GitRepository {
             path: path.to_path_buf(),
@@ -181,7 +181,7 @@ impl GitRepository {
             .arg("rev-parse")
             .arg(refname)
             .cwd(&self.path)
-            .exec_with_streaming(&mut silent, &mut silent, true)?;
+            .exec_with_output()?;
 
         let mut result = String::from_utf8(result.stdout)?;
         result.truncate(result.trim_end().len());
@@ -289,7 +289,7 @@ impl GitDatabase {
             .arg("--short")
             .arg(revision.as_str())
             .cwd(&self.repo.path)
-            .exec_with_streaming(&mut silent, &mut silent, true)?;
+            .exec_with_output()?;
 
         let mut result = String::from_utf8(output.stdout)?;
         result.truncate(result.trim_end().len());
@@ -369,7 +369,7 @@ impl GitCheckout {
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
             .arg(into.simplified_display().to_string())
-            .exec_with_streaming(&mut silent, &mut silent, true)?;
+            .exec_with_output()?;
 
         let repo = GitRepository::open(into)?;
         let checkout = GitCheckout::new(revision, repo);
@@ -412,7 +412,7 @@ impl GitCheckout {
             .arg("--hard")
             .arg(self.revision.as_str())
             .cwd(&self.repo.path)
-            .exec_with_streaming(&mut silent, &mut silent, true)?;
+            .exec_with_output()?;
 
         paths::create(ok_file)?;
         Ok(())
@@ -426,7 +426,7 @@ impl GitCheckout {
             .arg("--recursive")
             .arg("--init")
             .cwd(&self.repo.path)
-            .exec_with_streaming(&mut silent, &mut silent, true)
+            .exec_with_output()
             .map(drop)
     }
 }
@@ -608,13 +608,7 @@ fn fetch_with_cli(
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
-    cmd.exec_with_streaming(&mut silent, &mut silent, true)?;
-    Ok(())
-}
-
-/// Callback used with `exec_with_streaming` that silences the output.
-#[allow(clippy::unnecessary_wraps)]
-fn silent(_: &str) -> Result<()> {
+    cmd.exec_with_output()?;
     Ok(())
 }
 
