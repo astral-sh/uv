@@ -269,7 +269,7 @@ impl Distribution {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let url = Url::from(ParsedArchiveUrl {
                         url: self.id.source.url.clone(),
-                        subdirectory: None,
+                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                     });
                     let direct_dist = DirectUrlBuiltDist {
                         filename,
@@ -466,7 +466,7 @@ impl Source {
 
     fn from_built_dist(built_dist: &BuiltDist) -> Source {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist2(reg_dist),
+            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist(reg_dist),
             BuiltDist::DirectUrl(ref direct_dist) => Source::from_direct_built_dist(direct_dist),
             BuiltDist::Path(ref path_dist) => Source::from_path_built_dist(path_dist),
         }
@@ -490,11 +490,7 @@ impl Source {
         }
     }
 
-    fn from_registry_built_dist(reg_dist: &RegistryBuiltWheel) -> Source {
-        Source::from_index_url(&reg_dist.index)
-    }
-
-    fn from_registry_built_dist2(reg_dist: &RegistryBuiltDist) -> Source {
+    fn from_registry_built_dist(reg_dist: &RegistryBuiltDist) -> Source {
         Source::from_index_url(&reg_dist.best_wheel().index)
     }
 
