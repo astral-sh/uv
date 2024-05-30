@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
-use uv_git::GitUrl;
+use uv_git::{GitUrl, OidParseError};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -20,7 +20,7 @@ pub enum ParsedUrlError {
     #[error("Invalid path in file URL: `{0}`")]
     InvalidFileUrl(Url),
     #[error("Failed to parse Git reference from URL: `{0}`")]
-    GitShaParse(Url, #[source] git2::Error),
+    GitShaParse(Url, #[source] OidParseError),
     #[error("Not a valid URL: `{0}`")]
     UrlParse(String, #[source] ParseError),
     #[error(transparent)]
