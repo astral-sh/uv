@@ -27,6 +27,7 @@ uv-resolver = { workspace = true, features = ["clap"] }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 
+anstream = { workspace = true }
 anyhow = { workspace = true }
 configparser = { workspace = true }
 console = { workspace = true }

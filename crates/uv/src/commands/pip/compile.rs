@@ -34,8 +34,8 @@ use uv_interpreter::{
 use uv_interpreter::{PythonVersion, SourceSelector};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
-    upgrade::read_lockfile, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    upgrade::read_requirements_txt, LookaheadResolver, NamedRequirementsResolver,
+    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex,
@@ -288,7 +288,7 @@ pub(crate) async fn pip_compile(
         .build();
 
     // Read the lockfile, if present.
-    let preferences = read_lockfile(output_file, upgrade).await?;
+    let preferences = read_requirements_txt(output_file, &upgrade).await?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
