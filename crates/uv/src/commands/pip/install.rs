@@ -26,7 +26,7 @@ use uv_normalize::PackageName;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode,
-    Preference, ResolutionMode,
+    ResolutionMode,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -255,11 +255,8 @@ pub(crate) async fn pip_install(
         HashStrategy::None
     };
 
-    // When resolving, prefer current site packages.
-    let preferences = site_packages
-        .iter()
-        .map(Preference::from_installed)
-        .collect::<Vec<_>>();
+    // When resolving, don't take any external preferences into account.
+    let preferences = Vec::default();
 
     // Incorporate any index locations from the provided sources.
     let index_locations =

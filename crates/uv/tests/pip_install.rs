@@ -4341,11 +4341,12 @@ fn already_installed_multiple_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - anyio==4.0.0
-     + anyio==4.0.0
+     + anyio==4.3.0
     "###
     );
 
