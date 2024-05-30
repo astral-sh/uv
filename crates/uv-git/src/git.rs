@@ -158,7 +158,7 @@ impl GitRepository {
 
     /// Initializes a Git repository at `path`.
     fn init(path: &Path) -> Result<GitRepository> {
-        // TODO: see if this still necessary
+        // TODO(ibraheem): see if this still necessary now that we no longer use libgit2
         // Skip anything related to templates, they just call all sorts of issues as
         // we really don't want to use them yet they insist on being used. See #6240
         // for an example issue that comes up.
@@ -402,12 +402,6 @@ impl GitCheckout {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
         debug!("reset {} to {}", self.repo.path.display(), self.revision);
-
-        // TODO: see if this still necessary
-        // Ensure libgit2 won't mess with newlines when we vendor.
-        // if let Ok(mut git_config) = self.repo.config() {
-        //     git_config.set_bool("core.autocrlf", false)?;
-        // }
 
         // Perform the hard reset.
         ProcessBuilder::new("git")
