@@ -17,14 +17,14 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, enabled, instrument, Level, trace, warn};
+use tracing::{debug, enabled, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
     InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
-use pep440_rs::{MIN_VERSION, Version};
+use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Requirement};
@@ -34,7 +34,6 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::{ExtraName, PackageName};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
-use crate::{DependencyMode, Exclusions, FlatIndex, Options};
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
 use crate::error::ResolveError;
@@ -57,9 +56,10 @@ pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
 };
-pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::resolver::reporter::Facade;
+pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
+use crate::{DependencyMode, Exclusions, FlatIndex, Options};
 
 mod availability;
 mod batch_prefetch;

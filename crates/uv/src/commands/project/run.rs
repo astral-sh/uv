@@ -49,9 +49,17 @@ pub(crate) async fn run(
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
         // Lock and sync the environment.
-        let lock =
-            project::lock::do_lock(&project, &venv, upgrade, exclude_newer, preview, cache, printer).await?;
-        project::sync::do_sync(&project, &venv, &lock, extras,preview, cache, printer).await?;
+        let lock = project::lock::do_lock(
+            &project,
+            &venv,
+            upgrade,
+            exclude_newer,
+            preview,
+            cache,
+            printer,
+        )
+        .await?;
+        project::sync::do_sync(&project, &venv, &lock, extras, preview, cache, printer).await?;
 
         Some(venv)
     };

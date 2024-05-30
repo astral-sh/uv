@@ -367,6 +367,7 @@ impl ProjectWorkspace {
         let mut seen = FxHashSet::default();
         for member_glob in workspace_definition.members.unwrap_or_default() {
             let absolute_glob = workspace_root
+                .simplified()
                 .join(member_glob.as_str())
                 .to_string_lossy()
                 .to_string();
@@ -599,6 +600,7 @@ fn is_excluded_from_workspace(
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
         let absolute_glob = workspace_root
+            .simplified()
             .join(exclude_glob.as_str())
             .to_string_lossy()
             .to_string();
