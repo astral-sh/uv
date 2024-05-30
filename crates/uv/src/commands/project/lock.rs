@@ -96,6 +96,7 @@ pub(super) async fn do_lock(
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
+    let preferences = Vec::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
     let upgrade = Upgrade::default();
@@ -129,6 +130,7 @@ pub(super) async fn do_lock(
         source_trees,
         Some(project_name),
         &extras,
+        preferences,
         EmptyInstalledPackages,
         &hasher,
         &reinstall,

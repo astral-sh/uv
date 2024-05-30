@@ -169,7 +169,11 @@ pub(crate) async fn update_environment(
 
     // TODO(charlie): Respect project configuration.
     let build_isolation = BuildIsolation::default();
+    let compile = false;
+    let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
+    let dry_run = false;
+    let extras = ExtrasSpecification::default();
     let flat_index = FlatIndex::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
@@ -178,14 +182,11 @@ pub(crate) async fn update_environment(
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
-    let setup_py = SetupPyStrategy::default();
-    let concurrency = Concurrency::default();
-    let reinstall = Reinstall::default();
-    let compile = false;
-    let dry_run = false;
-    let extras = ExtrasSpecification::default();
-    let upgrade = Upgrade::default();
     let options = Options::default();
+    let preferences = Vec::default();
+    let reinstall = Reinstall::default();
+    let setup_py = SetupPyStrategy::default();
+    let upgrade = Upgrade::default();
 
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
@@ -213,6 +214,7 @@ pub(crate) async fn update_environment(
         spec.source_trees,
         spec.project,
         &extras,
+        preferences,
         site_packages.clone(),
         &hasher,
         &reinstall,
