@@ -197,12 +197,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // TODO(zanieb): Consider consuming these instead of cloning
     let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
 
-    // Filter out any excluded distributions from the preferences.
-    let preferences = preferences
-        .into_iter()
-        .filter(|dist| !exclusions.contains(dist.name()))
-        .collect::<Vec<_>>();
-
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
         requirements,
