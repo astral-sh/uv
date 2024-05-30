@@ -102,6 +102,8 @@ pub(crate) struct RunSettings {
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) upgrade: Upgrade,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
 }
 
@@ -116,11 +118,19 @@ impl RunSettings {
             target,
             args,
             with,
+            refresh,
+            no_refresh,
+            refresh_package,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
             python,
             exclude_newer,
         } = args;
 
         Self {
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
+            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
@@ -138,6 +148,7 @@ impl RunSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
+    pub(crate) refresh: Refresh,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) python: Option<String>,
 }
@@ -150,10 +161,14 @@ impl SyncSettings {
             extra,
             all_extras,
             no_all_extras,
+            refresh,
+            no_refresh,
+            refresh_package,
             python,
         } = args;
 
         Self {
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
@@ -167,6 +182,8 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
+    pub(crate) refresh: Refresh,
+    pub(crate) upgrade: Upgrade,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) python: Option<String>,
 }
@@ -176,11 +193,19 @@ impl LockSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, _workspace: Option<Workspace>) -> Self {
         let LockArgs {
+            refresh,
+            no_refresh,
+            refresh_package,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
             exclude_newer,
             python,
         } = args;
 
         Self {
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
+            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             exclude_newer,
             python,
         }

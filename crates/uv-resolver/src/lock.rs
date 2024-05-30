@@ -791,11 +791,6 @@ pub(crate) struct SourceDist {
 }
 
 impl SourceDist {
-    /// Returns the [`Hash`] of the source distribution.
-    pub(crate) fn hash(&self) -> Option<&Hash> {
-        self.hash.as_ref()
-    }
-
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
     ) -> Result<Option<SourceDist>, LockError> {
@@ -997,11 +992,6 @@ pub(crate) struct Wheel {
 }
 
 impl Wheel {
-    /// Returns the [`Hash`] of the wheel.
-    pub(crate) fn hash(&self) -> Option<&Hash> {
-        self.hash.as_ref()
-    }
-
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Wheel>, LockError> {
         match annotated_dist.dist {
             // TODO: Do we want to try to lock already-installed distributions?
@@ -1174,12 +1164,6 @@ pub(crate) struct Hash(HashDigest);
 impl From<HashDigest> for Hash {
     fn from(hd: HashDigest) -> Hash {
         Hash(hd)
-    }
-}
-
-impl From<Hash> for HashDigest {
-    fn from(hash: Hash) -> HashDigest {
-        hash.0
     }
 }
 

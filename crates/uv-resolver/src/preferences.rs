@@ -92,15 +92,7 @@ impl Preference {
             name: dist.id.name.clone(),
             version: dist.id.version.clone(),
             marker: None,
-            hashes: dist
-                .sdist
-                .as_ref()
-                .and_then(|sdist| sdist.hash())
-                .into_iter()
-                .chain(dist.wheels.iter().filter_map(|wheel| wheel.hash()))
-                .cloned()
-                .map(HashDigest::from)
-                .collect(),
+            hashes: Vec::new(),
         }
     }
 

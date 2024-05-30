@@ -372,8 +372,6 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     pub(crate) custom_compile_command: Option<String>,
 
-    /// Run offline, i.e., without accessing the network.
-
     /// Refresh all cached data.
     #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
@@ -1786,6 +1784,33 @@ pub(crate) struct RunArgs {
     #[arg(long)]
     pub(crate) with: Vec<String>,
 
+    /// Refresh all cached data.
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    pub(crate) refresh: bool,
+
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
+    pub(crate) no_refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[arg(long)]
+    pub(crate) refresh_package: Vec<PackageName>,
+
+    /// Allow package upgrades, ignoring pinned versions in the existing lockfile.
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
+
+    /// Allow upgrades for a specific package, ignoring pinned versions in the existing lockfile.
+    #[arg(long, short = 'P')]
+    pub(crate) upgrade_package: Vec<PackageName>,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1822,6 +1847,22 @@ pub(crate) struct SyncArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub(crate) no_all_extras: bool,
 
+    /// Refresh all cached data.
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    pub(crate) refresh: bool,
+
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
+    pub(crate) no_refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[arg(long)]
+    pub(crate) refresh_package: Vec<PackageName>,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1840,6 +1881,33 @@ pub(crate) struct SyncArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct LockArgs {
+    /// Refresh all cached data.
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    pub(crate) refresh: bool,
+
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
+    pub(crate) no_refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[arg(long)]
+    pub(crate) refresh_package: Vec<PackageName>,
+
+    /// Allow package upgrades, ignoring pinned versions in the existing lockfile.
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
+
+    /// Allow upgrades for a specific package, ignoring pinned versions in the existing lockfile.
+    #[arg(long, short = 'P')]
+    pub(crate) upgrade_package: Vec<PackageName>,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent

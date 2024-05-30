@@ -23,6 +23,7 @@ use crate::printer::Printer;
 /// Resolve the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
+    upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
     preview: PreviewMode,
     cache: &Cache,
@@ -39,7 +40,7 @@ pub(crate) async fn lock(
     let venv = project::init_environment(&project, preview, cache, printer)?;
 
     // Perform the lock operation.
-    match do_lock(&project, &venv, exclude_newer, cache, printer).await {
+    match do_lock(&project, &venv, upgrade, exclude_newer, cache, printer).await {
         Ok(_) => Ok(ExitStatus::Success),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
@@ -57,6 +58,7 @@ pub(crate) async fn lock(
 pub(super) async fn do_lock(
     project: &ProjectWorkspace,
     venv: &PythonEnvironment,
+    upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
     cache: &Cache,
     printer: Printer,
@@ -98,7 +100,6 @@ pub(super) async fn do_lock(
     let no_build = NoBuild::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
-    let upgrade = Upgrade::default();
 
     let hasher = HashStrategy::Generate;
     let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
