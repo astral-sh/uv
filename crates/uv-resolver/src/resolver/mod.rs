@@ -464,15 +464,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .insert(version.clone())
                 {
                     // Retrieve that package dependencies.
-                    let package = &state.next;
+                    let package = state.next.clone();
                     let forks = self.get_dependencies_forking(
-                        package,
+                        &package,
                         &version,
                         &mut state.priorities,
                         &request_sink,
                     )?;
-                    for fork in forks {
-                        let mut state = state.clone();
+                    let forks_len = forks.len();
+                    // This is a somewhat tortured technique to ensure
+                    // that our resolver state is only cloned as much
+                    // as it needs to be. And *especially*, in the case
+                    // when no forks occur, the state should not be
+                    // cloned at all. We basically move the state into
+                    // `forked_states`, and then only clone it if there
+                    // it at least one more fork to visit.
+                    let mut cur_state = Some(state);
+                    for (i, fork) in forks.into_iter().enumerate() {
+                        let is_last = i == forks_len - 1;
+                        let state = cur_state.as_mut().unwrap();
+                        // let mut state = state.clone();
                         let dependencies = match fork {
                             Dependencies::Unavailable(reason) => {
                                 state
@@ -482,13 +493,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         version.clone(),
                                         UnavailableReason::Version(reason),
                                     ));
-                                forked_states.push(state);
+                                let forked_state = cur_state.take().unwrap();
+                                if !is_last {
+                                    cur_state = Some(forked_state.clone());
+                                }
+                                forked_states.push(forked_state);
                                 continue;
                             }
                             Dependencies::Available(constraints)
                                 if constraints
                                     .iter()
-                                    .any(|(dependency, _)| dependency == package) =>
+                                    .any(|(dependency, _)| dependency == &package) =>
                             {
                                 if enabled!(Level::DEBUG) {
                                     prefetcher.log_tried_versions();
@@ -515,7 +530,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             dep_incompats,
                             &state.pubgrub.incompatibility_store,
                         );
-                        forked_states.push(state);
+                        let forked_state = cur_state.take().unwrap();
+                        if !is_last {
+                            cur_state = Some(forked_state.clone());
+                        }
+                        forked_states.push(forked_state);
                     }
                     continue 'FORK;
                 }
