@@ -528,7 +528,7 @@ pub(crate) async fn pip_compile(
 
     if uv_lock {
         let lock = resolution.lock()?;
-        let encoded = toml::to_string_pretty(&lock)?;
+        let encoded = lock.to_toml()?;
         fs::tokio::write("uv.lock", encoded.as_bytes()).await?;
     }
 
