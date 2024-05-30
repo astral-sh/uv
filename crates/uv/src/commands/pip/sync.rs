@@ -24,7 +24,7 @@ use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
-    Preference, ResolutionMode,
+    ResolutionMode,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -275,11 +275,8 @@ pub(crate) async fn pip_sync(
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;
 
-    // When resolving, prefer current site packages.
-    let preferences = site_packages
-        .iter()
-        .map(Preference::from_installed)
-        .collect::<Vec<_>>();
+    // When resolving, don't take any external preferences into account.
+    let preferences = Vec::default();
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
