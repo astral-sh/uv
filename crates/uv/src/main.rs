@@ -550,7 +550,7 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::RunSettings::resolve(args, workspace);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
 
             let requirements = args
                 .with
@@ -578,6 +578,7 @@ async fn run() -> Result<ExitStatus> {
                 args.args,
                 requirements,
                 args.python,
+                args.upgrade,
                 args.exclude_newer,
                 globals.isolated,
                 globals.preview,
@@ -592,7 +593,7 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::SyncSettings::resolve(args, workspace);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::sync(args.extras, globals.preview, &cache, printer).await
         }
@@ -601,9 +602,16 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::LockSettings::resolve(args, workspace);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
 
-            commands::lock(args.exclude_newer, globals.preview, &cache, printer).await
+            commands::lock(
+                args.upgrade,
+                args.exclude_newer,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {

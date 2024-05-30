@@ -52,6 +52,11 @@ impl Lock {
         Lock::try_from(wire)
     }
 
+    /// Returns the [`Distribution`] entries in this lock.
+    pub fn distributions(&self) -> &[Distribution] {
+        &self.distributions
+    }
+
     pub fn to_resolution(
         &self,
         marker_env: &MarkerEnvironment,
@@ -202,7 +207,7 @@ impl TryFrom<LockWire> for Lock {
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub(crate) struct Distribution {
+pub struct Distribution {
     #[serde(flatten)]
     pub(crate) id: DistributionId,
     #[serde(default)]

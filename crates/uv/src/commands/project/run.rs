@@ -9,7 +9,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{ExtrasSpecification, PreviewMode};
+use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
 use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_requirements::{ProjectWorkspace, RequirementsSource};
 use uv_resolver::ExcludeNewer;
@@ -26,6 +26,7 @@ pub(crate) async fn run(
     mut args: Vec<OsString>,
     requirements: Vec<RequirementsSource>,
     python: Option<String>,
+    upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
     isolated: bool,
     preview: PreviewMode,
@@ -47,7 +48,8 @@ pub(crate) async fn run(
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
         // Lock and sync the environment.
-        let lock = project::lock::do_lock(&project, &venv, exclude_newer, cache, printer).await?;
+        let lock =
+            project::lock::do_lock(&project, &venv, upgrade, exclude_newer, cache, printer).await?;
         project::sync::do_sync(&project, &venv, &lock, extras, cache, printer).await?;
 
         Some(venv)
