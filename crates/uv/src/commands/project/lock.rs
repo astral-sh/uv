@@ -12,7 +12,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
 use uv_requirements::ProjectWorkspace;
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder};
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, Preference};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -96,13 +96,34 @@ pub(super) async fn do_lock(
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
-    let preferences = Vec::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
     let upgrade = Upgrade::default();
 
     let hasher = HashStrategy::Generate;
     let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
+
+    // If an existing lockfile exists, build up a set of preferences.
+    let lockfile = project.workspace().root().join("uv.lock");
+    let lock = match fs_err::tokio::read_to_string(&lockfile).await {
+        Ok(encoded) => match toml::from_str::<Lock>(&encoded) {
+            Ok(lock) => Some(lock),
+            Err(err) => {
+                eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");
+                None
+            }
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => return Err(err.into()),
+    };
+    let preferences: Vec<Preference> = lock
+        .map(|lock| {
+            lock.distributions()
+                .iter()
+                .map(Preference::from_lock)
+                .collect()
+        })
+        .unwrap_or_default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

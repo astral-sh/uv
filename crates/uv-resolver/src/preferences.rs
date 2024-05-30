@@ -86,6 +86,24 @@ impl Preference {
         }
     }
 
+    /// Create a [`Preference`] from a locked distribution.
+    pub fn from_lock(dist: &crate::lock::Distribution) -> Self {
+        Self {
+            name: dist.id.name.clone(),
+            version: dist.id.version.clone(),
+            marker: None,
+            hashes: dist
+                .sdist
+                .as_ref()
+                .and_then(|sdist| sdist.hash())
+                .into_iter()
+                .chain(dist.wheels.iter().filter_map(|wheel| wheel.hash()))
+                .cloned()
+                .map(HashDigest::from)
+                .collect(),
+        }
+    }
+
     /// Return the [`PackageName`] of the package for this [`Preference`].
     pub fn name(&self) -> &PackageName {
         &self.name
