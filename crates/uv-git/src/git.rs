@@ -308,6 +308,9 @@ impl GitReference {
         let refkind = self.kind_str();
         let result = match self {
             // Resolve the commit pointed to by the tag.
+            //
+            // `^0` recursively peels away from the revision to the underlying commit object.
+            // This also verifies that the tag indeed refers to a commit.
             Self::Tag(s) => repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0")),
 
             // Resolve the commit pointed to by the branch.
