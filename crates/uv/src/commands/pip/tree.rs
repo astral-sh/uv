@@ -42,14 +42,7 @@ pub(crate) fn pip_tree(
 
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&venv)?;
-    match DisplayDependencyGraph::new(&site_packages, printer).render() {
-        Ok(()) => {}
-        Err(e) => {
-            writeln!(printer.stderr(), "{}", e.to_string().red().bold())?;
-            return Ok(ExitStatus::Error);
-        }
-    }
-
+    DisplayDependencyGraph::new(&site_packages, printer).render();
     // Validate that the environment is consistent.
     if strict {
         for diagnostic in site_packages.diagnostics()? {
@@ -139,8 +132,8 @@ impl<'a> DisplayDependencyGraph<'a> {
             return;
         }
         visited.insert(installed_dist.name().to_string());
-        for required in required_with_no_extra(installed_dist).iter() {
-            if self.package_index.get(&required.name).is_some() {
+        for required in &required_with_no_extra(installed_dist) {
+            if self.package_index.contains_key(&required.name) {
                 self.visit(self.package_index[&required.name], indent + 1, visited);
             }
         }
@@ -148,13 +141,12 @@ impl<'a> DisplayDependencyGraph<'a> {
 
     // Recursively visit the nodes to render the tree.
     // The starting nodes are the ones without incoming edges.
-    fn render(&self) -> Result<(), anyhow::Error> {
+    fn render(&self) {
         let mut visited: HashSet<String> = HashSet::new();
         for site_package in self.site_packages.iter() {
             if !self.non_root_packages.contains(site_package.name()) {
                 self.visit(site_package, 0, &mut visited);
             }
         }
-        Ok(())
     }
 }
