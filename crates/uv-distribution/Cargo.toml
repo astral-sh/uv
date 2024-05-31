@@ -54,6 +54,7 @@ url = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]
+indoc = { version = "2.0.5" }
 insta = { version = "1.39.0", features = ["filters", "json", "redactions"] }
 regex = { workspace = true }
 
