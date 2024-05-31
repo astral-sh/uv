@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tokio::task::JoinError;
 use zip::result::ZipError;
 
-use crate::MetadataLoweringError;
+use crate::metadata::MetadataLoweringError;
 use distribution_filename::WheelFilenameError;
 use pep440_rs::Version;
 use pypi_types::HashDigest;

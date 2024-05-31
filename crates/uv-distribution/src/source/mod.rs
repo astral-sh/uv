@@ -37,9 +37,10 @@ use uv_types::{BuildContext, SourceBuildTrait};
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
 use crate::git::{fetch_git_archive, resolve_precise};
+use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
-use crate::{ArchiveMetadata, Metadata, Reporter};
+use crate::Reporter;
 
 mod built_wheel_metadata;
 mod revision;
