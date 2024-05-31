@@ -179,10 +179,22 @@ pub struct ProjectWorkspace {
 
 impl ProjectWorkspace {
     /// Find the current project and workspace, given the current directory.
-    pub async fn discover(path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
+    ///
+    /// `stop_discovery_at` must be either `None` or an ancestor of the current directory. If set,
+    /// only directories between the current path and `stop_discovery_at` are considered.
+    pub async fn discover(
+        path: impl AsRef<Path>,
+        stop_discovery_at: Option<&Path>,
+    ) -> Result<Self, WorkspaceError> {
         let project_root = path
             .as_ref()
             .ancestors()
+            .take_while(|path| {
+                // Only walk up the given directory, if any.
+                stop_discovery_at
+                    .map(|stop_discovery_at| stop_discovery_at != *path)
+                    .unwrap_or(true)
+            })
             .find(|path| path.join("pyproject.toml").is_file())
             .ok_or(WorkspaceError::MissingPyprojectToml)?;
 
@@ -191,11 +203,14 @@ impl ProjectWorkspace {
             project_root.simplified_display()
         );
 
-        Self::from_project_root(project_root).await
+        Self::from_project_root(project_root, stop_discovery_at).await
     }
 
     /// Discover the workspace starting from the directory containing the `pyproject.toml`.
-    pub async fn from_project_root(project_root: &Path) -> Result<Self, WorkspaceError> {
+    pub async fn from_project_root(
+        project_root: &Path,
+        stop_discovery_at: Option<&Path>,
+    ) -> Result<Self, WorkspaceError> {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
@@ -208,13 +223,20 @@ impl ProjectWorkspace {
             .clone()
             .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path.clone()))?;
 
-        Self::from_project(project_root, &pyproject_toml, project.name).await
+        Self::from_project(
+            project_root,
+            &pyproject_toml,
+            project.name,
+            stop_discovery_at,
+        )
+        .await
     }
 
     /// If the current directory contains a `pyproject.toml` with a `project` table, discover the
     /// workspace and return it, otherwise it is a dynamic path dependency and we return `Ok(None)`.
     pub async fn from_maybe_project_root(
         project_root: &Path,
+        stop_discovery_at: Option<&Path>,
     ) -> Result<Option<Self>, WorkspaceError> {
         // Read the `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
@@ -232,7 +254,13 @@ impl ProjectWorkspace {
         };
 
         Ok(Some(
-            Self::from_project(project_root, &pyproject_toml, project.name).await?,
+            Self::from_project(
+                project_root,
+                &pyproject_toml,
+                project.name,
+                stop_discovery_at,
+            )
+            .await?,
         ))
     }
 
@@ -279,10 +307,11 @@ impl ProjectWorkspace {
     }
 
     /// Find the workspace for a project.
-    async fn from_project(
+    pub async fn from_project(
         project_path: &Path,
         project: &PyProjectToml,
         project_name: PackageName,
+        stop_discovery_at: Option<&Path>,
     ) -> Result<Self, WorkspaceError> {
         let project_path = absolutize_path(project_path)
             .map_err(WorkspaceError::Normalize)?
@@ -322,7 +351,7 @@ impl ProjectWorkspace {
         if workspace.is_none() {
             // The project isn't an explicit workspace root, check if we're a regular workspace
             // member by looking for an explicit workspace root above.
-            workspace = find_workspace(&project_path).await?;
+            workspace = find_workspace(&project_path, stop_discovery_at).await?;
         }
 
         let Some((workspace_root, workspace_definition, workspace_pyproject_toml)) = workspace
@@ -410,7 +439,7 @@ impl ProjectWorkspace {
             .and_then(|uv| uv.sources.clone())
             .unwrap_or_default();
 
-        check_nested_workspaces(&workspace_root);
+        check_nested_workspaces(&workspace_root, stop_discovery_at);
 
         Ok(Self {
             project_root: project_path.clone(),
@@ -454,9 +483,19 @@ impl ProjectWorkspace {
 /// Find the workspace root above the current project, if any.
 async fn find_workspace(
     project_root: &Path,
+    stop_discovery_at: Option<&Path>,
 ) -> Result<Option<(PathBuf, ToolUvWorkspace, PyProjectToml)>, WorkspaceError> {
     // Skip 1 to ignore the current project itself.
-    for workspace_root in project_root.ancestors().skip(1) {
+    for workspace_root in project_root
+        .ancestors()
+        .take_while(|path| {
+            // Only walk up the given directory, if any.
+            stop_discovery_at
+                .map(|stop_discovery_at| stop_discovery_at != *path)
+                .unwrap_or(true)
+        })
+        .skip(1)
+    {
         let pyproject_path = workspace_root.join("pyproject.toml");
         if !pyproject_path.is_file() {
             continue;
@@ -529,8 +568,17 @@ async fn find_workspace(
 }
 
 /// Warn when the valid workspace is included in another workspace.
-fn check_nested_workspaces(inner_workspace_root: &Path) {
-    for outer_workspace_root in inner_workspace_root.ancestors().skip(1) {
+fn check_nested_workspaces(inner_workspace_root: &Path, stop_discovery_at: Option<&Path>) {
+    for outer_workspace_root in inner_workspace_root
+        .ancestors()
+        .take_while(|path| {
+            // Only walk up the given directory, if any.
+            stop_discovery_at
+                .map(|stop_discovery_at| stop_discovery_at != *path)
+                .unwrap_or(true)
+        })
+        .skip(1)
+    {
         let pyproject_toml_path = outer_workspace_root.join("pyproject.toml");
         if !pyproject_toml_path.is_file() {
             continue;
@@ -636,7 +684,7 @@ mod tests {
             .unwrap()
             .join("scripts")
             .join("workspaces");
-        let project = ProjectWorkspace::discover(root_dir.join(folder))
+        let project = ProjectWorkspace::discover(root_dir.join(folder), None)
             .await
             .unwrap();
         let root_escaped = regex::escape(root_dir.to_string_lossy().as_ref());

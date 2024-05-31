@@ -34,8 +34,8 @@ mod workspace;
 pub enum MetadataLoweringError {
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
-    #[error(transparent)]
-    Lowering(#[from] LoweringError),
+    #[error("Failed to parse entry for: `{0}`")]
+    LoweringError(PackageName, #[source] LoweringError),
 }
 
 #[derive(Debug, Clone)]
@@ -76,11 +76,19 @@ impl Metadata {
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(project_root).await?
+            ProjectWorkspace::from_maybe_project_root(project_root, None).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
 
+        Self::from_project_workspace(metadata, &project_workspace, preview_mode)
+    }
+
+    pub fn from_project_workspace(
+        metadata: Metadata23,
+        project_workspace: &ProjectWorkspace,
+        preview_mode: PreviewMode,
+    ) -> Result<Metadata, MetadataLoweringError> {
         let empty = BTreeMap::default();
         let sources = project_workspace
             .current_project()
@@ -95,6 +103,7 @@ impl Metadata {
             .requires_dist
             .into_iter()
             .map(|requirement| {
+                let requirement_name = requirement.name.clone();
                 lower_requirement(
                     requirement,
                     &metadata.name,
@@ -103,6 +112,7 @@ impl Metadata {
                     project_workspace.workspace(),
                     preview_mode,
                 )
+                .map_err(|err| MetadataLoweringError::LoweringError(requirement_name.clone(), err))
             })
             .collect::<Result<_, _>>()?;
 
