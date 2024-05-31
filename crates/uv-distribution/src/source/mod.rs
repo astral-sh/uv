@@ -45,7 +45,7 @@ mod built_wheel_metadata;
 mod revision;
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
-pub struct SourceDistributionBuilder<'a, T: BuildContext> {
+pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -61,7 +61,7 @@ pub(crate) const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
-    pub fn new(build_context: &'a T) -> Self {
+    pub(crate) fn new(build_context: &'a T) -> Self {
         Self {
             build_context,
             reporter: None,
@@ -70,7 +70,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
     /// Set the [`Reporter`] to use for this source distribution fetcher.
     #[must_use]
-    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
+    pub(crate) fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             reporter: Some(reporter),
             ..self
@@ -78,7 +78,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Download and build a [`SourceDist`].
-    pub(super) async fn download_and_build(
+    pub(crate) async fn download_and_build(
         &self,
         source: &BuildableSource<'_>,
         tags: &Tags,
@@ -238,7 +238,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Download a [`SourceDist`] and determine its metadata. This typically involves building the
     /// source distribution into a wheel; however, some build backends support determining the
     /// metadata without building the source distribution.
-    pub(super) async fn download_and_build_metadata(
+    pub(crate) async fn download_and_build_metadata(
         &self,
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
