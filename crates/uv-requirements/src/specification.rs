@@ -27,7 +27,7 @@
 //! * `setup.py` or `setup.cfg` instead of `pyproject.toml`: Directory is an entry in
 //!   `source_trees`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
@@ -104,6 +104,14 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
+                if !(path == Path::new("-")
+                    || path.starts_with("http://")
+                    || path.starts_with("https://")
+                    || path.is_file())
+                {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                }
+
                 let requirements_txt =
                     RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
                 Self {
