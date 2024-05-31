@@ -17,6 +17,7 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
+#[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
     pub requirements: Vec<Requirement>,

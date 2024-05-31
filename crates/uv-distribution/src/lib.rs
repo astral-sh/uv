@@ -72,10 +72,6 @@ impl Metadata {
         project_root: &Path,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataLoweringError> {
-        if preview_mode.is_disabled() {
-            return Ok(Self::from_metadata23(metadata));
-        }
-
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =
