@@ -1374,7 +1374,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
-        let metadata = read_wheel_metadata(&filename, cache_shard.join(&disk_filename))?;
+        let metadata = read_wheel_metadata(
+            &filename,
+            cache_shard.join(&disk_filename),
+            Some(source_root),
+        )?;
 
         // Validate the metadata.
         validate(source, &metadata)?;
@@ -1456,7 +1460,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let content = fs::read(dist_info.join("METADATA"))
             .await
             .map_err(Error::CacheRead)?;
-        let metadata = Metadata23::parse_metadata(&content)?;
+        let metadata = Metadata23::parse_metadata_with_basedir(&content, Some(source_root))?;
 
         // Validate the metadata.
         validate(source, &metadata)?;
@@ -1638,12 +1642,16 @@ async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<Metadat
 fn read_wheel_metadata(
     filename: &WheelFilename,
     wheel: impl Into<PathBuf>,
+    working_dir: Option<&Path>,
 ) -> Result<Metadata23, Error> {
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
     let dist_info = read_archive_metadata(filename, &mut archive)?;
-    Ok(Metadata23::parse_metadata(&dist_info)?)
+    Ok(Metadata23::parse_metadata_with_basedir(
+        &dist_info,
+        working_dir,
+    )?)
 }
 
 /// Apply an advisory lock to a [`CacheShard`] to prevent concurrent builds.

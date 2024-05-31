@@ -1,5 +1,6 @@
 //! Derived from `pypi_types_crate`.
 
+use std::path::Path;
 use std::str::FromStr;
 
 use indexmap::IndexMap;
@@ -71,6 +72,12 @@ impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
 impl Metadata23 {
     /// Parse the [`Metadata23`] from a `METADATA` file, as included in a built distribution (wheel).
     pub fn parse_metadata(content: &[u8]) -> Result<Self, MetadataError> {
+        Metadata23::parse_metadata_with_basedir(content, None)
+    }
+    pub fn parse_metadata_with_basedir(
+        content: &[u8],
+        base_dir: Option<&Path>,
+    ) -> Result<Self, MetadataError> {
         let headers = Headers::parse(content)?;
 
         let name = PackageName::new(
@@ -87,7 +94,8 @@ impl Metadata23 {
         let requires_dist = headers
             .get_all_values("Requires-Dist")
             .map(|requires_dist| {
-                LenientRequirement::from_str(&requires_dist).map(Requirement::from)
+                LenientRequirement::from_str_and_workdir(&requires_dist, base_dir)
+                    .map(Requirement::from)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let requires_python = headers

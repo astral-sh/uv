@@ -511,6 +511,14 @@ impl<T: Pep508Url> Requirement<T> {
             reporter,
         )
     }
+
+    /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
+    pub fn parse_opt_workdir(
+        input: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Pep508Error<T>> {
+        parse_pep508_requirement(&mut Cursor::new(input), working_dir, &mut TracingReporter)
+    }
 }
 
 /// A list of [`ExtraName`] that can be attached to a [`Requirement`].

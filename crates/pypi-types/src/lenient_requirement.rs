@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::path::Path;
 use std::str::FromStr;
 
 use once_cell::sync::Lazy;
@@ -86,8 +87,11 @@ fn remove_stray_quotes(input: &str) -> Cow<'_, str> {
     }
 }
 
-fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
-    match T::from_str(input) {
+fn parse_with_fixups<T, F, Err>(parse: F, input: &str, type_name: &str) -> Result<T, Err>
+where
+    F: Fn(&str) -> Result<T, Err>,
+{
+    match parse(input) {
         Ok(requirement) => Ok(requirement),
         Err(err) => {
             let mut patched_input = input.to_string();
@@ -97,7 +101,7 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
                 if patched != patched_input {
                     messages.push(*message);
 
-                    if let Ok(requirement) = T::from_str(&patched) {
+                    if let Ok(requirement) = parse(&patched) {
                         warn!(
                             "Fixing invalid {type_name} by {} (before: `{input}`; after: `{patched}`)",
                             messages.join(", ")
@@ -108,7 +112,6 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
                     patched_input = patched.to_string();
                 }
             }
-
             Err(err)
         }
     }
@@ -122,7 +125,24 @@ impl<T: Pep508Url> FromStr for LenientRequirement<T> {
     type Err = Pep508Error<T>;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_with_fixups(input, "requirement")?))
+        Ok(Self(parse_with_fixups(
+            Requirement::from_str,
+            input,
+            "requirement",
+        )?))
+    }
+}
+
+impl<T: Pep508Url> LenientRequirement<T> {
+    pub fn from_str_and_workdir(
+        input: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Pep508Error<T>> {
+        Ok(Self(parse_with_fixups(
+            |input| Requirement::parse_opt_workdir(input, working_dir),
+            input,
+            "requirement",
+        )?))
     }
 }
 
@@ -142,7 +162,11 @@ impl FromStr for LenientVersionSpecifiers {
     type Err = VersionSpecifiersParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_with_fixups(input, "version specifier")?))
+        Ok(Self(parse_with_fixups(
+            VersionSpecifiers::from_str,
+            input,
+            "version specifier",
+        )?))
     }
 }
 
