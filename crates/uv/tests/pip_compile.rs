@@ -116,7 +116,8 @@ fn missing_requirements_in() {
     ----- stdout -----
 
     ----- stderr -----
-    error: File not found: `requirements.in`
+    error: failed to read from file `requirements.in`
+      Caused by: No such file or directory (os error 2)
     "###
     );
 
