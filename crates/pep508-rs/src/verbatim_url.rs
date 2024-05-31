@@ -155,6 +155,13 @@ impl VerbatimUrl {
     pub fn to_url(&self) -> Url {
         self.url.clone()
     }
+
+    /// Return the underlying [`Path`], if the URL is a file URL.
+    pub fn as_path(&self) -> Result<PathBuf, VerbatimUrlError> {
+        self.url
+            .to_file_path()
+            .map_err(|_| VerbatimUrlError::UrlConversion(self.url.to_file_path().unwrap()))
+    }
 }
 
 // This impl is written out because the `derive` doesn't seem to get it right.
