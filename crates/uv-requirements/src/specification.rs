@@ -107,7 +107,7 @@ impl RequirementsSpecification {
                 if !(path == Path::new("-")
                     || path.starts_with("http://")
                     || path.starts_with("https://")
-                    || path.is_file())
+                    || path.exists())
                 {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
