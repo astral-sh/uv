@@ -1,7 +1,7 @@
 use either::Either;
 
-use distribution_types::Requirement;
 use pep508_rs::MarkerEnvironment;
+use pypi_types::Requirement;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;

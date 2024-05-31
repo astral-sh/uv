@@ -10,10 +10,11 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 
-use distribution_types::{CachedDist, IndexLocations, Requirement, Resolution, SourceDist};
+use distribution_types::{CachedDist, IndexLocations, Resolution, SourceDist};
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use platform_tags::{Arch, Os, Platform, Tags};
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
@@ -155,7 +156,12 @@ async fn resolve(
         &hashes,
         &build_context,
         installed_packages,
-        DistributionDatabase::new(&client, &build_context, concurrency.downloads),
+        DistributionDatabase::new(
+            &client,
+            &build_context,
+            concurrency.downloads,
+            PreviewMode::Disabled,
+        ),
     )?;
     Ok(resolver.resolve().await?)
 }

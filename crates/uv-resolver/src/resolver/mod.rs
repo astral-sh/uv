@@ -21,14 +21,13 @@ use tracing::{debug, enabled, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist,
-    VersionOrUrlRef,
+    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
-use pypi_types::Metadata23;
+use pypi_types::{Metadata23, Requirement};
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -1144,7 +1143,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions().done(
                         dist.version_id(),
-                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
+                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from_metadata23(
+                            metadata,
+                        ))),
                     );
                 }
                 Some(Response::Dist {

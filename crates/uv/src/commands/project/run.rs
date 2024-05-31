@@ -10,8 +10,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
+use uv_distribution::ProjectWorkspace;
 use uv_interpreter::{PythonEnvironment, SystemPython};
-use uv_requirements::{ProjectWorkspace, RequirementsSource};
+use uv_requirements::RequirementsSource;
 use uv_resolver::ExcludeNewer;
 use uv_warnings::warn_user;
 
@@ -48,9 +49,17 @@ pub(crate) async fn run(
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
         // Lock and sync the environment.
-        let lock =
-            project::lock::do_lock(&project, &venv, upgrade, exclude_newer, cache, printer).await?;
-        project::sync::do_sync(&project, &venv, &lock, extras, cache, printer).await?;
+        let lock = project::lock::do_lock(
+            &project,
+            &venv,
+            upgrade,
+            exclude_newer,
+            preview,
+            cache,
+            printer,
+        )
+        .await?;
+        project::sync::do_sync(&project, &venv, &lock, extras, preview, cache, printer).await?;
 
         Some(venv)
     };
@@ -92,16 +101,8 @@ pub(crate) async fn run(
 
         // Install the ephemeral requirements.
         Some(
-            project::update_environment(
-                venv,
-                &requirements,
-                None,
-                preview,
-                connectivity,
-                cache,
-                printer,
-            )
-            .await?,
+            project::update_environment(venv, &requirements, connectivity, cache, printer, preview)
+                .await?,
         )
     };
 

@@ -3,12 +3,12 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use distribution_types::{Requirement, RequirementSource};
 use glob::{glob, GlobError, PatternError};
-use pep508_rs::{VerbatimUrl, VerbatimUrlError};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
 
+use pep508_rs::VerbatimUrl;
+use pypi_types::{Requirement, RequirementSource};
 use uv_fs::{absolutize_path, Simplified};
 use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user;
@@ -29,12 +29,8 @@ pub enum WorkspaceError {
     Toml(PathBuf, #[source] Box<toml::de::Error>),
     #[error("No `project` table found in: `{}`", _0.simplified_display())]
     MissingProject(PathBuf),
-    #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
-    DynamicNotAllowed(&'static str),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
-    #[error("Failed to normalize workspace member path")]
-    VerbatimUrl(#[from] VerbatimUrlError),
 }
 
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
@@ -371,6 +367,7 @@ impl ProjectWorkspace {
         let mut seen = FxHashSet::default();
         for member_glob in workspace_definition.members.unwrap_or_default() {
             let absolute_glob = workspace_root
+                .simplified()
                 .join(member_glob.as_str())
                 .to_string_lossy()
                 .to_string();
@@ -427,8 +424,8 @@ impl ProjectWorkspace {
         })
     }
 
-    #[cfg(test)]
-    pub(crate) fn dummy(root: &Path, project_name: &PackageName) -> Self {
+    /// Used in tests.
+    pub fn dummy(root: &Path, project_name: &PackageName) -> Self {
         // This doesn't necessarily match the exact test case, but we don't use the other fields
         // for the test cases atm.
         let root_member = WorkspaceMember {
@@ -436,9 +433,7 @@ impl ProjectWorkspace {
             pyproject_toml: PyProjectToml {
                 project: Some(crate::pyproject::Project {
                     name: project_name.clone(),
-                    dependencies: None,
                     optional_dependencies: None,
-                    dynamic: None,
                 }),
                 tool: None,
             },
@@ -605,6 +600,7 @@ fn is_excluded_from_workspace(
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
         let absolute_glob = workspace_root
+            .simplified()
             .join(exclude_glob.as_str())
             .to_string_lossy()
             .to_string();

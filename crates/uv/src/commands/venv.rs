@@ -9,8 +9,9 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::{IndexLocations, Requirement};
+use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
+use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -221,6 +222,7 @@ async fn venv_impl(
             &NoBuild::All,
             &NoBinary::None,
             concurrency,
+            preview,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 

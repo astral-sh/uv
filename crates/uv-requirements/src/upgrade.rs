@@ -1,14 +1,13 @@
 use std::path::Path;
 
+use anstream::eprint;
 use anyhow::Result;
 
-use anstream::eprint;
 use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
+use uv_distribution::ProjectWorkspace;
 use uv_resolver::{Lock, Preference, PreferenceError};
-
-use crate::ProjectWorkspace;
 
 /// Load the preferred requirements from an existing `requirements.txt`, applying the upgrade strategy.
 pub async fn read_requirements_txt(

@@ -1,8 +1,8 @@
 use std::hash::BuildHasherDefault;
 
-use distribution_types::Requirement;
 use rustc_hash::FxHashMap;
 
+use pypi_types::Requirement;
 use uv_normalize::PackageName;
 
 /// A set of constraints for a set of requirements.

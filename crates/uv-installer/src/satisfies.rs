@@ -6,8 +6,8 @@ use serde::Deserialize;
 use tracing::{debug, trace};
 
 use cache_key::{CanonicalUrl, RepositoryUrl};
-use distribution_types::{InstalledDirectUrlDist, InstalledDist, RequirementSource};
-use pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
+use distribution_types::{InstalledDirectUrlDist, InstalledDist};
+use pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 
 #[derive(Debug, Copy, Clone)]

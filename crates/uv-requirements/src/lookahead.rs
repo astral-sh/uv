@@ -6,11 +6,9 @@ use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tracing::trace;
 
-use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, GitSourceDist, Requirement, RequirementSource,
-    SourceDist,
-};
+use distribution_types::{BuiltDist, Dist, DistributionMetadata, GitSourceDist, SourceDist};
 use pep508_rs::MarkerEnvironment;
+use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_git::GitUrl;

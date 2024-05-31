@@ -25,7 +25,7 @@ use uv_cache::{ArchiveId, ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, 
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{NoBinary, NoBuild};
+use uv_configuration::{NoBinary, NoBuild, PreviewMode};
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_types::BuildContext;
@@ -33,7 +33,7 @@ use uv_types::BuildContext;
 use crate::archive::Archive;
 use crate::locks::Locks;
 use crate::source::SourceDistributionBuilder;
-use crate::{ArchiveMetadata, Error, LocalWheel, Reporter};
+use crate::{ArchiveMetadata, Error, LocalWheel, Metadata, Reporter};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -60,10 +60,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         client: &'a RegistryClient,
         build_context: &'a Context,
         concurrent_downloads: usize,
+        preview_mode: PreviewMode,
     ) -> Self {
         Self {
             build_context,
-            builder: SourceDistributionBuilder::new(build_context),
+            builder: SourceDistributionBuilder::new(build_context, preview_mode),
             locks: Rc::new(Locks::default()),
             client: ManagedClient::new(client, concurrent_downloads),
             reporter: None,
@@ -364,7 +365,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let wheel = self.get_wheel(dist, hashes).await?;
             let metadata = wheel.metadata()?;
             let hashes = wheel.hashes;
-            return Ok(ArchiveMetadata { metadata, hashes });
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata),
+                hashes,
+            });
         }
 
         let result = self
@@ -373,7 +377,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await;
 
         match result {
-            Ok(metadata) => Ok(ArchiveMetadata::from(metadata)),
+            Ok(metadata) => Ok(ArchiveMetadata::from_metadata23(metadata)),
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
 
@@ -382,7 +386,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel = self.get_wheel(dist, hashes).await?;
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
-                Ok(ArchiveMetadata { metadata, hashes })
+                Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(metadata),
+                    hashes,
+                })
             }
             Err(err) => Err(err.into()),
         }

@@ -10,9 +10,9 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution::ProjectWorkspace;
 use uv_interpreter::PythonEnvironment;
 use uv_requirements::upgrade::read_lockfile;
-use uv_requirements::ProjectWorkspace;
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -41,7 +41,17 @@ pub(crate) async fn lock(
     let venv = project::init_environment(&project, preview, cache, printer)?;
 
     // Perform the lock operation.
-    match do_lock(&project, &venv, upgrade, exclude_newer, cache, printer).await {
+    match do_lock(
+        &project,
+        &venv,
+        upgrade,
+        exclude_newer,
+        preview,
+        cache,
+        printer,
+    )
+    .await
+    {
         Ok(_) => Ok(ExitStatus::Success),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
@@ -61,6 +71,7 @@ pub(super) async fn do_lock(
     venv: &PythonEnvironment,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<Lock, ProjectError> {
@@ -124,6 +135,7 @@ pub(super) async fn do_lock(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     );
 
     // Resolve the requirements.
@@ -149,6 +161,7 @@ pub(super) async fn do_lock(
         concurrency,
         options,
         printer,
+        preview,
     )
     .await?;
 

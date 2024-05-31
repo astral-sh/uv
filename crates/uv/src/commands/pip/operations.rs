@@ -9,8 +9,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, Requirement, ResolutionDiagnostic,
-    UnresolvedRequirementSpecification,
+    CachedDist, Diagnostic, InstalledDist, ResolutionDiagnostic, UnresolvedRequirementSpecification,
 };
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, Name, Resolution,
@@ -18,6 +17,7 @@ use distribution_types::{
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
@@ -32,7 +32,7 @@ use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver, Workspace,
+    SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -42,8 +42,7 @@ use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::DryRunEvent;
-use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, DryRunEvent};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -51,10 +50,8 @@ pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
-    workspace: Option<&Workspace>,
     extras: &ExtrasSpecification,
     client_builder: &BaseClientBuilder<'_>,
-    preview: PreviewMode,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
@@ -66,39 +63,13 @@ pub(crate) async fn read_requirements(
     }
 
     // Read all requirements from the provided sources.
-    let spec = RequirementsSpecification::from_sources(
+    Ok(RequirementsSpecification::from_sources(
         requirements,
         constraints,
         overrides,
-        workspace,
-        extras,
         client_builder,
-        preview,
     )
-    .await?;
-
-    // If all the metadata could be statically resolved, validate that every extra was used. If we
-    // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
-    if spec.source_trees.is_empty() {
-        if let ExtrasSpecification::Some(extras) = extras {
-            let mut unused_extras = extras
-                .iter()
-                .filter(|extra| !spec.extras.contains(extra))
-                .collect::<Vec<_>>();
-            if !unused_extras.is_empty() {
-                unused_extras.sort_unstable();
-                unused_extras.dedup();
-                let s = if unused_extras.len() == 1 { "" } else { "s" };
-                return Err(anyhow!(
-                    "Requested extra{s} not found: {}",
-                    unused_extras.iter().join(", ")
-                )
-                .into());
-            }
-        }
-    }
-
-    Ok(spec)
+    .await?)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -108,7 +79,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     constraints: Vec<Requirement>,
     overrides: Vec<UnresolvedRequirementSpecification>,
     source_trees: Vec<PathBuf>,
-    project: Option<PackageName>,
+    mut project: Option<PackageName>,
     extras: &ExtrasSpecification,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
@@ -125,6 +96,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     concurrency: Concurrency,
     options: Options,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
@@ -135,7 +107,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             requirements,
             hasher,
             index,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
         )
         .with_reporter(ResolverReporter::from(printer))
         .resolve()
@@ -143,17 +115,53 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
+            let resolutions = SourceTreeResolver::new(
+                source_trees,
+                extras,
+                hasher,
+                index,
+                DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve()
+            .await?;
+
+            // If we resolved a single project, use it for the project name.
+            project = project.or_else(|| {
+                if let [resolution] = &resolutions[..] {
+                    Some(resolution.project.clone())
+                } else {
+                    None
+                }
+            });
+
+            // If any of the extras were unused, surface a warning.
+            if let ExtrasSpecification::Some(extras) = extras {
+                let mut unused_extras = extras
+                    .iter()
+                    .filter(|extra| {
+                        !resolutions
+                            .iter()
+                            .any(|resolution| resolution.extras.contains(extra))
+                    })
+                    .collect::<Vec<_>>();
+                if !unused_extras.is_empty() {
+                    unused_extras.sort_unstable();
+                    unused_extras.dedup();
+                    let s = if unused_extras.len() == 1 { "" } else { "s" };
+                    return Err(anyhow!(
+                        "Requested extra{s} not found: {}",
+                        unused_extras.iter().join(", ")
+                    )
+                    .into());
+                }
+            }
+
+            // Extend the requirements with the resolved source trees.
             requirements.extend(
-                SourceTreeResolver::new(
-                    source_trees,
-                    extras,
-                    hasher,
-                    index,
-                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
-                )
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?,
+                resolutions
+                    .into_iter()
+                    .flat_map(|resolution| resolution.requirements),
             );
         }
 
@@ -165,7 +173,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides,
         hasher,
         index,
-        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+        DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
@@ -185,7 +193,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &overrides,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve(Some(markers))
@@ -229,7 +237,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             hasher,
             build_dispatch,
             installed_packages,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
         )?
         .with_reporter(reporter);
 
@@ -287,6 +295,7 @@ pub(crate) async fn install(
     venv: &PythonEnvironment,
     dry_run: bool,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
@@ -362,7 +371,7 @@ pub(crate) async fn install(
             cache,
             tags,
             hasher,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
         )
         .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 

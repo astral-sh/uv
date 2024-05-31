@@ -1,17 +1,17 @@
 use std::hash::BuildHasherDefault;
 
-use rustc_hash::{FxHashMap, FxHashSet};
-
-use distribution_types::{
-    Dist, DistributionMetadata, Name, Requirement, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
-};
-use pep440_rs::{Version, VersionSpecifier};
-use pep508_rs::{MarkerEnvironment, MarkerTree};
 use petgraph::{
     graph::{Graph, NodeIndex},
     Directed,
 };
-use pypi_types::{ParsedUrlError, Yanked};
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use distribution_types::{
+    Dist, DistributionMetadata, Name, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
+};
+use pep440_rs::{Version, VersionSpecifier};
+use pep508_rs::{MarkerEnvironment, MarkerTree};
+use pypi_types::{ParsedUrlError, Requirement, Yanked};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::preferences::Preferences;

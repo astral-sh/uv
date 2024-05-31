@@ -5,8 +5,9 @@ use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{InstalledMetadata, Name, Requirement, UnresolvedRequirement};
+use distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use pep508_rs::UnnamedRequirement;
+use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -40,8 +41,7 @@ pub(crate) async fn pip_uninstall(
         .keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
-    let spec =
-        RequirementsSpecification::from_simple_sources(sources, &client_builder, preview).await?;
+    let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Detect the current Python interpreter.
     let system = if system {

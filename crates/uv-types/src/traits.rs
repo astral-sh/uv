@@ -3,10 +3,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{
-    CachedDist, IndexLocations, InstalledDist, Requirement, Resolution, SourceDist,
-};
+use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, SourceDist};
 use pep508_rs::PackageName;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
 use uv_interpreter::{Interpreter, PythonEnvironment};
