@@ -35,7 +35,6 @@ anyhow = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 glob = { workspace = true }
-indexmap =  { workspace = true }
 nanoid = { workspace = true }
 once_cell = { workspace = true }
 path-absolutize = { workspace = true }

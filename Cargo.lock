@@ -4659,7 +4659,6 @@ dependencies = [
  "fs-err",
  "futures",
  "glob",
- "indexmap",
  "insta",
  "install-wheel-rs",
  "nanoid",

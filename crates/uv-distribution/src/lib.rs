@@ -2,7 +2,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
-pub use archive::Archive;
+use archive::Archive;
 pub use distribution_database::{DistributionDatabase, HttpArchivePointer, LocalArchivePointer};
 pub use download::LocalWheel;
 pub use error::Error;
@@ -11,7 +11,7 @@ pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{HashDigest, Metadata23};
 pub use reporter::Reporter;
-pub use requirement_lowering::{lower_requirement, lower_requirements, LoweringError};
+use requirement_lowering::{lower_requirement, LoweringError};
 use uv_configuration::PreviewMode;
 use uv_normalize::{ExtraName, PackageName};
 pub use workspace::{ProjectWorkspace, Workspace, WorkspaceError, WorkspaceMember};
@@ -72,6 +72,10 @@ impl Metadata {
         project_root: &Path,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataLoweringError> {
+        if preview_mode.is_disabled() {
+            return Ok(Self::from_metadata23(metadata));
+        }
+
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =

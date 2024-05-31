@@ -1,34 +1,30 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
-use indexmap::IndexMap;
 use path_absolutize::Absolutize;
 use thiserror::Error;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{RequirementOrigin, VerbatimUrl, VersionOrUrl};
-use pypi_types::{Requirement, RequirementSource, Requirements, VerbatimParsedUrl};
+use pep508_rs::{VerbatimUrl, VersionOrUrl};
+use pypi_types::{Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_git::GitReference;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
 
-use crate::pyproject::{Pep621Error, Source};
+use crate::pyproject::Source;
 use crate::Workspace;
 
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.
 #[derive(Debug, Error)]
 pub enum LoweringError {
-    #[error("Unsupported path (can't convert to URL): `{}`", _0.user_display())]
-    PathToUrl(PathBuf),
     #[error("Package is not included as workspace package in `tool.uv.workspace`")]
     UndeclaredWorkspacePackage,
-    #[error("Can only specify one of rev, tag, or branch")]
+    #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
     #[error("Unable to combine options in `tool.uv.sources`")]
     InvalidEntry,
@@ -39,83 +35,17 @@ pub enum LoweringError {
     #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
     ConflictingUrls,
     #[error("Could not normalize path: `{}`", _0.user_display())]
-    AbsolutizeError(PathBuf, #[source] io::Error),
+    Absolutize(PathBuf, #[source] io::Error),
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
     #[error("`tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it")]
     MissingPreview,
-    #[error("`editable = false` is not yet supported")]
-    NonEditableWorkspaceDependency,
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn lower_requirements(
-    dependencies: Option<&[String]>,
-    optional_dependencies: Option<&IndexMap<ExtraName, Vec<String>>>,
-    pyproject_path: &Path,
-    project_name: &PackageName,
-    project_dir: &Path,
-    project_sources: &BTreeMap<PackageName, Source>,
-    workspace: &Workspace,
-    preview: PreviewMode,
-) -> Result<Requirements, Pep621Error> {
-    let dependencies = dependencies
-        .into_iter()
-        .flatten()
-        .map(|dependency| {
-            let requirement = pep508_rs::Requirement::from_str(dependency)?.with_origin(
-                RequirementOrigin::Project(pyproject_path.to_path_buf(), project_name.clone()),
-            );
-            let name = requirement.name.clone();
-            lower_requirement(
-                requirement,
-                project_name,
-                project_dir,
-                project_sources,
-                workspace,
-                preview,
-            )
-            .map_err(|err| Pep621Error::LoweringError(name, err))
-        })
-        .collect::<Result<_, Pep621Error>>()?;
-    let optional_dependencies = optional_dependencies
-        .into_iter()
-        .flatten()
-        .map(|(extra_name, dependencies)| {
-            let dependencies: Vec<_> = dependencies
-                .iter()
-                .map(|dependency| {
-                    let requirement = pep508_rs::Requirement::from_str(dependency)?.with_origin(
-                        RequirementOrigin::Project(
-                            pyproject_path.to_path_buf(),
-                            project_name.clone(),
-                        ),
-                    );
-                    let name = requirement.name.clone();
-                    lower_requirement(
-                        requirement,
-                        project_name,
-                        project_dir,
-                        project_sources,
-                        workspace,
-                        preview,
-                    )
-                    .map_err(|err| Pep621Error::LoweringError(name, err))
-                })
-                .collect::<Result<_, Pep621Error>>()?;
-            Ok((extra_name.clone(), dependencies))
-        })
-        .collect::<Result<_, Pep621Error>>()?;
-    Ok(Requirements {
-        dependencies,
-        optional_dependencies,
-    })
 }
 
 /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
-pub fn lower_requirement(
+pub(crate) fn lower_requirement(
     requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
     project_name: &PackageName,
     project_dir: &Path,
@@ -296,7 +226,7 @@ fn path_source(
     let path_buf = path.as_ref().to_path_buf();
     let path_buf = path_buf
         .absolutize_from(project_dir)
-        .map_err(|err| LoweringError::AbsolutizeError(path.as_ref().to_path_buf(), err))?
+        .map_err(|err| LoweringError::Absolutize(path.as_ref().to_path_buf(), err))?
         .to_path_buf();
     //if !editable {
     //    // TODO(konsti): Support this. Currently we support `{ workspace = true }`, but we don't
