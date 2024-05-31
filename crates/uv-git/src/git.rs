@@ -364,6 +364,8 @@ impl GitCheckout {
         ProcessBuilder::new("git")
             .arg("clone")
             .arg("--local")
+            // Propagate the treeless clone.
+            .arg("--filter=tree:0")
             // Make sure to pass the local file path and not a file://... url. If given a url,
             // Git treats the repository as a remote origin and gets confused because we don't
             // have a HEAD checked out.
@@ -530,14 +532,14 @@ pub(crate) fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     let result = match refspec_strategy {
-        RefspecStrategy::All => fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags),
+        RefspecStrategy::All => fetch_refspecs(repo, remote_url, refspecs.as_slice(), tags),
         RefspecStrategy::First => {
             // Try each refspec
             let mut errors = refspecs
                 .iter()
                 .map_while(|refspec| {
                     let fetch_result =
-                        fetch_with_cli(repo, remote_url, std::slice::from_ref(refspec), tags);
+                        fetch_refspecs(repo, remote_url, std::slice::from_ref(refspec), tags);
 
                     // Stop after the first success and log failures
                     match fetch_result {
@@ -576,8 +578,8 @@ pub(crate) fn fetch(
     }
 }
 
-/// Attempts to use `git` CLI installed on the system to fetch a repository,.
-fn fetch_with_cli(
+/// Attempts to use `git` CLI installed on the system to fetch the given refspecs from a remote repository.
+fn fetch_refspecs(
     repo: &mut GitRepository,
     url: &str,
     refspecs: &[String],
@@ -590,6 +592,11 @@ fn fetch_with_cli(
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
+        // Perform a treeless fetch, fetching trees and blobs on-demand.
+        // We cannot perform a shallow clone because build tools such as
+        // setuptools-scm may require access to git history, but we only
+        // need the contents of the specific commit we are fetching.
+        .arg("--filter=tree:0")
         .arg(url)
         .args(refspecs)
         // If cargo is run by git (for example, the `exec` command in `git
