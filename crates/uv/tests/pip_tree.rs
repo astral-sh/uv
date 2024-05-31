@@ -155,8 +155,9 @@ fn nested_dependencies() {
     );
 }
 
+// Ensure `pip tree` behaves correctly after a package has been removed.
 #[test]
-fn edited_dependency() {
+fn removed_dependency() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -285,7 +286,7 @@ fn multiple_packages() {
     );
 }
 
-// both `pendulum` and `boto3` depend on `python-dateutil`.
+// Both `pendulum` and `boto3` depend on `python-dateutil`.
 #[test]
 #[cfg(not(windows))]
 fn multiple_packages_shared_descendant() {

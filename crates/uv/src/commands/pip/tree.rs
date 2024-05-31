@@ -95,30 +95,33 @@ fn render_line(installed_dist: &InstalledDist, indent: usize, is_visited: bool) 
 }
 #[derive(Debug)]
 struct DisplayDependencyGraph<'a> {
-    // Map from package name to the installed distribution.
-    package_index: HashMap<&'a PackageName, &'a InstalledDist>,
     site_packages: &'a SitePackages,
-    non_root_packages: HashSet<PackageName>,
+    // Map from package name to the installed distribution.
+    dist_by_package_name: HashMap<&'a PackageName, &'a InstalledDist>,
+    // Set of package names that are required by at least one installed distribution.
+    // It is used to determine the starting nodes when recursing the
+    // dependency graph.
+    required_packages: HashSet<PackageName>,
     printer: Printer,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
-    /// Create a new [`DisplayDependencyGraph`] for the given graph.
+    /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
     fn new(site_packages: &'a SitePackages, printer: Printer) -> DisplayDependencyGraph<'a> {
-        let mut package_index = HashMap::new();
-        let mut non_root_packages = HashSet::new();
+        let mut dist_by_package_name = HashMap::new();
+        let mut required_packages = HashSet::new();
         for site_package in site_packages.iter() {
-            package_index.insert(site_package.name(), site_package);
+            dist_by_package_name.insert(site_package.name(), site_package);
         }
         for site_package in site_packages.iter() {
             for required in required_with_no_extra(site_package) {
-                non_root_packages.insert(required.name.clone());
+                required_packages.insert(required.name.clone());
             }
         }
         Self {
-            package_index,
             site_packages,
-            non_root_packages,
+            dist_by_package_name,
+            required_packages,
             printer,
         }
     }
@@ -133,8 +136,12 @@ impl<'a> DisplayDependencyGraph<'a> {
         }
         visited.insert(installed_dist.name().to_string());
         for required in &required_with_no_extra(installed_dist) {
-            if self.package_index.contains_key(&required.name) {
-                self.visit(self.package_index[&required.name], indent + 1, visited);
+            if self.dist_by_package_name.contains_key(&required.name) {
+                self.visit(
+                    self.dist_by_package_name[&required.name],
+                    indent + 1,
+                    visited,
+                );
             }
         }
     }
@@ -144,7 +151,7 @@ impl<'a> DisplayDependencyGraph<'a> {
     fn render(&self) {
         let mut visited: HashSet<String> = HashSet::new();
         for site_package in self.site_packages.iter() {
-            if !self.non_root_packages.contains(site_package.name()) {
+            if !self.required_packages.contains(site_package.name()) {
                 self.visit(site_package, 0, &mut visited);
             }
         }
