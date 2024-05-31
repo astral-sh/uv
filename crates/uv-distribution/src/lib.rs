@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use thiserror::Error;
@@ -80,14 +81,16 @@ impl Metadata {
             return Ok(Self::from_metadata23(metadata));
         };
 
+        let empty = BTreeMap::default();
         let sources = project_workspace
             .current_project()
             .pyproject_toml()
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.clone())
-            .unwrap_or_default();
+            .and_then(|uv| uv.sources.as_ref())
+            .unwrap_or(&empty);
+
         let requires_dist = metadata
             .requires_dist
             .into_iter()
@@ -96,7 +99,7 @@ impl Metadata {
                     requirement,
                     &metadata.name,
                     project_workspace.project_root(),
-                    &sources,
+                    sources,
                     project_workspace.workspace(),
                     preview_mode,
                 )
