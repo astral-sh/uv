@@ -1,14 +1,20 @@
-use pep508_rs::MarkerEnvironment;
-use platform_tags::Platform;
-use reqwest::{Client, ClientBuilder};
-use reqwest_middleware::ClientWithMiddleware;
-use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::RetryTransientMiddleware;
-use std::env;
+use std::error::Error;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::Path;
+use std::{env, iter};
+
+use itertools::Itertools;
+use reqwest::{Client, ClientBuilder, Response};
+use reqwest_middleware::ClientWithMiddleware;
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::{
+    DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
+};
 use tracing::debug;
+
+use pep508_rs::MarkerEnvironment;
+use platform_tags::Platform;
 use uv_auth::AuthMiddleware;
 use uv_configuration::KeyringProviderType;
 use uv_fs::Simplified;
@@ -166,7 +172,10 @@ impl<'a> BaseClientBuilder<'a> {
                 // Initialize the retry strategy.
                 let retry_policy =
                     ExponentialBackoff::builder().build_with_max_retries(self.retries);
-                let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
+                let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
+                    retry_policy,
+                    LoggingRetryableStrategy,
+                );
                 let client = client.with(retry_strategy);
 
                 // Initialize the authentication middleware to set headers.
@@ -223,5 +232,32 @@ impl Deref for BaseClient {
     /// Deference to the underlying [`ClientWithMiddleware`].
     fn deref(&self) -> &Self::Target {
         &self.client
+    }
+}
+
+/// The same as [`DefaultRetryableStrategy`], but retry attempts on transient request failures are
+/// logged, so we can tell whether a request was retried before failing or not.
+struct LoggingRetryableStrategy;
+
+impl RetryableStrategy for LoggingRetryableStrategy {
+    fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
+        let retryable = DefaultRetryableStrategy.handle(res);
+        if retryable == Some(Retryable::Transient) {
+            match res {
+                Ok(response) => {
+                    debug!("Transient request failure for: {}", response.url());
+                }
+                Err(err) => {
+                    let context = iter::successors(err.source(), |&err| err.source())
+                        .map(|err| format!("  Caused by: {err}"))
+                        .join("\n");
+                    debug!(
+                        "Transient request failure for {}, retrying: {err}\n{context}",
+                        err.url().map(|url| url.as_str()).unwrap_or("unknown URL")
+                    );
+                }
+            }
+        }
+        retryable
     }
 }
