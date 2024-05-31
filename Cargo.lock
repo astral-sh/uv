@@ -3001,6 +3001,7 @@ dependencies = [
  "reqwest-middleware",
  "tempfile",
  "test-case",
+ "thiserror",
  "tokio",
  "tracing",
  "unscanny",

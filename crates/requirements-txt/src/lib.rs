@@ -44,18 +44,17 @@ use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
+use crate::requirement::EditableError;
 use distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, MarkerTree, Pep508Error, Pep508ErrorSource,
-    RequirementOrigin, Scheme, UnnamedRequirement, VerbatimUrl,
+    expand_env_vars, split_scheme, strip_host, Pep508Error, RequirementOrigin, Scheme, VerbatimUrl,
 };
-use pypi_types::{ParsedPathUrl, ParsedUrl, Requirement, VerbatimParsedUrl};
+use pypi_types::{Requirement, VerbatimParsedUrl};
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
-use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
 
 pub use crate::requirement::RequirementsTxtRequirement;
@@ -79,7 +78,7 @@ enum RequirementsTxtStatement {
     /// PEP 508 requirement plus metadata
     RequirementEntry(RequirementEntry),
     /// `-e`
-    EditableRequirement(EditableRequirement),
+    EditableRequirementEntry(RequirementEntry),
     /// `--index-url`
     IndexUrl(VerbatimUrl),
     /// `--extra-index-url`
@@ -161,234 +160,6 @@ impl FindLink {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct EditableRequirement {
-    /// The underlying [`VerbatimUrl`] from the `requirements.txt` file or similar.
-    pub url: VerbatimUrl,
-    /// The extras that should be included when resolving the editable requirements.
-    pub extras: Vec<ExtraName>,
-    /// The markers such as `python_version > "3.8"` in `-e ../editable ; python_version > "3.8"`.
-    pub marker: Option<MarkerTree>,
-    /// The local path to the editable.
-    pub path: PathBuf,
-    /// The source file containing the requirement.
-    pub origin: Option<RequirementOrigin>,
-}
-
-impl EditableRequirement {
-    pub fn url(&self) -> &VerbatimUrl {
-        &self.url
-    }
-
-    pub fn raw(&self) -> &Url {
-        self.url.raw()
-    }
-}
-
-impl EditableRequirement {
-    /// Parse a raw string for an editable requirement (`pip install -e <editable>`), which could be
-    /// a URL or a local path, and could contain unexpanded environment variables.
-    ///
-    /// For example:
-    /// - `file:///home/ferris/project/scripts/...`
-    /// - `file:../editable/`
-    /// - `../editable/`
-    ///
-    /// We disallow URLs with schemes other than `file://` (e.g., `https://...`).
-    pub fn parse(
-        given: &str,
-        origin: Option<&Path>,
-        working_dir: impl AsRef<Path>,
-    ) -> Result<Self, RequirementsTxtParserError> {
-        // Identify the markers.
-        let (given, marker) = if let Some((requirement, marker)) = Self::split_markers(given) {
-            let marker = MarkerTree::parse_str(marker).map_err(|err| {
-                // Map from error on the markers to error on the whole requirement.
-                let err = Pep508Error {
-                    message: err.message,
-                    start: requirement.len() + err.start,
-                    len: err.len,
-                    input: given.to_string(),
-                };
-                match err.message {
-                    Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                        RequirementsTxtParserError::Pep508 {
-                            start: err.start,
-                            end: err.start + err.len,
-                            source: Box::new(err),
-                        }
-                    }
-                    Pep508ErrorSource::UnsupportedRequirement(_) => {
-                        RequirementsTxtParserError::UnsupportedRequirement {
-                            start: err.start,
-                            end: err.start + err.len,
-                            source: Box::new(err),
-                        }
-                    }
-                }
-            })?;
-            (requirement, Some(marker))
-        } else {
-            (given, None)
-        };
-
-        // Identify the extras.
-        let (requirement, extras) = if let Some((requirement, extras)) = Self::split_extras(given) {
-            let extras = Extras::parse(extras).map_err(|err| {
-                // Map from error on the extras to error on the whole requirement.
-                let err = Pep508Error {
-                    message: err.message,
-                    start: requirement.len() + err.start,
-                    len: err.len,
-                    input: given.to_string(),
-                };
-                match err.message {
-                    Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                        RequirementsTxtParserError::Pep508 {
-                            start: err.start,
-                            end: err.start + err.len,
-                            source: Box::new(err),
-                        }
-                    }
-                    Pep508ErrorSource::UnsupportedRequirement(_) => {
-                        RequirementsTxtParserError::UnsupportedRequirement {
-                            start: err.start,
-                            end: err.start + err.len,
-                            source: Box::new(err),
-                        }
-                    }
-                }
-            })?;
-            (requirement, extras.into_vec())
-        } else {
-            (given, vec![])
-        };
-
-        // Expand environment variables.
-        let expanded = expand_env_vars(requirement);
-
-        // Create a `VerbatimUrl` to represent the editable requirement.
-        let url = if let Some((scheme, path)) = split_scheme(&expanded) {
-            match Scheme::parse(scheme) {
-                // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`
-                Some(Scheme::File) => {
-                    // Strip the leading slashes, along with the `localhost` host, if present.
-                    let path = strip_host(path);
-
-                    // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                    let path = normalize_url_path(path);
-
-                    VerbatimUrl::parse_path(path.as_ref(), working_dir.as_ref())
-                }
-
-                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                Some(_) => {
-                    return Err(RequirementsTxtParserError::UnsupportedUrl(
-                        expanded.to_string(),
-                    ));
-                }
-
-                // Ex) `C:/Users/ferris/wheel-0.42.0.tar.gz`
-                _ => VerbatimUrl::parse_path(expanded.as_ref(), working_dir.as_ref()),
-            }
-        } else {
-            // Ex) `../editable/`
-            VerbatimUrl::parse_path(expanded.as_ref(), working_dir.as_ref())
-        };
-
-        let url = url.map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-            source: err,
-            url: expanded.to_string(),
-        })?;
-
-        // Create a `PathBuf`.
-        let path = url
-            .to_file_path()
-            .map_err(|()| RequirementsTxtParserError::UrlConversion(expanded.to_string()))?;
-
-        // Add the verbatim representation of the URL to the `VerbatimUrl`.
-        let url = url.with_given(requirement.to_string());
-
-        Ok(Self {
-            url,
-            extras,
-            marker,
-            path,
-            origin: origin.map(Path::to_path_buf).map(RequirementOrigin::File),
-        })
-    }
-
-    /// Identify the extras in an editable URL (e.g., `../editable[dev]`).
-    ///
-    /// Pip uses `m = re.match(r'^(.+)(\[[^]]+])$', path)`. Our strategy is:
-    /// - If the string ends with a closing bracket (`]`)...
-    /// - Iterate backwards until you find the open bracket (`[`)...
-    /// - But abort if you find another closing bracket (`]`) first.
-    pub fn split_extras(given: &str) -> Option<(&str, &str)> {
-        let mut chars = given.char_indices().rev();
-
-        // If the string ends with a closing bracket (`]`)...
-        if !matches!(chars.next(), Some((_, ']'))) {
-            return None;
-        }
-
-        // Iterate backwards until you find the open bracket (`[`)...
-        let (index, _) = chars
-            .take_while(|(_, c)| *c != ']')
-            .find(|(_, c)| *c == '[')?;
-
-        Some(given.split_at(index))
-    }
-
-    /// Identify the markers in an editable URL (e.g., `../editable ; python_version > "3.8"`).
-    pub fn split_markers(given: &str) -> Option<(&str, &str)> {
-        // Take until we see whitespace, unless it's escaped with a backslash, or within brackets
-        // (which would indicate an extra).
-        let mut backslash = false;
-        let mut depth = 0;
-        for (index, c) in given.char_indices() {
-            if backslash {
-                backslash = false;
-            } else if c == '\\' {
-                backslash = true;
-            } else if c == '[' {
-                depth += 1;
-            } else if c == ']' {
-                depth -= 1;
-            } else if depth == 0 && c.is_whitespace() {
-                // We found the end of the requirement; now, find the start of the markers,
-                // delimited by a semicolon.
-                let (requirement, markers) = given.split_at(index);
-
-                // Skip the whitespace.
-                for (index, c) in markers.char_indices() {
-                    if backslash {
-                        backslash = false;
-                    } else if c == '\\' {
-                        backslash = true;
-                    } else if c.is_whitespace() {
-                        continue;
-                    } else if c == ';' {
-                        // The marker starts just after the semicolon.
-                        let markers = &markers[index + 1..];
-                        return Some((requirement, markers));
-                    } else {
-                        // We saw some other character, so this isn't a marker.
-                        return None;
-                    }
-                }
-            }
-        }
-        None
-    }
-}
-
-impl Display for EditableRequirement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.url, f)
-    }
-}
-
 /// A [Requirement] with additional metadata from the `requirements.txt`, currently only hashes but in
 /// the future also editable and similar information.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -418,24 +189,12 @@ impl From<RequirementEntry> for UnresolvedRequirementSpecification {
     }
 }
 
-impl From<EditableRequirement> for UnresolvedRequirementSpecification {
-    fn from(value: EditableRequirement) -> Self {
-        Self {
-            requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                url: VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::Path(ParsedPathUrl {
-                        url: value.url.to_url(),
-                        path: value.path,
-                        editable: true,
-                    }),
-                    verbatim: value.url,
-                },
-                extras: value.extras,
-                marker: value.marker,
-                origin: value.origin,
-            }),
+impl From<RequirementsTxtRequirement> for UnresolvedRequirementSpecification {
+    fn from(value: RequirementsTxtRequirement) -> Self {
+        Self::from(RequirementEntry {
+            requirement: value,
             hashes: vec![],
-        }
+        })
     }
 }
 
@@ -447,7 +206,7 @@ pub struct RequirementsTxt {
     /// Constraints included with `-c`.
     pub constraints: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
     /// Editables with `-e`.
-    pub editables: Vec<EditableRequirement>,
+    pub editables: Vec<RequirementEntry>,
     /// The index URL, specified with `--index-url`.
     pub index_url: Option<VerbatimUrl>,
     /// The extra index URLs, specified with `--extra-index-url`.
@@ -636,7 +395,7 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::RequirementEntry(requirement_entry) => {
                     data.requirements.push(requirement_entry);
                 }
-                RequirementsTxtStatement::EditableRequirement(editable) => {
+                RequirementsTxtStatement::EditableRequirementEntry(editable) => {
                     data.editables.push(editable);
                 }
                 RequirementsTxtStatement::IndexUrl(url) => {
@@ -733,11 +492,27 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-e") || s.eat_if("--editable") {
-        let path_or_url = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let editable_requirement =
-            EditableRequirement::parse(path_or_url, Some(requirements_txt), working_dir)
-                .map_err(|err| err.with_offset(start))?;
-        RequirementsTxtStatement::EditableRequirement(editable_requirement)
+        s.eat_whitespace();
+
+        let source = if requirements_txt == Path::new("-") {
+            None
+        } else {
+            Some(requirements_txt)
+        };
+
+        let (requirement, hashes) = parse_requirement_and_hashes(s, content, source, working_dir)?;
+        let requirement =
+            requirement
+                .into_editable()
+                .map_err(|err| RequirementsTxtParserError::NonEditable {
+                    source: err,
+                    start,
+                    end: s.cursor(),
+                })?;
+        RequirementsTxtStatement::EditableRequirementEntry(RequirementEntry {
+            requirement,
+            hashes,
+        })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
@@ -1044,6 +819,11 @@ pub enum RequirementsTxtParserError {
     UrlConversion(String),
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
+    NonEditable {
+        source: EditableError,
+        start: usize,
+        end: usize,
+    },
     NoBinary {
         source: uv_normalize::InvalidNameError,
         specifier: String,
@@ -1092,89 +872,6 @@ pub enum RequirementsTxtParserError {
     Reqwest(reqwest_middleware::Error),
 }
 
-impl RequirementsTxtParserError {
-    /// Add a fixed offset to the location of the error.
-    #[must_use]
-    fn with_offset(self, offset: usize) -> Self {
-        match self {
-            Self::IO(err) => Self::IO(err),
-            Self::UrlConversion(given) => Self::UrlConversion(given),
-            Self::Url {
-                source,
-                url,
-                start,
-                end,
-            } => Self::Url {
-                source,
-                url,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::VerbatimUrl { source, url } => Self::VerbatimUrl { source, url },
-            Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
-            Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
-            Self::NoBinary {
-                source,
-                specifier,
-                start,
-                end,
-            } => Self::NoBinary {
-                source,
-                specifier,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::OnlyBinary {
-                source,
-                specifier,
-                start,
-                end,
-            } => Self::OnlyBinary {
-                source,
-                specifier,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::UnnamedConstraint { start, end } => Self::UnnamedConstraint {
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::Parser {
-                message,
-                line,
-                column,
-            } => Self::Parser {
-                message,
-                line,
-                column,
-            },
-            Self::UnsupportedRequirement { source, start, end } => Self::UnsupportedRequirement {
-                source,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::Pep508 { source, start, end } => Self::Pep508 {
-                source,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::ParsedUrl { source, start, end } => Self::ParsedUrl {
-                source,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::Subfile { source, start, end } => Self::Subfile {
-                source,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::NonUnicodeUrl { url } => Self::NonUnicodeUrl { url },
-            #[cfg(feature = "http")]
-            Self::Reqwest(err) => Self::Reqwest(err),
-        }
-    }
-}
-
 impl Display for RequirementsTxtParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1190,6 +887,9 @@ impl Display for RequirementsTxtParserError {
             }
             Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
+            }
+            Self::NonEditable { .. } => {
+                write!(f, "Unsupported editable requirement")
             }
             Self::MissingRequirementPrefix(given) => {
                 write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
@@ -1245,6 +945,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::VerbatimUrl { source, .. } => Some(source),
             Self::UrlConversion(_) => None,
             Self::UnsupportedUrl(_) => None,
+            Self::NonEditable { source, .. } => Some(source),
             Self::MissingRequirementPrefix(_) => None,
             Self::NoBinary { source, .. } => Some(source),
             Self::OnlyBinary { source, .. } => Some(source),
@@ -1286,6 +987,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::NonEditable { .. } => {
+                write!(
+                    f,
+                    "Unsupported editable requirement in `{}`",
                     self.file.user_display(),
                 )
             }
@@ -1457,7 +1165,7 @@ mod test {
     use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 
-    use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
+    use crate::{calculate_row_column, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
         Path::new("./test-data").simple_canonicalize().unwrap()
@@ -1570,6 +1278,27 @@ mod test {
             RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
                 .await
                 .unwrap();
+
+        let snapshot = format!("parse-unix-{}", path.to_string_lossy());
+
+        insta::with_settings!({
+            filters => path_filters(&path_filter(&working_dir)),
+        }, {
+            insta::assert_debug_snapshot!(snapshot, actual);
+        });
+    }
+
+    #[cfg(unix)]
+    #[test_case(Path::new("semicolon.txt"))]
+    #[tokio::test]
+    async fn parse_err(path: &Path) {
+        let working_dir = workspace_test_data_dir().join("requirements-txt");
+        let requirements_txt = working_dir.join(path);
+
+        let actual =
+            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
+                .await
+                .unwrap_err();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
 
@@ -1730,7 +1459,10 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `http://localhost:8080/`");
+            insta::assert_snapshot!(errors, @r###"
+            Unsupported editable requirement in `<REQUIREMENTS_TXT>`
+            Editable must refer to a local directory, not an HTTPS URL: `http://localhost:8080/`
+            "###);
         });
 
         Ok(())
@@ -1759,7 +1491,7 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @r###"
-            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 6
+            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
             Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
             black[,abcdef]
                   ^
@@ -2042,31 +1774,54 @@ mod test {
                 requirements: [],
                 constraints: [],
                 editables: [
-                    EditableRequirement {
-                        url: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/foo/bar",
-                                query: None,
-                                fragment: None,
+                    RequirementEntry {
+                        requirement: Unnamed(
+                            UnnamedRequirement {
+                                url: VerbatimParsedUrl {
+                                    parsed_url: Path(
+                                        ParsedPathUrl {
+                                            url: Url {
+                                                scheme: "file",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: None,
+                                                port: None,
+                                                path: "/foo/bar",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            path: "/foo/bar",
+                                            editable: true,
+                                        },
+                                    ),
+                                    verbatim: VerbatimUrl {
+                                        url: Url {
+                                            scheme: "file",
+                                            cannot_be_a_base: false,
+                                            username: "",
+                                            password: None,
+                                            host: None,
+                                            port: None,
+                                            path: "/foo/bar",
+                                            query: None,
+                                            fragment: None,
+                                        },
+                                        given: Some(
+                                            "/foo/bar",
+                                        ),
+                                    },
+                                },
+                                extras: [],
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/grandchild.txt",
+                                    ),
+                                ),
                             },
-                            given: Some(
-                                "/foo/bar",
-                            ),
-                        },
-                        extras: [],
-                        marker: None,
-                        path: "/foo/bar",
-                        origin: Some(
-                            File(
-                                "<REQUIREMENTS_DIR>/grandchild.txt",
-                            ),
                         ),
+                        hashes: [],
                     },
                 ],
                 index_url: None,
@@ -2337,26 +2092,6 @@ mod test {
         });
 
         Ok(())
-    }
-
-    #[test]
-    fn editable_extra() {
-        assert_eq!(
-            EditableRequirement::split_extras("../editable[dev]"),
-            Some(("../editable", "[dev]"))
-        );
-        assert_eq!(
-            EditableRequirement::split_extras("../editable[dev]more[extra]"),
-            Some(("../editable[dev]more", "[extra]"))
-        );
-        assert_eq!(
-            EditableRequirement::split_extras("../editable[[dev]]"),
-            None
-        );
-        assert_eq!(
-            EditableRequirement::split_extras("../editable[[dev]"),
-            Some(("../editable[", "[dev]"))
-        );
     }
 
     #[tokio::test]

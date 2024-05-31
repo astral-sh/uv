@@ -214,6 +214,12 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
 
 /// Create a `VerbatimUrl` to represent the requirement, and extracts any extras at the end of the
 /// URL, to comply with the non-PEP 508 extensions.
+///
+/// For example:
+/// - `file:///home/ferris/project/scripts/...`
+/// - `file:../editable/`
+/// - `../editable/`
+/// - `https://download.pytorch.org/whl/torch_stable.html`
 fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
     url: &str,
     #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused))] working_dir: Option<&Path>,
@@ -356,8 +362,39 @@ fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
 ) -> Result<(Url, Vec<ExtraName>), Pep508Error<Url>> {
     // wsp*
     cursor.eat_whitespace();
+
     // <URI_reference>
-    let (start, len) = cursor.take_while(|char| !char.is_whitespace());
+    let (start, len) = {
+        let start = cursor.pos();
+        let mut len = 0;
+        let mut backslash = false;
+        let mut depth = 0u32;
+        while let Some((_, c)) = cursor.next() {
+            if backslash {
+                backslash = false;
+            } else if c == '\\' {
+                backslash = true;
+            } else if c == '[' {
+                depth = depth.saturating_add(1);
+            } else if c == ']' {
+                depth = depth.saturating_sub(1);
+            }
+
+            // If we see top-level whitespace, we're done.
+            if depth == 0 && c.is_whitespace() {
+                break;
+            }
+
+            // If we see a line break, we're done.
+            if matches!(c, '\r' | '\n') {
+                break;
+            }
+
+            len += c.len_utf8();
+        }
+        (start, len)
+    };
+
     let url = cursor.slice(start, len);
     if url.is_empty() {
         return Err(Pep508Error {

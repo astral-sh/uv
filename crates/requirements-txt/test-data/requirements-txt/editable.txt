@@ -13,5 +13,5 @@
 # OK
 -e ./editable ; python_version >= "3.9" and os_name == "posix"
 
-# Disallowed (missing whitespace before colon)
--e ./editable; python_version >= "3.9" and os_name == "posix"
+# OK (unterminated)
+-e ./editable[d

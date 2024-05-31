@@ -1,0 +1,2 @@
+# Disallowed (missing whitespace before colon)
+-e ./editable; python_version >= "3.9" and os_name == "posix"
