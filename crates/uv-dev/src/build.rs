@@ -11,7 +11,7 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
-    BuildKind, Concurrency, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy,
+    BuildKind, Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
@@ -80,6 +80,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &NoBuild::None,
         &NoBinary::None,
         concurrency,
+        PreviewMode::Enabled,
     );
 
     let builder = SourceBuild::setup(

@@ -3,7 +3,7 @@ use std::path::{Component, Path, PathBuf};
 /// Determine the path at which the given tar entry will be unpacked, when unpacking into `dst`.
 ///
 /// See: <https://github.com/vorot93/tokio-tar/blob/87338a76092330bc6fe60de95d83eae5597332e1/src/entry.rs#L418>
-#[cfg_attr(not(target_os = "unix"), allow(dead_code))]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) fn unpacked_at(dst: &Path, entry: &Path) -> Option<PathBuf> {
     let mut file_dst = dst.to_path_buf();
     {

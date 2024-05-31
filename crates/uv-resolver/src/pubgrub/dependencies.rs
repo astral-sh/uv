@@ -3,9 +3,10 @@ use pubgrub::range::Range;
 use rustc_hash::FxHashSet;
 use tracing::warn;
 
-use distribution_types::{Requirement, RequirementSource, Verbatim};
+use distribution_types::Verbatim;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
+use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -47,6 +48,11 @@ impl PubGrubDependencies {
         )?;
 
         Ok(Self(dependencies))
+    }
+
+    /// Add a [`PubGrubPackage`] and [`PubGrubVersion`] range into the dependencies.
+    pub(crate) fn push(&mut self, package: PubGrubPackage, version: Range<Version>) {
+        self.0.push((package, version));
     }
 
     /// Iterate over the dependencies.
@@ -221,7 +227,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from_package(
                         requirement.name.clone(),
                         extra,
-                        None,
+                        requirement.marker.clone(),
                         urls,
                     ),
                     version,
@@ -247,7 +253,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        marker: None,
+                        marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
                     version: Range::full(),
@@ -273,7 +279,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        marker: None,
+                        marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
                     version: Range::full(),
@@ -299,7 +305,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        marker: None,
+                        marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
                     version: Range::full(),

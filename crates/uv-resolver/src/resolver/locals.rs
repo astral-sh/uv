@@ -4,9 +4,10 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
-use distribution_types::{RemoteSource, RequirementSource};
+use distribution_types::RemoteSource;
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
 use pep508_rs::MarkerEnvironment;
+use pypi_types::RequirementSource;
 use uv_normalize::PackageName;
 
 use crate::{DependencyMode, Manifest};
@@ -203,10 +204,10 @@ mod tests {
     use anyhow::Result;
     use url::Url;
 
-    use distribution_types::RequirementSource;
     use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
     use pep508_rs::VerbatimUrl;
     use pypi_types::ParsedUrl;
+    use pypi_types::RequirementSource;
 
     use crate::resolver::locals::{iter_locals, Locals};
 

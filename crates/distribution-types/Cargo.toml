@@ -20,12 +20,11 @@ pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-fs = { workspace = true }
-uv-git = { workspace = true, features = ["vendored-openssl"] }
+uv-git = { workspace = true }
 uv-normalize = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
-indexmap = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 rkyv = { workspace = true }

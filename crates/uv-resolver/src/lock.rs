@@ -6,7 +6,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use anyhow::Result;
 use rustc_hash::FxHashMap;
+use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
 use distribution_filename::WheelFilename;
@@ -20,12 +22,12 @@ use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
 use uv_git::{GitReference, GitSha};
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolution::AnnotatedDist;
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[serde(into = "LockWire", try_from = "LockWire")]
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(try_from = "LockWire")]
 pub struct Lock {
     version: u32,
     distributions: Vec<Distribution>,
@@ -52,23 +54,28 @@ impl Lock {
         Lock::try_from(wire)
     }
 
+    /// Returns the [`Distribution`] entries in this lock.
+    pub fn distributions(&self) -> &[Distribution] {
+        &self.distributions
+    }
+
     pub fn to_resolution(
         &self,
         marker_env: &MarkerEnvironment,
         tags: &Tags,
         root_name: &PackageName,
+        extras: &[ExtraName],
     ) -> Resolution {
-        let root = self
-            .find_by_name(root_name)
-            // TODO: In the future, we should derive the root distribution
-            // from the pyproject.toml, but I don't think the infrastructure
-            // for that is in place yet. For now, we ask the caller to specify
-            // the root package name explicitly, and we assume here that it is
-            // correct.
-            .expect("found too many distributions matching root")
-            .expect("could not find root");
         let mut queue: VecDeque<&Distribution> = VecDeque::new();
-        queue.push_back(root);
+
+        // Add the root distribution to the queue.
+        for extra in std::iter::once(None).chain(extras.iter().map(Some)) {
+            let root = self
+                .find_by_name(root_name, extra)
+                .expect("found too many distributions matching root")
+                .expect("could not find root");
+            queue.push_back(root);
+        }
 
         let mut map = BTreeMap::default();
         while let Some(dist) = queue.pop_front() {
@@ -87,12 +94,20 @@ impl Lock {
     /// Returns the distribution with the given name. If there are multiple
     /// matching distributions, then an error is returned. If there are no
     /// matching distributions, then `Ok(None)` is returned.
-    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Distribution>, String> {
+    fn find_by_name(
+        &self,
+        name: &PackageName,
+        extra: Option<&ExtraName>,
+    ) -> Result<Option<&Distribution>, String> {
         let mut found_dist = None;
         for dist in &self.distributions {
-            if &dist.id.name == name {
+            if &dist.id.name == name && dist.id.extra.as_ref() == extra {
                 if found_dist.is_some() {
-                    return Err(format!("found multiple distributions matching `{name}`"));
+                    return Err(if let Some(extra) = extra {
+                        format!("found multiple distributions matching `{name}[{extra}]`")
+                    } else {
+                        format!("found multiple distributions matching `{name}`")
+                    });
                 }
                 found_dist = Some(dist);
             }
@@ -110,7 +125,7 @@ impl Lock {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 struct LockWire {
     version: u32,
     #[serde(rename = "distribution")]
@@ -123,6 +138,72 @@ impl From<Lock> for LockWire {
             version: lock.version,
             distributions: lock.distributions,
         }
+    }
+}
+
+impl Lock {
+    /// Returns the TOML representation of this lock file.
+    pub fn to_toml(&self) -> Result<String> {
+        // We construct a TOML document manually instead of going through Serde to enable
+        // the use of inline tables.
+        let mut doc = toml_edit::DocumentMut::new();
+        doc.insert("version", value(i64::from(self.version)));
+
+        let mut distributions = ArrayOfTables::new();
+        for dist in &self.distributions {
+            let mut table = Table::new();
+
+            table.insert("name", value(dist.id.name.to_string()));
+            table.insert("version", value(dist.id.version.to_string()));
+            table.insert("source", value(dist.id.source.to_string()));
+            if let Some(ref extra) = dist.id.extra {
+                table.insert("extra", value(extra.to_string()));
+            }
+
+            if let Some(ref marker) = dist.marker {
+                table.insert("marker", value(marker.to_string()));
+            }
+
+            if let Some(ref sdist) = dist.sdist {
+                table.insert("sdist", value(sdist.to_toml()?));
+            }
+
+            if !dist.dependencies.is_empty() {
+                let deps = dist
+                    .dependencies
+                    .iter()
+                    .map(Dependency::to_toml)
+                    .collect::<ArrayOfTables>();
+                table.insert("dependencies", Item::ArrayOfTables(deps));
+            }
+
+            if !dist.wheels.is_empty() {
+                let wheels = dist
+                    .wheels
+                    .iter()
+                    .enumerate()
+                    .map(|(i, wheel)| {
+                        let mut table = wheel.to_toml()?;
+
+                        if dist.wheels.len() > 1 {
+                            // Indent each wheel on a new line.
+                            table.decor_mut().set_prefix("\n\t");
+                            if i == dist.wheels.len() - 1 {
+                                table.decor_mut().set_suffix("\n");
+                            }
+                        }
+
+                        Ok(table)
+                    })
+                    .collect::<Result<Array>>()?;
+                table.insert("wheels", value(wheels));
+            }
+
+            distributions.push(table);
+        }
+
+        doc.insert("distribution", Item::ArrayOfTables(distributions));
+        Ok(doc.to_string())
     }
 }
 
@@ -193,15 +274,15 @@ impl TryFrom<LockWire> for Lock {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub(crate) struct Distribution {
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct Distribution {
     #[serde(flatten)]
     pub(crate) id: DistributionId,
     #[serde(default)]
     pub(crate) marker: Option<String>,
     #[serde(default)]
     pub(crate) sdist: Option<SourceDist>,
-    #[serde(default, rename = "wheel", skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) wheels: Vec<Wheel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) dependencies: Vec<Dependency>,
@@ -216,9 +297,7 @@ impl Distribution {
         let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
         Ok(Distribution {
             id,
-            // TODO: Refactoring is needed to get the marker expressions for a
-            // particular resolved dist to this point.
-            marker: None,
+            marker: annotated_dist.marker.as_ref().map(ToString::to_string),
             sdist,
             wheels,
             dependencies: vec![],
@@ -261,7 +340,7 @@ impl Distribution {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let url = Url::from(ParsedArchiveUrl {
                         url: self.id.source.url.clone(),
-                        subdirectory: None,
+                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                     });
                     let direct_dist = DirectUrlBuiltDist {
                         filename,
@@ -401,12 +480,12 @@ impl Distribution {
     }
 }
 
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct DistributionId {
     pub(crate) name: PackageName,
     pub(crate) version: Version,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) extra: Option<ExtraName>,
     pub(crate) source: Source,
 }
 
@@ -414,10 +493,12 @@ impl DistributionId {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> DistributionId {
         let name = annotated_dist.metadata.name.clone();
         let version = annotated_dist.metadata.version.clone();
+        let extra = annotated_dist.extra.clone();
         let source = Source::from_resolved_dist(&annotated_dist.dist);
         DistributionId {
             name,
             version,
+            extra,
             source,
         }
     }
@@ -454,7 +535,7 @@ impl Source {
 
     fn from_built_dist(built_dist: &BuiltDist) -> Source {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist2(reg_dist),
+            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist(reg_dist),
             BuiltDist::DirectUrl(ref direct_dist) => Source::from_direct_built_dist(direct_dist),
             BuiltDist::Path(ref path_dist) => Source::from_path_built_dist(path_dist),
         }
@@ -478,11 +559,7 @@ impl Source {
         }
     }
 
-    fn from_registry_built_dist(reg_dist: &RegistryBuiltWheel) -> Source {
-        Source::from_index_url(&reg_dist.index)
-    }
-
-    fn from_registry_built_dist2(reg_dist: &RegistryBuiltDist) -> Source {
+    fn from_registry_built_dist(reg_dist: &RegistryBuiltDist) -> Source {
         Source::from_index_url(&reg_dist.best_wheel().index)
     }
 
@@ -615,15 +692,6 @@ impl std::fmt::Display for Source {
     }
 }
 
-impl serde::Serialize for Source {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        s.collect_str(self)
-    }
-}
-
 impl<'de> serde::Deserialize<'de> for Source {
     fn deserialize<D>(d: D) -> Result<Source, D::Error>
     where
@@ -672,9 +740,7 @@ impl SourceKind {
     }
 }
 
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct DirectSource {
     subdirectory: Option<String>,
 }
@@ -747,9 +813,7 @@ impl GitSource {
     }
 }
 
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 enum GitSourceKind {
     Tag(String),
     Branch(String),
@@ -758,7 +822,7 @@ enum GitSourceKind {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 pub(crate) struct SourceDist {
     /// A URL or file path (via `file://`) where the source dist that was
     /// locked against was found. The location does not need to exist in the
@@ -778,6 +842,19 @@ pub(crate) struct SourceDist {
 }
 
 impl SourceDist {
+    /// Returns the TOML representation of this source distribution.
+    fn to_toml(&self) -> Result<InlineTable> {
+        let mut table = InlineTable::new();
+        table.insert("url", Value::from(self.url.to_string()));
+        if let Some(ref hash) = self.hash {
+            table.insert("hash", Value::from(hash.to_string()));
+        }
+        if let Some(size) = self.size {
+            table.insert("size", Value::from(i64::try_from(size)?));
+        }
+        Ok(table)
+    }
+
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
     ) -> Result<Option<SourceDist>, LockError> {
@@ -951,8 +1028,8 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[serde(into = "WheelWire", try_from = "WheelWire")]
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(try_from = "WheelWire")]
 pub(crate) struct Wheel {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
@@ -1077,7 +1154,7 @@ impl Wheel {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 struct WheelWire {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
@@ -1096,13 +1173,18 @@ struct WheelWire {
     size: Option<u64>,
 }
 
-impl From<Wheel> for WheelWire {
-    fn from(wheel: Wheel) -> WheelWire {
-        WheelWire {
-            url: wheel.url,
-            hash: wheel.hash,
-            size: wheel.size,
+impl Wheel {
+    /// Returns the TOML representation of this wheel.
+    fn to_toml(&self) -> Result<InlineTable> {
+        let mut table = InlineTable::new();
+        table.insert("url", Value::from(self.url.to_string()));
+        if let Some(ref hash) = self.hash {
+            table.insert("hash", Value::from(hash.to_string()));
         }
+        if let Some(size) = self.size {
+            table.insert("size", Value::from(i64::try_from(size)?));
+        }
+        Ok(table)
     }
 }
 
@@ -1128,7 +1210,7 @@ impl TryFrom<WheelWire> for Wheel {
 }
 
 /// A single dependency of a distribution in a lock file.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct Dependency {
     #[serde(flatten)]
     id: DistributionId,
@@ -1138,6 +1220,19 @@ impl Dependency {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Dependency {
         let id = DistributionId::from_annotated_dist(annotated_dist);
         Dependency { id }
+    }
+
+    /// Returns the TOML representation of this dependency.
+    fn to_toml(&self) -> Table {
+        let mut table = Table::new();
+        table.insert("name", value(self.id.name.to_string()));
+        table.insert("version", value(self.id.version.to_string()));
+        table.insert("source", value(self.id.source.to_string()));
+        if let Some(ref extra) = self.id.extra {
+            table.insert("extra", value(extra.to_string()));
+        }
+
+        table
     }
 }
 
@@ -1174,15 +1269,6 @@ impl std::str::FromStr for Hash {
 impl std::fmt::Display for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}:{}", self.0.algorithm, self.0.digest)
-    }
-}
-
-impl serde::Serialize for Hash {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        s.collect_str(self)
     }
 }
 
@@ -1495,9 +1581,7 @@ version = 1
 name = "anyio"
 version = "4.3.0"
 source = "registry+https://pypi.org/simple"
-
-[[distribution.wheel]]
-url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"
+wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
@@ -1512,10 +1596,7 @@ version = 1
 name = "anyio"
 version = "4.3.0"
 source = "path+file:///foo/bar"
-
-[[distribution.wheel]]
-url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl"
-hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);

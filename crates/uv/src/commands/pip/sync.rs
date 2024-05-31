@@ -97,10 +97,8 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        None,
         &extras,
         &client_builder,
-        preview,
     )
     .await?;
 
@@ -269,11 +267,15 @@ pub(crate) async fn pip_sync(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;
+
+    // When resolving, don't take any external preferences into account.
+    let preferences = Vec::default();
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
@@ -290,6 +292,7 @@ pub(crate) async fn pip_sync(
         source_trees,
         project,
         &extras,
+        preferences,
         site_packages.clone(),
         &hasher,
         reinstall,
@@ -304,6 +307,7 @@ pub(crate) async fn pip_sync(
         concurrency,
         options,
         printer,
+        preview,
     )
     .await
     {
@@ -340,6 +344,7 @@ pub(crate) async fn pip_sync(
             &no_build,
             &no_binary,
             concurrency,
+            preview,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
@@ -364,6 +369,7 @@ pub(crate) async fn pip_sync(
         &venv,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 

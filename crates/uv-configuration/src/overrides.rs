@@ -1,9 +1,9 @@
 use std::hash::BuildHasherDefault;
 
 use either::Either;
+use pypi_types::Requirement;
 use rustc_hash::FxHashMap;
 
-use distribution_types::Requirement;
 use uv_normalize::PackageName;
 
 /// A set of overrides for a set of requirements.

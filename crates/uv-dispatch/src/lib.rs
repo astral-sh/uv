@@ -11,12 +11,13 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, IndexLocations, Name, Requirement, Resolution, SourceDist};
+use distribution_types::{CachedDist, IndexLocations, Name, Resolution, SourceDist};
+use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::Concurrency;
 use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
+use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
@@ -43,6 +44,7 @@ pub struct BuildDispatch<'a> {
     options: Options,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     concurrency: Concurrency,
+    preview_mode: PreviewMode,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -62,6 +64,7 @@ impl<'a> BuildDispatch<'a> {
         no_build: &'a NoBuild,
         no_binary: &'a NoBinary,
         concurrency: Concurrency,
+        preview_mode: PreviewMode,
     ) -> Self {
         Self {
             client,
@@ -81,6 +84,7 @@ impl<'a> BuildDispatch<'a> {
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
             build_extra_env_vars: FxHashMap::default(),
+            preview_mode,
         }
     }
 
@@ -138,7 +142,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             &HashStrategy::None,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+            DistributionDatabase::new(
+                self.client,
+                self,
+                self.concurrency.downloads,
+                self.preview_mode,
+            ),
         )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
@@ -220,7 +229,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 self.cache,
                 tags,
                 &HashStrategy::None,
-                DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+                DistributionDatabase::new(
+                    self.client,
+                    self,
+                    self.concurrency.downloads,
+                    self.preview_mode,
+                ),
             );
 
             debug!(

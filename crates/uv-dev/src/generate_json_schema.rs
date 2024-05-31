@@ -20,7 +20,7 @@ struct ToolUv {
     #[serde(flatten)]
     options: Options,
     #[serde(flatten)]
-    dep_spec: uv_requirements::pyproject::ToolUv,
+    dep_spec: uv_distribution::pyproject::ToolUv,
 }
 
 #[derive(clap::Args)]

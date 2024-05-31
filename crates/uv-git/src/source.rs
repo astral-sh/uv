@@ -11,7 +11,7 @@ use url::Url;
 use cache_key::{digest, RepositoryUrl};
 
 use crate::git::GitRemote;
-use crate::{FetchStrategy, GitSha, GitUrl};
+use crate::{GitOid, GitSha, GitUrl};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
@@ -19,8 +19,6 @@ pub struct GitSource {
     git: GitUrl,
     /// The HTTP client to use for fetching.
     client: Client,
-    /// The fetch strategy to use when cloning.
-    strategy: FetchStrategy,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -33,7 +31,6 @@ impl GitSource {
         Self {
             git,
             client: Client::new(),
-            strategy: FetchStrategy::Cli,
             cache: cache.into(),
             reporter: None,
         }
@@ -77,8 +74,7 @@ impl GitSource {
                     &db_path,
                     db,
                     &self.git.reference,
-                    locked_rev.map(git2::Oid::from),
-                    self.strategy,
+                    locked_rev.map(GitOid::from),
                     &self.client,
                 )?;
 
@@ -98,12 +94,8 @@ impl GitSource {
             .join("checkouts")
             .join(&ident)
             .join(short_id.as_str());
-        db.copy_to(
-            actual_rev.into(),
-            &checkout_path,
-            self.strategy,
-            &self.client,
-        )?;
+
+        db.copy_to(actual_rev.into(), &checkout_path)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = task {

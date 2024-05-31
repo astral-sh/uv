@@ -1,4 +1,4 @@
-use distribution_types::RequirementSource;
+use pypi_types::RequirementSource;
 use rustc_hash::FxHashSet;
 
 use pep508_rs::MarkerEnvironment;

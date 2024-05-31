@@ -12,23 +12,6 @@ pub use crate::path::*;
 pub mod cachedir;
 mod path;
 
-/// Reads data from the path and requires that it be valid UTF-8.
-///
-/// If the file path is `-`, then contents are read from stdin instead.
-#[cfg(feature = "tokio")]
-pub async fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
-    use std::io::Read;
-
-    let path = path.as_ref();
-    if path == Path::new("-") {
-        let mut buf = String::with_capacity(1024);
-        std::io::stdin().read_to_string(&mut buf)?;
-        Ok(buf)
-    } else {
-        fs_err::tokio::read_to_string(path).await
-    }
-}
-
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
 /// This uses BOM sniffing to determine if the data should be transcoded

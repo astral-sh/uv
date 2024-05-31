@@ -14,10 +14,11 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution::ProjectWorkspace;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
-use uv_requirements::{ProjectWorkspace, RequirementsSource, RequirementsSpecification, Workspace};
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, Options};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -37,7 +38,25 @@ pub(crate) enum ProjectError {
     Virtualenv(#[from] uv_virtualenv::Error),
 
     #[error(transparent)]
+    Tags(#[from] platform_tags::TagsError),
+
+    #[error(transparent)]
+    Lock(#[from] uv_resolver::LockError),
+
+    #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Serialize(#[from] toml::ser::Error),
+
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    Operation(#[from] pip::operations::Error),
 }
 
 /// Initialize a virtual environment for the current project.
@@ -89,11 +108,10 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
-    workspace: Option<&Workspace>,
-    preview: PreviewMode,
     connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<PythonEnvironment> {
     // TODO(zanieb): Support client configuration
     let client_builder = BaseClientBuilder::default().connectivity(connectivity);
@@ -101,16 +119,8 @@ pub(crate) async fn update_environment(
     // Read all requirements from the provided sources.
     // TODO(zanieb): Consider allowing constraints and extras
     // TODO(zanieb): Allow specifying extras somehow
-    let spec = RequirementsSpecification::from_sources(
-        requirements,
-        &[],
-        &[],
-        workspace,
-        &ExtrasSpecification::None,
-        &client_builder,
-        preview,
-    )
-    .await?;
+    let spec =
+        RequirementsSpecification::from_sources(requirements, &[], &[], &client_builder).await?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_executable(&venv)?;
@@ -151,7 +161,11 @@ pub(crate) async fn update_environment(
 
     // TODO(charlie): Respect project configuration.
     let build_isolation = BuildIsolation::default();
+    let compile = false;
+    let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
+    let dry_run = false;
+    let extras = ExtrasSpecification::default();
     let flat_index = FlatIndex::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
@@ -160,14 +174,11 @@ pub(crate) async fn update_environment(
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
-    let setup_py = SetupPyStrategy::default();
-    let concurrency = Concurrency::default();
-    let reinstall = Reinstall::default();
-    let compile = false;
-    let dry_run = false;
-    let extras = ExtrasSpecification::default();
-    let upgrade = Upgrade::default();
     let options = Options::default();
+    let preferences = Vec::default();
+    let reinstall = Reinstall::default();
+    let setup_py = SetupPyStrategy::default();
+    let upgrade = Upgrade::default();
 
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
@@ -185,6 +196,7 @@ pub(crate) async fn update_environment(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     );
 
     // Resolve the requirements.
@@ -195,6 +207,7 @@ pub(crate) async fn update_environment(
         spec.source_trees,
         spec.project,
         &extras,
+        preferences,
         site_packages.clone(),
         &hasher,
         &reinstall,
@@ -209,6 +222,7 @@ pub(crate) async fn update_environment(
         concurrency,
         options,
         printer,
+        preview,
     )
     .await
     {
@@ -239,6 +253,7 @@ pub(crate) async fn update_environment(
             &no_build,
             &no_binary,
             concurrency,
+            preview,
         )
     };
 
@@ -262,6 +277,7 @@ pub(crate) async fn update_environment(
         &venv,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 

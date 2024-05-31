@@ -372,8 +372,6 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     pub(crate) custom_compile_command: Option<String>,
 
-    /// Run offline, i.e., without accessing the network.
-
     /// Refresh all cached data.
     #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
     pub(crate) refresh: bool,
@@ -1764,6 +1762,17 @@ pub(crate) struct VenvArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
+    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub(crate) extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    #[arg(long, conflicts_with = "extra")]
+    pub(crate) all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub(crate) no_all_extras: bool,
+
     /// The command to run.
     pub(crate) target: Option<String>,
 
@@ -1774,6 +1783,33 @@ pub(crate) struct RunArgs {
     /// Run with the given packages installed.
     #[arg(long)]
     pub(crate) with: Vec<String>,
+
+    /// Refresh all cached data.
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    pub(crate) refresh: bool,
+
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
+    pub(crate) no_refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[arg(long)]
+    pub(crate) refresh_package: Vec<PackageName>,
+
+    /// Allow package upgrades, ignoring pinned versions in the existing lockfile.
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
+
+    /// Allow upgrades for a specific package, ignoring pinned versions in the existing lockfile.
+    #[arg(long, short = 'P')]
+    pub(crate) upgrade_package: Vec<PackageName>,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1788,11 +1824,45 @@ pub(crate) struct RunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub(crate) python: Option<String>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct SyncArgs {
+    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub(crate) extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    #[arg(long, conflicts_with = "extra")]
+    pub(crate) all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub(crate) no_all_extras: bool,
+
+    /// Refresh all cached data.
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    pub(crate) refresh: bool,
+
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
+    pub(crate) no_refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[arg(long)]
+    pub(crate) refresh_package: Vec<PackageName>,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1811,6 +1881,33 @@ pub(crate) struct SyncArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct LockArgs {
+    /// Refresh all cached data.
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    pub(crate) refresh: bool,
+
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
+    pub(crate) no_refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[arg(long)]
+    pub(crate) refresh_package: Vec<PackageName>,
+
+    /// Allow package upgrades, ignoring pinned versions in the existing lockfile.
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
+
+    /// Allow upgrades for a specific package, ignoring pinned versions in the existing lockfile.
+    #[arg(long, short = 'P')]
+    pub(crate) upgrade_package: Vec<PackageName>,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1824,6 +1921,13 @@ pub(crate) struct LockArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub(crate) python: Option<String>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 }
 
 #[derive(Args)]

@@ -1,10 +1,9 @@
+use pypi_types::{Requirement, RequirementSource};
 use std::collections::BTreeMap;
 
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::{
-    BuiltDist, Diagnostic, Dist, Name, Requirement, RequirementSource, ResolvedDist, SourceDist,
-};
+use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]

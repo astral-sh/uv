@@ -100,10 +100,8 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
-        None,
         extras,
         &client_builder,
-        preview,
     )
     .await?;
 
@@ -255,6 +253,9 @@ pub(crate) async fn pip_install(
         HashStrategy::None
     };
 
+    // When resolving, don't take any external preferences into account.
+    let preferences = Vec::default();
+
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
@@ -315,6 +316,7 @@ pub(crate) async fn pip_install(
         &no_build,
         &no_binary,
         concurrency,
+        preview,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
@@ -323,7 +325,7 @@ pub(crate) async fn pip_install(
         let root = PackageName::new(root.to_string())?;
         let encoded = fs::tokio::read_to_string("uv.lock").await?;
         let lock: Lock = toml::from_str(&encoded)?;
-        lock.to_resolution(&markers, &tags, &root)
+        lock.to_resolution(&markers, &tags, &root, &[])
     } else {
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
@@ -340,6 +342,7 @@ pub(crate) async fn pip_install(
             source_trees,
             project,
             extras,
+            preferences,
             site_packages.clone(),
             &hasher,
             &reinstall,
@@ -354,6 +357,7 @@ pub(crate) async fn pip_install(
             concurrency,
             options,
             printer,
+            preview,
         )
         .await
         {
@@ -391,6 +395,7 @@ pub(crate) async fn pip_install(
             &no_build,
             &no_binary,
             concurrency,
+            preview,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
@@ -415,6 +420,7 @@ pub(crate) async fn pip_install(
         &venv,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 

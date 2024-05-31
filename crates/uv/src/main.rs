@@ -552,7 +552,7 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::RunSettings::resolve(args, workspace);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
 
             let requirements = args
                 .with
@@ -575,10 +575,13 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
+                args.extras,
                 args.target,
                 args.args,
                 requirements,
                 args.python,
+                args.upgrade,
+                args.exclude_newer,
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,
@@ -589,21 +592,28 @@ async fn run() -> Result<ExitStatus> {
         }
         Commands::Sync(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let _args = settings::SyncSettings::resolve(args, workspace);
+            let args = settings::SyncSettings::resolve(args, workspace);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
 
-            commands::sync(globals.preview, &cache, printer).await
+            commands::sync(args.extras, globals.preview, &cache, printer).await
         }
         Commands::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let _args = settings::LockSettings::resolve(args, workspace);
+            let args = settings::LockSettings::resolve(args, workspace);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
 
-            commands::lock(globals.preview, &cache, printer).await
+            commands::lock(
+                args.upgrade,
+                args.exclude_newer,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {

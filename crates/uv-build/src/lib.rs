@@ -25,10 +25,10 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
-use distribution_types::{Requirement, Resolution};
+use distribution_types::Resolution;
 use pep440_rs::Version;
 use pep508_rs::PackageName;
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};

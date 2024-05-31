@@ -29,7 +29,7 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, NoBuild};
+use uv_configuration::{BuildKind, NoBuild, PreviewMode};
 use uv_extract::hash::Hasher;
 use uv_fs::{write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
@@ -39,15 +39,16 @@ use crate::error::Error;
 use crate::git::{fetch_git_archive, resolve_precise};
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
-use crate::{ArchiveMetadata, Reporter};
+use crate::{ArchiveMetadata, Metadata, Reporter};
 
 mod built_wheel_metadata;
 mod revision;
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
-pub struct SourceDistributionBuilder<'a, T: BuildContext> {
+pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     reporter: Option<Arc<dyn Reporter>>,
+    preview_mode: PreviewMode,
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
@@ -61,16 +62,17 @@ pub(crate) const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
-    pub fn new(build_context: &'a T) -> Self {
+    pub(crate) fn new(build_context: &'a T, preview_mode: PreviewMode) -> Self {
         Self {
             build_context,
             reporter: None,
+            preview_mode,
         }
     }
 
     /// Set the [`Reporter`] to use for this source distribution fetcher.
     #[must_use]
-    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
+    pub(crate) fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             reporter: Some(reporter),
             ..self
@@ -78,7 +80,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Download and build a [`SourceDist`].
-    pub(super) async fn download_and_build(
+    pub(crate) async fn download_and_build(
         &self,
         source: &BuildableSource<'_>,
         tags: &Tags,
@@ -238,7 +240,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Download a [`SourceDist`] and determine its metadata. This typically involves building the
     /// source distribution into a wheel; however, some build backends support determining the
     /// metadata without building the source distribution.
-    pub(super) async fn download_and_build_metadata(
+    pub(crate) async fn download_and_build_metadata(
         &self,
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
@@ -492,7 +494,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadata {
-                metadata,
+                metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
         }
@@ -515,7 +517,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata {
-                metadata,
+                metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
         }
@@ -542,7 +544,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         Ok(ArchiveMetadata {
-            metadata,
+            metadata: Metadata::from_metadata23(metadata),
             hashes: revision.into_hashes(),
         })
     }
@@ -720,7 +722,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadata {
-                metadata,
+                metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
         }
@@ -742,7 +744,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata {
-                metadata,
+                metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
         }
@@ -769,7 +771,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata {
-            metadata,
+            metadata: Metadata::from_metadata23(metadata),
             hashes: revision.into_hashes(),
         })
     }
@@ -929,7 +931,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata::from(metadata));
+            return Ok(ArchiveMetadata::from(
+                Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode)
+                    .await?,
+            ));
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -946,7 +951,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(ArchiveMetadata::from(metadata));
+            return Ok(ArchiveMetadata::from(
+                Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode)
+                    .await?,
+            ));
         }
 
         // Otherwise, we need to build a wheel.
@@ -970,7 +978,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(ArchiveMetadata::from(metadata))
+        Ok(ArchiveMetadata::from(
+            Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode).await?,
+        ))
     }
 
     /// Return the [`Revision`] for a local source tree, refreshing it if necessary.
@@ -1137,7 +1147,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for: {source}");
-                return Ok(ArchiveMetadata::from(metadata));
+                return Ok(ArchiveMetadata::from(
+                    Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
+                ));
             }
         }
 
@@ -1155,7 +1167,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(ArchiveMetadata::from(metadata));
+            return Ok(ArchiveMetadata::from(
+                Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
+            ));
         }
 
         // Otherwise, we need to build a wheel.
@@ -1179,7 +1193,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(ArchiveMetadata::from(metadata))
+        Ok(ArchiveMetadata::from(
+            Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
+        ))
     }
 
     /// Download and unzip a source distribution into the cache from an HTTP response.
@@ -1592,7 +1608,7 @@ async fn read_pyproject_toml(
 /// Read an existing cached [`Metadata23`], if it exists.
 async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<Metadata23>, Error> {
     match fs::read(&cache_entry.path()).await {
-        Ok(cached) => Ok(Some(rmp_serde::from_slice::<Metadata23>(&cached)?)),
+        Ok(cached) => Ok(Some(rmp_serde::from_slice(&cached)?)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(Error::CacheRead(err)),
     }

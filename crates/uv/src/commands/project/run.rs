@@ -9,9 +9,11 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::PreviewMode;
+use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
+use uv_distribution::ProjectWorkspace;
 use uv_interpreter::{PythonEnvironment, SystemPython};
-use uv_requirements::{ProjectWorkspace, RequirementsSource};
+use uv_requirements::RequirementsSource;
+use uv_resolver::ExcludeNewer;
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
@@ -20,10 +22,13 @@ use crate::printer::Printer;
 /// Run a command.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
+    extras: ExtrasSpecification,
     target: Option<String>,
     mut args: Vec<OsString>,
     requirements: Vec<RequirementsSource>,
     python: Option<String>,
+    upgrade: Upgrade,
+    exclude_newer: Option<ExcludeNewer>,
     isolated: bool,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -34,22 +39,6 @@ pub(crate) async fn run(
         warn_user!("`uv run` is experimental and may change without warning.");
     }
 
-    let command = if let Some(target) = target {
-        let target_path = PathBuf::from(&target);
-        if target_path
-            .extension()
-            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
-            && target_path.exists()
-        {
-            args.insert(0, target_path.as_os_str().into());
-            "python".to_string()
-        } else {
-            target
-        }
-    } else {
-        "python".to_string()
-    };
-
     // Discover and sync the project.
     let project_env = if isolated {
         None
@@ -57,22 +46,22 @@ pub(crate) async fn run(
         debug!("Syncing project environment.");
 
         let project = ProjectWorkspace::discover(std::env::current_dir()?).await?;
-
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
-        // Install the project requirements.
-        Some(
-            project::update_environment(
-                venv,
-                &project.requirements(),
-                Some(project.workspace()),
-                preview,
-                connectivity,
-                cache,
-                printer,
-            )
-            .await?,
+        // Lock and sync the environment.
+        let lock = project::lock::do_lock(
+            &project,
+            &venv,
+            upgrade,
+            exclude_newer,
+            preview,
+            cache,
+            printer,
         )
+        .await?;
+        project::sync::do_sync(&project, &venv, &lock, extras, preview, cache, printer).await?;
+
+        Some(venv)
     };
 
     // If necessary, create an environment for the ephemeral requirements.
@@ -112,20 +101,28 @@ pub(crate) async fn run(
 
         // Install the ephemeral requirements.
         Some(
-            project::update_environment(
-                venv,
-                &requirements,
-                None,
-                preview,
-                connectivity,
-                cache,
-                printer,
-            )
-            .await?,
+            project::update_environment(venv, &requirements, connectivity, cache, printer, preview)
+                .await?,
         )
     };
 
     // Construct the command
+    let command = if let Some(target) = target {
+        let target_path = PathBuf::from(&target);
+        if target_path
+            .extension()
+            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
+            && target_path.exists()
+        {
+            args.insert(0, target_path.as_os_str().into());
+            "python".to_string()
+        } else {
+            target
+        }
+    } else {
+        "python".to_string()
+    };
+
     let mut process = Command::new(&command);
     process.args(&args);
 

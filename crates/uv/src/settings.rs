@@ -98,11 +98,14 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
-    // CLI-only settings.
+    pub(crate) extras: ExtrasSpecification,
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 }
 
 impl RunSettings {
@@ -110,18 +113,34 @@ impl RunSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, _workspace: Option<Workspace>) -> Self {
         let RunArgs {
+            extra,
+            all_extras,
+            no_all_extras,
             target,
             args,
             with,
+            refresh,
+            no_refresh,
+            refresh_package,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
             python,
+            exclude_newer,
         } = args;
 
         Self {
-            // CLI-only settings.
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
+            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
+            extras: ExtrasSpecification::from_args(
+                flag(all_extras, no_all_extras).unwrap_or_default(),
+                extra.unwrap_or_default(),
+            ),
             target,
             args,
             with,
             python,
+            exclude_newer,
         }
     }
 }
@@ -130,7 +149,8 @@ impl RunSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    // CLI-only settings.
+    pub(crate) refresh: Refresh,
+    pub(crate) extras: ExtrasSpecification,
     pub(crate) python: Option<String>,
 }
 
@@ -138,10 +158,22 @@ impl SyncSettings {
     /// Resolve the [`SyncSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: SyncArgs, _workspace: Option<Workspace>) -> Self {
-        let SyncArgs { python } = args;
+        let SyncArgs {
+            extra,
+            all_extras,
+            no_all_extras,
+            refresh,
+            no_refresh,
+            refresh_package,
+            python,
+        } = args;
 
         Self {
-            // CLI-only settings.
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
+            extras: ExtrasSpecification::from_args(
+                flag(all_extras, no_all_extras).unwrap_or_default(),
+                extra.unwrap_or_default(),
+            ),
             python,
         }
     }
@@ -151,7 +183,9 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
-    // CLI-only settings.
+    pub(crate) refresh: Refresh,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) python: Option<String>,
 }
 
@@ -159,10 +193,21 @@ impl LockSettings {
     /// Resolve the [`LockSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, _workspace: Option<Workspace>) -> Self {
-        let LockArgs { python } = args;
+        let LockArgs {
+            refresh,
+            no_refresh,
+            refresh_package,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
+            exclude_newer,
+            python,
+        } = args;
 
         Self {
-            // CLI-only settings.
+            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
+            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
+            exclude_newer,
             python,
         }
     }
@@ -210,7 +255,6 @@ impl PipCompileSettings {
             header,
             annotation_style,
             custom_compile_command,
-
             refresh,
             no_refresh,
             refresh_package,

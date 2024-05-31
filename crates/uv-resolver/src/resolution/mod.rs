@@ -5,8 +5,9 @@ use std::path::Path;
 use itertools::Itertools;
 
 use distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
-use pep508_rs::{split_scheme, Scheme};
-use pypi_types::{HashDigest, Metadata23};
+use pep508_rs::{split_scheme, MarkerTree, Scheme};
+use pypi_types::HashDigest;
+use uv_distribution::Metadata;
 use uv_normalize::{ExtraName, PackageName};
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
@@ -21,13 +22,40 @@ mod graph;
 #[derive(Debug, Clone)]
 pub(crate) struct AnnotatedDist {
     pub(crate) dist: ResolvedDist,
-    pub(crate) extras: Vec<ExtraName>,
+    pub(crate) extra: Option<ExtraName>,
+    pub(crate) marker: Option<MarkerTree>,
     pub(crate) hashes: Vec<HashDigest>,
-    pub(crate) metadata: Metadata23,
+    pub(crate) metadata: Metadata,
 }
 
-impl AnnotatedDist {
-    /// Convert the [`AnnotatedDist`] to a requirement that adheres to the `requirements.txt`
+impl Name for AnnotatedDist {
+    fn name(&self) -> &PackageName {
+        self.dist.name()
+    }
+}
+
+impl DistributionMetadata for AnnotatedDist {
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        self.dist.version_or_url()
+    }
+}
+
+impl Display for AnnotatedDist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.dist, f)
+    }
+}
+
+/// A pinned package with its resolved distribution and all the extras that were pinned for it.
+#[derive(Debug, Clone)]
+pub(crate) struct RequirementsTxtDist {
+    pub(crate) dist: ResolvedDist,
+    pub(crate) extras: Vec<ExtraName>,
+    pub(crate) hashes: Vec<HashDigest>,
+}
+
+impl RequirementsTxtDist {
+    /// Convert the [`RequirementsTxtDist`] to a requirement that adheres to the `requirements.txt`
     /// format.
     ///
     /// This typically results in a PEP 508 representation of the requirement, but will write an
@@ -114,25 +142,39 @@ impl AnnotatedDist {
     }
 }
 
+impl From<&AnnotatedDist> for RequirementsTxtDist {
+    fn from(annotated: &AnnotatedDist) -> Self {
+        Self {
+            dist: annotated.dist.clone(),
+            extras: if let Some(extra) = annotated.extra.clone() {
+                vec![extra]
+            } else {
+                vec![]
+            },
+            hashes: annotated.hashes.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum RequirementsTxtComparator<'a> {
     Url(Cow<'a, str>),
     Name(&'a PackageName),
 }
 
-impl Name for AnnotatedDist {
+impl Name for RequirementsTxtDist {
     fn name(&self) -> &PackageName {
         self.dist.name()
     }
 }
 
-impl DistributionMetadata for AnnotatedDist {
+impl DistributionMetadata for RequirementsTxtDist {
     fn version_or_url(&self) -> VersionOrUrlRef {
         self.dist.version_or_url()
     }
 }
 
-impl Display for AnnotatedDist {
+impl Display for RequirementsTxtDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.dist, f)
     }

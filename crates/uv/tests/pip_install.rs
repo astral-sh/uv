@@ -81,8 +81,7 @@ fn missing_requirements_txt() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `requirements.txt`
-      Caused by: No such file or directory (os error 2)
+    error: File not found: `requirements.txt`
     "###
     );
 
@@ -124,8 +123,7 @@ fn missing_pyproject_toml() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `pyproject.toml`
-      Caused by: No such file or directory (os error 2)
+    error: File not found: `pyproject.toml`
     "###
     );
 }
@@ -178,41 +176,6 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
       | ^^^^^^^^^
     missing field `name`
 
-    "###
-    );
-
-    Ok(())
-}
-
-/// For user controlled pyproject.toml files, we enforce PEP 621.
-#[test]
-fn invalid_pyproject_toml_requirement_direct() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"[project]
-name = "project"
-dependencies = ["flask==1.0.x"]
-"#,
-    )?;
-
-    let filters = [("exit status", "exit code")]
-        .into_iter()
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.install()
-        .arg("-r")
-        .arg("pyproject.toml"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: after parsing '1.0', found '.x', which is not part of a valid version
-    flask==1.0.x
-         ^^^^^^^
     "###
     );
 
@@ -4341,11 +4304,12 @@ fn already_installed_multiple_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Downloaded 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - anyio==4.0.0
-     + anyio==4.0.0
+     + anyio==4.3.0
     "###
     );
 
@@ -4979,7 +4943,8 @@ fn tool_uv_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 6 packages in [TIME]
+    Resolved 9 packages in [TIME]
+    Audited 9 packages in [TIME]
     "###
     );
     Ok(())
@@ -5012,9 +4977,7 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: Failed to parse entry for: `tqdm`
-      Caused by: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    error: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
     "###
     );
 
