@@ -6,7 +6,8 @@ use pep508_rs::VerbatimUrl;
 use pypi_types::HashDigest;
 use uv_cache::{Cache, CacheBucket, CacheEntry};
 
-use crate::{Archive, HttpArchivePointer, LocalArchivePointer};
+use crate::archive::Archive;
+use crate::{HttpArchivePointer, LocalArchivePointer};
 
 #[derive(Debug, Clone)]
 pub struct CachedWheel {
