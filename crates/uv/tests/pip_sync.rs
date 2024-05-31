@@ -919,6 +919,99 @@ fn install_no_index_cached() -> Result<()> {
     Ok(())
 }
 
+/// Sync with direct dependencies.
+/// Sets up 3 directories: `app`, `mylib`, `my_corelib`
+/// `app` contains `requirements.txt` pointing to `../mylib`
+/// `mylib` has a `pyproject.toml` with a `../my_corelib` dependency
+/// `my_corelib` has its own `pyproject.toml`
+/// The test ensures that all transitive dependencies are installed
+#[test]
+fn install_relpath_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("app/requirements.txt");
+    requirements_txt.write_str("mylib @ ../mylib")?;
+
+    let pyproject_toml = context.temp_dir.child("mylib/pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "mylib"
+version = "1.0.0"
+requires-python = ">=3.8"
+dependencies=[
+    "boto3 == 1.34.116",
+    "my_corelib @ ./../my_corelib",
+]
+
+[build-system]
+requires = ["hatchling==1.24.2"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["mylib"]
+    "#,
+    )?;
+    context.temp_dir.child("lib/mylib/__init__.py");
+
+    let pyproject_toml = context.temp_dir.child("my_corelib/pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "my_corelib"
+version = "1.0.0"
+requires-python = ">=3.8"
+dependencies=[
+    "numpy == 1.26.4",
+]
+
+[build-system]
+requires = ["hatchling==1.24.2"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["my_corelib"]
+    "#,
+    )?;
+    context.temp_dir.child("lib/my_corelib/__init__.py");
+
+    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+        .current_dir(context.temp_dir.child("app"))
+        .arg("requirements.txt")
+        //.arg("--no-index")
+        //.arg("--strict"), @r###"
+        , @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + mylib==1.0.0 (from file://[TEMP_DIR]/mylib)
+    "#
+    );
+
+    context
+        .assert_command("import mylib; import my_corelib")
+        .success();
+
+    Ok(())
+}
+
 #[test]
 fn warn_on_yanked() -> Result<()> {
     let context = TestContext::new("3.12");
