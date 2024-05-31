@@ -364,8 +364,8 @@ impl GitCheckout {
         ProcessBuilder::new("git")
             .arg("clone")
             .arg("--local")
-            // Propagate the treeless clone.
-            .arg("--filter=tree:0")
+            // Propagate the blobless clone.
+            .arg("--filter=blob:none")
             // Make sure to pass the local file path and not a file://... url. If given a url,
             // Git treats the repository as a remote origin and gets confused because we don't
             // have a HEAD checked out.
@@ -592,11 +592,11 @@ fn fetch_refspecs(
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
-        // Perform a treeless fetch, fetching trees and blobs on-demand.
+        // Perform a blobless fetch, fetching blobs on-demand.
         // We cannot perform a shallow clone because build tools such as
         // setuptools-scm may require access to git history, but we only
         // need the contents of the specific commit we are fetching.
-        .arg("--filter=tree:0")
+        .arg("--filter=blob:none")
         .arg(url)
         .args(refspecs)
         // If cargo is run by git (for example, the `exec` command in `git
