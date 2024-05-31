@@ -14,7 +14,7 @@ use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
-use uv_toolchain::{Interpreter, Toolchain};
+use uv_toolchain::{Interpreter, SystemPython, Toolchain, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -28,6 +28,7 @@ pub(crate) async fn lock(
     index_locations: IndexLocations,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
+    python: Option<String>,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -41,9 +42,23 @@ pub(crate) async fn lock(
 
     // Find an interpreter for the project
     let interpreter = match project::find_environment(&workspace, cache) {
-        Ok(environment) => environment.into_interpreter(),
+        Ok(environment) => {
+            let interpreter = environment.into_interpreter();
+            if let Some(python) = python.as_deref() {
+                let request = ToolchainRequest::parse(python);
+                if request.satisfied(&interpreter) {
+                    interpreter
+                } else {
+                    Toolchain::find_requested(python, SystemPython::Allowed, preview, cache)?
+                        .into_interpreter()
+                }
+            } else {
+                interpreter
+            }
+        }
         Err(uv_toolchain::Error::NotFound(_)) => {
-            Toolchain::find_default(PreviewMode::Enabled, cache)?.into_interpreter()
+            Toolchain::find(python.as_deref(), SystemPython::Allowed, preview, cache)?
+                .into_interpreter()
         }
         Err(err) => return Err(err.into()),
     };

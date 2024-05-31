@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -21,8 +21,9 @@ use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, Options, RequiresPython};
-use uv_toolchain::{PythonEnvironment, Toolchain};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_warnings::warn_user;
 
 use crate::commands::pip;
 use crate::printer::Printer;
@@ -81,42 +82,94 @@ pub(crate) fn find_environment(
 /// Initialize a virtual environment for the current project.
 pub(crate) fn init_environment(
     workspace: &Workspace,
+    python: Option<&str>,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
+    let venv = workspace.root().join(".venv");
+
+    let requires_python = workspace
+        .root_member()
+        .and_then(|root| root.project().requires_python.as_ref());
+
     // Discover or create the virtual environment.
-    // TODO(charlie): If the environment isn't compatible with `--python`, recreate it.
-    match find_environment(workspace, cache) {
-        Ok(venv) => Ok(venv),
-        Err(uv_toolchain::Error::NotFound(_)) => {
-            // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
-            let interpreter = Toolchain::find_default(preview, cache)?.into_interpreter();
+    match PythonEnvironment::from_root(venv, cache) {
+        Ok(venv) => {
+            // `--python` has highest precedence, after that we check `requires_python` from
+            // `pyproject.toml`. If `--python` and `requires_python` are mutually incompatible,
+            // we'll fail at the build or at last the install step when we aren't able to install
+            // the editable wheel for the current project into the venv.
+            // TODO(konsti): Do we want to support a workspace python version requirement?
+
+            let venv_python_satisfactory = if let Some(python) = python {
+                ToolchainRequest::parse(python).satisfied(venv.interpreter())
+            } else if let Some(requires_python) = requires_python {
+                requires_python.contains(venv.interpreter().python_version())
+            } else {
+                true
+            };
+
+            if venv_python_satisfactory {
+                return Ok(venv);
+            }
 
             writeln!(
                 printer.stderr(),
-                "Using Python {} interpreter at: {}",
-                interpreter.python_version(),
-                interpreter.sys_executable().user_display().cyan()
+                "Removing virtual environment at: {}",
+                venv.root().user_display().cyan()
             )?;
-
-            let venv = workspace.venv();
-            writeln!(
-                printer.stderr(),
-                "Creating virtualenv at: {}",
-                venv.user_display().cyan()
-            )?;
-
-            Ok(uv_virtualenv::create_venv(
-                &venv,
-                interpreter,
-                uv_virtualenv::Prompt::None,
-                false,
-                false,
-            )?)
+            fs_err::remove_dir_all(venv.root())
+                .context("Failed to remove existing virtual environment")?;
         }
-        Err(e) => Err(e.into()),
+        Err(uv_toolchain::Error::NotFound(_)) => {}
+        Err(e) => return Err(e.into()),
     }
+
+    // TODO(konsti): Extend `VersionRequest` to support `VersionSpecifiers`.
+    let requires_python_str = requires_python.map(ToString::to_string);
+    let interpreter = Toolchain::find(
+        python.or(requires_python_str.as_deref()),
+        // Otherwise we'll try to use the venv we just deleted.
+        SystemPython::Required,
+        preview,
+        cache,
+    )?
+    .into_interpreter();
+
+    if let Some(requires_python) = requires_python {
+        if !requires_python.contains(interpreter.python_version()) {
+            warn_user!(
+                "The Python {} you requested with {} is incompatible with the requirement of the \
+                project of {}",
+                interpreter.python_version(),
+                python.unwrap_or("(default)"),
+                requires_python
+            );
+        }
+    }
+
+    writeln!(
+        printer.stderr(),
+        "Using Python {} interpreter at: {}",
+        interpreter.python_version(),
+        interpreter.sys_executable().user_display().cyan()
+    )?;
+
+    let venv = workspace.venv();
+    writeln!(
+        printer.stderr(),
+        "Creating virtualenv at: {}",
+        venv.user_display().cyan()
+    )?;
+
+    Ok(uv_virtualenv::create_venv(
+        &venv,
+        interpreter,
+        uv_virtualenv::Prompt::None,
+        false,
+        false,
+    )?)
 }
 
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.

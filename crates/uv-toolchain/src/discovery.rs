@@ -19,6 +19,7 @@ use crate::virtualenv::{
 use crate::{Interpreter, PythonVersion};
 use std::borrow::Cow;
 
+use same_file::is_same_file;
 use std::collections::HashSet;
 use std::fmt::{self, Formatter};
 use std::num::ParseIntError;
@@ -27,7 +28,7 @@ use std::{path::Path, path::PathBuf, str::FromStr};
 
 /// A request to find a Python toolchain.
 ///
-/// See [`InterpreterRequest::from_str`].
+/// See [`ToolchainRequest::from_str`].
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ToolchainRequest {
     /// Use any discovered Python toolchain
@@ -699,7 +700,7 @@ pub fn find_best_toolchain(
     debug!("Looking for Python toolchain with any version");
     let request = ToolchainRequest::Any;
     Ok(find_toolchain(
-        // TODO(zanieb): Add a dedicated `Default` variant to `InterpreterRequest`
+        // TODO(zanieb): Add a dedicated `Default` variant to `ToolchainRequest`
         &request, system, &sources, cache,
     )?
     .map_err(|err| {
@@ -860,7 +861,7 @@ fn is_windows_store_shim(_path: &Path) -> bool {
 impl ToolchainRequest {
     /// Create a request from a string.
     ///
-    /// This cannot fail, which means weird inputs will be parsed as [`InterpreterRequest::File`] or [`InterpreterRequest::ExecutableName`].
+    /// This cannot fail, which means weird inputs will be parsed as [`ToolchainRequest::File`] or [`ToolchainRequest::ExecutableName`].
     pub fn parse(value: &str) -> Self {
         // e.g. `3.12.1`
         if let Ok(version) = VersionRequest::from_str(value) {
@@ -933,6 +934,72 @@ impl ToolchainRequest {
         // Finally, we'll treat it as the name of an executable (i.e. in the search PATH)
         // e.g. foo.exe
         Self::ExecutableName(value.to_string())
+    }
+
+    /// Check if a given interpreter satisfies the interpreter request.
+    pub fn satisfied(&self, interpreter: &Interpreter) -> bool {
+        match self {
+            ToolchainRequest::Any => true,
+            ToolchainRequest::Version(version_request) => {
+                version_request.matches_interpreter(interpreter)
+            }
+            ToolchainRequest::Directory(directory) => {
+                // `sys.prefix` points to the venv root.
+                is_same_file(directory, interpreter.sys_prefix()).unwrap_or(false)
+            }
+            ToolchainRequest::File(file) => {
+                // The interpreter satisfies the request both if it is the venv ...
+                if is_same_file(interpreter.sys_executable(), file).unwrap_or(false) {
+                    return true;
+                }
+                // ... or if it is the base interpreter the venv was created from.
+                if interpreter
+                    .sys_base_executable()
+                    .is_some_and(|sys_base_executable| {
+                        is_same_file(sys_base_executable, file).unwrap_or(false)
+                    })
+                {
+                    return true;
+                }
+                false
+            }
+            ToolchainRequest::ExecutableName(name) => {
+                // First, see if we have a match in the venv ...
+                if interpreter
+                    .sys_executable()
+                    .file_name()
+                    .is_some_and(|filename| filename == name.as_str())
+                {
+                    return true;
+                }
+                // ... or the venv's base interpreter (without performing IO), if that fails, ...
+                if interpreter
+                    .sys_base_executable()
+                    .and_then(|executable| executable.file_name())
+                    .is_some_and(|file_name| file_name == name.as_str())
+                {
+                    return true;
+                }
+                // ... check in `PATH`. The name we find here does not need to be the
+                // name we install, so we can find `foopython` here which got installed as `python`.
+                if which(name)
+                    .ok()
+                    .as_ref()
+                    .and_then(|executable| executable.file_name())
+                    .is_some_and(|file_name| file_name == name.as_str())
+                {
+                    return true;
+                }
+                false
+            }
+            ToolchainRequest::Implementation(implementation) => {
+                interpreter.implementation_name() == implementation.as_str()
+            }
+            ToolchainRequest::ImplementationVersion(implementation, version) => {
+                version.matches_interpreter(interpreter)
+                    && interpreter.implementation_name() == implementation.as_str()
+            }
+        }
     }
 }
 

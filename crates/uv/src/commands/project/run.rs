@@ -61,7 +61,13 @@ pub(crate) async fn run(
         } else {
             ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
         };
-        let venv = project::init_environment(project.workspace(), preview, cache, printer)?;
+        let venv = project::init_environment(
+            project.workspace(),
+            python.as_deref(),
+            preview,
+            cache,
+            printer,
+        )?;
 
         // Lock and sync the environment.
         let root_project_name = project

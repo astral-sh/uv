@@ -274,6 +274,38 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv run` command with options shared across scenarios.
+    pub fn run(&self) -> std::process::Command {
+        let mut command = self.run_without_exclude_newer();
+        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+        command
+    }
+
+    /// Create a `uv run` command with no `--exclude-newer` option.
+    ///
+    /// One should avoid using this in tests to the extent possible because
+    /// it can result in tests failing when the index state changes. Therefore,
+    /// if you use this, there should be some other kind of mitigation in place.
+    /// For example, pinning package versions.
+    pub fn run_without_exclude_newer(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("run")
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
+    }
+
     pub fn interpreter(&self) -> PathBuf {
         venv_to_interpreter(&self.venv)
     }
@@ -397,14 +429,9 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
     }
 }
 
-/// Create a virtual environment named `.venv` in a temporary directory with the given
-/// Python version. Expected format for `python` is "<version>".
-pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
-    temp_dir: &Parent,
-    cache_dir: &assert_fs::TempDir,
-    python: &str,
-) -> PathBuf {
-    let python = InstalledToolchains::from_settings()
+/// Get the path to the python interpreter for a specific toolchain version.
+pub fn get_toolchain(python: &str) -> PathBuf {
+    InstalledToolchains::from_settings()
         .map(|installed_toolchains| {
             installed_toolchains
                 .find_version(
@@ -419,7 +446,17 @@ pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path
         // We'll search for the request Python on the PATH if not found in the toolchain versions
         // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
         .unwrap_or_default()
-        .unwrap_or(PathBuf::from(python));
+        .unwrap_or(PathBuf::from(python))
+}
+
+/// Create a virtual environment named `.venv` in a temporary directory with the given
+/// Python version. Expected format for `python` is "<version>".
+pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
+    temp_dir: &Parent,
+    cache_dir: &assert_fs::TempDir,
+    python: &str,
+) -> PathBuf {
+    let python = get_toolchain(python);
 
     let venv = temp_dir.child(".venv");
     Command::new(get_bin())

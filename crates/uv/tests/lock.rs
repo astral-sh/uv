@@ -2046,7 +2046,8 @@ fn lock_requires_python() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    error: The current Python version (3.8.[X]) is not compatible with the locked Python requirement (>=3.12)
+    Removing virtual environment at: [VENV]/
+    error: Requested Python executable `>=3.12` not found in PATH
     "###);
 
     Ok(())
