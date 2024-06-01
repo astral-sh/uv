@@ -8,7 +8,7 @@ use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use pypi_types::{
     ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, RequirementSource, VerbatimParsedUrl,
 };
-use uv_git::{GitResolver, GitUrl, RepositoryReference};
+use uv_git::{GitResolver, GitUrl};
 use uv_normalize::PackageName;
 
 use crate::{DependencyMode, Manifest, ResolveError};
@@ -168,40 +168,8 @@ fn is_same_reference<'a>(a: &'a Url, b: &'a Url, git: &'a GitResolver) -> bool {
         return false;
     }
 
-    // Convert `a` to a repository URL.
-    let a_ref = RepositoryReference::from(&a_git.url);
-
-    // Convert `b` to a repository URL.
-    let b_ref = RepositoryReference::from(&b_git.url);
-
-    // The URLs must refer to the same repository.
-    if a_ref.url != b_ref.url {
-        return false;
-    }
-
-    // If the URLs have the same tag, they refer to the same commit.
-    if a_ref.reference == b_ref.reference {
-        return true;
-    }
-
-    // Otherwise, the URLs must resolve to the same precise commit.
-    let Some(a_precise) = a_git
-        .url
-        .precise()
-        .or_else(|| git.get(&a_ref).map(|sha| *sha))
-    else {
-        return false;
-    };
-
-    let Some(b_precise) = b_git
-        .url
-        .precise()
-        .or_else(|| git.get(&b_ref).map(|sha| *sha))
-    else {
-        return false;
-    };
-
-    a_precise == b_precise
+    // The Git URLs must refer to the same commit.
+    git.same_ref(&a_git.url, &b_git.url)
 }
 
 #[cfg(test)]
