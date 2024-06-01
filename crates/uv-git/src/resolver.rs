@@ -2,12 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use dashmap::mapref::one::Ref;
-use dashmap::DashMap;
-use fs_err::tokio as fs;
 use tracing::debug;
 
 use cache_key::RepositoryUrl;
+use dashmap::mapref::one::Ref;
+use dashmap::DashMap;
+use fs_err::tokio as fs;
 use uv_fs::LockedFile;
 
 use crate::{Fetch, GitReference, GitSha, GitSource, GitUrl, Reporter};
@@ -36,14 +36,14 @@ impl GitResolver {
         ))
     }
 
-    /// Returns the [`GitSha`] for the given [`RepositoryReference`], if it exists.
-    pub fn get(&self, reference: &RepositoryReference) -> Option<Ref<RepositoryReference, GitSha>> {
-        self.0.get(reference)
-    }
-
     /// Inserts a new [`GitSha`] for the given [`RepositoryReference`].
     pub fn insert(&self, reference: RepositoryReference, sha: GitSha) {
         self.0.insert(reference, sha);
+    }
+
+    /// Returns the [`GitSha`] for the given [`RepositoryReference`], if it exists.
+    fn get(&self, reference: &RepositoryReference) -> Option<Ref<RepositoryReference, GitSha>> {
+        self.0.get(reference)
     }
 
     /// Download a source distribution from a Git repository.
@@ -142,6 +142,36 @@ impl GitResolver {
         let reference = RepositoryReference::from(&url);
         let precise = self.get(&reference)?;
         Some(url.with_precise(*precise))
+    }
+
+    /// Returns `true` if the two Git URLs refer to the same precise commit.
+    pub fn same_ref(&self, a: &GitUrl, b: &GitUrl) -> bool {
+        // Convert `a` to a repository URL.
+        let a_ref = RepositoryReference::from(a);
+
+        // Convert `b` to a repository URL.
+        let b_ref = RepositoryReference::from(b);
+
+        // The URLs must refer to the same repository.
+        if a_ref.url != b_ref.url {
+            return false;
+        }
+
+        // If the URLs have the same tag, they refer to the same commit.
+        if a_ref.reference == b_ref.reference {
+            return true;
+        }
+
+        // Otherwise, the URLs must resolve to the same precise commit.
+        let Some(a_precise) = a.precise().or_else(|| self.get(&a_ref).map(|sha| *sha)) else {
+            return false;
+        };
+
+        let Some(b_precise) = b.precise().or_else(|| self.get(&b_ref).map(|sha| *sha)) else {
+            return false;
+        };
+
+        a_precise == b_precise
     }
 }
 
