@@ -1,7 +1,5 @@
 use std::future::Future;
 
-use anyhow::Result;
-
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
 use uv_configuration::{NoBinary, NoBuild};

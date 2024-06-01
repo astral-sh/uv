@@ -3,7 +3,6 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::Result;
 use configparser::ini::Ini;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use serde::Deserialize;
@@ -21,6 +20,18 @@ use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
+
+#[derive(Debug, thiserror::Error)]
+pub enum NamedRequirementsError {
+    #[error(transparent)]
+    Distribution(#[from] uv_distribution::Error),
+
+    #[error(transparent)]
+    DistributionTypes(#[from] distribution_types::Error),
+
+    #[error(transparent)]
+    WheelFilename(#[from] distribution_filename::WheelFilenameError),
+}
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
@@ -60,7 +71,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
     }
 
     /// Resolve any unnamed requirements in the specification.
-    pub async fn resolve(self) -> Result<Vec<Requirement>> {
+    pub async fn resolve(self) -> Result<Vec<Requirement>, NamedRequirementsError> {
         let Self {
             requirements,
             hasher,
@@ -88,7 +99,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
-    ) -> Result<pep508_rs::Requirement<VerbatimParsedUrl>> {
+    ) -> Result<pep508_rs::Requirement<VerbatimParsedUrl>, NamedRequirementsError> {
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
         // Ex) `anyio-4.3.0-py3-none-any.whl`

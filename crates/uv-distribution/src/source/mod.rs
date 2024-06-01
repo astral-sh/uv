@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::Result;
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::Response;

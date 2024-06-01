@@ -1,5 +1,3 @@
-use anyhow::Result;
-
 use distribution_types::InstalledDist;
 
 /// Uninstall a package from the specified Python environment.
