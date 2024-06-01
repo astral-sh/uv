@@ -484,10 +484,11 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), run_workspace(&context)
+    uv_snapshot!(run_workspace(&context)
             .arg("--package")
             .arg("albatross")
             .arg("check_installed_albatross.py")
+            .arg("--verbose")
             .current_dir(&work_dir), @r###"
     success: true
     exit_code: 0

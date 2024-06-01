@@ -133,7 +133,10 @@ impl Workspace {
     ///
     /// Returns `None` if the package is not part of the workspace.
     pub fn with_current_project(self, package_name: PackageName) -> Option<ProjectWorkspace> {
+        debug!("With current project: `{}`", package_name);
         let member = self.packages.get(&package_name)?;
+        debug!("Found current project: `{:?}`", member);
+        debug!("Found members: `{:?}`", self.packages);
         let extras = member
             .pyproject_toml
             .project
@@ -195,6 +198,12 @@ impl Workspace {
                     .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
 
                 seen.insert(workspace_root.clone());
+
+                debug!(
+                    "Adding root workspace member: `{}` `{:?}`",
+                    project.name, workspace_root
+                );
+
                 workspace_members.insert(
                     project.name.clone(),
                     WorkspaceMember {
@@ -207,6 +216,11 @@ impl Workspace {
 
         // The current project is a workspace member, especially in a single project workspace.
         if let Some((project_name, project_path, project)) = current_project {
+            debug!(
+                "Adding current workspace member: `{}` `{:?}` {:?}",
+                project_name, project_path, project
+            );
+
             seen.insert(project_path.clone());
             workspace_members.insert(
                 project_name,
@@ -236,7 +250,7 @@ impl Workspace {
                     .map_err(WorkspaceError::Normalize)?
                     .to_path_buf();
 
-                trace!("Processing workspace member {}", member_root.user_display());
+                debug!("Processing workspace member {}", member_root.user_display());
                 // Read the member `pyproject.toml`.
                 let pyproject_path = member_root.join("pyproject.toml");
                 let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
@@ -252,6 +266,9 @@ impl Workspace {
                     root: member_root.clone(),
                     pyproject_toml,
                 };
+
+                debug!("Adding workspace member: `{}` `{:?}`", project.name, member);
+
                 workspace_members.insert(project.name, member);
             }
         }
