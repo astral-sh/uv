@@ -25,8 +25,8 @@ pub enum Error {
     RelativePath(PathBuf),
     #[error(transparent)]
     JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
-    #[error("Git operation failed")]
-    Git(#[source] anyhow::Error),
+    #[error(transparent)]
+    Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
     Reqwest(#[from] BetterReqwestError),
     #[error(transparent)]

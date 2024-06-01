@@ -39,6 +39,7 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
+uv-git = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }

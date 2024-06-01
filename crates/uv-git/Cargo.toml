@@ -17,9 +17,11 @@ cache-key = { workspace = true }
 uv-fs = { workspace = true }
 
 anyhow = { workspace = true }
-thiserror = { workspace = true }
 cargo-util = { workspace = true }
+dashmap = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 reqwest = { workspace = true, features = ["blocking"] }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

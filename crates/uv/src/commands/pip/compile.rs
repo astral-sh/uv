@@ -27,6 +27,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
+use uv_git::GitResolver;
 use uv_interpreter::{
     find_best_interpreter, find_interpreter, InterpreterRequest, PythonEnvironment, SystemPython,
     VersionRequest,
@@ -286,6 +287,7 @@ pub(crate) async fn pip_compile(
 
     // Read the lockfile, if present.
     let preferences = read_requirements_txt(output_file, &upgrade).await?;
+    let git = GitResolver::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -316,6 +318,7 @@ pub(crate) async fn pip_compile(
         &index_locations,
         &flat_index,
         &source_index,
+        &git,
         &in_flight,
         setup_py,
         &config_settings,

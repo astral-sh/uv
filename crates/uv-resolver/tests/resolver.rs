@@ -21,6 +21,7 @@ use uv_configuration::{
     BuildKind, Concurrency, Constraints, NoBinary, NoBuild, Overrides, PreviewMode, SetupPyStrategy,
 };
 use uv_distribution::DistributionDatabase;
+use uv_git::GitResolver;
 use uv_interpreter::{find_default_interpreter, Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_resolver::{
@@ -45,6 +46,7 @@ struct DummyContext {
     cache: Cache,
     interpreter: Interpreter,
     index_locations: IndexLocations,
+    git: GitResolver,
 }
 
 impl DummyContext {
@@ -53,6 +55,7 @@ impl DummyContext {
             cache,
             interpreter,
             index_locations: IndexLocations::default(),
+            git: GitResolver::default(),
         }
     }
 }
@@ -62,6 +65,10 @@ impl BuildContext for DummyContext {
 
     fn cache(&self) -> &Cache {
         &self.cache
+    }
+
+    fn git(&self) -> &GitResolver {
+        &self.git
     }
 
     fn interpreter(&self) -> &Interpreter {

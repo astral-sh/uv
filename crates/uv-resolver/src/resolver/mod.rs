@@ -31,6 +31,7 @@ use pypi_types::{Metadata23, Requirement};
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_git::GitResolver;
 use uv_normalize::{ExtraName, PackageName};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
@@ -82,6 +83,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     constraints: Constraints,
     overrides: Overrides,
     preferences: Preferences,
+    git: GitResolver,
     exclusions: Exclusions,
     urls: Urls,
     locals: Locals,
@@ -154,6 +156,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             markers,
             python_requirement,
             index,
+            build_context.git(),
             provider,
             installed_packages,
         )
@@ -172,16 +175,18 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         markers: Option<&MarkerEnvironment>,
         python_requirement: &PythonRequirement,
         index: &InMemoryIndex,
+        git: &GitResolver,
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
         let state = ResolverState {
             index: index.clone(),
+            git: git.clone(),
             unavailable_packages: DashMap::default(),
             incomplete_packages: DashMap::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(&manifest, markers, options.dependency_mode)?,
+            urls: Urls::from_manifest(&manifest, markers, git, options.dependency_mode)?,
             locals: Locals::from_manifest(&manifest, markers, options.dependency_mode),
             project: manifest.project,
             requirements: manifest.requirements,
@@ -549,7 +554,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for resolution in resolutions {
             combined.union(resolution);
         }
-        ResolutionGraph::from_state(&self.index, &self.preferences, combined)
+        ResolutionGraph::from_state(&self.index, &self.preferences, &self.git, combined)
     }
 
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
@@ -907,6 +912,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     &self.urls,
                     &self.locals,
+                    &self.git,
                     self.markers.as_ref(),
                 );
 
@@ -1050,6 +1056,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     extra.as_ref(),
                     &self.urls,
                     &self.locals,
+                    &self.git,
                     self.markers.as_ref(),
                 )?;
 

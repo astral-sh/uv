@@ -19,6 +19,7 @@ use uv_client::RegistryClient;
 use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
+use uv_git::GitResolver;
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
@@ -33,6 +34,7 @@ pub struct BuildDispatch<'a> {
     index_locations: &'a IndexLocations,
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
+    git: &'a GitResolver,
     in_flight: &'a InFlight,
     setup_py: SetupPyStrategy,
     build_isolation: BuildIsolation<'a>,
@@ -56,6 +58,7 @@ impl<'a> BuildDispatch<'a> {
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
+        git: &'a GitResolver,
         in_flight: &'a InFlight,
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
@@ -73,6 +76,7 @@ impl<'a> BuildDispatch<'a> {
             index_locations,
             flat_index,
             index,
+            git,
             in_flight,
             setup_py,
             config_settings,
@@ -100,6 +104,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn cache(&self) -> &Cache {
         self.cache
+    }
+
+    fn git(&self) -> &GitResolver {
+        self.git
     }
 
     fn interpreter(&self) -> &Interpreter {
@@ -194,9 +202,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             extraneous: _,
         } = Planner::new(&requirements).build(
             site_packages,
-            &Reinstall::None,
-            &NoBinary::None,
-            &HashStrategy::None,
+            &Reinstall::default(),
+            &NoBinary::default(),
+            &HashStrategy::default(),
             self.index_locations,
             self.cache(),
             venv,

@@ -36,8 +36,8 @@ use uv_types::{BuildContext, SourceBuildTrait};
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
-use crate::git::{fetch_git_archive, resolve_precise};
 use crate::metadata::{ArchiveMetadata, Metadata};
+use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
 use crate::Reporter;
@@ -1040,12 +1040,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Resolve to a precise Git SHA.
-        let url = if let Some(url) = resolve_precise(
-            resource.git,
-            self.build_context.cache(),
-            self.reporter.as_ref(),
-        )
-        .await?
+        let url = if let Some(url) = self
+            .build_context
+            .git()
+            .resolve(
+                resource.git,
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter.clone().map(Facade::from),
+            )
+            .await?
         {
             Cow::Owned(url)
         } else {
@@ -1053,8 +1056,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Fetch the Git repository.
-        let fetch =
-            fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
+        let fetch = self
+            .build_context
+            .git()
+            .fetch(
+                &url,
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter.clone().map(Facade::from),
+            )
+            .await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
@@ -1114,12 +1124,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Resolve to a precise Git SHA.
-        let url = if let Some(url) = resolve_precise(
-            resource.git,
-            self.build_context.cache(),
-            self.reporter.as_ref(),
-        )
-        .await?
+        let url = if let Some(url) = self
+            .build_context
+            .git()
+            .resolve(
+                resource.git,
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter.clone().map(Facade::from),
+            )
+            .await?
         {
             Cow::Owned(url)
         } else {
@@ -1127,8 +1140,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Fetch the Git repository.
-        let fetch =
-            fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
+        let fetch = self
+            .build_context
+            .git()
+            .fetch(
+                &url,
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter.clone().map(Facade::from),
+            )
+            .await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(

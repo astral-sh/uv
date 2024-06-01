@@ -19,6 +19,7 @@ use uv_configuration::{Concurrency, KeyringProviderType, PreviewMode};
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
+use uv_git::GitResolver;
 use uv_interpreter::{
     find_default_interpreter, find_interpreter, InterpreterRequest, SourceSelector,
 };
@@ -198,6 +199,7 @@ async fn venv_impl(
 
         // Create a shared in-memory index.
         let index = InMemoryIndex::default();
+        let git = GitResolver::default();
 
         // Track in-flight downloads, builds, etc., across resolutions.
         let in_flight = InFlight::default();
@@ -214,6 +216,7 @@ async fn venv_impl(
             index_locations,
             &flat_index,
             &index,
+            &git,
             &in_flight,
             SetupPyStrategy::default(),
             &config_settings,
