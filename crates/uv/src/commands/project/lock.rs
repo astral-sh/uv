@@ -178,7 +178,7 @@ pub(super) async fn do_lock(
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Write the lockfile to disk.
-    let lock = resolution.lock()?;
+    let lock = Lock::from_resolution_graph(&resolution)?;
     let encoded = lock.to_toml()?;
     fs_err::tokio::write(
         project.workspace().root().join("uv.lock"),
