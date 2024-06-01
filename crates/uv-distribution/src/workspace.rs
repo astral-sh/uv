@@ -130,6 +130,8 @@ impl Workspace {
     }
 
     /// Set the current project to the given workspace member.
+    ///
+    /// Returns `None` if the package is not part of the workspace.
     pub fn with_current_project(self, package_name: PackageName) -> Option<ProjectWorkspace> {
         let member = self.packages.get(&package_name)?;
         let extras = member
