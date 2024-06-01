@@ -26,6 +26,7 @@ uv-configuration = { workspace = true, features = ["clap"] }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
+uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }

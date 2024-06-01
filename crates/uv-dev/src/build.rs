@@ -14,6 +14,7 @@ use uv_configuration::{
     BuildKind, Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
+use uv_git::GitResolver;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex};
 use uv_types::{BuildContext, BuildIsolation, InFlight};
@@ -55,15 +56,16 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
 
     let cache = Cache::try_from(args.cache_args)?.init()?;
 
-    let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
-    let index_urls = IndexLocations::default();
-    let flat_index = FlatIndex::default();
-    let index = InMemoryIndex::default();
-    let setup_py = SetupPyStrategy::default();
-    let in_flight = InFlight::default();
-    let config_settings = ConfigSettings::default();
     let concurrency = Concurrency::default();
+    let config_settings = ConfigSettings::default();
+    let flat_index = FlatIndex::default();
+    let git = GitResolver::default();
+    let in_flight = InFlight::default();
+    let index = InMemoryIndex::default();
+    let index_urls = IndexLocations::default();
+    let setup_py = SetupPyStrategy::default();
+    let venv = PythonEnvironment::from_virtualenv(&cache)?;
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -72,6 +74,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &index_urls,
         &flat_index,
         &index,
+        &git,
         &in_flight,
         setup_py,
         &config_settings,

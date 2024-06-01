@@ -19,9 +19,10 @@ pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
 uv-cache = { workspace = true }
+uv-configuration = { workspace = true }
+uv-git = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
-uv-configuration = { workspace = true }
 
 anyhow = { workspace = true }
 rustc-hash = { workspace = true }

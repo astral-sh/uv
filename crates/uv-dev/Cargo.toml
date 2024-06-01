@@ -25,9 +25,10 @@ uv-build = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
-uv-distribution = { workspace = true, features = ["schemars"] }
 uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true, features = ["schemars"] }
 uv-fs = { workspace = true }
+uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-resolver = { workspace = true }

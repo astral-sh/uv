@@ -1,13 +1,14 @@
-use distribution_types::Verbatim;
 use rustc_hash::FxHashMap;
 use tracing::debug;
+use url::Url;
 
+use cache_key::CanonicalUrl;
+use distribution_types::Verbatim;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use pypi_types::{
     ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, RequirementSource, VerbatimParsedUrl,
 };
-use uv_distribution::is_same_reference;
-use uv_git::GitUrl;
+use uv_git::{GitResolver, GitUrl, RepositoryReference};
 use uv_normalize::PackageName;
 
 use crate::{DependencyMode, Manifest, ResolveError};
@@ -20,6 +21,7 @@ impl Urls {
     pub(crate) fn from_manifest(
         manifest: &Manifest,
         markers: Option<&MarkerEnvironment>,
+        git: &GitResolver,
         dependencies: DependencyMode,
     ) -> Result<Self, ResolveError> {
         let mut urls: FxHashMap<PackageName, VerbatimParsedUrl> = FxHashMap::default();
@@ -93,7 +95,7 @@ impl Urls {
                     };
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
                         if !is_equal(&previous.verbatim, &url.verbatim) {
-                            if is_same_reference(&previous.verbatim, &url.verbatim) {
+                            if is_same_reference(&previous.verbatim, &url.verbatim, git) {
                                 debug!(
                                     "Allowing {} as a variant of {}",
                                     &url.verbatim, previous.verbatim
@@ -120,12 +122,16 @@ impl Urls {
     }
 
     /// Returns `true` if the provided URL is compatible with the given "allowed" URL.
-    pub(crate) fn is_allowed(expected: &VerbatimUrl, provided: &VerbatimUrl) -> bool {
+    pub(crate) fn is_allowed(
+        expected: &VerbatimUrl,
+        provided: &VerbatimUrl,
+        git: &GitResolver,
+    ) -> bool {
         #[allow(clippy::if_same_then_else)]
         if is_equal(expected, provided) {
             // If the URLs are canonically equivalent, they're compatible.
             true
-        } else if is_same_reference(expected, provided) {
+        } else if is_same_reference(expected, provided, git) {
             // If the URLs refer to the same commit, they're compatible.
             true
         } else {
@@ -139,12 +145,75 @@ impl Urls {
 ///
 /// Accepts URLs that map to the same [`CanonicalUrl`].
 fn is_equal(previous: &VerbatimUrl, url: &VerbatimUrl) -> bool {
-    cache_key::CanonicalUrl::new(previous.raw()) == cache_key::CanonicalUrl::new(url.raw())
+    CanonicalUrl::new(previous.raw()) == CanonicalUrl::new(url.raw())
+}
+
+/// Returns `true` if the URLs refer to the same Git commit.
+///
+/// For example, the previous URL could be a branch or tag, while the current URL would be a
+/// precise commit hash.
+fn is_same_reference<'a>(a: &'a Url, b: &'a Url, git: &'a GitResolver) -> bool {
+    // Convert `a` to a Git URL, if possible.
+    let Ok(a_git) = ParsedGitUrl::try_from(Url::from(CanonicalUrl::new(a))) else {
+        return false;
+    };
+
+    // Convert `b` to a Git URL, if possible.
+    let Ok(b_git) = ParsedGitUrl::try_from(Url::from(CanonicalUrl::new(b))) else {
+        return false;
+    };
+
+    // The URLs must refer to the same subdirectory, if any.
+    if a_git.subdirectory != b_git.subdirectory {
+        return false;
+    }
+
+    // Convert `a` to a repository URL.
+    let a_ref = RepositoryReference::from(&a_git.url);
+
+    // Convert `b` to a repository URL.
+    let b_ref = RepositoryReference::from(&b_git.url);
+
+    // The URLs must refer to the same repository.
+    if a_ref.url != b_ref.url {
+        return false;
+    }
+
+    // If the URLs have the same tag, they refer to the same commit.
+    if a_ref.reference == b_ref.reference {
+        return true;
+    }
+
+    // Otherwise, the URLs must resolve to the same precise commit.
+    let Some(a_precise) = a_git
+        .url
+        .precise()
+        .or_else(|| git.get(&a_ref).map(|sha| *sha))
+    else {
+        return false;
+    };
+
+    let Some(b_precise) = b_git
+        .url
+        .precise()
+        .or_else(|| git.get(&b_ref).map(|sha| *sha))
+    else {
+        return false;
+    };
+
+    a_precise == b_precise
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
+    use url::Url;
+
+    use pep508_rs::VerbatimUrl;
+    use uv_git::{GitResolver, GitSha, GitUrl, RepositoryReference};
+
+    use crate::resolver::urls::{is_equal, is_same_reference};
 
     #[test]
     fn url_compatibility() -> Result<(), url::ParseError> {
@@ -172,6 +241,66 @@ mod tests {
         let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
         let url = VerbatimUrl::parse_url("git+https://example.com/MyProject.git")?;
         assert!(!is_equal(&previous, &url));
+
+        Ok(())
+    }
+
+    #[test]
+    fn same_reference() -> anyhow::Result<()> {
+        let empty = GitResolver::default();
+
+        // Same repository, same tag.
+        let a = Url::parse("git+https://example.com/MyProject.git@main")?;
+        let b = Url::parse("git+https://example.com/MyProject.git@main")?;
+        assert!(is_same_reference(&a, &b, &empty));
+
+        // Same repository, same tag, same subdirectory.
+        let a = Url::parse("git+https://example.com/MyProject.git@main#subdirectory=pkg_dir")?;
+        let b = Url::parse("git+https://example.com/MyProject.git@main#subdirectory=pkg_dir")?;
+        assert!(is_same_reference(&a, &b, &empty));
+
+        // Different repositories, same tag.
+        let a = Url::parse("git+https://example.com/MyProject.git@main")?;
+        let b = Url::parse("git+https://example.com/MyOtherProject.git@main")?;
+        assert!(!is_same_reference(&a, &b, &empty));
+
+        // Same repository, different tags.
+        let a = Url::parse("git+https://example.com/MyProject.git@main")?;
+        let b = Url::parse("git+https://example.com/MyProject.git@v1.0")?;
+        assert!(!is_same_reference(&a, &b, &empty));
+
+        // Same repository, same tag, different subdirectory.
+        let a = Url::parse("git+https://example.com/MyProject.git@main#subdirectory=pkg_dir")?;
+        let b = Url::parse("git+https://example.com/MyProject.git@main#subdirectory=other_dir")?;
+        assert!(!is_same_reference(&a, &b, &empty));
+
+        // Same repository, different tags, but same precise commit.
+        let a = Url::parse("git+https://example.com/MyProject.git@main")?;
+        let b = Url::parse(
+            "git+https://example.com/MyProject.git@164a8735b081663fede48c5041667b194da15d25",
+        )?;
+        let resolved_refs = GitResolver::default();
+        resolved_refs.insert(
+            RepositoryReference::from(&GitUrl::try_from(Url::parse(
+                "https://example.com/MyProject@main",
+            )?)?),
+            GitSha::from_str("164a8735b081663fede48c5041667b194da15d25")?,
+        );
+        assert!(is_same_reference(&a, &b, &resolved_refs));
+
+        // Same repository, different tags, different precise commit.
+        let a = Url::parse("git+https://example.com/MyProject.git@main")?;
+        let b = Url::parse(
+            "git+https://example.com/MyProject.git@164a8735b081663fede48c5041667b194da15d25",
+        )?;
+        let resolved_refs = GitResolver::default();
+        resolved_refs.insert(
+            RepositoryReference::from(&GitUrl::try_from(Url::parse(
+                "https://example.com/MyProject@main",
+            )?)?),
+            GitSha::from_str("f2c9e88f3ec9526bbcec68d150b176d96a750aba")?,
+        );
+        assert!(!is_same_reference(&a, &b, &resolved_refs));
 
         Ok(())
     }

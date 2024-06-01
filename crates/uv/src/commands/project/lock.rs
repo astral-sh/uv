@@ -11,6 +11,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::ProjectWorkspace;
+use uv_git::GitResolver;
 use uv_interpreter::PythonEnvironment;
 use uv_requirements::upgrade::read_lockfile;
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder};
@@ -104,6 +105,7 @@ pub(super) async fn do_lock(
     let config_settings = ConfigSettings::default();
     let extras = ExtrasSpecification::default();
     let flat_index = FlatIndex::default();
+    let git = GitResolver::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
     let index_locations = IndexLocations::default();
@@ -127,6 +129,7 @@ pub(super) async fn do_lock(
         &index_locations,
         &flat_index,
         &index,
+        &git,
         &in_flight,
         setup_py,
         &config_settings,
