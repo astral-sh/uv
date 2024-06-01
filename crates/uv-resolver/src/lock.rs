@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
+use cache_key::RepositoryUrl;
 use rustc_hash::FxHashMap;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
@@ -21,7 +22,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
-use uv_git::{GitReference, GitSha};
+use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolution::AnnotatedDist;
@@ -477,6 +478,25 @@ impl Distribution {
             }
         }
         best.map(|(_, i)| i)
+    }
+
+    /// Returns the [`PackageName`] of the distribution.
+    pub fn name(&self) -> &PackageName {
+        &self.id.name
+    }
+
+    /// Returns the [`ResolvedRepositoryReference`] for the distribution, if it is a Git source.
+    pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
+        match &self.id.source.kind {
+            SourceKind::Git(git) => Some(ResolvedRepositoryReference {
+                reference: RepositoryReference {
+                    url: RepositoryUrl::new(&self.id.source.url),
+                    reference: GitReference::from(git.kind.clone()),
+                },
+                sha: git.precise,
+            }),
+            _ => None,
+        }
     }
 }
 

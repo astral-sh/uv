@@ -2,7 +2,9 @@ use std::str::FromStr;
 use url::Url;
 
 pub use crate::git::GitReference;
-pub use crate::resolver::{GitResolver, GitResolverError, RepositoryReference};
+pub use crate::resolver::{
+    GitResolver, GitResolverError, RepositoryReference, ResolvedRepositoryReference,
+};
 pub use crate::sha::{GitOid, GitSha, OidParseError};
 pub use crate::source::{Fetch, GitSource, Reporter};
 

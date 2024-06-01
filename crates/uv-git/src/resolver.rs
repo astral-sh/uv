@@ -27,6 +27,15 @@ pub enum GitResolverError {
 pub struct GitResolver(Arc<DashMap<RepositoryReference, GitSha>>);
 
 impl GitResolver {
+    /// Initialize a [`GitResolver`] with a set of resolved references.
+    pub fn from_refs(refs: Vec<ResolvedRepositoryReference>) -> Self {
+        Self(Arc::new(
+            refs.into_iter()
+                .map(|ResolvedRepositoryReference { reference, sha }| (reference, sha))
+                .collect(),
+        ))
+    }
+
     /// Returns the [`GitSha`] for the given [`RepositoryReference`], if it exists.
     pub fn get(&self, reference: &RepositoryReference) -> Option<Ref<RepositoryReference, GitSha>> {
         self.0.get(reference)
@@ -137,10 +146,19 @@ impl GitResolver {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ResolvedRepositoryReference {
+    /// An abstract reference to a Git repository, including the URL and the commit (e.g., a branch,
+    /// tag, or revision).
+    pub reference: RepositoryReference,
+    /// The precise commit SHA of the reference.
+    pub sha: GitSha,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RepositoryReference {
     /// The URL of the Git repository, with any query parameters and fragments removed.
     pub url: RepositoryUrl,
-    /// The reference to the commit to use, which could be a branch, tag or revision.
+    /// The reference to the commit to use, which could be a branch, tag, or revision.
     pub reference: GitReference,
 }
 
