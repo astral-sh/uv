@@ -1,8 +1,10 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
-use crate::common::{get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
+use anyhow::Result;
+
+use crate::common::{copy_dir_all, get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
@@ -66,19 +68,6 @@ fn workspaces_dir() -> PathBuf {
         .unwrap()
         .join("scripts")
         .join("workspaces")
-}
-
-fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
-    fs_err::create_dir_all(&dst).unwrap();
-    for entry in ignore::Walk::new(&src) {
-        let entry = entry.unwrap();
-        let relative = entry.path().strip_prefix(&src).unwrap();
-        if entry.file_type().unwrap().is_dir() {
-            fs_err::create_dir_all(dst.as_ref().join(relative)).unwrap();
-        } else {
-            fs_err::copy(entry.path(), dst.as_ref().join(relative)).unwrap();
-        }
-    }
 }
 
 #[test]
@@ -380,14 +369,14 @@ fn test_albatross_virtual_workspace() {
 
 /// Check that `uv run --package` works in a virtual workspace.
 #[test]
-fn test_uv_run_with_package_virtual_workspace() {
+fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
 
     copy_dir_all(
         workspaces_dir().join("albatross-virtual-workspace"),
         &work_dir,
-    );
+    )?;
 
     // TODO(konsti): `--python` is being ignored atm, so we need to create the correct venv
     // ourselves and add the output filters.
@@ -445,15 +434,17 @@ fn test_uv_run_with_package_virtual_workspace() {
      + tqdm==4.66.2
     "###
     );
+
+    Ok(())
 }
 
 /// Check that `uv run --package` works in a root workspace.
 #[test]
-fn test_uv_run_with_package_root_workspace() {
+fn test_uv_run_with_package_root_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
 
-    copy_dir_all(workspaces_dir().join("albatross-root-workspace"), &work_dir);
+    copy_dir_all(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
 
     // TODO(konsti): `--python` is being ignored atm, so we need to create the correct venv
     // ourselves and add the output filters.
@@ -511,4 +502,6 @@ fn test_uv_run_with_package_root_workspace() {
      + tqdm==4.66.2
     "###
     );
+
+    Ok(())
 }

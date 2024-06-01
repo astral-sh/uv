@@ -175,7 +175,6 @@ impl Workspace {
         workspace_definition: ToolUvWorkspace,
         workspace_pyproject_toml: PyProjectToml,
         current_project: Option<(PackageName, PathBuf, PyProjectToml)>,
-
         stop_discovery_at: Option<&Path>,
     ) -> Result<Workspace, WorkspaceError> {
         let mut workspace_members = BTreeMap::new();
