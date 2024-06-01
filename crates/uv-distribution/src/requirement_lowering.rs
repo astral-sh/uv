@@ -252,8 +252,9 @@ mod test {
     use uv_configuration::PreviewMode;
     use uv_normalize::PackageName;
 
+    use crate::metadata::Metadata;
     use crate::pyproject::PyProjectToml;
-    use crate::{Metadata, ProjectWorkspace};
+    use crate::ProjectWorkspace;
 
     async fn metadata_from_pyproject_toml(contents: &str) -> anyhow::Result<Metadata> {
         let pyproject_toml: PyProjectToml = toml::from_str(contents)?;

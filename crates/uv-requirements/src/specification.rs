@@ -40,9 +40,7 @@ use distribution_types::{
 use pep508_rs::{UnnamedRequirement, UnnamedRequirementUrl};
 use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
-use requirements_txt::{
-    EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
-};
+use requirements_txt::{FindLink, RequirementsTxt, RequirementsTxtRequirement};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_distribution::pyproject::PyProjectToml;
@@ -91,20 +89,17 @@ impl RequirementsSpecification {
                 let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
-                    requirements: vec![UnresolvedRequirementSpecification::from(
-                        RequirementEntry {
-                            requirement,
-                            hashes: vec![],
-                        },
-                    )],
+                    requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
                     ..Self::default()
                 }
             }
             RequirementsSource::Editable(name) => {
-                let requirement = EditableRequirement::parse(name, None, std::env::current_dir()?)
+                let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
-                    requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
+                    requirements: vec![UnresolvedRequirementSpecification::from(
+                        requirement.into_editable()?,
+                    )],
                     ..Self::default()
                 }
             }
@@ -112,7 +107,7 @@ impl RequirementsSpecification {
                 if !(path == Path::new("-")
                     || path.starts_with("http://")
                     || path.starts_with("https://")
-                    || path.is_file())
+                    || path.exists())
                 {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }

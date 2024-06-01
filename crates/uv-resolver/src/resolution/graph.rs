@@ -12,6 +12,7 @@ use distribution_types::{
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::{ParsedUrlError, Requirement, Yanked};
+use uv_git::GitResolver;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::preferences::Preferences;
@@ -40,6 +41,7 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         index: &InMemoryIndex,
         preferences: &Preferences,
+        git: &GitResolver,
         resolution: Resolution,
     ) -> anyhow::Result<Self, ResolveError> {
         // Collect all marker expressions from relevant pubgrub packages.
@@ -183,7 +185,7 @@ impl ResolutionGraph {
                         url: Some(url),
                     } => {
                         // Create the distribution.
-                        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone()))?;
+                        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
 
                         // Extract the hashes, preserving those that were already present in the
                         // lockfile if necessary.

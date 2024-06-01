@@ -11,8 +11,9 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::ProjectWorkspace;
+use uv_git::GitResolver;
 use uv_interpreter::PythonEnvironment;
-use uv_requirements::upgrade::read_lockfile;
+use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -117,7 +118,10 @@ pub(super) async fn do_lock(
     let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
 
     // If an existing lockfile exists, build up a set of preferences.
-    let preferences = read_lockfile(project, &upgrade).await?;
+    let LockedRequirements { preferences, git } = read_lockfile(project, &upgrade).await?;
+
+    // Create the Git resolver.
+    let git = GitResolver::from_refs(git);
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -127,6 +131,7 @@ pub(super) async fn do_lock(
         &index_locations,
         &flat_index,
         &index,
+        &git,
         &in_flight,
         setup_py,
         &config_settings,

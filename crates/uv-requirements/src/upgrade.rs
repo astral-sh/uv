@@ -7,7 +7,16 @@ use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
 use uv_distribution::ProjectWorkspace;
+use uv_git::ResolvedRepositoryReference;
 use uv_resolver::{Lock, Preference, PreferenceError};
+
+#[derive(Debug, Default)]
+pub struct LockedRequirements {
+    /// The pinned versions from the lockfile.
+    pub preferences: Vec<Preference>,
+    /// The pinned Git SHAs from the lockfile.
+    pub git: Vec<ResolvedRepositoryReference>,
+}
 
 /// Load the preferred requirements from an existing `requirements.txt`, applying the upgrade strategy.
 pub async fn read_requirements_txt(
@@ -58,10 +67,10 @@ pub async fn read_requirements_txt(
 pub async fn read_lockfile(
     project: &ProjectWorkspace,
     upgrade: &Upgrade,
-) -> Result<Vec<Preference>> {
+) -> Result<LockedRequirements> {
     // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
     if upgrade.is_all() {
-        return Ok(Vec::new());
+        return Ok(LockedRequirements::default());
     }
 
     // If an existing lockfile exists, build up a set of preferences.
@@ -71,32 +80,36 @@ pub async fn read_lockfile(
             Ok(lock) => lock,
             Err(err) => {
                 eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");
-                return Ok(Vec::new());
+                return Ok(LockedRequirements::default());
             }
         },
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Vec::new());
+            return Ok(LockedRequirements::default());
         }
         Err(err) => return Err(err.into()),
     };
 
-    // Map each entry in the lockfile to a preference.
-    let preferences: Vec<Preference> = lock
-        .distributions()
-        .iter()
-        .map(Preference::from_lock)
-        .collect();
+    let mut preferences = Vec::new();
+    let mut git = Vec::new();
 
-    // Apply the upgrade strategy to the requirements.
-    Ok(match upgrade {
-        // Respect all pinned versions from the existing lockfile.
-        Upgrade::None => preferences,
-        // Ignore all pinned versions from the existing lockfile.
-        Upgrade::All => vec![],
-        // Ignore pinned versions for the specified packages.
-        Upgrade::Packages(packages) => preferences
-            .into_iter()
-            .filter(|preference| !packages.contains(preference.name()))
-            .collect(),
-    })
+    for dist in lock.distributions() {
+        // Skip the distribution if it's not included in the upgrade strategy.
+        if match upgrade {
+            Upgrade::None => false,
+            Upgrade::All => true,
+            Upgrade::Packages(packages) => packages.contains(dist.name()),
+        } {
+            continue;
+        }
+
+        // Map each entry in the lockfile to a preference.
+        preferences.push(Preference::from_lock(dist));
+
+        // Map each entry in the lockfile to a Git SHA.
+        if let Some(git_ref) = dist.as_git_ref() {
+            git.push(git_ref);
+        }
+    }
+
+    Ok(LockedRequirements { preferences, git })
 }

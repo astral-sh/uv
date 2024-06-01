@@ -8,6 +8,7 @@ use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
+use uv_git::GitResolver;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
 use crate::BuildIsolation;
@@ -54,6 +55,9 @@ pub trait BuildContext {
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
+
+    /// Return a reference to the Git resolver.
+    fn git(&self) -> &GitResolver;
 
     /// All (potentially nested) source distribution builds use the same base python and can reuse
     /// it's metadata (e.g. wheel compatibility tags).

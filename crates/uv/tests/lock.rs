@@ -348,7 +348,7 @@ fn lock_sdist_git() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        dependencies = ["anyio @ git+https://github.com/agronholm/anyio@3.7.0"]
+        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]
         "#,
     )?;
 
@@ -359,7 +359,7 @@ fn lock_sdist_git() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning.
-    Resolved 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -372,45 +372,21 @@ fn lock_sdist_git() -> Result<()> {
         version = 1
 
         [[distribution]]
-        name = "anyio"
-        version = "3.7.0"
-        source = "git+https://github.com/agronholm/anyio?rev=3.7.0#f7a880ffac4766efb39e6fb60fc28d944f5d2f65"
-        sdist = { url = "https://github.com/agronholm/anyio?rev=3.7.0#f7a880ffac4766efb39e6fb60fc28d944f5d2f65" }
-
-        [[distribution.dependencies]]
-        name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution.dependencies]]
-        name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution]]
-        name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
-        wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 }]
-
-        [[distribution]]
         name = "project"
         version = "0.1.0"
         source = "editable+file://[TEMP_DIR]/"
         sdist = { url = "file://[TEMP_DIR]/" }
 
         [[distribution.dependencies]]
-        name = "anyio"
-        version = "3.7.0"
-        source = "git+https://github.com/agronholm/anyio?rev=3.7.0#f7a880ffac4766efb39e6fb60fc28d944f5d2f65"
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
 
         [[distribution]]
-        name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
-        wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 }]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        sdist = { url = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -423,12 +399,10 @@ fn lock_sdist_git() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==3.7.0 (from git+https://github.com/agronholm/anyio@f7a880ffac4766efb39e6fb60fc28d944f5d2f65)
-     + idna==3.6
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
-     + sniffio==1.3.1
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
     Ok(())
@@ -909,6 +883,162 @@ fn lock_preference() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = "registry+https://pypi.org/simple"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Respect locked versions with `uv lock`, unless `--upgrade` is passed.
+#[test]
+fn lock_git_sha() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Lock to a specific commit on `main`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+file://[TEMP_DIR]/"
+        sdist = { url = "file://[TEMP_DIR]/" }
+
+        [[distribution.dependencies]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        sdist = { url = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
+        );
+    });
+
+    // Rewrite the lockfile, as if it were locked against `main`.
+    let lock = lock.replace("rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979", "rev=main");
+    fs_err::write(context.temp_dir.join("uv.lock"), lock)?;
+
+    // Lock `anyio` against `main`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@main"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    // The lockfile should resolve to `0dacfd662c64cb4ceb16e6cf65a157a8b715b979`, even though it's
+    // not the latest commit on `main`.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+file://[TEMP_DIR]/"
+        sdist = { url = "file://[TEMP_DIR]/" }
+
+        [[distribution.dependencies]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        sdist = { url = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
+        );
+    });
+
+    // Relock with `--upgrade`.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("uv-public-pypackage"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    // The lockfile should resolve to `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`, the latest commit
+    // on `main`.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+file://[TEMP_DIR]/"
+        sdist = { url = "file://[TEMP_DIR]/" }
+
+        [[distribution.dependencies]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"
+
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"
+        sdist = { url = "https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
         "###
         );
     });

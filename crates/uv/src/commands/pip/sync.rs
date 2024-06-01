@@ -19,6 +19,7 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
+use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -251,6 +252,10 @@ pub(crate) async fn pip_sync(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
+    // When resolving, don't take any external preferences into account.
+    let preferences = Vec::default();
+    let git = GitResolver::default();
+
     // Create a build dispatch for resolution.
     let resolve_dispatch = BuildDispatch::new(
         &client,
@@ -259,6 +264,7 @@ pub(crate) async fn pip_sync(
         &index_locations,
         &flat_index,
         &index,
+        &git,
         &in_flight,
         setup_py,
         config_settings,
@@ -273,9 +279,6 @@ pub(crate) async fn pip_sync(
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;
-
-    // When resolving, don't take any external preferences into account.
-    let preferences = Vec::default();
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
@@ -336,6 +339,7 @@ pub(crate) async fn pip_sync(
             &index_locations,
             &flat_index,
             &index,
+            &git,
             &in_flight,
             setup_py,
             config_settings,

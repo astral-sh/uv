@@ -1044,6 +1044,161 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn install_editable_pep_508_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        -e black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Downloaded 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + frozenlist==1.4.1
+     + idna==3.6
+     + multidict==6.0.5
+     + yarl==1.9.4
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_editable_pep_508_cli() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(format!("black[d] @ file://{workspace_root}/scripts/packages/black_editable", workspace_root = context.workspace_root.simplified_display())), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Downloaded 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + frozenlist==1.4.1
+     + idna==3.6
+     + multidict==6.0.5
+     + yarl==1.9.4
+    "###
+    );
+}
+
+#[test]
+fn invalid_editable_no_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e black")?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported editable requirement in `requirements.txt`
+      Caused by: Editable `black` must refer to a local directory
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_editable_no_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e black==0.1.0")?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported editable requirement in `requirements.txt`
+      Caused by: Editable `black` must refer to a local directory, not a versioned package
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_editable_unnamed_https_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported editable requirement in `requirements.txt`
+      Caused by: Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_editable_named_https_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported editable requirement in `requirements.txt`
+      Caused by: Editable `black` must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a source distribution that uses the `flit` build system, along with `flit`
 /// at the top-level, along with `--reinstall` to force a re-download after resolution, to ensure
 /// that the `flit` install and the source distribution build don't conflict.

@@ -8,6 +8,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
+use uv_git::GitResolver;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::specifier::PubGrubSpecifier;
@@ -29,6 +30,7 @@ impl PubGrubDependencies {
         source_extra: Option<&ExtraName>,
         urls: &Urls,
         locals: &Locals,
+        git: &GitResolver,
         env: Option<&MarkerEnvironment>,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = Vec::default();
@@ -42,6 +44,7 @@ impl PubGrubDependencies {
             source_extra,
             urls,
             locals,
+            git,
             env,
             &mut dependencies,
             &mut seen,
@@ -71,6 +74,7 @@ fn add_requirements(
     source_extra: Option<&ExtraName>,
     urls: &Urls,
     locals: &Locals,
+    git: &GitResolver,
     env: Option<&MarkerEnvironment>,
     dependencies: &mut Vec<(PubGrubPackage, Range<Version>)>,
     seen: &mut FxHashSet<ExtraName>,
@@ -97,9 +101,10 @@ fn add_requirements(
             None,
             urls,
             locals,
+            git,
         ))
         .chain(requirement.extras.clone().into_iter().map(|extra| {
-            PubGrubRequirement::from_requirement(requirement, Some(extra), urls, locals)
+            PubGrubRequirement::from_requirement(requirement, Some(extra), urls, locals, git)
         })) {
             let PubGrubRequirement { package, version } = result?;
 
@@ -126,6 +131,7 @@ fn add_requirements(
                                 Some(extra),
                                 urls,
                                 locals,
+                                git,
                                 env,
                                 dependencies,
                                 seen,
@@ -156,7 +162,7 @@ fn add_requirements(
 
                 // Add the package.
                 let PubGrubRequirement { package, version } =
-                    PubGrubRequirement::from_constraint(constraint, urls, locals)?;
+                    PubGrubRequirement::from_constraint(constraint, urls, locals, git)?;
 
                 // Ignore self-dependencies.
                 if let PubGrubPackageInner::Package { name, .. } = &*package {
@@ -196,6 +202,7 @@ impl PubGrubRequirement {
         extra: Option<ExtraName>,
         urls: &Urls,
         locals: &Locals,
+        git: &GitResolver,
     ) -> Result<Self, ResolveError> {
         match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
@@ -241,7 +248,7 @@ impl PubGrubRequirement {
                     ));
                 };
 
-                if !Urls::is_allowed(&expected.verbatim, url) {
+                if !Urls::is_allowed(&expected.verbatim, url, git) {
                     return Err(ResolveError::ConflictingUrlsTransitive(
                         requirement.name.clone(),
                         expected.verbatim.verbatim().to_string(),
@@ -267,7 +274,7 @@ impl PubGrubRequirement {
                     ));
                 };
 
-                if !Urls::is_allowed(&expected.verbatim, url) {
+                if !Urls::is_allowed(&expected.verbatim, url, git) {
                     return Err(ResolveError::ConflictingUrlsTransitive(
                         requirement.name.clone(),
                         expected.verbatim.verbatim().to_string(),
@@ -293,7 +300,7 @@ impl PubGrubRequirement {
                     ));
                 };
 
-                if !Urls::is_allowed(&expected.verbatim, url) {
+                if !Urls::is_allowed(&expected.verbatim, url, git) {
                     return Err(ResolveError::ConflictingUrlsTransitive(
                         requirement.name.clone(),
                         expected.verbatim.verbatim().to_string(),
@@ -319,7 +326,8 @@ impl PubGrubRequirement {
         constraint: &Requirement,
         urls: &Urls,
         locals: &Locals,
+        git: &GitResolver,
     ) -> Result<Self, ResolveError> {
-        Self::from_requirement(constraint, None, urls, locals)
+        Self::from_requirement(constraint, None, urls, locals, git)
     }
 }

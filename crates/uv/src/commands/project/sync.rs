@@ -10,6 +10,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::ProjectWorkspace;
+use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
@@ -87,6 +88,7 @@ pub(super) async fn do_sync(
     let config_settings = ConfigSettings::default();
     let dry_run = false;
     let flat_index = FlatIndex::default();
+    let git = GitResolver::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
@@ -105,6 +107,7 @@ pub(super) async fn do_sync(
         &index_locations,
         &flat_index,
         &index,
+        &git,
         &in_flight,
         setup_py,
         &config_settings,

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tokio::task::JoinError;
 use zip::result::ZipError;
 
-use crate::MetadataLoweringError;
+use crate::metadata::MetadataLoweringError;
 use distribution_filename::WheelFilenameError;
 use pep440_rs::Version;
 use pypi_types::HashDigest;
@@ -25,8 +25,8 @@ pub enum Error {
     RelativePath(PathBuf),
     #[error(transparent)]
     JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
-    #[error("Git operation failed")]
-    Git(#[source] anyhow::Error),
+    #[error(transparent)]
+    Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
     Reqwest(#[from] BetterReqwestError),
     #[error(transparent)]

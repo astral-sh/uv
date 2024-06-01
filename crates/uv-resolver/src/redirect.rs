@@ -2,8 +2,39 @@ use url::Url;
 
 use pep508_rs::VerbatimUrl;
 use pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
-use uv_distribution::git_url_to_precise;
-use uv_git::GitReference;
+use uv_git::{GitReference, GitResolver};
+
+/// Map a URL to a precise URL, if possible.
+pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> VerbatimParsedUrl {
+    let ParsedUrl::Git(ParsedGitUrl {
+        url: git_url,
+        subdirectory,
+    }) = &url.parsed_url
+    else {
+        return url;
+    };
+
+    let Some(new_git_url) = git.precise(git_url.clone()) else {
+        debug_assert!(
+            matches!(git_url.reference(), GitReference::FullCommit(_)),
+            "Unseen Git URL: {}, {:?}",
+            url.verbatim,
+            git_url
+        );
+        return url;
+    };
+
+    let new_parsed_url = ParsedGitUrl {
+        url: new_git_url,
+        subdirectory: subdirectory.clone(),
+    };
+    let new_url = Url::from(new_parsed_url.clone());
+    let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
+    VerbatimParsedUrl {
+        parsed_url: ParsedUrl::Git(new_parsed_url),
+        verbatim: new_verbatim_url,
+    }
+}
 
 /// Given a [`VerbatimUrl`] and a redirect, apply the redirect to the URL while preserving as much
 /// of the verbatim representation as possible.
@@ -37,37 +68,6 @@ fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
     }
 
     redirect
-}
-
-pub(crate) fn url_to_precise(url: VerbatimParsedUrl) -> VerbatimParsedUrl {
-    let ParsedUrl::Git(ParsedGitUrl {
-        url: git_url,
-        subdirectory,
-    }) = url.parsed_url.clone()
-    else {
-        return url;
-    };
-
-    let Some(new_git_url) = git_url_to_precise(git_url.clone()) else {
-        debug_assert!(
-            matches!(git_url.reference(), GitReference::FullCommit(_)),
-            "Unseen Git URL: {}, {:?}",
-            url.verbatim,
-            git_url
-        );
-        return url;
-    };
-
-    let new_parsed_url = ParsedGitUrl {
-        url: new_git_url,
-        subdirectory,
-    };
-    let new_url = Url::from(new_parsed_url.clone());
-    let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
-    VerbatimParsedUrl {
-        parsed_url: ParsedUrl::Git(new_parsed_url),
-        verbatim: new_verbatim_url,
-    }
 }
 
 #[cfg(test)]

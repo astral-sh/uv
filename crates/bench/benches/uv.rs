@@ -85,6 +85,7 @@ mod resolver {
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
+    use uv_git::GitResolver;
     use uv_interpreter::PythonEnvironment;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph, Resolver,
@@ -124,17 +125,18 @@ mod resolver {
         client: &RegistryClient,
         venv: &PythonEnvironment,
     ) -> Result<ResolutionGraph> {
+        let build_isolation = BuildIsolation::Isolated;
+        let concurrency = Concurrency::default();
+        let config_settings = ConfigSettings::default();
         let flat_index = FlatIndex::default();
-        let index = InMemoryIndex::default();
+        let git = GitResolver::default();
         let hashes = HashStrategy::None;
-        let index_locations = IndexLocations::default();
         let in_flight = InFlight::default();
+        let index = InMemoryIndex::default();
+        let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
         let interpreter = venv.interpreter().clone();
         let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &MARKERS);
-        let concurrency = Concurrency::default();
-        let config_settings = ConfigSettings::default();
-        let build_isolation = BuildIsolation::Isolated;
 
         let build_context = BuildDispatch::new(
             client,
@@ -143,6 +145,7 @@ mod resolver {
             &index_locations,
             &flat_index,
             &index,
+            &git,
             &in_flight,
             SetupPyStrategy::default(),
             &config_settings,

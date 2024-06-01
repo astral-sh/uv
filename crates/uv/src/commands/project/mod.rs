@@ -16,6 +16,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::ProjectWorkspace;
 use uv_fs::Simplified;
+use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -167,6 +168,7 @@ pub(crate) async fn update_environment(
     let dry_run = false;
     let extras = ExtrasSpecification::default();
     let flat_index = FlatIndex::default();
+    let git = GitResolver::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
@@ -188,6 +190,7 @@ pub(crate) async fn update_environment(
         &index_locations,
         &flat_index,
         &index,
+        &git,
         &in_flight,
         setup_py,
         &config_settings,
@@ -245,6 +248,7 @@ pub(crate) async fn update_environment(
             &index_locations,
             &flat_index,
             &index,
+            &git,
             &in_flight,
             setup_py,
             &config_settings,

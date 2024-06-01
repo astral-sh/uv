@@ -32,8 +32,9 @@ use uv_types::BuildContext;
 
 use crate::archive::Archive;
 use crate::locks::Locks;
+use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
-use crate::{ArchiveMetadata, Error, LocalWheel, Metadata, Reporter};
+use crate::{Error, LocalWheel, Reporter};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
