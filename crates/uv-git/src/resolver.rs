@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::Result;
 use tracing::debug;
 
 use cache_key::RepositoryUrl;

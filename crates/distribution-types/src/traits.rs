@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
-
 use pep508_rs::VerbatimUrl;
 use uv_normalize::PackageName;
 

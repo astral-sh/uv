@@ -36,7 +36,6 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::Result;
 use url::Url;
 
 use distribution_filename::WheelFilename;

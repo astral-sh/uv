@@ -726,5 +726,8 @@ pub(crate) enum Error {
     Lookahead(#[from] uv_requirements::LookaheadError),
 
     #[error(transparent)]
+    Named(#[from] uv_requirements::NamedRequirementsError),
+
+    #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }

@@ -1,4 +1,3 @@
-use anyhow::Result;
 use pubgrub::range::Range;
 
 use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier};

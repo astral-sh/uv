@@ -6,7 +6,6 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::thread;
 
-use anyhow::Result;
 use dashmap::DashMap;
 use futures::{FutureExt, StreamExt, TryFutureExt};
 use itertools::Itertools;
