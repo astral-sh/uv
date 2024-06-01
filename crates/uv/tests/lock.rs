@@ -611,11 +611,6 @@ fn lock_extra() -> Result<()> {
         sdist = { url = "file://[TEMP_DIR]/" }
 
         [[distribution.dependencies]]
-        name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution.dependencies]]
         name = "iniconfig"
         version = "2.0.0"
         source = "registry+https://pypi.org/simple"
