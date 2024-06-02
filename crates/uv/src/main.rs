@@ -199,13 +199,13 @@ async fn run() -> Result<ExitStatus> {
                 .r#override
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .chain(args.override_from_workspace)
                 .collect::<Vec<_>>();
 
             commands::pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
+                args.overrides_from_workspace,
                 args.shared.extras,
                 args.shared.output_file.as_deref(),
                 args.shared.resolution,
@@ -340,13 +340,13 @@ async fn run() -> Result<ExitStatus> {
                 .r#override
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .chain(args.override_from_workspace)
                 .collect::<Vec<_>>();
 
             commands::pip_install(
                 &requirements,
                 &constraints,
                 &overrides,
+                args.overrides_from_workspace,
                 &args.shared.extras,
                 args.shared.resolution,
                 args.shared.prerelease,

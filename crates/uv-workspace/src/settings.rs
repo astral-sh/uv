@@ -1,9 +1,11 @@
-use std::{num::NonZeroUsize, path::PathBuf};
+use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf, str::FromStr};
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::RequirementOrigin;
+use pypi_types::Requirement;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
@@ -37,7 +39,33 @@ pub struct Options {
     pub preview: Option<bool>,
     pub cache_dir: Option<PathBuf>,
     pub pip: Option<PipOptions>,
-    pub override_dependencies: Option<Vec<String>>,
+    #[serde(deserialize_with = "deserialize_override_dependencies", default)]
+    pub override_dependencies: Vec<Requirement>,
+}
+
+fn deserialize_override_dependencies<'de, D>(deserializer: D) -> Result<Vec<Requirement>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let requirements: Vec<String> = Option::deserialize(deserializer)?.unwrap_or_default();
+
+    if requirements.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let reqs: Result<Vec<Requirement>, _> = requirements
+        .iter()
+        .map(|name| {
+            pep508_rs::Requirement::from_str(name)
+                .map(Requirement::from)
+                .map(|mut req| {
+                    req.origin = Some(RequirementOrigin::Workspace);
+                    req
+                })
+                .map_err(serde::de::Error::custom)
+        })
+        .collect();
+    reqs
 }
 
 /// A `[tool.uv.pip]` section.

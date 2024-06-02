@@ -29,12 +29,9 @@
       ]
     },
     "override-dependencies": {
-      "type": [
-        "array",
-        "null"
-      ],
+      "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/Requirement"
       }
     },
     "pip": {
@@ -606,6 +603,10 @@
       "description": "A Python version specifier, e.g. `3.7` or `3.8.0`.",
       "type": "string",
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
+    },
+    "Requirement": {
+      "description": "PEP 508 style requirement. (e.g., `flask==3.0.0`, `black @ https://...`).",
+      "type": "string"
     },
     "ResolutionMode": {
       "oneOf": [

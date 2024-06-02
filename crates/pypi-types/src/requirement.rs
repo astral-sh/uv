@@ -31,6 +31,28 @@ pub struct Requirement {
     pub origin: Option<RequirementOrigin>,
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Requirement {
+    fn schema_name() -> String {
+        "Requirement".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some(
+                    "PEP 508 style requirement. (e.g., `flask==3.0.0`, `black @ https://...`)."
+                        .to_string(),
+                ),
+                ..schemars::schema::Metadata::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
+    }
+}
+
 impl Requirement {
     /// Returns whether the markers apply for the given environment.
     ///
