@@ -12,15 +12,18 @@ pub struct PythonRequirement {
 }
 
 impl PythonRequirement {
-    pub fn new(interpreter: &Interpreter, target: &StringVersion) -> Self {
+    pub fn from_marker_environment(interpreter: &Interpreter, env: &MarkerEnvironment) -> Self {
         Self {
             installed: interpreter.python_full_version().clone(),
-            target: target.clone(),
+            target: env.python_full_version().clone(),
         }
     }
 
-    pub fn from_marker_environment(interpreter: &Interpreter, env: &MarkerEnvironment) -> Self {
-        Self::new(interpreter, env.python_full_version())
+    pub fn from_interpreter(interpreter: &Interpreter) -> Self {
+        Self {
+            installed: interpreter.python_full_version().clone(),
+            target: interpreter.python_full_version().clone(),
+        }
     }
 
     /// Return the installed version of Python.

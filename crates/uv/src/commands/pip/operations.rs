@@ -88,7 +88,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     upgrade: &Upgrade,
     interpreter: &Interpreter,
     tags: &Tags,
-    markers: &MarkerEnvironment,
+    markers: Option<&MarkerEnvironment>,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
@@ -182,7 +182,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
-    let python_requirement = PythonRequirement::from_marker_environment(interpreter, markers);
+    let python_requirement = if let Some(markers) = markers {
+        PythonRequirement::from_marker_environment(interpreter, markers)
+    } else {
+        PythonRequirement::from_interpreter(interpreter)
+    };
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -196,7 +200,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve(Some(markers))
+            .resolve(markers)
             .await?
         }
         DependencyMode::Direct => Vec::new(),
@@ -230,7 +234,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             manifest,
             options,
             &python_requirement,
-            Some(markers),
+            markers,
             tags,
             flat_index,
             index,
