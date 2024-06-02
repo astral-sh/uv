@@ -2955,7 +2955,7 @@ fn override_dependency_from_specific_uvtoml() -> Result<()> {
     )?;
 
     let _ = context.temp_dir.child("uv").create_dir_all();
-    let uv_toml: assert_fs::fixture::ChildPath = context.temp_dir.child("uv/uv.toml");
+    let uv_toml: assert_fs::fixture::ChildPath = context.temp_dir.child("uv").child("uv.toml");
     uv_toml.write_str(
         r#"
         override-dependencies = [
@@ -3087,7 +3087,7 @@ fn override_dependency_marge_user_level_uvtoml() -> Result<()> {
     )?;
 
     let _ = context.temp_dir.child("uv").create_dir_all();
-    let uv_toml = context.temp_dir.child("uv/uv.toml");
+    let uv_toml = context.temp_dir.child("uv").child("uv.toml");
     uv_toml.write_str(
         r#"
         override-dependencies = [
