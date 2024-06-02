@@ -38,6 +38,7 @@ fs-err = { workspace = true }
 futures = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 serde = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
