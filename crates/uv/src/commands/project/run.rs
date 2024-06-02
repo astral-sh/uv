@@ -60,9 +60,6 @@ pub(crate) async fn run(
         };
         let venv = project::init_environment(&project, preview, cache, printer)?;
 
-        debug!("Found project: {:?}", project);
-        debug!("Found venv: {:?}", venv);
-
         // Lock and sync the environment.
         let lock = project::lock::do_lock(
             &project,

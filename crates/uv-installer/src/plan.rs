@@ -76,8 +76,6 @@ impl<'a> Planner<'a> {
             BuildHasherDefault::default(),
         );
 
-        debug!("site_packages: {:?}", site_packages);
-
         for requirement in self.requirements {
             // Filter out incompatible requirements.
             if !requirement.evaluate_markers(Some(venv.interpreter().markers()), &[]) {
@@ -116,8 +114,6 @@ impl<'a> Planner<'a> {
             };
 
             let installed_dists = site_packages.remove_packages(&requirement.name);
-
-            debug!("Looking for requirement: {:?}", requirement);
 
             if reinstall {
                 reinstalls.extend(installed_dists);
