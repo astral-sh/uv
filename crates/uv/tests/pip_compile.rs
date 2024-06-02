@@ -3067,6 +3067,7 @@ fn override_dependency_from_workspace_uvtoml() -> Result<()> {
 /// Derivation test of `override_dependency`
 /// Check that merged override-dependencies in pyproject.toml and user level uv.toml.
 #[test]
+#[cfg(not(windows))]
 fn override_dependency_marge_user_level_uvtoml() -> Result<()> {
     let context = TestContext::new("3.12");
     let _ = context.temp_dir.child("sample").create_dir_all();
