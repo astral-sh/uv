@@ -1831,6 +1831,10 @@ pub(crate) struct RunArgs {
     /// format (e.g., `2006-12-02`).
     #[arg(long)]
     pub(crate) exclude_newer: Option<ExcludeNewer>,
+
+    /// Run the command in a different package in the workspace.
+    #[arg(long, conflicts_with = "isolated")]
+    pub(crate) package: Option<PackageName>,
 }
 
 #[derive(Args)]

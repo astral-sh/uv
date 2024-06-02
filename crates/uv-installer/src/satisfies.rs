@@ -2,8 +2,10 @@ use std::fmt::Debug;
 use std::path::Path;
 
 use anyhow::Result;
+use same_file::is_same_file;
 use serde::Deserialize;
 use tracing::{debug, trace};
+use url::Url;
 
 use cache_key::{CanonicalUrl, RepositoryUrl};
 use distribution_types::{InstalledDirectUrlDist, InstalledDist};
@@ -147,8 +149,8 @@ impl RequirementSatisfaction {
                 Ok(Self::Satisfied)
             }
             RequirementSource::Path {
-                path,
-                url: requested_url,
+                url: _,
+                path: requested_path,
                 editable: requested_editable,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
@@ -175,24 +177,34 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if !CanonicalUrl::parse(installed_url)
-                    .is_ok_and(|installed_url| installed_url == CanonicalUrl::new(requested_url))
+                let Some(installed_path) = Url::parse(installed_url)
+                    .ok()
+                    .and_then(|url| url.to_file_path().ok())
+                else {
+                    return Ok(Self::Mismatch);
+                };
+
+                if !(*requested_path == installed_path
+                    || is_same_file(requested_path, &installed_path).unwrap_or(false))
                 {
                     trace!(
-                        "URL mismatch: {:?} vs. {:?}",
-                        CanonicalUrl::parse(installed_url),
-                        CanonicalUrl::new(requested_url)
+                        "Path mismatch: {:?} vs. {:?}",
+                        requested_path,
+                        installed_path
                     );
-                    return Ok(Self::Mismatch);
+                    return Ok(Self::Satisfied);
                 }
 
-                if !ArchiveTimestamp::up_to_date_with(path, ArchiveTarget::Install(distribution))? {
+                if !ArchiveTimestamp::up_to_date_with(
+                    requested_path,
+                    ArchiveTarget::Install(distribution),
+                )? {
                     trace!("Out of date");
                     return Ok(Self::OutOfDate);
                 }
 
                 // Does the package have dynamic metadata?
-                if is_dynamic(path) {
+                if is_dynamic(requested_path) {
                     return Ok(Self::Dynamic);
                 }
 

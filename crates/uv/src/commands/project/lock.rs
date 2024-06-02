@@ -36,7 +36,7 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let project = ProjectWorkspace::discover(std::env::current_dir()?, None).await?;
+    let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
     let venv = project::init_environment(&project, preview, cache, printer)?;

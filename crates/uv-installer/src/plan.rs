@@ -113,16 +113,18 @@ impl<'a> Planner<'a> {
                 NoBinary::Packages(packages) => packages.contains(&requirement.name),
             };
 
+            let installed_dists = site_packages.remove_packages(&requirement.name);
+
             if reinstall {
-                let installed_dists = site_packages.remove_packages(&requirement.name);
                 reinstalls.extend(installed_dists);
             } else {
-                let installed_dists = site_packages.remove_packages(&requirement.name);
                 match installed_dists.as_slice() {
                     [] => {}
                     [distribution] => {
                         match RequirementSatisfaction::check(distribution, &requirement.source)? {
-                            RequirementSatisfaction::Mismatch => {}
+                            RequirementSatisfaction::Mismatch => {
+                                debug!("Requirement installed, but mismatched: {distribution:?}");
+                            }
                             RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {distribution}");
                                 continue;

@@ -580,6 +580,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.upgrade,
                 args.exclude_newer,
+                args.package,
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,

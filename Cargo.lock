@@ -4775,6 +4775,7 @@ dependencies = [
  "pypi-types",
  "rayon",
  "rustc-hash",
+ "same-file",
  "serde",
  "tempfile",
  "thiserror",

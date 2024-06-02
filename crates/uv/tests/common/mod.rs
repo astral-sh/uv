@@ -276,6 +276,10 @@ impl TestContext {
         command
     }
 
+    pub fn interpreter(&self) -> PathBuf {
+        venv_to_interpreter(&self.venv)
+    }
+
     /// Run the given python code and check whether it succeeds.
     pub fn assert_command(&self, command: &str) -> Assert {
         std::process::Command::new(venv_to_interpreter(&self.venv))
