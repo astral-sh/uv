@@ -485,21 +485,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let mut cur_state = Some(state);
                     for (i, fork) in forks.into_iter().enumerate() {
                         let is_last = i == forks_len - 1;
-                        let state = cur_state.as_mut().unwrap();
-                        // let mut state = state.clone();
+
                         let dependencies = match fork {
                             Dependencies::Unavailable(reason) => {
-                                state
-                                    .pubgrub
-                                    .add_incompatibility(Incompatibility::custom_version(
-                                        package.clone(),
-                                        version.clone(),
-                                        UnavailableReason::Version(reason),
-                                    ));
-                                let forked_state = cur_state.take().unwrap();
+                                let mut forked_state = cur_state.take().unwrap();
                                 if !is_last {
                                     cur_state = Some(forked_state.clone());
                                 }
+
+                                forked_state.pubgrub.add_incompatibility(
+                                    Incompatibility::custom_version(
+                                        package.clone(),
+                                        version.clone(),
+                                        UnavailableReason::Version(reason),
+                                    ),
+                                );
                                 forked_states.push(forked_state);
                                 continue;
                             }
@@ -520,23 +520,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             Dependencies::Available(constraints) => constraints,
                         };
 
-                        // Add that package and version if the dependencies are not problematic.
-                        let dep_incompats = state.pubgrub.add_incompatibility_from_dependencies(
-                            package.clone(),
-                            version.clone(),
-                            dependencies,
-                        );
-
-                        state.pubgrub.partial_solution.add_version(
-                            package.clone(),
-                            version.clone(),
-                            dep_incompats,
-                            &state.pubgrub.incompatibility_store,
-                        );
-                        let forked_state = cur_state.take().unwrap();
+                        let mut forked_state = cur_state.take().unwrap();
                         if !is_last {
                             cur_state = Some(forked_state.clone());
                         }
+
+                        // Add that package and version if the dependencies are not problematic.
+                        let dep_incompats =
+                            forked_state.pubgrub.add_incompatibility_from_dependencies(
+                                package.clone(),
+                                version.clone(),
+                                dependencies,
+                            );
+                        forked_state.pubgrub.partial_solution.add_version(
+                            package.clone(),
+                            version.clone(),
+                            dep_incompats,
+                            &forked_state.pubgrub.incompatibility_store,
+                        );
                         forked_states.push(forked_state);
                     }
                     continue 'FORK;
