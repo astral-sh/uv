@@ -575,6 +575,7 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
+                args.index_locations,
                 args.extras,
                 args.target,
                 args.args,
@@ -598,7 +599,14 @@ async fn run() -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
 
-            commands::sync(args.extras, globals.preview, &cache, printer).await
+            commands::sync(
+                args.index_locations,
+                args.extras,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
         }
         Commands::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
@@ -608,6 +616,7 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::lock(
+                args.index_locations,
                 args.upgrade,
                 args.exclude_newer,
                 globals.preview,
@@ -631,6 +640,9 @@ async fn run() -> Result<ExitStatus> {
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Run(args),
         }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolRunSettings::resolve(args, workspace);
+
             // Initialize the cache.
             let cache = cache.init()?;
 
@@ -642,6 +654,7 @@ async fn run() -> Result<ExitStatus> {
                 args.with,
                 globals.isolated,
                 globals.preview,
+                args.index_locations,
                 globals.connectivity,
                 &cache,
                 printer,

@@ -23,7 +23,7 @@ use uv_workspace::{Combine, PipOptions, Workspace};
 use crate::cli::{
     ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
     PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs,
-    VenvArgs,
+    ToolRunArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -99,6 +99,7 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
+    pub(crate) index_locations: IndexLocations,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
@@ -127,12 +128,29 @@ impl RunSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
+            index_url,
+            extra_index_url,
+            find_links,
+            no_index,
             python,
             exclude_newer,
             package,
         } = args;
 
         Self {
+            index_locations: IndexLocations::new(
+                index_url.and_then(Maybe::into_option),
+                extra_index_url
+                    .map(|extra_index_urls| {
+                        extra_index_urls
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                find_links.unwrap_or_default(),
+                no_index,
+            ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             extras: ExtrasSpecification::from_args(
@@ -149,10 +167,62 @@ impl RunSettings {
     }
 }
 
+/// The resolved settings to use for a `tool run` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolRunSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) target: String,
+    pub(crate) args: Vec<OsString>,
+    pub(crate) from: Option<String>,
+    pub(crate) with: Vec<String>,
+    pub(crate) python: Option<String>,
+}
+
+impl ToolRunSettings {
+    /// Resolve the [`ToolRunSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolRunArgs, _workspace: Option<Workspace>) -> Self {
+        let ToolRunArgs {
+            target,
+            args,
+            from,
+            with,
+            index_url,
+            extra_index_url,
+            find_links,
+            no_index,
+            python,
+        } = args;
+
+        Self {
+            index_locations: IndexLocations::new(
+                index_url.and_then(Maybe::into_option),
+                extra_index_url
+                    .map(|extra_index_urls| {
+                        extra_index_urls
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                find_links.unwrap_or_default(),
+                no_index,
+            ),
+            target,
+            args,
+            from,
+            with,
+            python,
+        }
+    }
+}
+
 /// The resolved settings to use for a `sync` invocation.
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
+    pub(crate) index_locations: IndexLocations,
     pub(crate) refresh: Refresh,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) python: Option<String>,
@@ -169,10 +239,27 @@ impl SyncSettings {
             refresh,
             no_refresh,
             refresh_package,
+            index_url,
+            extra_index_url,
+            find_links,
+            no_index,
             python,
         } = args;
 
         Self {
+            index_locations: IndexLocations::new(
+                index_url.and_then(Maybe::into_option),
+                extra_index_url
+                    .map(|extra_index_urls| {
+                        extra_index_urls
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                find_links.unwrap_or_default(),
+                no_index,
+            ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
@@ -187,6 +274,7 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
+    pub(crate) index_locations: IndexLocations,
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
@@ -204,11 +292,28 @@ impl LockSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
+            index_url,
+            extra_index_url,
+            find_links,
+            no_index,
             exclude_newer,
             python,
         } = args;
 
         Self {
+            index_locations: IndexLocations::new(
+                index_url.and_then(Maybe::into_option),
+                extra_index_url
+                    .map(|extra_index_urls| {
+                        extra_index_urls
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                find_links.unwrap_or_default(),
+                no_index,
+            ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             exclude_newer,

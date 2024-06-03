@@ -109,6 +109,7 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
+    index_locations: &IndexLocations,
     connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
@@ -172,7 +173,6 @@ pub(crate) async fn update_environment(
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let index_locations = IndexLocations::default();
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
@@ -187,7 +187,7 @@ pub(crate) async fn update_environment(
         &client,
         cache,
         &interpreter,
-        &index_locations,
+        index_locations,
         &flat_index,
         &index,
         &git,
@@ -245,7 +245,7 @@ pub(crate) async fn update_environment(
             &client,
             cache,
             &interpreter,
-            &index_locations,
+            index_locations,
             &flat_index,
             &index,
             &git,
@@ -270,7 +270,7 @@ pub(crate) async fn update_environment(
         &no_binary,
         link_mode,
         compile,
-        &index_locations,
+        index_locations,
         &hasher,
         tags,
         &client,

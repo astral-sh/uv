@@ -25,6 +25,7 @@ use crate::printer::Printer;
 /// Resolve the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
+    index_locations: IndexLocations,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
     preview: PreviewMode,
@@ -45,6 +46,7 @@ pub(crate) async fn lock(
     match do_lock(
         &project,
         &venv,
+        &index_locations,
         upgrade,
         exclude_newer,
         preview,
@@ -67,9 +69,11 @@ pub(crate) async fn lock(
 }
 
 /// Lock the project requirements into a lockfile.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn do_lock(
     project: &ProjectWorkspace,
     venv: &PythonEnvironment,
+    index_locations: &IndexLocations,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
     preview: PreviewMode,
@@ -107,7 +111,6 @@ pub(super) async fn do_lock(
     let flat_index = FlatIndex::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let index_locations = IndexLocations::default();
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
@@ -128,7 +131,7 @@ pub(super) async fn do_lock(
         &client,
         cache,
         &interpreter,
-        &index_locations,
+        index_locations,
         &flat_index,
         &index,
         &git,
