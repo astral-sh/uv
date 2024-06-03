@@ -58,8 +58,7 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         // Register the waiter for calls to `notify_waiters`.
         let notification = pin!(notify.notified());
 
-        // Make sure the value wasn't inserted in-between us checking the map and registering the
-        // waiter.
+        // Make sure the value wasn't inserted in-between us checking the map and registering the waiter.
         if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
             return Some(value.clone());
         };
@@ -89,8 +88,7 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         // Register the waiter for calls to `notify_waiters`.
         let notification = pin!(notify.notified());
 
-        // Make sure the value wasn't inserted in-between us checking the map and registering the
-        // waiter.
+        // Make sure the value wasn't inserted in-between us checking the map and registering the waiter.
         if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
             return Some(value.clone());
         };
