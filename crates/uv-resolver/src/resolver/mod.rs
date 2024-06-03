@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
-use std::ops::Deref;
 use std::sync::Arc;
 use std::thread;
 
@@ -652,22 +651,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(Some(ResolverVersion::Available(MIN_VERSION.clone())))
             }
 
-            PubGrubPackageInner::Python(PubGrubPython::Installed) => {
-                let version = self.python_requirement.installed();
-                if range.contains(version) {
-                    Ok(Some(ResolverVersion::Available(version.deref().clone())))
-                } else {
-                    Ok(None)
-                }
-            }
-
-            PubGrubPackageInner::Python(PubGrubPython::Target) => {
-                let version = self.python_requirement.target();
-                if range.contains(version) {
-                    Ok(Some(ResolverVersion::Available(version.deref().clone())))
-                } else {
-                    Ok(None)
-                }
+            PubGrubPackageInner::Python(_) => {
+                // Dependencies on Python are only added when a package is incompatible; as such,
+                // we don't need to do anything here.
+                Ok(None)
             }
 
             PubGrubPackageInner::Extra {
