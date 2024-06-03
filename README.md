@@ -592,6 +592,8 @@ In addition, uv respects the following environment variables:
 - `MACOSX_DEPLOYMENT_TARGET`: Used with `--python-platform macos` and related variants to set the
   deployment target (i.e., the minimum supported macOS version). Defaults to `12.0`, the
   least-recent non-EOL macOS version at time of writing.
+- `NO_COLOR`: Disable colors. Takes precedence over `FORCE_COLOR`. See [no-color.org](https://no-color.org).
+- `FORCE_COLOR`: Enforce colors regardless of TTY support. See [force-color.org](https://force-color.org).
 
 ## Versioning
 
