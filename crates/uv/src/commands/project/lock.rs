@@ -99,6 +99,7 @@ pub(super) async fn do_lock(
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .index_urls(index_locations.index_urls())
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
