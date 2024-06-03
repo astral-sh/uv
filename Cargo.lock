@@ -2650,9 +2650,9 @@ dependencies = [
 
 [[package]]
 name = "priority-queue"
-version = "2.0.2"
+version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "509354d8a769e8d0b567d6821b84495c60213162761a732d68ce87c964bd347f"
+checksum = "70c501afe3a2e25c9bd219aa56ec1e04cdb3fcdd763055be268778c13fa82c1f"
 dependencies = [
  "autocfg",
  "equivalent",
@@ -2691,7 +2691,6 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=d4795a31be17669aba11eb741b4a9086acc3eb11#d4795a31be17669aba11eb741b4a9086acc3eb11"
 dependencies = [
  "indexmap",
  "log",
@@ -2710,7 +2709,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.2",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",

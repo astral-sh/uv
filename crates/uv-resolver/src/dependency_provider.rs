@@ -2,6 +2,7 @@ use std::convert::Infallible;
 
 use pubgrub::range::Range;
 use pubgrub::solver::{Dependencies, DependencyProvider};
+use pubgrub::type_aliases::DependencyConstraints;
 
 use pep440_rs::Version;
 
@@ -38,7 +39,7 @@ impl DependencyProvider for UvDependencyProvider {
         &self,
         _package: &Self::P,
         _version: &Self::V,
-    ) -> Result<Dependencies<Vec<(Self::P, Self::VS)>, Self::M>, Self::Err> {
+    ) -> Result<Dependencies<DependencyConstraints<Self::P, Self::VS>, Self::M>, Self::Err> {
         unimplemented!()
     }
 }
