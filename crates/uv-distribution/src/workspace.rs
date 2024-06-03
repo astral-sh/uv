@@ -611,32 +611,6 @@ impl ProjectWorkspace {
             workspace,
         })
     }
-
-    /// Used in tests.
-    pub fn dummy(root: &Path, project_name: &PackageName) -> Self {
-        // This doesn't necessarily match the exact test case, but we don't use the other fields
-        // for the test cases atm.
-        let root_member = WorkspaceMember {
-            root: root.to_path_buf(),
-            pyproject_toml: PyProjectToml {
-                project: Some(crate::pyproject::Project {
-                    name: project_name.clone(),
-                    optional_dependencies: None,
-                }),
-                tool: None,
-            },
-        };
-        Self {
-            project_root: root.to_path_buf(),
-            project_name: project_name.clone(),
-            extras: Vec::new(),
-            workspace: Workspace {
-                root: root.to_path_buf(),
-                packages: [(project_name.clone(), root_member)].into_iter().collect(),
-                sources: BTreeMap::default(),
-            },
-        }
-    }
 }
 
 /// Find the workspace root above the current project, if any.
