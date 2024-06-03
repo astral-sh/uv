@@ -157,6 +157,7 @@ pub(crate) async fn update_environment(
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
         .connectivity(connectivity)
+        .index_urls(index_locations.index_urls())
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
