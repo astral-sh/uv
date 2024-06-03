@@ -526,8 +526,8 @@ pub(crate) struct PipCompileArgs {
     /// The minimum Python version that should be supported by the compiled requirements (e.g.,
     /// `3.7` or `3.7.9`).
     ///
-    /// If a patch version is omitted, the most recent known patch version for that minor version
-    /// is assumed. For example, `3.7` is mapped to `3.7.17`.
+    /// If a patch version is omitted, the minimum patch version is assumed. For example, `3.7` is
+    /// mapped to `3.7.0`.
     #[arg(long, short)]
     pub(crate) python_version: Option<PythonVersion>,
 
@@ -829,8 +829,8 @@ pub(crate) struct PipSyncArgs {
     /// The minimum Python version that should be supported by the requirements (e.g.,
     /// `3.7` or `3.7.9`).
     ///
-    /// If a patch version is omitted, the most recent known patch version for that minor version
-    /// is assumed. For example, `3.7` is mapped to `3.7.17`.
+    /// If a patch version is omitted, the minimum patch version is assumed. For example, `3.7` is
+    /// mapped to `3.7.0`.
     #[arg(long)]
     pub(crate) python_version: Option<PythonVersion>,
 
@@ -1185,8 +1185,8 @@ pub(crate) struct PipInstallArgs {
     /// The minimum Python version that should be supported by the requirements (e.g.,
     /// `3.7` or `3.7.9`).
     ///
-    /// If a patch version is omitted, the most recent known patch version for that minor version
-    /// is assumed. For example, `3.7` is mapped to `3.7.17`.
+    /// If a patch version is omitted, the minimum patch version is assumed. For example, `3.7` is
+    /// mapped to `3.7.0`.
     #[arg(long)]
     pub(crate) python_version: Option<PythonVersion>,
 
