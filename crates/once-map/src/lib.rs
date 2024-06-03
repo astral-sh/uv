@@ -55,11 +55,11 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
             }
         };
 
-        // Prepare to wait.
-        let mut notification = pin!(notify.notified());
-        notification.as_mut().enable();
+        // Register the waiter for calls to `notify_waiters`.
+        let notification = pin!(notify.notified());
 
-        // Make sure the value wasn't inserted in-between us checking the map and preparing to wait.
+        // Make sure the value wasn't inserted in-between us checking the map and registering the
+        // waiter.
         if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
             return Some(value.clone());
         };
@@ -86,11 +86,11 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
             }
         };
 
-        // Prepare to wait.
-        let mut notification = pin!(notify.notified());
-        notification.as_mut().enable();
+        // Register the waiter for calls to `notify_waiters`.
+        let notification = pin!(notify.notified());
 
-        // Make sure the value wasn't inserted in-between us checking the map and preparing to wait.
+        // Make sure the value wasn't inserted in-between us checking the map and registering the
+        // waiter.
         if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
             return Some(value.clone());
         };
