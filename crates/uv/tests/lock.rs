@@ -603,19 +603,9 @@ fn lock_extra() -> Result<()> {
         version = "3.7.0"
         source = "registry+https://pypi.org/simple"
 
-        [[distribution]]
-        name = "project"
-        version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        extra = "test"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        [distribution.optional-dependencies]
 
-        [[distribution.dependencies]]
-        name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution.dependencies]]
+        [[distribution.optional-dependencies.test]]
         name = "iniconfig"
         version = "2.0.0"
         source = "registry+https://pypi.org/simple"

@@ -20,10 +20,7 @@ use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::Resolution;
-use crate::{
-    lock, InMemoryIndex, Lock, LockError, Manifest, MetadataResponse, ResolveError,
-    VersionsResponse,
-};
+use crate::{InMemoryIndex, Manifest, MetadataResponse, ResolveError, VersionsResponse};
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
@@ -440,21 +437,6 @@ impl ResolutionGraph {
             conjuncts.push(MarkerTree::Expression(expr));
         }
         Ok(MarkerTree::And(conjuncts))
-    }
-
-    pub fn lock(&self) -> anyhow::Result<Lock, LockError> {
-        let mut locked_dists = vec![];
-        for node_index in self.petgraph.node_indices() {
-            let dist = &self.petgraph[node_index];
-            let mut locked_dist = lock::Distribution::from_annotated_dist(dist)?;
-            for neighbor in self.petgraph.neighbors(node_index) {
-                let dependency_dist = &self.petgraph[neighbor];
-                locked_dist.add_dependency(dependency_dist);
-            }
-            locked_dists.push(locked_dist);
-        }
-        let lock = Lock::new(locked_dists)?;
-        Ok(lock)
     }
 }
 

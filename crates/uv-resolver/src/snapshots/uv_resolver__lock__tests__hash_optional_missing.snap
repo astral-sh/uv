@@ -12,7 +12,6 @@ Ok(
                         "anyio",
                     ),
                     version: "4.3.0",
-                    extra: None,
                     source: Source {
                         kind: Path,
                         url: Url {
@@ -71,6 +70,7 @@ Ok(
                     },
                 ],
                 dependencies: [],
+                optional_dependencies: {},
             },
         ],
         by_id: {
@@ -79,7 +79,6 @@ Ok(
                     "anyio",
                 ),
                 version: "4.3.0",
-                extra: None,
                 source: Source {
                     kind: Path,
                     url: Url {
