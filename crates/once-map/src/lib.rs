@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::hash::{BuildHasher, Hash, RandomState};
+use std::pin::pin;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -55,9 +56,8 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         };
 
         // Prepare to wait.
-        let notified = notify.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
+        let mut notification = pin!(notify.notified());
+        notification.as_mut().enable();
 
         // Make sure the value wasn't inserted in-between us checking the map and preparing to wait.
         if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
@@ -65,7 +65,7 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         };
 
         // Wait until the value is inserted.
-        notified.await;
+        notification.await;
 
         let entry = self.items.get(key).expect("map is append-only");
         match entry.value() {
@@ -87,9 +87,8 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         };
 
         // Prepare to wait.
-        let notified = notify.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
+        let mut notification = pin!(notify.notified());
+        notification.as_mut().enable();
 
         // Make sure the value wasn't inserted in-between us checking the map and preparing to wait.
         if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
@@ -97,7 +96,7 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         };
 
         // Wait until the value is inserted.
-        futures::executor::block_on(notified);
+        futures::executor::block_on(notification);
 
         let entry = self.items.get(key).expect("map is append-only");
         match entry.value() {
