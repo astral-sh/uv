@@ -4692,6 +4692,7 @@ dependencies = [
  "uv-normalize",
  "uv-types",
  "uv-warnings",
+ "walkdir",
  "zip",
 ]
 
