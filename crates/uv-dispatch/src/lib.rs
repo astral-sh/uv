@@ -2,7 +2,7 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -95,6 +95,21 @@ impl<'a> BuildDispatch<'a> {
     #[must_use]
     pub fn with_options(mut self, options: Options) -> Self {
         self.options = options;
+        self
+    }
+
+    /// Set the environment variables to be used when building a source distribution.
+    #[must_use]
+    pub fn with_build_extra_env_vars<I, K, V>(mut self, sdist_build_env_variables: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.build_extra_env_vars = sdist_build_env_variables
+            .into_iter()
+            .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
+            .collect();
         self
     }
 }
