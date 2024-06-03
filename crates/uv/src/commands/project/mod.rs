@@ -149,7 +149,7 @@ pub(crate) async fn update_environment(
     }
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let interpreter = venv.interpreter().clone();
+    let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
@@ -187,7 +187,7 @@ pub(crate) async fn update_environment(
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &interpreter,
+        interpreter,
         index_locations,
         &flat_index,
         &index,
@@ -216,7 +216,7 @@ pub(crate) async fn update_environment(
         &hasher,
         &reinstall,
         &upgrade,
-        &interpreter,
+        interpreter,
         tags,
         Some(markers),
         &client,
@@ -245,7 +245,7 @@ pub(crate) async fn update_environment(
         BuildDispatch::new(
             &client,
             cache,
-            &interpreter,
+            interpreter,
             index_locations,
             &flat_index,
             &index,

@@ -207,7 +207,7 @@ pub(crate) async fn pip_install(
         }
     }
 
-    let interpreter = venv.interpreter().clone();
+    let interpreter = venv.interpreter();
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = match (python_platform, python_version.as_ref()) {
@@ -310,7 +310,7 @@ pub(crate) async fn pip_install(
     let resolve_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        &interpreter,
+        interpreter,
         &index_locations,
         &flat_index,
         &index,
@@ -348,7 +348,7 @@ pub(crate) async fn pip_install(
         &hasher,
         &reinstall,
         &upgrade,
-        &interpreter,
+        interpreter,
         &tags,
         Some(&markers),
         &client,
@@ -383,7 +383,7 @@ pub(crate) async fn pip_install(
         BuildDispatch::new(
             &client,
             &cache,
-            &interpreter,
+            interpreter,
             &index_locations,
             &flat_index,
             &index,
