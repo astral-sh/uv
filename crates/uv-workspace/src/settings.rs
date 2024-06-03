@@ -1,9 +1,10 @@
-use std::{num::NonZeroUsize, path::PathBuf};
+use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
 use serde::Deserialize;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
+use pypi_types::VerbatimParsedUrl;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
@@ -37,6 +38,14 @@ pub struct Options {
     pub preview: Option<bool>,
     pub cache_dir: Option<PathBuf>,
     pub pip: Option<PipOptions>,
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "PEP 508 style requirements, e.g. `flask==3.0.0`, or `black @ https://...`."
+        )
+    )]
+    pub override_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
 /// A `[tool.uv.pip]` section.

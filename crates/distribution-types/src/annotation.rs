@@ -25,13 +25,25 @@ impl std::fmt::Display for SourceAnnotation {
                 RequirementOrigin::Project(path, project_name) => {
                     write!(f, "{project_name} ({})", path.portable_display())
                 }
+                RequirementOrigin::Workspace => {
+                    write!(f, "(workspace)")
+                }
             },
             Self::Constraint(origin) => {
                 write!(f, "-c {}", origin.path().portable_display())
             }
-            Self::Override(origin) => {
-                write!(f, "--override {}", origin.path().portable_display())
-            }
+            Self::Override(origin) => match origin {
+                RequirementOrigin::File(path) => {
+                    write!(f, "--override {}", path.portable_display())
+                }
+                RequirementOrigin::Project(path, project_name) => {
+                    // Project is not used for override
+                    write!(f, "--override {project_name} ({})", path.portable_display())
+                }
+                RequirementOrigin::Workspace => {
+                    write!(f, "--override (workspace)")
+                }
+            },
         }
     }
 }

@@ -11,9 +11,13 @@ use anyhow::{anyhow, Result};
 use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use pypi_types::Requirement;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, SourceAnnotation, SourceAnnotations, Verbatim};
+use distribution_types::{
+    IndexLocations, SourceAnnotation, SourceAnnotations, UnresolvedRequirementSpecification,
+    Verbatim,
+};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
@@ -57,6 +61,7 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    overrides_from_workspace: Vec<Requirement>,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
@@ -397,6 +402,17 @@ pub(crate) async fn pip_compile(
 
         requirements
     };
+
+    // Merge workspace overrides.
+    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
+        .iter()
+        .cloned()
+        .chain(
+            overrides_from_workspace
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from),
+        )
+        .collect();
 
     // Resolve the overrides from the provided sources.
     let overrides = NamedRequirementsResolver::new(

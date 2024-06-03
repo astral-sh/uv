@@ -4996,6 +4996,8 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "install-wheel-rs",
+ "pep508_rs",
+ "pypi-types",
  "schemars",
  "serde",
  "thiserror",

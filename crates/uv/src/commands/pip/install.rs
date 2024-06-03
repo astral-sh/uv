@@ -7,9 +7,10 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-use distribution_types::{IndexLocations, Resolution};
+use distribution_types::{IndexLocations, Resolution, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
+use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -42,6 +43,7 @@ pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    overrides_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
@@ -105,6 +107,16 @@ pub(crate) async fn pip_install(
         &client_builder,
     )
     .await?;
+
+    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
+        .iter()
+        .cloned()
+        .chain(
+            overrides_from_workspace
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from),
+        )
+        .collect();
 
     // Detect the current Python interpreter.
     let system = if system {

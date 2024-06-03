@@ -28,6 +28,16 @@
         "null"
       ]
     },
+    "override-dependencies": {
+      "description": "PEP 508 style requirements, e.g. `flask==3.0.0`, or `black @ https://...`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "pip": {
       "anyOf": [
         {

@@ -47,9 +47,9 @@ impl Workspace {
                 Ok(None) => {
                     // Continue traversing the directory tree.
                 }
-                Err(err @ WorkspaceError::PyprojectToml(..)) => {
+                Err(WorkspaceError::PyprojectToml(file, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
-                    warn_user!("{err}");
+                    warn_user!("Failed to parse `{file}`: {err}");
                 }
                 Err(err) => {
                     // Otherwise, warn and stop.

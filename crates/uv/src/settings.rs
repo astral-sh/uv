@@ -7,6 +7,8 @@ use std::str::FromStr;
 
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::RequirementOrigin;
+use pypi_types::Requirement;
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -229,6 +231,8 @@ pub(crate) struct PipCompileSettings {
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
+    // Override dependencies from workspace.
+    pub(crate) overrides_from_workspace: Vec<Requirement>,
 }
 
 impl PipCompileSettings {
@@ -298,6 +302,21 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
+        let overrides_from_workspace: Vec<Requirement> = if let Some(workspace) = &workspace {
+            workspace
+                .options
+                .override_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         Self {
             // CLI-only settings.
             src_file,
@@ -309,6 +328,7 @@ impl PipCompileSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             uv_lock: flag(unstable_uv_lock_file, no_unstable_uv_lock_file).unwrap_or(false),
+            overrides_from_workspace,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
@@ -503,6 +523,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) uv_lock: Option<String>,
+    pub(crate) overrides_from_workspace: Vec<Requirement>,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -570,6 +591,22 @@ impl PipInstallSettings {
             compat_args: _,
         } = args;
 
+        let overrides_from_workspace: Vec<pypi_types::Requirement> =
+            if let Some(workspace) = &workspace {
+                workspace
+                    .options
+                    .override_dependencies
+                    .clone()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|requirement| {
+                        Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+
         Self {
             // CLI-only settings.
             package,
@@ -585,6 +622,7 @@ impl PipInstallSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
             uv_lock: unstable_uv_lock_file,
+            overrides_from_workspace,
 
             // Shared settings.
             shared: PipSharedSettings::combine(
