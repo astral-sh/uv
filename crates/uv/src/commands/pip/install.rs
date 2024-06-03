@@ -352,7 +352,7 @@ pub(crate) async fn pip_install(
             &upgrade,
             &interpreter,
             &tags,
-            &markers,
+            Some(&markers),
             &client,
             &flat_index,
             &index,

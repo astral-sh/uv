@@ -514,6 +514,12 @@ pub fn python_path_with_versions(
     Ok(env::join_paths(selected_pythons)?)
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum WindowsFilters {
+    Platform,
+    Universal,
+}
+
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
@@ -521,7 +527,7 @@ pub fn run_and_format<T: AsRef<str>>(
     mut command: impl BorrowMut<std::process::Command>,
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
-    windows_filters: bool,
+    windows_filters: Option<WindowsFilters>,
 ) -> (String, Output) {
     let program = command
         .borrow_mut()
@@ -566,29 +572,40 @@ pub fn run_and_format<T: AsRef<str>>(
     // pass whether it's on Windows or Unix. In particular, there are some very
     // common Windows-only dependencies that, when removed from a resolution,
     // cause the set of dependencies to be the same across platforms.
-    if cfg!(windows) && windows_filters {
-        // The optional leading +/- is for install logs, the optional next line is for lock files
-        let windows_only_deps = [
-            ("( [+-] )?colorama==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
-            ("( [+-] )?colorama==\\d+(\\.[\\d+])+\\s+(# via .*\n)?"),
-            ("( [+-] )?tzdata==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
-            ("( [+-] )?tzdata==\\d+(\\.[\\d+])+\\s+(# via .*\n)?"),
-        ];
-        let mut removed_packages = 0;
-        for windows_only_dep in windows_only_deps {
-            // TODO(konstin): Cache regex compilation
-            let re = Regex::new(windows_only_dep).unwrap();
-            if re.is_match(&snapshot) {
-                snapshot = re.replace(&snapshot, "").to_string();
-                removed_packages += 1;
+    if cfg!(windows) {
+        if let Some(windows_filters) = windows_filters {
+            // The optional leading +/- is for install logs, the optional next line is for lock files
+            let windows_only_deps = [
+                ("( [+-] )?colorama==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
+                ("( [+-] )?colorama==\\d+(\\.[\\d+])+\\s+(# via .*\n)?"),
+                ("( [+-] )?tzdata==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
+                ("( [+-] )?tzdata==\\d+(\\.[\\d+])+\\s+(# via .*\n)?"),
+            ];
+            let mut removed_packages = 0;
+            for windows_only_dep in windows_only_deps {
+                // TODO(konstin): Cache regex compilation
+                let re = Regex::new(windows_only_dep).unwrap();
+                if re.is_match(&snapshot) {
+                    snapshot = re.replace(&snapshot, "").to_string();
+                    removed_packages += 1;
+                }
             }
-        }
-        if removed_packages > 0 {
-            for i in 1..20 {
-                snapshot = snapshot.replace(
-                    &format!("{} packages", i + removed_packages),
-                    &format!("{} package{}", i, if i > 1 { "s" } else { "" }),
-                );
+            if removed_packages > 0 {
+                for i in 1..20 {
+                    for verb in match windows_filters {
+                        WindowsFilters::Platform => {
+                            ["Resolved", "Downloaded", "Installed", "Uninstalled"].iter()
+                        }
+                        WindowsFilters::Universal => {
+                            ["Downloaded", "Installed", "Uninstalled"].iter()
+                        }
+                    } {
+                        snapshot = snapshot.replace(
+                            &format!("{verb} {} packages", i + removed_packages),
+                            &format!("{verb} {} package{}", i, if i > 1 { "s" } else { "" }),
+                        );
+                    }
+                }
             }
         }
     }
@@ -641,13 +658,19 @@ macro_rules! uv_snapshot {
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), true);
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), Some($crate::common::WindowsFilters::Platform));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, windows_filters=false, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), false);
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), None);
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
+        output
+    }};
+    ($filters:expr, universal_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
+        // Take a reference for backwards compatibility with the vec-expecting insta filters.
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), Some($crate::common::WindowsFilters::Universal));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};

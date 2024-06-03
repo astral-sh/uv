@@ -158,7 +158,7 @@ pub(super) async fn do_lock(
         &upgrade,
         &interpreter,
         tags,
-        markers,
+        None,
         &client,
         &flat_index,
         &index,

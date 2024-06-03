@@ -19,7 +19,7 @@ use distribution_types::{
     RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, VerbatimUrl};
+use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -82,10 +82,16 @@ impl Lock {
         while let Some(dist) = queue.pop_front() {
             for dep in &dist.dependencies {
                 let dep_dist = self.find_by_id(&dep.id);
-                queue.push_back(dep_dist);
+                if dep_dist
+                    .marker
+                    .as_ref()
+                    .map_or(true, |marker| marker.evaluate(marker_env, &[]))
+                {
+                    queue.push_back(dep_dist);
+                }
             }
             let name = dist.id.name.clone();
-            let resolved_dist = ResolvedDist::Installable(dist.to_dist(marker_env, tags));
+            let resolved_dist = ResolvedDist::Installable(dist.to_dist(tags));
             map.insert(name, resolved_dist);
         }
         let diagnostics = vec![];
@@ -280,7 +286,7 @@ pub struct Distribution {
     #[serde(flatten)]
     pub(crate) id: DistributionId,
     #[serde(default)]
-    pub(crate) marker: Option<String>,
+    pub(crate) marker: Option<MarkerTree>,
     #[serde(default)]
     pub(crate) sdist: Option<SourceDist>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -294,11 +300,12 @@ impl Distribution {
         annotated_dist: &AnnotatedDist,
     ) -> Result<Distribution, LockError> {
         let id = DistributionId::from_annotated_dist(annotated_dist);
-        let wheels = Wheel::from_annotated_dist(annotated_dist)?;
+        let marker = annotated_dist.marker.clone();
         let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
+        let wheels = Wheel::from_annotated_dist(annotated_dist)?;
         Ok(Distribution {
             id,
-            marker: annotated_dist.marker.as_ref().map(ToString::to_string),
+            marker,
             sdist,
             wheels,
             dependencies: vec![],
@@ -311,7 +318,7 @@ impl Distribution {
     }
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
-    fn to_dist(&self, _marker_env: &MarkerEnvironment, tags: &Tags) -> Dist {
+    fn to_dist(&self, tags: &Tags) -> Dist {
         if let Some(best_wheel_index) = self.find_best_wheel(tags) {
             return match &self.id.source.kind {
                 SourceKind::Registry => {

@@ -217,7 +217,7 @@ pub(crate) async fn update_environment(
         &upgrade,
         &interpreter,
         tags,
-        markers,
+        Some(markers),
         &client,
         &flat_index,
         &index,
