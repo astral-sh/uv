@@ -8,7 +8,8 @@ use tracing::instrument;
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    PythonRequirementKind, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::{TagCompatibility, Tags};
@@ -465,11 +466,20 @@ impl VersionMapLazy {
         // Source distributions must meet both the _target_ Python version and the
         // _installed_ Python version (to build successfully)
         if let Some(requires_python) = requires_python {
-            if !requires_python.contains(self.python_requirement.target())
-                || !requires_python.contains(self.python_requirement.installed())
-            {
+            if self.python_requirement.target() != self.python_requirement.installed() {
+                if !requires_python.contains(self.python_requirement.target()) {
+                    return SourceDistCompatibility::Incompatible(
+                        IncompatibleSource::RequiresPython(
+                            requires_python,
+                            PythonRequirementKind::Target,
+                        ),
+                    );
+                }
+            }
+            if !requires_python.contains(self.python_requirement.installed()) {
                 return SourceDistCompatibility::Incompatible(IncompatibleSource::RequiresPython(
                     requires_python,
+                    PythonRequirementKind::Installed,
                 ));
             }
         }
@@ -526,6 +536,7 @@ impl VersionMapLazy {
             if !requires_python.contains(self.python_requirement.target()) {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
                     requires_python,
+                    PythonRequirementKind::Target,
                 ));
             }
         }
