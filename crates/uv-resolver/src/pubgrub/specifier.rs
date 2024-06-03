@@ -9,6 +9,13 @@ use crate::ResolveError;
 #[derive(Debug)]
 pub(crate) struct PubGrubSpecifier(Range<Version>);
 
+impl PubGrubSpecifier {
+    /// Returns `true` if the [`PubGrubSpecifier`] is a subset of the other.
+    pub(crate) fn subset_of(&self, other: &Self) -> bool {
+        self.0.subset_of(&other.0)
+    }
+}
+
 impl From<PubGrubSpecifier> for Range<Version> {
     /// Convert a PubGrub specifier to a range of versions.
     fn from(specifier: PubGrubSpecifier) -> Self {

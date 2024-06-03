@@ -4392,6 +4392,7 @@ dependencies = [
  "miette",
  "mimalloc",
  "owo-colors",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "predicates",

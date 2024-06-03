@@ -15,6 +15,7 @@ use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
+use pep440_rs::VersionSpecifiers;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::Requirement;
@@ -89,6 +90,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     interpreter: &Interpreter,
     tags: &Tags,
     markers: Option<&MarkerEnvironment>,
+    requires_python: Option<&VersionSpecifiers>,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
@@ -182,6 +184,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
+    let python_requirement = if let Some(requires_python) = requires_python {
+        PythonRequirement::from_requires_python(interpreter, requires_python)
+    } else {
+        PythonRequirement::from_interpreter(interpreter)
+    };
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -200,8 +207,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         }
         DependencyMode::Direct => Vec::new(),
     };
-
-    let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // TODO(zanieb): Consider consuming these instead of cloning
     let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
