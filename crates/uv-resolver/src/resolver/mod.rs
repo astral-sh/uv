@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
-use std::thread;
+use std::{iter, thread};
 
 use dashmap::DashMap;
 use futures::{FutureExt, StreamExt, TryFutureExt};
@@ -20,7 +20,8 @@ use tracing::{debug, enabled, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionId,
+    VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -338,7 +339,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
                     }
-                    resolutions.push(state.into_resolution());
+                    resolutions.push(state.into_resolution(&self.index, self.markers.as_ref()));
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
@@ -1409,7 +1410,7 @@ struct SolveState {
 }
 
 impl SolveState {
-    fn into_resolution(self) -> Resolution {
+    fn into_resolution2(self) -> Resolution {
         let packages = self.pubgrub.partial_solution.extract_solution();
         let mut dependencies: FxHashMap<
             ResolutionDependencyNames,
@@ -1499,6 +1500,131 @@ impl SolveState {
             .into_iter()
             .map(|(package, version)| (package, FxHashSet::from_iter([version])))
             .collect();
+        Resolution {
+            packages,
+            dependencies,
+            pins: self.pins,
+        }
+    }
+
+    fn into_resolution(self, index: &InMemoryIndex, env: Option<&MarkerEnvironment>) -> Resolution {
+        let packages = self.pubgrub.partial_solution.extract_solution();
+        let mut dependencies: FxHashMap<
+            ResolutionDependencyNames,
+            FxHashSet<ResolutionDependencyVersions>,
+        > = FxHashMap::default();
+
+        let package_versions: FxHashMap<PackageName, Version> = packages
+            .iter()
+            .filter_map(|(package, version)| {
+                let PubGrubPackageInner::Package { name, .. } = &**package else {
+                    return None;
+                };
+                Some((name.clone(), version.clone()))
+            })
+            .collect();
+        let mut package_extras: FxHashMap<PackageName, FxHashSet<ExtraName>> = FxHashMap::default();
+
+        for package in packages.keys() {
+            let PubGrubPackageInner::Package { name, extra, .. } = &**package else {
+                continue;
+            };
+            let extras = package_extras.entry(name.clone()).or_default();
+            if let Some(extra) = extra {
+                extras.insert(extra.clone());
+            }
+        }
+
+        // The evaluate markers api wants a slice.
+        let package_extras: FxHashMap<PackageName, Vec<ExtraName>> = package_extras
+            .into_iter()
+            .map(|(package, extras)| (package, Vec::from_iter(extras)))
+            .collect();
+
+        for (self_package, self_version) in &packages {
+            let PubGrubPackageInner::Package {
+                name: self_name,
+                url,
+                ..
+            } = &**self_package
+            else {
+                continue;
+            };
+
+            let version_id = if let Some(url) = url {
+                VersionId::from_url(url.verbatim.raw())
+            } else {
+                VersionId::NameVersion(self_name.clone(), self_version.clone())
+            };
+
+            let metadata_response = index.distributions().get(&version_id).expect(&format!(
+                "Missing resolved distribution {self_name} {self_version}"
+            ));
+
+            let MetadataResponse::Found(metadata) = &*metadata_response else {
+                panic!("Invalid metadata for resolved version {self_name} {self_version}");
+            };
+
+            for requirement in &metadata.metadata.requires_dist {
+                if self_name == &requirement.name {
+                    continue;
+                }
+                let names = ResolutionDependencyNames {
+                    from: self_name.clone(),
+                    to: requirement.name.clone(),
+                };
+                for self_extra in iter::once(None).chain(
+                    package_extras[self_name]
+                        .iter()
+                        .map(|extra| Some(extra.clone())),
+                ) {
+                    if requirement
+                        .marker
+                        .as_ref()
+                        .map(|marker| {
+                            marker.evaluate_optional_environment(env, self_extra.as_slice())
+                        })
+                        .unwrap_or(true)
+                    {
+                        let Some(dependency_version) = package_versions.get(&requirement.name)
+                        else {
+                            continue;
+                        };
+                        let versions = ResolutionDependencyVersions {
+                            from_version: self_version.clone(),
+                            from_extra: self_extra.clone(),
+                            to_version: dependency_version.clone(),
+                            to_extra: None,
+                        };
+                        dependencies
+                            .entry(names.clone())
+                            .or_default()
+                            .insert(versions);
+                        for dependency_extra in &requirement.extras {
+                            let versions = ResolutionDependencyVersions {
+                                from_version: self_version.clone(),
+                                from_extra: self_extra.clone(),
+                                to_version: dependency_version.clone(),
+                                to_extra: Some(dependency_extra.clone()),
+                            };
+                            dependencies
+                                .entry(names.clone())
+                                .or_default()
+                                .insert(versions);
+                        }
+                    }
+                }
+            }
+        }
+        let packages = packages
+            .iter()
+            .map(|(package, version)| (package.clone(), FxHashSet::from_iter([version.clone()])))
+            .collect();
+
+        let base_line = self.clone().into_resolution2();
+        assert_eq!(&packages, &base_line.packages);
+        assert_eq!(&dependencies, &base_line.dependencies);
+
         Resolution {
             packages,
             dependencies,
