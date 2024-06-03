@@ -92,7 +92,7 @@ pub(super) async fn do_lock(
     let project_name = project.project_name().clone();
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let interpreter = venv.interpreter().clone();
+    let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
@@ -131,7 +131,7 @@ pub(super) async fn do_lock(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &interpreter,
+        interpreter,
         index_locations,
         &flat_index,
         &index,
@@ -160,7 +160,7 @@ pub(super) async fn do_lock(
         &hasher,
         &reinstall,
         &upgrade,
-        &interpreter,
+        interpreter,
         tags,
         None,
         &client,
