@@ -46,7 +46,7 @@ itertools = { workspace = true }
 owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.0" }
-resvg = { version = "0.29.0", optional = true }
+resvg = { version = "0.42.0", optional = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
