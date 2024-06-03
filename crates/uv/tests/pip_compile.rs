@@ -3048,7 +3048,6 @@ fn override_multi_dependency() -> Result<()> {
 }
 
 /// Check how invalid `tool.uv.override-dependencies` is handled in `pyproject.toml`.
-// TODO(konsti): We should show a warnings here or better fail parsing.
 #[test]
 fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3095,6 +3094,14 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
         # via flask
 
     ----- stderr -----
+    warning: Failed to parse `pyproject.toml`: TOML parse error at line 9, column 29
+      |
+    9 |     override-dependencies = [
+      |                             ^
+    no such comparison operator "=", must be one of ~= == != <= >= < > ===
+    werkzeug=2.3.0
+            ^^^^^^
+
     Resolved 7 packages in [TIME]
     "###
     );

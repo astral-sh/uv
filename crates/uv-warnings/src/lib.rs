@@ -17,6 +17,11 @@ pub fn enable() {
     ENABLED.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// Disable user-facing warnings.
+pub fn disable() {
+    ENABLED.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
 /// Warn a user, if warnings are enabled.
 #[macro_export]
 macro_rules! warn_user {
