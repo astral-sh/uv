@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use distribution_types::IndexUrl;
 use install_wheel_rs::linker::LinkMode;
-use pypi_types::Requirement;
 use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple};
 use uv_interpreter::PythonVersion;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
@@ -61,12 +60,6 @@ impl Combine for Option<PipOptions> {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
         }
-    }
-}
-
-impl Combine for Vec<Requirement> {
-    fn combine(self, other: Vec<Requirement>) -> Vec<Requirement> {
-        self.iter().chain(other.iter()).cloned().collect()
     }
 }
 

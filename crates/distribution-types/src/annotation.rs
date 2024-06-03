@@ -41,7 +41,7 @@ impl std::fmt::Display for SourceAnnotation {
                     write!(f, "--override {project_name} ({})", path.portable_display())
                 }
                 RequirementOrigin::Workspace => {
-                    write!(f, "--override (workspace)",)
+                    write!(f, "--override (workspace)")
                 }
             },
         }

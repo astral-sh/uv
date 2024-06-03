@@ -49,7 +49,7 @@ impl Workspace {
                 }
                 Err(WorkspaceError::PyprojectToml(file, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
-                    warn_user!("Failed to parse: {file}\n {err}");
+                    warn_user!("Failed to parse `{file}`: {err}");
                 }
                 Err(err) => {
                     // Otherwise, warn and stop.

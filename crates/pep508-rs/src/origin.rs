@@ -20,7 +20,7 @@ impl RequirementOrigin {
             RequirementOrigin::File(path) => path.as_path(),
             RequirementOrigin::Project(path, _) => path.as_path(),
             // Multiple toml are merged and difficult to track files where Requirement is defined. Returns a dummy path instead.
-            RequirementOrigin::Workspace => Path::new("workspance(dummy path"),
+            RequirementOrigin::Workspace => Path::new("(workspace)"),
         }
     }
 }

@@ -7,6 +7,7 @@ use std::str::FromStr;
 
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::RequirementOrigin;
 use pypi_types::Requirement;
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::Connectivity;
@@ -298,12 +299,20 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace: Vec<pypi_types::Requirement> =
-            if let Some(ws) = workspace.clone() {
-                ws.options.override_dependencies
-            } else {
-                Vec::new()
-            };
+        let overrides_from_workspace: Vec<Requirement> = if let Some(workspace) = &workspace {
+            workspace
+                .options
+                .override_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         Self {
             // CLI-only settings.
@@ -580,8 +589,17 @@ impl PipInstallSettings {
         } = args;
 
         let overrides_from_workspace: Vec<pypi_types::Requirement> =
-            if let Some(ws) = workspace.clone() {
-                ws.options.override_dependencies
+            if let Some(workspace) = &workspace {
+                workspace
+                    .options
+                    .override_dependencies
+                    .clone()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|requirement| {
+                        Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                    })
+                    .collect()
             } else {
                 Vec::new()
             };

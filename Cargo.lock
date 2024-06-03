@@ -2786,7 +2786,6 @@ dependencies = [
  "pep508_rs",
  "regex",
  "rkyv",
- "schemars",
  "serde",
  "thiserror",
  "toml",
