@@ -119,10 +119,22 @@ impl RequirementsTxtRequirement {
     pub fn parse(
         input: &str,
         working_dir: impl AsRef<Path>,
+        editable: bool,
     ) -> Result<Self, Box<Pep508Error<VerbatimParsedUrl>>> {
         // Attempt to parse as a PEP 508-compliant requirement.
         match pep508_rs::Requirement::parse(input, &working_dir) {
-            Ok(requirement) => Ok(Self::Named(requirement)),
+            Ok(requirement) => {
+                // As a special-case, interpret `dagster` as `./dagster` if we're in editable mode.
+                if editable && requirement.version_or_url.is_none() {
+                    Ok(Self::Unnamed(UnnamedRequirement::parse(
+                        input,
+                        &working_dir,
+                        &mut TracingReporter,
+                    )?))
+                } else {
+                    Ok(Self::Named(requirement))
+                }
+            }
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     // If that fails, attempt to parse as a direct URL requirement.

@@ -1114,22 +1114,50 @@ fn install_editable_pep_508_cli() {
 }
 
 #[test]
-fn invalid_editable_no_version() -> Result<()> {
+fn install_editable_bare_cli() {
     let context = TestContext::new("3.12");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("-e black")?;
+    let packages_dir = context.workspace_root.join("scripts/packages");
 
     uv_snapshot!(context.filters(), context.install()
-        .arg("-r")
-        .arg("requirements.txt"), @r###"
-    success: false
-    exit_code: 2
+        .arg("-e")
+        .arg("black_editable")
+        .current_dir(&packages_dir), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported editable requirement in `requirements.txt`
-      Caused by: Editable `black` must refer to a local directory
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+}
+
+#[test]
+fn install_editable_bare_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e black_editable")?;
+
+    let packages_dir = context.workspace_root.join("scripts/packages");
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .current_dir(&packages_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
     );
 
