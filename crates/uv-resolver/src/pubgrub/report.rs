@@ -19,7 +19,7 @@ use crate::candidate_selector::CandidateSelector;
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 
-use super::{PubGrubPackage, PubGrubPackageInner};
+use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -44,44 +44,23 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 format!("we are solving dependencies of {package} {version}")
             }
             External::NoVersions(package, set) => {
-                if matches!(&**package, PubGrubPackageInner::Python(_)) {
-                    if let Some(python) = self.python_requirement {
-                        if python.target() == python.installed() {
-                            // Simple case, the installed version is the same as the target version
-                            return format!(
-                                "the current {package} version ({}) does not satisfy {}",
-                                python.target(),
-                                PackageRange::compatibility(package, set)
-                            );
-                        }
-                        // Complex case, the target was provided and differs from the installed one
-                        // Determine which Python version requirement was not met
-                        if !set.contains(python.target()) {
-                            return format!(
-                                "the requested {package} version ({}) does not satisfy {}",
-                                python.target(),
-                                PackageRange::compatibility(package, set)
-                            );
-                        }
-                        // TODO(zanieb): Explain to the user why the installed version is relevant
-                        //               when they provided a target version; probably via a "hint"
-                        debug_assert!(
-                            !set.contains(python.installed()),
-                            "There should not be an incompatibility where the range is satisfied by both Python requirements"
+                if let Some(python) = self.python_requirement {
+                    if matches!(&**package, PubGrubPackageInner::Python(PubGrubPython::Target)) {
+                        return format!(
+                            "the requested {package} version ({}) does not satisfy {}",
+                            python.target(),
+                            PackageRange::compatibility(package, set)
                         );
+                    }
+                    if matches!(&**package, PubGrubPackageInner::Python(PubGrubPython::Installed)) {
                         return format!(
                             "the current {package} version ({}) does not satisfy {}",
                             python.installed(),
                             PackageRange::compatibility(package, set)
                         );
                     }
-                    // We should always have the required Python versions, if we don't we'll fall back
-                    // to a less helpful message in production
-                    debug_assert!(
-                        false,
-                        "Error reporting should always be provided with Python versions"
-                    );
                 }
+
                 let set = self.simplify_set(set, package);
 
                 if set.as_ref() == &Range::full() {
