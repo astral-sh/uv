@@ -260,16 +260,12 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
                 // Add version information to improve unsat error messages.
                 Err(if let ResolveError::NoSolution(err) = err {
                     ResolveError::NoSolution(
-                        err.with_available_versions(
-                            &state.python_requirement,
-                            &visited,
-                            state.index.packages(),
-                        )
-                        .with_selector(state.selector.clone())
-                        .with_python_requirement(&state.python_requirement)
-                        .with_index_locations(provider.index_locations())
-                        .with_unavailable_packages(&state.unavailable_packages)
-                        .with_incomplete_packages(&state.incomplete_packages),
+                        err.with_available_versions(&visited, state.index.packages())
+                            .with_selector(state.selector.clone())
+                            .with_python_requirement(&state.python_requirement)
+                            .with_index_locations(provider.index_locations())
+                            .with_unavailable_packages(&state.unavailable_packages)
+                            .with_incomplete_packages(&state.incomplete_packages),
                     )
                 } else {
                     err
