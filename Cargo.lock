@@ -313,9 +313,9 @@ dependencies = [
 
 [[package]]
 name = "axoupdater"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d6bf8aaa32e7d33071ed9a339fc34ac30b0a5190f82069fbd12a1266bda9068"
+checksum = "669a5ea910fb9b97e3df709c7d0f626fc9e5e9cb83c00bd3a1b4c54835ed8b66"
 dependencies = [
  "axoasset",
  "axoprocess",
@@ -325,7 +325,7 @@ dependencies = [
  "miette",
  "reqwest",
  "serde",
- "temp-dir",
+ "tempfile",
  "thiserror",
  "tokio",
 ]
@@ -3725,12 +3725,6 @@ name = "target-lexicon"
 version = "0.12.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1fc403891a21bcfb7c37834ba66a547a8f402146eba7265b5a6d88059c9ff2f"
-
-[[package]]
-name = "temp-dir"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f227968ec00f0e5322f9b8173c7a0cbcff6181a0a5b28e9892491c286277231"
 
 [[package]]
 name = "temp-env"
