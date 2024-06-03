@@ -2691,7 +2691,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=0e684a874c9fb8f74738cd8875524c80e3d4820b#0e684a874c9fb8f74738cd8875524c80e3d4820b"
+source = "git+https://github.com/astral-sh/pubgrub?rev=d4795a31be17669aba11eb741b4a9086acc3eb11#d4795a31be17669aba11eb741b4a9086acc3eb11"
 dependencies = [
  "indexmap",
  "log",
