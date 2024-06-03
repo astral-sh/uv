@@ -128,10 +128,8 @@ impl RunSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
-            index_url,
-            extra_index_url,
-            find_links,
-            no_index,
+
+            index_args,
             python,
             exclude_newer,
             package,
@@ -139,8 +137,9 @@ impl RunSettings {
 
         Self {
             index_locations: IndexLocations::new(
-                index_url.and_then(Maybe::into_option),
-                extra_index_url
+                index_args.index_url.and_then(Maybe::into_option),
+                index_args
+                    .extra_index_url
                     .map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
@@ -148,8 +147,8 @@ impl RunSettings {
                             .collect()
                     })
                     .unwrap_or_default(),
-                find_links.unwrap_or_default(),
-                no_index,
+                index_args.find_links.unwrap_or_default(),
+                index_args.no_index,
             ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
@@ -188,17 +187,15 @@ impl ToolRunSettings {
             args,
             from,
             with,
-            index_url,
-            extra_index_url,
-            find_links,
-            no_index,
+            index_args,
             python,
         } = args;
 
         Self {
             index_locations: IndexLocations::new(
-                index_url.and_then(Maybe::into_option),
-                extra_index_url
+                index_args.index_url.and_then(Maybe::into_option),
+                index_args
+                    .extra_index_url
                     .map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
@@ -206,8 +203,8 @@ impl ToolRunSettings {
                             .collect()
                     })
                     .unwrap_or_default(),
-                find_links.unwrap_or_default(),
-                no_index,
+                index_args.find_links.unwrap_or_default(),
+                index_args.no_index,
             ),
             target,
             args,
@@ -239,17 +236,15 @@ impl SyncSettings {
             refresh,
             no_refresh,
             refresh_package,
-            index_url,
-            extra_index_url,
-            find_links,
-            no_index,
+            index_args,
             python,
         } = args;
 
         Self {
             index_locations: IndexLocations::new(
-                index_url.and_then(Maybe::into_option),
-                extra_index_url
+                index_args.index_url.and_then(Maybe::into_option),
+                index_args
+                    .extra_index_url
                     .map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
@@ -257,8 +252,8 @@ impl SyncSettings {
                             .collect()
                     })
                     .unwrap_or_default(),
-                find_links.unwrap_or_default(),
-                no_index,
+                index_args.find_links.unwrap_or_default(),
+                index_args.no_index,
             ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             extras: ExtrasSpecification::from_args(
@@ -292,18 +287,16 @@ impl LockSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
-            index_url,
-            extra_index_url,
-            find_links,
-            no_index,
+            index_args,
             exclude_newer,
             python,
         } = args;
 
         Self {
             index_locations: IndexLocations::new(
-                index_url.and_then(Maybe::into_option),
-                extra_index_url
+                index_args.index_url.and_then(Maybe::into_option),
+                index_args
+                    .extra_index_url
                     .map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
@@ -311,8 +304,8 @@ impl LockSettings {
                             .collect()
                     })
                     .unwrap_or_default(),
-                find_links.unwrap_or_default(),
-                no_index,
+                index_args.find_links.unwrap_or_default(),
+                index_args.no_index,
             ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
@@ -368,12 +361,9 @@ impl PipCompileSettings {
             no_refresh,
             refresh_package,
             link_mode,
-            index_url,
-            extra_index_url,
-            no_index,
+            index_args,
             index_strategy,
             keyring_provider,
-            find_links,
             python,
             system,
             no_system,
@@ -441,15 +431,15 @@ impl PipCompileSettings {
                     python,
                     system: flag(system, no_system),
 
-                    index_url: index_url.and_then(Maybe::into_option),
-                    extra_index_url: extra_index_url.map(|extra_index_urls| {
+                    index_url: index_args.index_url.and_then(Maybe::into_option),
+                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
                             .filter_map(Maybe::into_option)
                             .collect()
                     }),
-                    no_index: Some(no_index),
-                    find_links,
+                    no_index: Some(index_args.no_index),
+                    find_links: index_args.find_links,
                     index_strategy,
                     keyring_provider,
                     no_build: flag(no_build, build),
@@ -523,10 +513,7 @@ impl PipSyncSettings {
             no_refresh,
             refresh_package,
             link_mode,
-            index_url,
-            extra_index_url,
-            find_links,
-            no_index,
+            index_args,
             index_strategy,
             require_hashes,
             no_require_hashes,
@@ -575,16 +562,15 @@ impl PipSyncSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-
-                    index_url: index_url.and_then(Maybe::into_option),
-                    extra_index_url: extra_index_url.map(|extra_index_urls| {
+                    index_url: index_args.index_url.and_then(Maybe::into_option),
+                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
                             .filter_map(Maybe::into_option)
                             .collect()
                     }),
-                    no_index: Some(no_index),
-                    find_links,
+                    no_index: Some(index_args.no_index),
+                    find_links: index_args.find_links,
                     index_strategy,
                     keyring_provider,
                     no_build: flag(no_build, build),
@@ -661,10 +647,7 @@ impl PipInstallSettings {
             resolution,
             prerelease,
             pre,
-            index_url,
-            extra_index_url,
-            find_links,
-            no_index,
+            index_args,
             index_strategy,
             require_hashes,
             no_require_hashes,
@@ -736,16 +719,15 @@ impl PipInstallSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-
-                    index_url: index_url.and_then(Maybe::into_option),
-                    extra_index_url: extra_index_url.map(|extra_index_urls| {
+                    index_url: index_args.index_url.and_then(Maybe::into_option),
+                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
                             .filter_map(Maybe::into_option)
                             .collect()
                     }),
-                    no_index: Some(no_index),
-                    find_links,
+                    no_index: Some(index_args.no_index),
+                    find_links: index_args.find_links,
                     index_strategy,
                     keyring_provider,
                     no_build: flag(no_build, build),
