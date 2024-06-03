@@ -1811,6 +1811,43 @@ pub(crate) struct RunArgs {
     #[arg(long, short = 'P')]
     pub(crate) upgrade_package: Vec<PackageName>,
 
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    pub(crate) index_url: Option<Maybe<IndexUrl>>,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
+
+    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    ///
+    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
+    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    ///
+    /// If a URL, the page must contain a flat list of links to package files.
+    #[arg(long, short)]
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
+
+    /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
+    /// discovered via `--find-links`.
+    #[arg(long)]
+    pub(crate) no_index: bool,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1867,6 +1904,43 @@ pub(crate) struct SyncArgs {
     #[arg(long)]
     pub(crate) refresh_package: Vec<PackageName>,
 
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    pub(crate) index_url: Option<Maybe<IndexUrl>>,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
+
+    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    ///
+    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
+    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    ///
+    /// If a URL, the page must contain a flat list of links to package files.
+    #[arg(long, short)]
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
+
+    /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
+    /// discovered via `--find-links`.
+    #[arg(long)]
+    pub(crate) no_index: bool,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1911,6 +1985,43 @@ pub(crate) struct LockArgs {
     /// Allow upgrades for a specific package, ignoring pinned versions in the existing lockfile.
     #[arg(long, short = 'P')]
     pub(crate) upgrade_package: Vec<PackageName>,
+
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    pub(crate) index_url: Option<Maybe<IndexUrl>>,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
+
+    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    ///
+    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
+    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    ///
+    /// If a URL, the page must contain a flat list of links to package files.
+    #[arg(long, short)]
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
+
+    /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
+    /// discovered via `--find-links`.
+    #[arg(long)]
+    pub(crate) no_index: bool,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1980,7 +2091,54 @@ pub(crate) struct ToolRunArgs {
     #[arg(long)]
     pub(crate) with: Vec<String>,
 
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    pub(crate) index_url: Option<Maybe<IndexUrl>>,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
+
+    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    ///
+    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
+    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    ///
+    /// If a URL, the page must contain a flat list of links to package files.
+    #[arg(long, short)]
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
+
+    /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
+    /// discovered via `--find-links`.
+    #[arg(long)]
+    pub(crate) no_index: bool,
+
     /// The Python interpreter to use to build the run environment.
+    ///
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
+    /// option allows you to specify a different interpreter.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 }

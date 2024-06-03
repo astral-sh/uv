@@ -2,6 +2,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use distribution_types::IndexLocations;
 use itertools::Itertools;
 use tempfile::tempdir_in;
 use tokio::process::Command;
@@ -28,6 +29,7 @@ pub(crate) async fn run(
     with: Vec<String>,
     _isolated: bool,
     preview: PreviewMode,
+    index_locations: IndexLocations,
     connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
@@ -71,8 +73,18 @@ pub(crate) async fn run(
     )?;
 
     // Install the ephemeral requirements.
-    let ephemeral_env =
-        Some(update_environment(venv, &requirements, connectivity, cache, printer, preview).await?);
+    let ephemeral_env = Some(
+        update_environment(
+            venv,
+            &requirements,
+            &index_locations,
+            connectivity,
+            cache,
+            printer,
+            preview,
+        )
+        .await?,
+    );
 
     // TODO(zanieb): Determine the command via the package entry points
     let command = target;

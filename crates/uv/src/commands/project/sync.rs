@@ -25,6 +25,7 @@ use crate::printer::Printer;
 /// Sync the project environment.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync(
+    index_locations: IndexLocations,
     extras: ExtrasSpecification,
     preview: PreviewMode,
     cache: &Cache,
@@ -48,16 +49,28 @@ pub(crate) async fn sync(
     };
 
     // Perform the sync operation.
-    do_sync(&project, &venv, &lock, extras, preview, cache, printer).await?;
+    do_sync(
+        &project,
+        &venv,
+        &lock,
+        &index_locations,
+        extras,
+        preview,
+        cache,
+        printer,
+    )
+    .await?;
 
     Ok(ExitStatus::Success)
 }
 
 /// Sync a lockfile with an environment.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn do_sync(
     project: &ProjectWorkspace,
     venv: &PythonEnvironment,
     lock: &Lock,
+    index_locations: &IndexLocations,
     extras: ExtrasSpecification,
     preview: PreviewMode,
     cache: &Cache,
@@ -92,7 +105,6 @@ pub(super) async fn do_sync(
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let index_locations = IndexLocations::default();
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
@@ -104,7 +116,7 @@ pub(super) async fn do_sync(
         &client,
         cache,
         venv.interpreter(),
-        &index_locations,
+        index_locations,
         &flat_index,
         &index,
         &git,
@@ -130,7 +142,7 @@ pub(super) async fn do_sync(
         &no_binary,
         link_mode,
         compile,
-        &index_locations,
+        index_locations,
         &hasher,
         tags,
         &client,
