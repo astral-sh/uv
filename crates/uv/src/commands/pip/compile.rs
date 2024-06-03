@@ -215,6 +215,13 @@ pub(crate) async fn pip_compile(
         InMemoryIndexRef::Borrowed(&source_index)
     };
 
+    // Determine the Python requirement, based on the interpreter and the requested version.
+    let python_requirement = if let Some(python_version) = python_version.as_ref() {
+        PythonRequirement::from_python_version(&interpreter, python_version)
+    } else {
+        PythonRequirement::from_interpreter(&interpreter)
+    };
+
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = match (python_platform, python_version.as_ref()) {
         (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
@@ -250,8 +257,6 @@ pub(crate) async fn pip_compile(
         (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
         (None, None) => Cow::Borrowed(interpreter.markers()),
     };
-
-    let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &markers);
 
     // Generate, but don't enforce hashes for the requirements.
     let hasher = if generate_hashes {

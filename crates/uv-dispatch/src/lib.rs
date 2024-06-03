@@ -150,9 +150,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
+        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let markers = self.interpreter.markers();
-        let python_requirement =
-            PythonRequirement::from_marker_environment(self.interpreter, markers);
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()),

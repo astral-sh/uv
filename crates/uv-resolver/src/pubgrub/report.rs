@@ -49,11 +49,17 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         &**package,
                         PubGrubPackageInner::Python(PubGrubPython::Target)
                     ) {
-                        return format!(
-                            "the requested {package} version ({}) does not satisfy {}",
-                            python.target(),
-                            PackageRange::compatibility(package, set)
-                        );
+                        return if let Some(target) = python.target() {
+                            format!(
+                                "the requested {package} version ({target}) does not satisfy {}",
+                                PackageRange::compatibility(package, set)
+                            )
+                        } else {
+                            format!(
+                                "the requested {package} version does not satisfy {}",
+                                PackageRange::compatibility(package, set)
+                            )
+                        };
                     }
                     if matches!(
                         &**package,

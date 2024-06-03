@@ -466,8 +466,8 @@ impl VersionMapLazy {
         // Source distributions must meet both the _target_ Python version and the
         // _installed_ Python version (to build successfully)
         if let Some(requires_python) = requires_python {
-            if self.python_requirement.target() != self.python_requirement.installed() {
-                if !requires_python.contains(self.python_requirement.target()) {
+            if let Some(target) = self.python_requirement.target() {
+                if !requires_python.contains(target) {
                     return SourceDistCompatibility::Incompatible(
                         IncompatibleSource::RequiresPython(
                             requires_python,
@@ -533,11 +533,20 @@ impl VersionMapLazy {
 
         // Check for a Python version incompatibility`
         if let Some(requires_python) = requires_python {
-            if !requires_python.contains(self.python_requirement.target()) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
-                    requires_python,
-                    PythonRequirementKind::Target,
-                ));
+            if let Some(target) = self.python_requirement.target() {
+                if !requires_python.contains(target) {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
+                        requires_python,
+                        PythonRequirementKind::Target,
+                    ));
+                }
+            } else {
+                if !requires_python.contains(self.python_requirement.installed()) {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
+                        requires_python,
+                        PythonRequirementKind::Installed,
+                    ));
+                }
             }
         }
 

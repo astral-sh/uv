@@ -308,7 +308,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         debug!(
             "Solving with target Python version {}",
-            self.python_requirement.target()
+            self.python_requirement
+                .target()
+                .unwrap_or(self.python_requirement.installed())
         );
 
         'FORK: while let Some(mut state) = forked_states.pop() {
@@ -715,9 +717,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // The version is incompatible due to its Python requirement.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    let installed = self.python_requirement.installed();
-                    let target = self.python_requirement.target();
-                    if target != installed {
+                    if let Some(target) = self.python_requirement.target() {
                         if !requires_python.contains(target) {
                             return Ok(Some(ResolverVersion::Unavailable(
                                 version.clone(),
@@ -730,6 +730,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             )));
                         }
                     }
+
+                    let installed = self.python_requirement.installed();
                     if !requires_python.contains(installed) {
                         return Ok(Some(ResolverVersion::Unavailable(
                             version.clone(),
