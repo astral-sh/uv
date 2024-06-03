@@ -20,7 +20,8 @@ use tracing::{debug, enabled, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist,
+    VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -406,9 +407,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if let UnavailableVersion::IncompatibleDist(
                             IncompatibleDist::Source(IncompatibleSource::RequiresPython(
                                 requires_python,
+                                kind,
                             ))
                             | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
                                 requires_python,
+                                kind,
                             )),
                         ) = reason
                         {
@@ -420,18 +423,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 })?;
 
                             let package = &state.next;
-                            for kind in [PubGrubPython::Installed, PubGrubPython::Target] {
-                                state.pubgrub.add_incompatibility(
-                                    Incompatibility::from_dependency(
-                                        package.clone(),
-                                        Range::singleton(version.clone()),
-                                        (
-                                            PubGrubPackage::from(PubGrubPackageInner::Python(kind)),
-                                            python_version.clone(),
-                                        ),
+                            state
+                                .pubgrub
+                                .add_incompatibility(Incompatibility::from_dependency(
+                                    package.clone(),
+                                    Range::singleton(version.clone()),
+                                    (
+                                        PubGrubPackage::from(PubGrubPackageInner::Python(
+                                            match kind {
+                                                PythonRequirementKind::Installed => {
+                                                    PubGrubPython::Installed
+                                                }
+                                                PythonRequirementKind::Target => {
+                                                    PubGrubPython::Target
+                                                }
+                                            },
+                                        )),
+                                        python_version.clone(),
                                     ),
-                                );
-                            }
+                                ));
                             state
                                 .pubgrub
                                 .partial_solution
@@ -722,12 +732,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // The version is incompatible due to its Python requirement.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
+                    let installed = self.python_requirement.installed();
                     let target = self.python_requirement.target();
-                    if !requires_python.contains(target) {
+                    if target != installed {
+                        if !requires_python.contains(target) {
+                            return Ok(Some(ResolverVersion::Unavailable(
+                                version.clone(),
+                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                                    IncompatibleSource::RequiresPython(
+                                        requires_python.clone(),
+                                        PythonRequirementKind::Target,
+                                    ),
+                                )),
+                            )));
+                        }
+                    }
+                    if !requires_python.contains(installed) {
                         return Ok(Some(ResolverVersion::Unavailable(
                             version.clone(),
                             UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
-                                IncompatibleSource::RequiresPython(requires_python.clone()),
+                                IncompatibleSource::RequiresPython(
+                                    requires_python.clone(),
+                                    PythonRequirementKind::Installed,
+                                ),
                             )),
                         )));
                     }

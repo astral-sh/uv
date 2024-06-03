@@ -103,8 +103,8 @@ impl Display for IncompatibleDist {
                     Some(_) => f.write_str("was published after the exclude newer time"),
                     None => f.write_str("has no publish time"),
                 },
-                IncompatibleWheel::RequiresPython(python) => {
-                    write!(f, "requires at python {python}")
+                IncompatibleWheel::RequiresPython(python, _) => {
+                    write!(f, "requires Python {python}")
                 }
             },
             Self::Source(incompatibility) => match incompatibility {
@@ -123,13 +123,23 @@ impl Display for IncompatibleDist {
                     Some(_) => f.write_str("was published after the exclude newer time"),
                     None => f.write_str("has no publish time"),
                 },
-                IncompatibleSource::RequiresPython(python) => {
-                    write!(f, "requires python {python}")
+                IncompatibleSource::RequiresPython(python, _) => {
+                    write!(f, "requires Python {python}")
                 }
             },
             Self::Unavailable => f.write_str("has no available distributions"),
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum PythonRequirementKind {
+    /// The installed version of Python.
+    Installed,
+    /// The target version of Python; that is, the version of Python for which we are resolving
+    /// dependencies. This is typically the same as the installed version, but may be different
+    /// when specifying an alternate Python version for the resolution.
+    Target,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,7 +152,7 @@ pub enum WheelCompatibility {
 pub enum IncompatibleWheel {
     ExcludeNewer(Option<i64>),
     Tag(IncompatibleTag),
-    RequiresPython(VersionSpecifiers),
+    RequiresPython(VersionSpecifiers, PythonRequirementKind),
     Yanked(Yanked),
     NoBinary,
 }
@@ -156,7 +166,7 @@ pub enum SourceDistCompatibility {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleSource {
     ExcludeNewer(Option<i64>),
-    RequiresPython(VersionSpecifiers),
+    RequiresPython(VersionSpecifiers, PythonRequirementKind),
     Yanked(Yanked),
     NoBuild,
 }
@@ -466,16 +476,16 @@ impl IncompatibleSource {
             Self::ExcludeNewer(timestamp_self) => match other {
                 // Smaller timestamps are closer to the cut-off time
                 Self::ExcludeNewer(timestamp_other) => timestamp_other < timestamp_self,
-                Self::NoBuild | Self::RequiresPython(_) | Self::Yanked(_) => true,
+                Self::NoBuild | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
             },
-            Self::RequiresPython(_) => match other {
+            Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) => false,
                 // Version specifiers cannot be reasonably compared
-                Self::RequiresPython(_) => false,
+                Self::RequiresPython(_, _) => false,
                 Self::NoBuild | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
-                Self::ExcludeNewer(_) | Self::RequiresPython(_) => false,
+                Self::ExcludeNewer(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
                 Self::NoBuild => true,
@@ -497,21 +507,23 @@ impl IncompatibleWheel {
                         timestamp_other < timestamp_self
                     }
                 },
-                Self::NoBinary | Self::RequiresPython(_) | Self::Tag(_) | Self::Yanked(_) => true,
+                Self::NoBinary | Self::RequiresPython(_, _) | Self::Tag(_) | Self::Yanked(_) => {
+                    true
+                }
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
                 Self::Tag(tag_other) => tag_other > tag_self,
-                Self::NoBinary | Self::RequiresPython(_) | Self::Yanked(_) => true,
+                Self::NoBinary | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
             },
-            Self::RequiresPython(_) => match other {
+            Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
-                Self::RequiresPython(_) => false,
+                Self::RequiresPython(_, _) => false,
                 Self::NoBinary | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
-                Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_) => false,
+                Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
                 Self::NoBinary => true,

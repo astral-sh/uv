@@ -45,14 +45,20 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
             }
             External::NoVersions(package, set) => {
                 if let Some(python) = self.python_requirement {
-                    if matches!(&**package, PubGrubPackageInner::Python(PubGrubPython::Target)) {
+                    if matches!(
+                        &**package,
+                        PubGrubPackageInner::Python(PubGrubPython::Target)
+                    ) {
                         return format!(
                             "the requested {package} version ({}) does not satisfy {}",
                             python.target(),
                             PackageRange::compatibility(package, set)
                         );
                     }
-                    if matches!(&**package, PubGrubPackageInner::Python(PubGrubPython::Installed)) {
+                    if matches!(
+                        &**package,
+                        PubGrubPackageInner::Python(PubGrubPython::Installed)
+                    ) {
                         return format!(
                             "the current {package} version ({}) does not satisfy {}",
                             python.installed(),
