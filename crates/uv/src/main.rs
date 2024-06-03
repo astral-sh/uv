@@ -107,11 +107,6 @@ async fn run() -> Result<ExitStatus> {
         }
     };
 
-    // enable warning before workspace loading.
-    if !cli.global_args.quiet {
-        uv_warnings::enable();
-    }
-
     // Load the workspace settings, prioritizing (in order):
     // 1. The configuration file specified on the command-line.
     // 2. The configuration file in the current directory.
@@ -153,9 +148,7 @@ async fn run() -> Result<ExitStatus> {
     };
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
-    if globals.quiet {
-        uv_warnings::disable();
-    } else {
+    if !globals.quiet {
         uv_warnings::enable();
     }
 
