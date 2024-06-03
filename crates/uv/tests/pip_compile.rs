@@ -3047,7 +3047,8 @@ fn override_multi_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Check that `tool.uv.override-dependencies` is respected in `pyproject.toml`.
+/// Check how invalid `tool.uv.override-dependencies` is handled in `pyproject.toml`.
+// TODO(konsti): We should show a warnings here or better fail parsing.
 #[test]
 fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
     let context = TestContext::new("3.12");
