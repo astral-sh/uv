@@ -194,7 +194,15 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         _ => (),
                     }
                 }
-                result.push_str(" are incompatible");
+                if let [(p, t)] = slice {
+                    if PackageTerm::new(p, t).plural() {
+                        result.push_str(" are incompatible");
+                    } else {
+                        result.push_str(" is incompatible");
+                    }
+                } else {
+                    result.push_str(" are incompatible");
+                }
                 result
             }
         }
@@ -749,13 +757,28 @@ impl std::fmt::Display for PackageTerm<'_> {
 }
 
 impl PackageTerm<'_> {
+    /// Create a new [`PackageTerm`] from a [`PubGrubPackage`] and a [`Term`].
     fn new<'a>(package: &'a PubGrubPackage, term: &'a Term<Range<Version>>) -> PackageTerm<'a> {
         PackageTerm { package, term }
+    }
+
+    /// Returns `true` if the predicate following this package term should be singular or plural.
+    fn plural(&self) -> bool {
+        match self.term {
+            Term::Positive(set) => PackageRange::compatibility(self.package, set).plural(),
+            Term::Negative(set) => {
+                if set.as_singleton().is_some() {
+                    false
+                } else {
+                    PackageRange::compatibility(self.package, &set.complement()).plural()
+                }
+            }
+        }
     }
 }
 
 /// The kind of version ranges being displayed in [`PackageRange`]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PackageRangeKind {
     Dependency,
     Compatibility,
@@ -775,12 +798,19 @@ impl PackageRange<'_> {
     /// be singular or plural e.g. if false use "<range> depends on <...>" and
     /// if true use "<range> depend on <...>"
     fn plural(&self) -> bool {
-        if self.range.is_empty() {
-            false
+        let mut segments = self.range.iter();
+        if let Some(segment) = segments.next() {
+            // A single unbounded compatibility segment is always plural ("all versions of").
+            if self.kind == PackageRangeKind::Compatibility {
+                if matches!(segment, (Bound::Unbounded, Bound::Unbounded)) {
+                    return true;
+                }
+            }
+            // Otherwise, multiple segments are always plural.
+            segments.next().is_some()
         } else {
-            let segments: Vec<_> = self.range.iter().collect();
-            // "all versions of" is the only plural case
-            matches!(segments.as_slice(), [(Bound::Unbounded, Bound::Unbounded)])
+            // An empty range is always singular.
+            false
         }
     }
 }

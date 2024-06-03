@@ -359,7 +359,7 @@ fn excluded_only_compatible_version() {
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that any of:
               package-a<2.0.0
               package-a>2.0.0
-          depends on one of:
+          depend on one of:
               package-b==1.0.0
               package-b==3.0.0
 
@@ -4011,14 +4011,14 @@ fn python_greater_than_current_excluded() {
               Python>=3.10,<3.11
               Python>=3.12
            are incompatible.
-          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 are incompatible.
+          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 is incompatible.
           And because package-a==2.0.0 depends on Python>=3.10 and only the following versions of package-a are available:
               package-a<=2.0.0
               package-a==3.0.0
               package-a==4.0.0
           we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 is incompatible.
           And because package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
           And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
 
