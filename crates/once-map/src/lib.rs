@@ -46,20 +46,31 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     ///
     /// Will hang if [`OnceMap::done`] isn't called for this key.
     pub async fn wait(&self, key: &K) -> Option<V> {
-        let entry = self.items.get(key)?;
+        let notify = {
+            let entry = self.items.get(key)?;
+            match entry.value() {
+                Value::Filled(value) => return Some(value.clone()),
+                Value::Waiting(notify) => notify.clone(),
+            }
+        };
+
+        // Prepare to wait.
+        let notified = notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+
+        // Make sure the value wasn't inserted in-between us checking the map and preparing to wait.
+        if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
+            return Some(value.clone());
+        };
+
+        // Wait until the value is inserted.
+        notified.await;
+
+        let entry = self.items.get(key).expect("map is append-only");
         match entry.value() {
             Value::Filled(value) => Some(value.clone()),
-            Value::Waiting(notify) => {
-                let notify = notify.clone();
-                drop(entry);
-                notify.notified().await;
-
-                let entry = self.items.get(key).expect("map is append-only");
-                match entry.value() {
-                    Value::Filled(value) => Some(value.clone()),
-                    Value::Waiting(_) => unreachable!("notify was called"),
-                }
-            }
+            Value::Waiting(_) => unreachable!("notify was called"),
         }
     }
 
@@ -67,20 +78,31 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     ///
     /// Will hang if [`OnceMap::done`] isn't called for this key.
     pub fn wait_blocking(&self, key: &K) -> Option<V> {
-        let entry = self.items.get(key)?;
+        let notify = {
+            let entry = self.items.get(key)?;
+            match entry.value() {
+                Value::Filled(value) => return Some(value.clone()),
+                Value::Waiting(notify) => notify.clone(),
+            }
+        };
+
+        // Prepare to wait.
+        let notified = notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+
+        // Make sure the value wasn't inserted in-between us checking the map and preparing to wait.
+        if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
+            return Some(value.clone());
+        };
+
+        // Wait until the value is inserted.
+        futures::executor::block_on(notified);
+
+        let entry = self.items.get(key).expect("map is append-only");
         match entry.value() {
             Value::Filled(value) => Some(value.clone()),
-            Value::Waiting(notify) => {
-                let notify = notify.clone();
-                drop(entry);
-                futures::executor::block_on(notify.notified());
-
-                let entry = self.items.get(key).expect("map is append-only");
-                match entry.value() {
-                    Value::Filled(value) => Some(value.clone()),
-                    Value::Waiting(_) => unreachable!("notify was called"),
-                }
-            }
+            Value::Waiting(_) => unreachable!("notify was called"),
         }
     }
 
