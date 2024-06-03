@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
-use std::ops::Deref;
 use std::sync::Arc;
 
 use indexmap::IndexMap;
@@ -16,7 +15,7 @@ use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, PubGrubReportFormatter};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{
     FxOnceMap, IncompletePackage, UnavailablePackage, UnavailableReason, VersionsResponse,
@@ -225,7 +224,6 @@ impl NoSolutionError {
     #[must_use]
     pub(crate) fn with_available_versions(
         mut self,
-        python_requirement: &PythonRequirement,
         visited: &FxHashSet<PackageName>,
         package_versions: &FxOnceMap<PackageName, Arc<VersionsResponse>>,
     ) -> Self {
@@ -233,18 +231,7 @@ impl NoSolutionError {
         for package in self.derivation_tree.packages() {
             match &**package {
                 PubGrubPackageInner::Root(_) => {}
-                PubGrubPackageInner::Python(PubGrubPython::Installed) => {
-                    available_versions.insert(
-                        package.clone(),
-                        BTreeSet::from([python_requirement.installed().deref().clone()]),
-                    );
-                }
-                PubGrubPackageInner::Python(PubGrubPython::Target) => {
-                    available_versions.insert(
-                        package.clone(),
-                        BTreeSet::from([python_requirement.target().deref().clone()]),
-                    );
-                }
+                PubGrubPackageInner::Python(_) => {}
                 PubGrubPackageInner::Extra { .. } => {}
                 PubGrubPackageInner::Package { name, .. } => {
                     // Avoid including available versions for packages that exist in the derivation
