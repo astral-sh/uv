@@ -22,9 +22,9 @@ use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_configuration::IndexStrategy;
-use uv_configuration::KeyringProviderType;
 use uv_normalize::PackageName;
 
+use crate::base_client::MiddlewareStack;
 use crate::base_client::{BaseClient, BaseClientBuilder};
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
@@ -37,14 +37,13 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
-    keyring: KeyringProviderType,
     native_tls: bool,
-    retries: u32,
     connectivity: Connectivity,
     cache: Cache,
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
+    middleware_stack: MiddlewareStack,
 }
 
 impl RegistryClientBuilder<'_> {
@@ -52,14 +51,13 @@ impl RegistryClientBuilder<'_> {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            keyring: KeyringProviderType::default(),
             native_tls: false,
             cache,
             connectivity: Connectivity::Online,
-            retries: 3,
             client: None,
             markers: None,
             platform: None,
+            middleware_stack: MiddlewareStack::default(),
         }
     }
 }
@@ -78,20 +76,8 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
-        self.keyring = keyring_type;
-        self
-    }
-
-    #[must_use]
     pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
         self.connectivity = connectivity;
-        self
-    }
-
-    #[must_use]
-    pub fn retries(mut self, retries: u32) -> Self {
-        self.retries = retries;
         self
     }
 
@@ -125,6 +111,12 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn middleware_stack(mut self, middleware_stack: MiddlewareStack) -> Self {
+        self.middleware_stack = middleware_stack;
+        self
+    }
+
     pub fn build(self) -> RegistryClient {
         // Build a base client
         let mut builder = BaseClientBuilder::new();
@@ -142,10 +134,9 @@ impl<'a> RegistryClientBuilder<'a> {
         }
 
         let client = builder
-            .retries(self.retries)
             .connectivity(self.connectivity)
             .native_tls(self.native_tls)
-            .keyring(self.keyring)
+            .middleware_stack(self.middleware_stack)
             .build();
 
         let timeout = client.timeout();

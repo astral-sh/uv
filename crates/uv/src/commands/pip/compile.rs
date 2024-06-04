@@ -21,7 +21,9 @@ use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{
+    BaseClientBuilder, Connectivity, FlatIndexClient, MiddlewareStack, RegistryClientBuilder,
+};
 use uv_configuration::{
     Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy, NoBinary,
     NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
@@ -112,7 +114,11 @@ pub(crate) async fn pip_compile(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .middleware_stack(
+            MiddlewareStack::default()
+                .with_retries(3)
+                .with_auth(keyring_provider),
+        );
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -280,7 +286,11 @@ pub(crate) async fn pip_compile(
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
-        .keyring(keyring_provider)
+        .middleware_stack(
+            MiddlewareStack::default()
+                .with_retries(3)
+                .with_auth(keyring_provider),
+        )
         .markers(&markers)
         .platform(interpreter.platform())
         .build();

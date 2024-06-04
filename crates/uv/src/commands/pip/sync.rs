@@ -11,7 +11,9 @@ use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{
+    BaseClientBuilder, Connectivity, FlatIndexClient, MiddlewareStack, RegistryClientBuilder,
+};
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary, NoBuild,
     PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
@@ -70,7 +72,11 @@ pub(crate) async fn pip_sync(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .middleware_stack(
+            MiddlewareStack::default()
+                .with_retries(3)
+                .with_auth(keyring_provider),
+        );
 
     // Initialize a few defaults.
     let overrides = &[];
@@ -223,7 +229,11 @@ pub(crate) async fn pip_sync(
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
-        .keyring(keyring_provider)
+        .middleware_stack(
+            MiddlewareStack::default()
+                .with_retries(3)
+                .with_auth(keyring_provider),
+        )
         .markers(&markers)
         .platform(interpreter.platform())
         .build();

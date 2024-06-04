@@ -10,7 +10,7 @@ use pep508_rs::UnnamedRequirement;
 use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity};
+use uv_client::{BaseClientBuilder, Connectivity, MiddlewareStack};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
 use uv_interpreter::{PythonEnvironment, SystemPython, Target};
@@ -38,7 +38,11 @@ pub(crate) async fn pip_uninstall(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .middleware_stack(
+            MiddlewareStack::default()
+                .with_retries(3)
+                .with_auth(keyring_provider),
+        );
 
     // Read all requirements from the provided sources.
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;

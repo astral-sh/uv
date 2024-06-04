@@ -1,13 +1,15 @@
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Platform;
 use reqwest::{Client, ClientBuilder};
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use std::env;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::Path;
+use std::slice::Iter;
+use std::sync::Arc;
 use tracing::debug;
 use uv_auth::AuthMiddleware;
 use uv_configuration::KeyringProviderType;
@@ -19,54 +21,72 @@ use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::Connectivity;
 
+/// Newtype to implement [`Debug`] on [`Middleware`].
+#[derive(Clone, Default)]
+pub struct MiddlewareStack(Vec<Arc<dyn Middleware>>);
+
+impl MiddlewareStack {
+    /// Add an arbitrary middleware layer.
+    // This function exists for rustlib users.
+    pub fn with(mut self, middleware: impl Into<Arc<dyn Middleware>>) -> Self {
+        self.0.push(middleware.into());
+        self
+    }
+
+    /// Add an [`ExponentialBackoff`] layer with the given number of retries.
+    pub fn with_retries(mut self, retries: u32) -> Self {
+        if retries > 0 {
+            let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries);
+            let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
+            self.0.push(Arc::new(retry_strategy))
+        }
+        self
+    }
+
+    /// Add an [`AuthMiddleware`] layer with the given keyring provider.
+    pub fn with_auth(mut self, keyring: KeyringProviderType) -> Self {
+        let auth_middleware = AuthMiddleware::new().with_keyring(keyring.to_provider());
+        self.0.push(Arc::new(auth_middleware));
+        self
+    }
+}
+
+impl Debug for MiddlewareStack {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MiddlewareStack").finish()
+    }
+}
+
+impl<'a> IntoIterator for &'a MiddlewareStack {
+    type Item = &'a Arc<dyn Middleware>;
+    type IntoIter = Iter<'a, Arc<dyn Middleware>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 /// A builder for an [`BaseClient`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BaseClientBuilder<'a> {
-    keyring: KeyringProviderType,
     native_tls: bool,
-    retries: u32,
     connectivity: Connectivity,
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
-}
-
-impl Default for BaseClientBuilder<'_> {
-    fn default() -> Self {
-        Self::new()
-    }
+    middleware_stack: MiddlewareStack,
 }
 
 impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
-        Self {
-            keyring: KeyringProviderType::default(),
-            native_tls: false,
-            connectivity: Connectivity::Online,
-            retries: 3,
-            client: None,
-            markers: None,
-            platform: None,
-        }
+        Self::default()
     }
 }
 
 impl<'a> BaseClientBuilder<'a> {
     #[must_use]
-    pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
-        self.keyring = keyring_type;
-        self
-    }
-
-    #[must_use]
     pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
         self.connectivity = connectivity;
-        self
-    }
-
-    #[must_use]
-    pub fn retries(mut self, retries: u32) -> Self {
-        self.retries = retries;
         self
     }
 
@@ -91,6 +111,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn platform(mut self, platform: &'a Platform) -> Self {
         self.platform = Some(platform);
+        self
+    }
+
+    #[must_use]
+    pub fn middleware_stack(mut self, middleware_stack: MiddlewareStack) -> Self {
+        self.middleware_stack = middleware_stack;
         self
     }
 
@@ -161,18 +187,10 @@ impl<'a> BaseClientBuilder<'a> {
         // Wrap in any relevant middleware.
         let client = match self.connectivity {
             Connectivity::Online => {
-                let client = reqwest_middleware::ClientBuilder::new(client.clone());
-
-                // Initialize the retry strategy.
-                let retry_policy =
-                    ExponentialBackoff::builder().build_with_max_retries(self.retries);
-                let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
-                let client = client.with(retry_strategy);
-
-                // Initialize the authentication middleware to set headers.
-                let client =
-                    client.with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
-
+                let mut client = reqwest_middleware::ClientBuilder::new(client.clone());
+                for middleware in &self.middleware_stack {
+                    client = client.with_arc(middleware.clone());
+                }
                 client.build()
             }
             Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client.clone())
