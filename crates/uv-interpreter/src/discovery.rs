@@ -1174,11 +1174,12 @@ impl SourceSelector {
             Self::from_sources([InterpreterSource::ManagedToolchain])
         } else if env::var_os("UV_TEST_PYTHON_PATH").is_some() {
             debug!(
-                "Only considering search path and active environments due to `UV_TEST_PYTHON_PATH`"
+                "Only considering search path, provided path, and active environments due to `UV_TEST_PYTHON_PATH`"
             );
             Self::from_sources([
                 InterpreterSource::ActiveEnvironment,
                 InterpreterSource::SearchPath,
+                InterpreterSource::ProvidedPath,
             ])
         } else {
             match system {
