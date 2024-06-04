@@ -189,6 +189,13 @@ approximate shorthand for, e.g., `uv pip install --python=$(which python3)`. Tho
 recommend the use of virtual environments for dependency management, `--system` is intended to
 enable the use of uv in continuous integration and containerized environments.
 
+The `--system` flag is also used to opt-in to mutation of system environments. For example, when
+the `--python` argument is used to implicitly request a system interpreter, e.g., if `--python 3.12`
+finds `/usr/lib/python3.12`, then the `--system` flag is required to allow modification of this non-virtual
+Python environment. When the `--system` flag is not provided, uv will ignore any interpreters that are not in
+[PEP 405 compliant](https://peps.python.org/pep-0405/#specification) virtual environments. Similarly, if
+the `--system` flag is provided, uv will ignore any interpreters that are in virtual environments.
+
 Installing into system Python across platforms and distributions is notoriously difficult. uv
 supports the common cases, but will not work in all cases. For example, installing into system
 Python on Debian prior to Python 3.10 is unsupported due to the [distribution's patching
