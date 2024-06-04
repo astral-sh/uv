@@ -221,7 +221,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
                     "insta",
                     "test",
                     "--features",
-                    "pypi,python",
+                    "pypi,python,python-patch",
                     "--accept",
                     "--test-runner",
                     "nextest",
