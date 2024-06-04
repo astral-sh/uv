@@ -1,35 +1,64 @@
-use std::path::PathBuf;
+//! Collecting the requirements to compile, sync or install.
+//!
+//! # `requirements.txt` format
+//!
+//! The `requirements.txt` format (also known as `requirements.in`) is static except for the
+//! possibility of making network requests.
+//!
+//! All entries are stored as `requirements` and `editables` or `constraints`  depending on the kind
+//! of inclusion (`uv pip install -r` and `uv pip compile` vs. `uv pip install -c` and
+//! `uv pip compile -c`).
+//!
+//! # `pyproject.toml` and directory source.
+//!
+//! `pyproject.toml` files come in two forms: PEP 621 compliant with static dependencies and non-PEP 621
+//! compliant or PEP 621 compliant with dynamic metadata. There are different ways how the requirements are evaluated:
+//! * `uv pip install -r pyproject.toml` or `uv pip compile requirements.in`: The `pyproject.toml`
+//!   must be valid (in other circumstances we allow invalid `dependencies` e.g. for hatch's
+//!   relative path support), but it can be dynamic. We set the `project` from the `name` entry. If it is static, we add
+//!   all `dependencies` from the pyproject.toml as `requirements` (and drop the directory). If it
+//!   is dynamic, we add the directory to `source_trees`.
+//! * `uv pip install .` in a directory with `pyproject.toml` or `uv pip compile requirements.in`
+//!   where the `requirements.in` points to that directory: The directory is listed in
+//!   `requirements`. The lookahead resolver reads the static metadata from `pyproject.toml` if
+//!   available, otherwise it calls PEP 517 to resolve.
+//! * `uv pip install -e`: We add the directory in `editables` instead of `requirements`. The
+//!   lookahead resolver resolves it the same.
+//! * `setup.py` or `setup.cfg` instead of `pyproject.toml`: Directory is an entry in
+//!   `source_trees`.
+
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
 
 use cache_key::CanonicalUrl;
-use distribution_types::{FlatIndexLocation, IndexUrl};
-use pep508_rs::Requirement;
-use requirements_txt::{
-    EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
+use distribution_types::{
+    FlatIndexLocation, IndexUrl, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use pep508_rs::{UnnamedRequirement, UnnamedRequirementUrl};
+use pypi_types::Requirement;
+use pypi_types::VerbatimParsedUrl;
+use requirements_txt::{FindLink, RequirementsTxt, RequirementsTxtRequirement};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
+use uv_distribution::pyproject::PyProjectToml;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::pyproject::{Pep621Metadata, PyProjectToml};
-use crate::{ExtrasSpecification, RequirementsSource};
+use crate::RequirementsSource;
 
 #[derive(Debug, Default)]
 pub struct RequirementsSpecification {
     /// The name of the project specifying requirements.
     pub project: Option<PackageName>,
     /// The requirements for the project.
-    pub requirements: Vec<RequirementEntry>,
+    pub requirements: Vec<UnresolvedRequirementSpecification>,
     /// The constraints for the project.
     pub constraints: Vec<Requirement>,
     /// The overrides for the project.
-    pub overrides: Vec<RequirementEntry>,
-    /// Package to install as editable installs
-    pub editables: Vec<EditableRequirement>,
+    pub overrides: Vec<UnresolvedRequirementSpecification>,
     /// The source trees from which to extract requirements.
     pub source_trees: Vec<PathBuf>,
     /// The extras used to collect requirements.
@@ -53,62 +82,55 @@ impl RequirementsSpecification {
     #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
     pub async fn from_source(
         source: &RequirementsSource,
-        extras: &ExtrasSpecification,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
                 let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                    .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
-                    project: None,
-                    requirements: vec![RequirementEntry {
-                        requirement,
-                        hashes: vec![],
-                    }],
-                    constraints: vec![],
-                    overrides: vec![],
-                    editables: vec![],
-                    source_trees: vec![],
-                    extras: FxHashSet::default(),
-                    index_url: None,
-                    extra_index_urls: vec![],
-                    no_index: false,
-                    find_links: vec![],
-                    no_binary: NoBinary::default(),
-                    no_build: NoBuild::default(),
+                    requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
+                    ..Self::default()
                 }
             }
             RequirementsSource::Editable(name) => {
-                let requirement = EditableRequirement::parse(name, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
+                    .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
-                    project: None,
-                    requirements: vec![],
-                    constraints: vec![],
-                    overrides: vec![],
-                    editables: vec![requirement],
-                    source_trees: vec![],
-                    extras: FxHashSet::default(),
-                    index_url: None,
-                    extra_index_urls: vec![],
-                    no_index: false,
-                    find_links: vec![],
-                    no_binary: NoBinary::default(),
-                    no_build: NoBuild::default(),
+                    requirements: vec![UnresolvedRequirementSpecification::from(
+                        requirement.into_editable()?,
+                    )],
+                    ..Self::default()
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
+                if !(path == Path::new("-")
+                    || path.starts_with("http://")
+                    || path.starts_with("https://")
+                    || path.exists())
+                {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                }
+
                 let requirements_txt =
                     RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
                 Self {
-                    project: None,
-                    requirements: requirements_txt.requirements,
-                    constraints: requirements_txt.constraints,
-                    overrides: vec![],
-                    editables: requirements_txt.editables,
-                    source_trees: vec![],
-                    extras: FxHashSet::default(),
+                    requirements: requirements_txt
+                        .requirements
+                        .into_iter()
+                        .map(UnresolvedRequirementSpecification::from)
+                        .chain(
+                            requirements_txt
+                                .editables
+                                .into_iter()
+                                .map(UnresolvedRequirementSpecification::from),
+                        )
+                        .collect(),
+                    constraints: requirements_txt
+                        .constraints
+                        .into_iter()
+                        .map(Requirement::from)
+                        .collect(),
                     index_url: requirements_txt.index_url.map(IndexUrl::from),
                     extra_index_urls: requirements_txt
                         .extra_index_urls
@@ -126,96 +148,61 @@ impl RequirementsSpecification {
                         .collect(),
                     no_binary: requirements_txt.no_binary,
                     no_build: requirements_txt.only_binary,
+                    ..Self::default()
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
-                let contents = uv_fs::read_to_string(path).await?;
-                let pyproject = toml::from_str::<PyProjectToml>(&contents)
-                    .with_context(|| format!("Failed to parse `{}`", path.user_display()))?;
+                let contents = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(contents) => contents,
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    }
+                    Err(err) => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to read `{}`: {}",
+                            path.user_display(),
+                            err
+                        ));
+                    }
+                };
+                let _ = toml::from_str::<PyProjectToml>(&contents)
+                    .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
-                // Attempt to read metadata from the `pyproject.toml` directly.
-                //
-                // If we fail to extract the PEP 621 metadata, fall back to treating it as a source
-                // tree, as there are some cases where the `pyproject.toml` may not be a valid PEP
-                // 621 file, but might still resolve under PEP 517. (If the source tree doesn't
-                // resolve under PEP 517, we'll catch that later.)
-                //
-                // For example, Hatch's "Context formatting" API is not compliant with PEP 621, as
-                // it expects dynamic processing by the build backend for the static metadata
-                // fields. See: https://hatch.pypa.io/latest/config/context/
-                if let Some(project) = pyproject
-                    .project
-                    .and_then(|project| Pep621Metadata::try_from(project, extras).ok().flatten())
-                {
-                    Self {
-                        project: Some(project.name),
-                        requirements: project
-                            .requirements
-                            .into_iter()
-                            .map(|requirement| RequirementEntry {
-                                requirement: RequirementsTxtRequirement::Pep508(requirement),
-                                hashes: vec![],
-                            })
-                            .collect(),
-                        constraints: vec![],
-                        overrides: vec![],
-                        editables: vec![],
-                        source_trees: vec![],
-                        extras: project.used_extras,
-                        index_url: None,
-                        extra_index_urls: vec![],
-                        no_index: false,
-                        find_links: vec![],
-                        no_binary: NoBinary::default(),
-                        no_build: NoBuild::default(),
-                    }
-                } else {
-                    let path = fs_err::canonicalize(path)?;
-                    let source_tree = path.parent().ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "The file `{}` appears to be a `pyproject.toml` file, which must be in a directory",
-                            path.user_display()
-                        )
-                    })?;
-                    Self {
-                        project: None,
-                        requirements: vec![],
-                        constraints: vec![],
-                        overrides: vec![],
-                        editables: vec![],
-                        source_trees: vec![source_tree.to_path_buf()],
-                        extras: FxHashSet::default(),
-                        index_url: None,
-                        extra_index_urls: vec![],
-                        no_index: false,
-                        find_links: vec![],
-                        no_binary: NoBinary::default(),
-                        no_build: NoBuild::default(),
-                    }
+                Self {
+                    source_trees: vec![path.clone()],
+                    ..Self::default()
                 }
             }
             RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
-                let path = fs_err::canonicalize(path)?;
-                let source_tree = path.parent().ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "The file `{}` appears to be a `setup.py` or `setup.cfg` file, which must be in a directory",
+                if !path.is_file() {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                }
+
+                Self {
+                    source_trees: vec![path.clone()],
+                    ..Self::default()
+                }
+            }
+            RequirementsSource::SourceTree(path) => {
+                if !path.is_dir() {
+                    return Err(anyhow::anyhow!(
+                        "Directory not found: `{}`",
                         path.user_display()
-                    )
-                })?;
+                    ));
+                }
+
                 Self {
                     project: None,
-                    requirements: vec![],
-                    constraints: vec![],
-                    overrides: vec![],
-                    editables: vec![],
-                    source_trees: vec![source_tree.to_path_buf()],
-                    extras: FxHashSet::default(),
-                    index_url: None,
-                    extra_index_urls: vec![],
-                    no_index: false,
-                    find_links: vec![],
-                    no_binary: NoBinary::default(),
-                    no_build: NoBuild::default(),
+                    requirements: vec![UnresolvedRequirementSpecification {
+                        requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                            url: VerbatimParsedUrl::parse_absolute_path(path)?,
+                            extras: vec![],
+                            marker: None,
+                            origin: None,
+                        }),
+                        hashes: vec![],
+                    }],
+                    ..Self::default()
                 }
             }
         })
@@ -226,7 +213,6 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
-        extras: &ExtrasSpecification,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
@@ -235,12 +221,11 @@ impl RequirementsSpecification {
         // A `requirements.txt` can contain a `-c constraints.txt` directive within it, so reading
         // a requirements file can also add constraints.
         for source in requirements {
-            let source = Self::from_source(source, extras, client_builder).await?;
+            let source = Self::from_source(source, client_builder).await?;
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
-            spec.editables.extend(source.editables);
             spec.source_trees.extend(source.source_trees);
 
             // Use the first project name discovered.
@@ -268,13 +253,13 @@ impl RequirementsSpecification {
         // Read all constraints, treating both requirements _and_ constraints as constraints.
         // Overrides are ignored, as are the hashes, as they are not relevant for constraints.
         for source in constraints {
-            let source = Self::from_source(source, extras, client_builder).await?;
+            let source = Self::from_source(source, client_builder).await?;
             for entry in source.requirements {
                 match entry.requirement {
-                    RequirementsTxtRequirement::Pep508(requirement) => {
+                    UnresolvedRequirement::Named(requirement) => {
                         spec.constraints.push(requirement);
                     }
-                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                    UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(
                             "Unnamed requirements are not allowed as constraints (found: `{requirement}`)"
                         ));
@@ -303,7 +288,7 @@ impl RequirementsSpecification {
         // Read all overrides, treating both requirements _and_ overrides as overrides.
         // Constraints are ignored.
         for source in overrides {
-            let source = Self::from_source(source, extras, client_builder).await?;
+            let source = Self::from_source(source, client_builder).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
 
@@ -332,13 +317,6 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(
-            requirements,
-            &[],
-            &[],
-            &ExtrasSpecification::None,
-            client_builder,
-        )
-        .await
+        Self::from_sources(requirements, &[], &[], client_builder).await
     }
 }

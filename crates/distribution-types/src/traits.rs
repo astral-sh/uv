@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
-
 use pep508_rs::VerbatimUrl;
 use uv_normalize::PackageName;
 
@@ -10,8 +8,8 @@ use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
     DirectUrlSourceDist, Dist, DistributionId, GitSourceDist, InstalledDirectUrlDist,
     InstalledDist, InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistrySourceDist, ResourceId, SourceDist, VersionId,
-    VersionOrUrl,
+    PathSourceDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId,
+    VersionOrUrlRef,
 };
 
 pub trait Name {
@@ -24,7 +22,7 @@ pub trait Name {
 pub trait DistributionMetadata: Name {
     /// Return a [`pep440_rs::Version`], for registry-based distributions, or a [`url::Url`],
     /// for URL-based distributions.
-    fn version_or_url(&self) -> VersionOrUrl;
+    fn version_or_url(&self) -> VersionOrUrlRef;
 
     /// Returns a unique identifier for the package at the given version (e.g., `black==23.10.0`).
     ///
@@ -33,10 +31,10 @@ pub trait DistributionMetadata: Name {
     /// will return the same version ID, but different distribution IDs.
     fn version_id(&self) -> VersionId {
         match self.version_or_url() {
-            VersionOrUrl::Version(version) => {
+            VersionOrUrlRef::Version(version) => {
                 VersionId::from_registry(self.name().clone(), version.clone())
             }
-            VersionOrUrl::Url(url) => VersionId::from_url(url),
+            VersionOrUrlRef::Url(url) => VersionId::from_url(url),
         }
     }
 
@@ -48,8 +46,8 @@ pub trait DistributionMetadata: Name {
     /// will return the same version ID, but different distribution IDs.
     fn package_id(&self) -> PackageId {
         match self.version_or_url() {
-            VersionOrUrl::Version(_) => PackageId::from_registry(self.name().clone()),
-            VersionOrUrl::Url(url) => PackageId::from_url(url),
+            VersionOrUrlRef::Version(_) => PackageId::from_registry(self.name().clone()),
+            VersionOrUrlRef::Url(url) => PackageId::from_url(url),
         }
     }
 }
@@ -203,7 +201,7 @@ impl std::fmt::Display for PathSourceDist {
     }
 }
 
-impl std::fmt::Display for RegistryBuiltDist {
+impl std::fmt::Display for RegistryBuiltWheel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }

@@ -132,6 +132,7 @@ fn check_incompatible_packages() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - idna==3.6
      + idna==2.4
@@ -198,6 +199,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - idna==3.6
      + idna==2.4

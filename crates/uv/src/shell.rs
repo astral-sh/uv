@@ -2,6 +2,7 @@ use std::path::Path;
 
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[allow(clippy::doc_markdown)]
 pub(crate) enum Shell {
     /// Bourne Again SHell (bash)
     Bash,

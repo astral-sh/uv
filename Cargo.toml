@@ -23,7 +23,7 @@ distribution-types = { path = "crates/distribution-types" }
 install-wheel-rs = { path = "crates/install-wheel-rs", default-features = false }
 once-map = { path = "crates/once-map" }
 pep440_rs = { path = "crates/pep440-rs" }
-pep508_rs = { path = "crates/pep508-rs" }
+pep508_rs = { path = "crates/pep508-rs", features = ["non-pep508-extensions"] }
 platform-tags = { path = "crates/platform-tags" }
 pypi-types = { path = "crates/pypi-types" }
 requirements-txt = { path = "crates/requirements-txt" }
@@ -42,7 +42,7 @@ uv-interpreter = { path = "crates/uv-interpreter" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
-uv-toolchain = { path = "crates/uv-toolchain" }
+uv-state = { path = "crates/uv-state" }
 uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
@@ -54,9 +54,9 @@ anyhow = { version = "1.0.80" }
 async-channel = { version = "2.2.0" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.78" }
-async_http_range_reader = { version = "0.7.1" }
+async_http_range_reader = { version = "0.8.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "1dcb40cfe1bf5325a6fd4bfcf9894db40241f585", features = ["deflate"] }
-axoupdater = { version = "0.5.0", default-features = false }
+axoupdater = { version = "0.6.0", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.0" }
 cachedir = { version = "0.3.1" }
@@ -74,38 +74,35 @@ derivative = { version = "2.2.0" }
 directories = { version = "5.0.1" }
 dirs-sys = { version = "0.4.1" }
 dunce = { version = "1.0.4" }
-either = { version = "1.9.0" }
+either = { version = "1.12.0" }
 encoding_rs_io = { version = "0.1.7" }
 flate2 = { version = "1.0.28", default-features = false }
 fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
-git2 = { version = "0.18.1" }
 glob = { version = "0.3.1" }
 hex = { version = "0.4.3" }
-hmac = { version = "0.12.1" }
-home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "1.1.0" }
 indexmap = { version = "2.2.5" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
-itertools = { version = "0.12.1" }
+itertools = { version = "0.13.0" }
 junction = { version = "1.0.0" }
-mailparse = { version = "0.14.0" }
+mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }
 miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
 owo-colors = { version = "4.0.0" }
 path-absolutize = { version = "3.1.1" }
+path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "c26e485213e39582c6f2e4d45c0328422670e7a7" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "d4795a31be17669aba11eb741b4a9086acc3eb11" }
 pyo3 = { version = "0.21.0" }
 pyo3-log = { version = "0.10.0" }
-rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
@@ -117,11 +114,10 @@ rmp-serde = { version = "1.1.2" }
 rust-netrc = { version = "0.1.1" }
 rustc-hash = { version = "1.1.0" }
 same-file = { version = "1.0.6" }
-schemars = { version = "0.8.16" }
+schemars = { version = "0.8.16", features = ["url"] }
 seahash = { version = "4.1.0" }
-serde = { version = "1.0.197" }
+serde = { version = "1.0.197", features = ["derive"] }
 serde_json = { version = "1.0.114" }
-sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
 sys-info = { version = "0.9.1" }
 tempfile = { version = "3.9.0" }
@@ -133,9 +129,9 @@ tokio-stream = { version = "0.1.14" }
 tokio-tar = { version = "0.3.1" }
 tokio-util = { version = "0.7.10", features = ["compat"] }
 toml = { version = "0.8.12" }
+toml_edit = { version = "0.22.13" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.2.0", features = ["plot"] }
-tracing-indicatif = { version = "0.3.6" }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
 tracing-tree = { version = "0.3.0" }
 unicode-width = { version = "0.1.11" }
@@ -145,8 +141,11 @@ urlencoding = { version = "2.1.3" }
 wiremock = { version = "0.6.0" }
 walkdir = { version = "2.5.0" }
 which = { version = "6.0.0" }
-winapi = { version = "0.3.9" }
-zip = { version = "1.1.0", default-features = false, features = ["deflate"] }
+winapi = { version = "0.3.9", features = ["fileapi", "handleapi", "ioapiset", "winbase", "winioctl", "winnt"] }
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+
+[workspace.metadata.cargo-shear]
+ignored = ["flate2"]
 
 [patch.crates-io]
 # For pyproject-toml
@@ -156,6 +155,7 @@ pep508_rs = { path = "crates/pep508-rs" }
 [workspace.lints.rust]
 unsafe_code = "warn"
 unreachable_pub = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(codspeed)'] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -2 }
@@ -164,6 +164,7 @@ char_lit_as_u8 = "allow"
 collapsible_else_if = "allow"
 collapsible_if = "allow"
 implicit_hasher = "allow"
+map_unwrap_or = "allow"
 match_same_arms = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
@@ -200,7 +201,7 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.13.3"
+cargo-dist-version = "0.14.0"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
@@ -212,7 +213,6 @@ unix-archive = ".tar.gz"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
   "aarch64-apple-darwin",
-  "aarch64-unknown-linux-gnu",
   "aarch64-unknown-linux-musl",
   "arm-unknown-linux-musleabihf",
   "armv7-unknown-linux-gnueabihf",

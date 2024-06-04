@@ -1,3 +1,5 @@
+#![cfg(feature = "render")]
+
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};

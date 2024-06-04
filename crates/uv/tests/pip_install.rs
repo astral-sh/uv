@@ -81,8 +81,7 @@ fn missing_requirements_txt() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `requirements.txt`
-      Caused by: No such file or directory (os error 2)
+    error: File not found: `requirements.txt`
     "###
     );
 
@@ -124,8 +123,7 @@ fn missing_pyproject_toml() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `pyproject.toml`
-      Caused by: No such file or directory (os error 2)
+    error: File not found: `pyproject.toml`
     "###
     );
 }
@@ -144,7 +142,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
@@ -171,7 +169,7 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
       |
     1 | [project]
@@ -184,16 +182,28 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     Ok(())
 }
 
+/// For indirect, non-user controlled pyproject.toml, we don't enforce correctness.
+///
+/// If we fail to extract the PEP 621 metadata, we fall back to treating it as a source
+/// tree, as there are some cases where the `pyproject.toml` may not be a valid PEP
+/// 621 file, but might still resolve under PEP 517. (If the source tree doesn't
+/// resolve under PEP 517, we'll catch that later.)
+///
+/// For example, Hatch's "Context formatting" API is not compliant with PEP 621, as
+/// it expects dynamic processing by the build backend for the static metadata
+/// fields. See: <https://hatch.pypa.io/latest/config/context/>
 #[test]
-fn invalid_pyproject_toml_requirement() -> Result<()> {
+fn invalid_pyproject_toml_requirement_indirect() -> Result<()> {
     let context = TestContext::new("3.12");
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject_toml = context.temp_dir.child("path_dep/pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
 name = "project"
 dependencies = ["flask==1.0.x"]
 "#,
     )?;
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("./path_dep")?;
 
     let filters = [("exit status", "exit code")]
         .into_iter()
@@ -202,13 +212,14 @@ dependencies = ["flask==1.0.x"]
 
     uv_snapshot!(filters, context.install()
         .arg("-r")
-        .arg("pyproject.toml"), @r###"
+        .arg("requirements.txt"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `file://[TEMP_DIR]/`
+    error: Failed to download and build: `project @ file://[TEMP_DIR]/path_dep`
+      Caused by: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
     --- stdout:
     configuration error: `project.dependencies[0]` must be pep508
@@ -264,6 +275,24 @@ dependencies = ["flask==1.0.x"]
     );
 
     Ok(())
+}
+
+#[test]
+fn missing_pip() {
+    uv_snapshot!(Command::new(get_bin()).arg("install"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: unrecognized subcommand 'install'
+
+      tip: a similar subcommand exists: 'uv pip install'
+
+    Usage: uv [OPTIONS] <COMMAND>
+
+    For more information, try '--help'.
+    "###);
 }
 
 #[test]
@@ -366,6 +395,46 @@ fn install_requirements_txt() -> Result<()> {
     );
 
     context.assert_command("import flask").success();
+
+    Ok(())
+}
+
+/// Install a requirements file with pins that conflict
+///
+/// This is likely to occur in the real world when compiled on one platform then installed on another.
+#[test]
+fn install_requirements_txt_conflicting_pins() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+
+    // We pin `click` to a conflicting requirement
+    requirements_txt.write_str(
+        r"
+blinker==1.7.0
+click==7.0.0
+flask==3.0.2
+itsdangerous==2.1.2
+jinja2==3.1.3
+markupsafe==2.1.5
+werkzeug==3.0.1
+",
+    )?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask==3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask==3.0.2 are incompatible.
+          And because you require flask==3.0.2, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
 
     Ok(())
 }
@@ -496,6 +565,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.2
      + flask==2.3.3
@@ -519,6 +589,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.3
      + flask==3.0.2
@@ -541,6 +612,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==3.0.2
      + flask==3.0.2
@@ -654,6 +726,7 @@ fn reinstall_incomplete() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
     warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      + anyio==4.0.0
@@ -711,6 +784,7 @@ fn allow_incompatibilities() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - jinja2==3.1.3
      + jinja2==2.11.3
@@ -737,9 +811,8 @@ fn install_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -771,18 +844,15 @@ fn install_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 10 packages in [TIME]
     Downloaded 6 packages in [TIME]
-    Installed 7 packages in [TIME]
+    Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 }
@@ -820,8 +890,9 @@ fn install_editable_and_registry() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
@@ -861,6 +932,7 @@ fn install_editable_and_registry() {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
      + black==23.10.0
@@ -883,12 +955,248 @@ fn install_editable_no_binary() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
     );
+}
+
+#[test]
+fn install_editable_compatible_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("black==0.1.0")?;
+
+    // Install the editable package with a compatible constraint.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_editable_incompatible_constraint_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("black>0.1.0")?;
+
+    // Install the editable package with an incompatible constraint.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_editable_incompatible_constraint_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")?;
+
+    // Install the editable package with an incompatible constraint.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requirements contain conflicting URLs for package `black`:
+    - [WORKSPACE]/scripts/packages/black_editable
+    - https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_editable_pep_508_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        -e black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Downloaded 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + frozenlist==1.4.1
+     + idna==3.6
+     + multidict==6.0.5
+     + yarl==1.9.4
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_editable_pep_508_cli() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(format!("black[d] @ file://{workspace_root}/scripts/packages/black_editable", workspace_root = context.workspace_root.simplified_display())), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Downloaded 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + frozenlist==1.4.1
+     + idna==3.6
+     + multidict==6.0.5
+     + yarl==1.9.4
+    "###
+    );
+}
+
+#[test]
+fn invalid_editable_no_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e black")?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported editable requirement in `requirements.txt`
+      Caused by: Editable `black` must refer to a local directory
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_editable_no_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e black==0.1.0")?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported editable requirement in `requirements.txt`
+      Caused by: Editable `black` must refer to a local directory, not a versioned package
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_editable_unnamed_https_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported editable requirement in `requirements.txt`
+      Caused by: Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_editable_named_https_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported editable requirement in `requirements.txt`
+      Caused by: Editable `black` must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
+    "###
+    );
+
+    Ok(())
 }
 
 /// Install a source distribution that uses the `flit` build system, along with `flit`
@@ -970,7 +1278,7 @@ fn install_no_index_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask==3.0.0 was not found in the provided package locations and you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -1477,6 +1785,7 @@ fn reinstall_no_binary() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
      + anyio==4.3.0
@@ -1510,7 +1819,92 @@ fn only_binary_requirements_txt() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because django-allauth==0.51.0 is unusable because no wheels are usable and building from source is disabled and you require django-allauth==0.51.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because django-allauth==0.51.0 has no usable wheels and building from source is disabled and you require django-allauth==0.51.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+}
+
+/// `--only-binary` does not apply to editable requirements
+#[test]
+fn only_binary_editable() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/anyio_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+    "###
+    );
+}
+
+/// `--only-binary` does not apply to editable requirements that depend on each other
+#[test]
+fn only_binary_dependent_editables() {
+    let context = TestContext::new("3.12");
+    let root_path = context
+        .workspace_root
+        .join("scripts/packages/dependent_locals");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("-e")
+        .arg(root_path.join("first_local"))
+        .arg("-e")
+        .arg(root_path.join("second_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
+    "###
+    );
+}
+
+/// `--only-binary` does not apply to editable requirements, with a `setup.py` config
+#[test]
+fn only_binary_editable_setup_py() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/setup_py_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Downloaded 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + h11==0.14.0
+     + httpcore==1.0.4
+     + httpx==0.27.0
+     + idna==3.6
+     + setup-py-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/setup_py_editable)
+     + sniffio==1.3.1
     "###
     );
 }
@@ -1669,8 +2063,8 @@ fn no_deps_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1721,6 +2115,7 @@ fn install_upgrade() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.6.2
      + anyio==4.3.0
@@ -1768,6 +2163,7 @@ fn install_upgrade() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - httpcore==0.16.3
      + httpcore==1.0.4
@@ -2126,9 +2522,8 @@ fn config_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
@@ -2155,9 +2550,8 @@ fn config_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
@@ -2182,13 +2576,10 @@ fn reinstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==21.3.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    context1
+        .install()
+        .arg("-r")
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context1.cache_dir.path())
-        .env("VIRTUAL_ENV", context1.venv.as_os_str())
         .assert()
         .success();
 
@@ -2198,13 +2589,10 @@ fn reinstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==22.1.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    context2
+        .install()
+        .arg("-r")
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context2.cache_dir.path())
-        .env("VIRTUAL_ENV", context2.venv.as_os_str())
         .assert()
         .success();
 
@@ -2226,6 +2614,7 @@ fn reinstall_duplicate() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - pip==21.3.1
      - pip==22.1.1
@@ -2298,9 +2687,8 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -2343,9 +2731,9 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
@@ -2389,9 +2777,8 @@ dependencies = {file = ["requirements.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2409,8 +2796,9 @@ dependencies = {file = ["requirements.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example==0.1.0 (from file://[TEMP_DIR]/editable)
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2429,9 +2817,9 @@ dependencies = {file = ["requirements.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Downloaded 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
@@ -2493,7 +2881,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Modify the editable package.
+    // Modify the package.
     pyproject_toml.write_str(
         r#"[project]
 name = "example"
@@ -2516,6 +2904,7 @@ requires-python = ">=3.8"
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Downloaded 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
@@ -2556,9 +2945,8 @@ requires-python = ">=3.11,<3.13"
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -2594,11 +2982,13 @@ requires-python = "<=3.8"
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Editable `example` requires Python <=3.8, but 3.12.[X] is installed
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -2659,6 +3049,77 @@ fn no_build_isolation() -> Result<()> {
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-build-isolation"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==0.0.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Ensure that `UV_NO_BUILD_ISOLATION` env var does the same as the `--no-build-isolation` flag
+#[test]
+fn respect_no_build_isolation_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz")?;
+
+    // We expect the build to fail, because `setuptools` is not installed.
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.install()
+        .arg("-r")
+        .arg("requirements.in")
+        .env("UV_NO_BUILD_ISOLATION", "yes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      Caused by: Failed to build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 8, in <module>
+    ModuleNotFoundError: No module named 'setuptools'
+    ---
+    "###
+    );
+
+    // Install `setuptools` and `wheel`.
+    uv_snapshot!(context.install()
+        .arg("setuptools")
+        .arg("wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + setuptools==69.2.0
+     + wheel==0.43.0
+    "###);
+
+    // We expect the build to succeed, since `setuptools` is now installed.
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.in")
+        .env("UV_NO_BUILD_ISOLATION", "yes"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3138,6 +3599,46 @@ fn install_package_basic_auth_from_netrc() -> Result<()> {
     Ok(())
 }
 
+/// Install a package from an index that requires authentication
+/// Define the `--index-url` in the requirements file
+#[test]
+fn install_package_basic_auth_from_netrc_index_in_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(
+        r"
+anyio
+--index-url https://pypi-proxy.fly.dev/basic-auth/simple
+    ",
+    )?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .env("NETRC", netrc.to_str().unwrap())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
 /// Install a package from an index that provides relative links
 #[test]
 fn install_index_with_relative_links() {
@@ -3497,11 +3998,12 @@ fn already_installed_dependent_editable() {
     let context = TestContext::new("3.12");
     let root_path = context
         .workspace_root
-        .join("scripts/packages/dependent_editables");
+        .join("scripts/packages/dependent_locals");
 
     // Install the first editable
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("first_editable")), @r###"
+        .arg("-e")
+        .arg(root_path.join("first_local")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3510,14 +4012,15 @@ fn already_installed_dependent_editable() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
+     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 
     // Install the second editable which depends on the first editable
     // The already installed first editable package should satisfy the requirement
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("second_editable"))
+        .arg("-e")
+        .arg(root_path.join("second_local"))
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
@@ -3530,14 +4033,15 @@ fn already_installed_dependent_editable() {
     Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + second-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/second_editable)
+     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
     );
 
     // Request install of the first editable by full path again
     // We should audit the installed package
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("first_editable")), @r###"
+        .arg("-e")
+        .arg(root_path.join("first_local")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3548,11 +4052,12 @@ fn already_installed_dependent_editable() {
     );
 
     // Request reinstallation of the first package during install of the second
-    // It's not available on an index and the user has not specified the path so we fail
+    // It's not available on an index and the user has not specified the path so we fail.
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("second_editable"))
+        .arg("-e")
+        .arg(root_path.join("second_local"))
         .arg("--reinstall-package")
-        .arg("first-editable")
+        .arg("first-local")
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
@@ -3563,31 +4068,34 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-editable was not found in the provided package locations and second-editable==0.0.1 depends on first-editable, we can conclude that second-editable==0.0.1 cannot be used.
-          And because only second-editable==0.0.1 is available and you require second-editable, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
+          And because only second-local==0.1.0 is available and you require second-local, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
     // Request reinstallation of the first package
     // We include it in the install command with a full path so we should succeed
     uv_snapshot!(context.filters(), context.install()
-        .arg(root_path.join("first_editable"))
+        .arg("-e")
+        .arg(root_path.join("first_local"))
         .arg("--reinstall-package")
-        .arg("first-editable"), @r###"
+        .arg("first-local"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
-     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
+     - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 }
 
-/// Install an local package that depends on a previously installed local package.
+/// Install a local package that depends on a previously installed local package.
 #[test]
 fn already_installed_local_path_dependent() {
     let context = TestContext::new("3.12");
@@ -3677,6 +4185,8 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
      + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -3771,7 +4281,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.2.0 was not found in the provided package locations and you require anyio==4.2.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -3804,6 +4314,8 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -3822,6 +4334,7 @@ fn already_installed_local_version_of_remote_package() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 3 packages in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
      + anyio==4.3.0
@@ -3839,6 +4352,8 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -3923,6 +4438,7 @@ fn already_installed_multiple_versions() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - anyio==4.0.0
@@ -3943,10 +4459,12 @@ fn already_installed_multiple_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - anyio==4.0.0
-     + anyio==4.0.0
+     + anyio==4.3.0
     "###
     );
 
@@ -3973,6 +4491,31 @@ fn already_installed_remote_url() {
     "###);
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
+
+    // Request installation again with a different URL, but the same _canonical_ URL. We should
+    // resolve the package (since we installed a specific commit, but are now requesting the default
+    // branch), but not reinstall the package.
+    uv_snapshot!(context.filters(), context.install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Request installation again with a different URL, but the same _canonical_ URL and the same
+    // commit. We should neither resolve nor reinstall the package, since it's already installed
+    // at this precise commit.
+    uv_snapshot!(context.filters(), context.install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
 
     // Request installation again with just the name
     // We should just audit the URL package since it fulfills this requirement
@@ -4029,6 +4572,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
@@ -4044,7 +4588,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage==0.2.0 was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###);
@@ -4263,8 +4807,7 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `aiohttp`
+    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
     "###
     );
 
@@ -4389,7 +4932,7 @@ fn require_hashes_unnamed_repeated() -> Result<()> {
                 --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
                 --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
                 # via anyio
-        "} )?;
+        "})?;
 
     uv_snapshot!(context.install()
         .arg("-r")
@@ -4464,6 +5007,133 @@ fn require_hashes_override() -> Result<()> {
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn tool_uv_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+    // Use a subdir to test path normalization.
+    let require_path = "some_dir/pyproject.toml";
+    let pyproject_toml = context.temp_dir.child(require_path);
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = [
+          "tqdm>4,<=5",
+          "packaging @ git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e",
+          "poetry_editable",
+          "urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl",
+          # Windows consistency
+          "colorama>0.4,<5",
+        ]
+
+        [project.optional-dependencies]
+        utils = [
+            "boltons==24.0.0"
+        ]
+        dont_install_me = [
+            "broken @ https://example.org/does/not/exist"
+        ]
+
+        [tool.uv.sources]
+        tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
+        boltons = { git = "https://github.com/mahmoud/boltons", rev = "57fbaa9b673ed85b32458b31baeeae230520e4a0" }
+        poetry_editable = { path = "../poetry_editable", editable = true }
+    "#})?;
+
+    let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
+    fs_err::create_dir_all(context.temp_dir.join("poetry_editable/poetry_editable"))?;
+    fs_err::copy(
+        project_root.join("scripts/packages/poetry_editable/pyproject.toml"),
+        context.temp_dir.join("poetry_editable/pyproject.toml"),
+    )?;
+    fs_err::copy(
+        project_root.join("scripts/packages/poetry_editable/poetry_editable/__init__.py"),
+        context
+            .temp_dir
+            .join("poetry_editable/poetry_editable/__init__.py"),
+    )?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.filters(), windows_filters=false, context.install()
+        .arg("--preview")
+        .arg("-r")
+        .arg(require_path)
+        .arg("--extra")
+        .arg("utils"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Downloaded 9 packages in [TIME]
+    Installed 9 packages in [TIME]
+     + anyio==4.3.0
+     + boltons==24.0.1.dev0 (from git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0)
+     + colorama==0.4.6
+     + idna==3.6
+     + packaging==24.1.dev0 (from git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e)
+     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + sniffio==1.3.1
+     + tqdm==4.66.0 (from https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl)
+     + urllib3==2.2.1 (from https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl)
+    "###
+    );
+
+    // Re-install the editable packages.
+    uv_snapshot!(context.filters(), windows_filters=false, context.install()
+        .arg("--preview")
+        .arg("-r")
+        .arg(require_path)
+        .arg("--extra")
+        .arg("utils"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Audited 9 packages in [TIME]
+    "###
+    );
+    Ok(())
+}
+
+#[test]
+fn tool_uv_sources_is_in_preview() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = [
+          "tqdm>4,<=5",
+        ]
+
+        [tool.uv.sources]
+        tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
+    "#})?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.filters(), windows_filters=false, context.install()
+        .arg("-r")
+        .arg("pyproject.toml")
+        .arg("--extra")
+        .arg("utils"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse entry for: `tqdm`
+      Caused by: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
     "###
     );
 

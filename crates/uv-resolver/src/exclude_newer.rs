@@ -3,8 +3,7 @@ use std::str::FromStr;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 
 /// A timestamp that excludes files newer than it.
-#[derive(Debug, Copy, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ExcludeNewer(DateTime<Utc>);
 
 impl ExcludeNewer {
@@ -68,7 +67,11 @@ impl schemars::JsonSchema for ExcludeNewer {
                 ),
                 ..schemars::schema::StringValidation::default()
             })),
-            ..Default::default()
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some("Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).".to_string()),
+              ..schemars::schema::Metadata::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
         }
         .into()
     }

@@ -36,20 +36,13 @@ If tests fail due to a mismatch in the JSON Schema, run: `cargo dev generate-jso
 
 ### Python
 
-Testing uv requires multiple specific Python versions. You can install them into
-`<project root>/bin` via our bootstrapping script:
+Testing uv requires multiple specific Python versions; they can be installed with:
 
 ```shell
-cargo run -p uv-dev -- fetch-python
+cargo dev fetch-python
 ```
 
-You may need to add the versions to your `PATH`:
-
-```shell
-source .env
-```
-
-You can configure the bootstrapping directory with `UV_BOOTSTRAP_DIR`.
+The storage directory can be configured with `UV_TOOLCHAIN_DIR`.
 
 ### Local testing
 
@@ -60,14 +53,25 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
-## Running inside a docker container
+### Testing on Windows
+
+When testing debug builds on Windows, the stack can overflow resulting in a `STATUS_STACK_OVERFLOW` error code.
+This is due to a small stack size limit on Windows that we encounter when running unoptimized builds — the release
+builds do not have this problem. We [added a `UV_STACK_SIZE` variable](https://github.com/astral-sh/uv/pull/941) to
+bypass this problem during testing. We recommend bumping the stack size from the default of 1MB to 2MB, for example:
+
+```powershell
+$Env:UV_STACK_SIZE = '2000000'
+```
+
+## Running inside a Docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your system (["Someone's Been Messing With My Subnormals!" on Blogspot](https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html), ["nvidia-pyindex" on PyPI](https://pypi.org/project/nvidia-pyindex/)), which can even occur when just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 
 ```bash
 docker buildx build -t uv-builder -f builder.dockerfile --load .
 # Build for musl to avoid glibc errors, might not be required with your OS version
-cargo build --target x86_64-unknown-linux-musl --profile profiling --features vendored-openssl
+cargo build --target x86_64-unknown-linux-musl --profile profiling
 docker run --rm -it -v $(pwd):/app uv-builder /app/target/x86_64-unknown-linux-musl/profiling/uv-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt
 ```
 

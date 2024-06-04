@@ -19,11 +19,29 @@
   },
   packageRules: [
     {
+      // Disable updates of `zip-rs`; intentionally pinned for now due to ownership change
+      // See: https://github.com/astral-sh/uv/issues/3642
+      matchPackagePatterns: ["zip"],
+      matchManagers: ["cargo"],
+      enabled: false,
+    },
+    {
       // Group upload/download artifact updates, the versions are dependent
       groupName: "Artifact GitHub Actions dependencies",
       matchManagers: ["github-actions"],
+      matchDatasources: ["gitea-tags", "github-tags"],
       matchPackagePatterns: ["actions/.*-artifact"],
       description: "Weekly update of artifact-related GitHub Actions dependencies",
+    },
+    {
+      // This package rule disables updates for GitHub runners:
+      // we'd only pin them to a specific version
+      // if there was a deliberate reason to do so
+      groupName: "GitHub runners",
+      matchManagers: ["github-actions"],
+      matchDatasources: ["github-runners"],
+      description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
+      enabled: false,
     },
     {
       groupName: "pre-commit dependencies",

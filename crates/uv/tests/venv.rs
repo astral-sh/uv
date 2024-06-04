@@ -9,7 +9,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err::PathExt;
 use uv_fs::Simplified;
-use uv_toolchain::PythonVersion;
+use uv_interpreter::PythonVersion;
 
 use crate::common::{get_bin, python_path_with_versions, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
@@ -53,6 +53,8 @@ impl VenvTestContext {
             .arg("--exclude-newer")
             .arg(EXCLUDE_NEWER)
             .env("UV_TEST_PYTHON_PATH", self.python_path.clone())
+            .env("UV_NO_WRAP", "1")
+            .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
             .current_dir(self.temp_dir.path());
         command
     }
@@ -126,8 +128,7 @@ fn create_venv() {
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
-        .env("UV_NO_WRAP", "1"), @r###"
+        .arg("3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -147,8 +148,7 @@ fn create_venv_defaults_to_cwd() {
     let context = VenvTestContext::new(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv_command()
         .arg("--python")
-        .arg("3.12")
-        .env("UV_NO_WRAP", "1"), @r###"
+        .arg("3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -170,8 +170,7 @@ fn seed() {
         .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
-        .arg("3.12")
-        .env("UV_NO_WRAP", "1"), @r###"
+        .arg("3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -194,8 +193,7 @@ fn seed_older_python_version() {
         .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
-        .arg("3.10")
-        .env("UV_NO_WRAP", "1"), @r###"
+        .arg("3.10"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -220,9 +218,12 @@ fn create_venv_unknown_python_minor() {
     let mut command = context.venv_command();
     command
         .arg(context.venv.as_os_str())
+        // Request a version we know we'll never see
         .arg("--python")
-        .arg("3.15")
-        .env("UV_NO_WRAP", "1");
+        .arg("3.100")
+        // Unset this variable to force what the user would see
+        .env_remove("UV_TEST_PYTHON_PATH");
+
     if cfg!(windows) {
         uv_snapshot!(&mut command, @r###"
         success: false
@@ -230,7 +231,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No Python 3.15 found through `py --list-paths` or in `PATH`. Is Python 3.15 installed?
+          × No interpreter found for Python 3.100 in search path or `py` launcher output
         "###
         );
     } else {
@@ -240,7 +241,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No Python 3.15 in `PATH`. Is Python 3.15 installed?
+          × No interpreter found for Python 3.100 in search path
         "###
         );
     }
@@ -252,29 +253,36 @@ fn create_venv_unknown_python_minor() {
 fn create_venv_unknown_python_patch() {
     let context = VenvTestContext::new(&["3.12"]);
 
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (
-            r"No Python 3\.8\.0 found through `py --list-paths` or in `PATH`\. Is Python 3\.8\.0 installed\?",
-            "No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?",
-        ),
-    ];
-    uv_snapshot!(filters, context.venv_command()
+    let mut command = context.venv_command();
+    command
         .arg(context.venv.as_os_str())
+        // Request a version we know we'll never see
         .arg("--python")
-        .arg("3.8.0")
-        .env("UV_NO_WRAP", "1"), @r###"
-    success: false
-    exit_code: 1
-    ----- stdout -----
+        .arg("3.12.100")
+        // Unset this variable to force what the user would see
+        .env_remove("UV_TEST_PYTHON_PATH");
 
-    ----- stderr -----
-      × No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?
-    "###
-    );
+    if cfg!(windows) {
+        uv_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No interpreter found for Python 3.12.100 in search path or `py` launcher output
+        "###
+        );
+    } else {
+        uv_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No interpreter found for Python 3.12.100 in search path
+        "###
+        );
+    }
 
     context.venv.assert(predicates::path::missing());
 }
@@ -287,8 +295,7 @@ fn create_venv_python_patch() {
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12.1")
-        .env("UV_NO_WRAP", "1"), @r###"
+        .arg("3.12.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -313,8 +320,7 @@ fn file_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
-        .env("UV_NO_WRAP", "1"), @r###"
+        .arg("3.12"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -341,8 +347,7 @@ fn empty_dir_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
-        .env("UV_NO_WRAP", "1"), @r###"
+        .arg("3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -370,8 +375,7 @@ fn non_empty_dir_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
-        .env("UV_NO_WRAP", "1"), @r###"
+        .arg("3.12"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -383,6 +387,70 @@ fn non_empty_dir_exists() -> Result<()> {
 
       × Failed to create virtualenv
       ╰─▶ The directory `.venv` exists, but it's not a virtualenv
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn non_empty_dir_exists_allow_existing() -> Result<()> {
+    let context = VenvTestContext::new(&["3.12"]);
+
+    // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should
+    // succeed when `--allow-existing` is specified, but fail when it is not.
+    context.venv.create_dir_all()?;
+    context.venv.child("file").touch()?;
+
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    uv::venv::creation
+
+      × Failed to create virtualenv
+      ╰─▶ The directory `.venv` exists, but it's not a virtualenv
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // Running again should _also_ succeed, overwriting existing symlinks and respecting existing
+    // directories.
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -509,7 +577,6 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
         .arg("--python")
         .arg("3.12")
         .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
         .assert()
         .success();
 
@@ -526,4 +593,35 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
     assert_eq!(sub_venv_home, venv_home);
 
     Ok(())
+}
+
+/// See <https://github.com/astral-sh/uv/issues/3280>
+#[test]
+#[cfg(windows)]
+fn path_with_trailing_space_gives_proper_error() {
+    let context = VenvTestContext::new(&["3.12"]);
+
+    let mut filters = context.filters();
+    filters.push((
+        regex::escape(&context.cache_dir.path().display().to_string()).to_string(),
+        r"C:\Path\to\Cache\dir".to_string(),
+    ));
+    // Create a virtual environment at `.venv`.
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .env("UV_CACHE_DIR", format!("{} ", context.cache_dir.path().display()))
+        .env("UV_TEST_PYTHON_PATH", context.python_path.clone())
+        .current_dir(context.temp_dir.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to open file `C:\Path\to\Cache\dir \CACHEDIR.TAG`
+      Caused by: The system cannot find the path specified. (os error 3)
+    "###
+    );
 }

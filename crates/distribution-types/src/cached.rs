@@ -1,15 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use distribution_filename::WheelFilename;
 use pep508_rs::VerbatimUrl;
-use pypi_types::HashDigest;
+use pypi_types::{HashDigest, ParsedPathUrl};
 use uv_normalize::PackageName;
 
 use crate::{
     BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
-    ParsedLocalFileUrl, ParsedUrl, SourceDist, VersionOrUrl,
+    ParsedUrl, SourceDist, VersionOrUrlRef,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
@@ -89,6 +89,13 @@ impl CachedDist {
                 url: dist.url,
                 hashes,
                 path,
+                editable: false,
+            }),
+            Dist::Source(SourceDist::Directory(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: dist.url,
+                hashes,
+                path,
                 editable: dist.editable,
             }),
         }
@@ -109,22 +116,18 @@ impl CachedDist {
             Self::Url(dist) => {
                 if dist.editable {
                     assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
-                    Ok(Some(ParsedUrl::LocalFile(ParsedLocalFileUrl {
+                    Ok(Some(ParsedUrl::Path(ParsedPathUrl {
                         url: dist.url.raw().clone(),
+                        path: dist
+                            .url
+                            .to_file_path()
+                            .map_err(|()| anyhow!("Invalid path in file URL"))?,
                         editable: dist.editable,
                     })))
                 } else {
-                    Ok(Some(ParsedUrl::try_from(dist.url.raw())?))
+                    Ok(Some(ParsedUrl::try_from(dist.url.to_url())?))
                 }
             }
-        }
-    }
-
-    /// Returns `true` if the distribution is editable.
-    pub fn editable(&self) -> bool {
-        match self {
-            Self::Registry(_) => false,
-            Self::Url(dist) => dist.editable,
         }
     }
 
@@ -183,19 +186,19 @@ impl Name for CachedDist {
 }
 
 impl DistributionMetadata for CachedRegistryDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.filename.version)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Version(&self.filename.version)
     }
 }
 
 impl DistributionMetadata for CachedDirectUrlDist {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
+    fn version_or_url(&self) -> VersionOrUrlRef {
+        VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for CachedDist {
-    fn version_or_url(&self) -> VersionOrUrl {
+    fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::Url(dist) => dist.version_or_url(),

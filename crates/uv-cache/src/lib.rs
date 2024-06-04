@@ -11,9 +11,10 @@ use rustc_hash::FxHashSet;
 use tempfile::{tempdir, TempDir};
 use tracing::debug;
 
+pub use archive::ArchiveId;
 use distribution_types::InstalledDist;
 use pypi_types::Metadata23;
-use uv_fs::directories;
+use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
 
 pub use crate::by_timestamp::CachedByTimestamp;
@@ -23,7 +24,6 @@ use crate::removal::{rm_rf, Removal};
 pub use crate::timestamp::Timestamp;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
 
 mod archive;
 mod by_timestamp;
@@ -126,20 +126,20 @@ pub struct Cache {
 
 impl Cache {
     /// A persistent cache directory at `root`.
-    pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
-        Ok(Self {
-            root: Self::init(root)?,
-            refresh: Refresh::None,
+    pub fn from_path(root: impl Into<PathBuf>) -> Self {
+        Self {
+            root: root.into(),
+            refresh: Refresh::None(Timestamp::now()),
             _temp_dir_drop: None,
-        })
+        }
     }
 
     /// Create a temporary cache directory.
     pub fn temp() -> Result<Self, io::Error> {
         let temp_dir = tempdir()?;
         Ok(Self {
-            root: Self::init(temp_dir.path())?,
-            refresh: Refresh::None,
+            root: temp_dir.path().to_path_buf(),
+            refresh: Refresh::None(Timestamp::now()),
             _temp_dir_drop: Some(Arc::new(temp_dir)),
         })
     }
@@ -183,13 +183,16 @@ impl Cache {
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
     pub fn must_revalidate(&self, package: &PackageName) -> bool {
         match &self.refresh {
-            Refresh::None => false,
+            Refresh::None(_) => false,
             Refresh::All(_) => true,
             Refresh::Packages(packages, _) => packages.contains(package),
         }
     }
 
-    /// Returns `true` if a cache entry is up-to-date given the [`Refresh`] policy.
+    /// Returns the [`Freshness`] for a cache entry, validating it against the [`Refresh`] policy.
+    ///
+    /// A cache entry is considered fresh if it was created after the cache itself was
+    /// initialized, or if the [`Refresh`] policy does not require revalidation.
     pub fn freshness(
         &self,
         entry: &CacheEntry,
@@ -197,7 +200,7 @@ impl Cache {
     ) -> io::Result<Freshness> {
         // Grab the cutoff timestamp, if it's relevant.
         let timestamp = match &self.refresh {
-            Refresh::None => return Ok(Freshness::Fresh),
+            Refresh::None(_) => return Ok(Freshness::Fresh),
             Refresh::All(timestamp) => timestamp,
             Refresh::Packages(packages, timestamp) => {
                 if package.map_or(true, |package| packages.contains(package)) {
@@ -217,6 +220,26 @@ impl Cache {
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Freshness::Missing),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Returns `true` if a cache entry is up-to-date. Unlike [`Cache::freshness`], this method does
+    /// not take the [`Refresh`] policy into account.
+    ///
+    /// A cache entry is considered up-to-date if it was created after the [`Cache`] instance itself
+    /// was initialized.
+    pub fn is_fresh(&self, entry: &CacheEntry) -> io::Result<bool> {
+        // Grab the cutoff timestamp.
+        let timestamp = match &self.refresh {
+            Refresh::None(timestamp) => timestamp,
+            Refresh::All(timestamp) => timestamp,
+            Refresh::Packages(_packages, timestamp) => timestamp,
+        };
+
+        match fs::metadata(entry.path()) {
+            Ok(metadata) => Ok(Timestamp::from_metadata(&metadata) >= *timestamp),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
             Err(err) => Err(err),
         }
     }
@@ -243,15 +266,15 @@ impl Cache {
         Ok(id)
     }
 
-    /// Initialize a directory for use as a cache.
-    fn init(root: impl Into<PathBuf>) -> Result<PathBuf, io::Error> {
-        let root = root.into();
+    /// Initialize the cache.
+    pub fn init(self) -> Result<Self, io::Error> {
+        let root = &self.root;
 
         // Create the cache directory, if it doesn't exist.
-        fs::create_dir_all(&root)?;
+        fs::create_dir_all(root)?;
 
         // Add the CACHEDIR.TAG.
-        cachedir::ensure_tag(&root)?;
+        cachedir::ensure_tag(root)?;
 
         // Add the .gitignore.
         match fs::OpenOptions::new()
@@ -289,7 +312,10 @@ impl Cache {
             .write(true)
             .open(root.join(CacheBucket::BuiltWheels.to_str()).join(".git"))?;
 
-        fs::canonicalize(root)
+        Ok(Self {
+            root: fs::canonicalize(root)?,
+            ..self
+        })
     }
 
     /// Clear the cache, removing all entries.
@@ -376,7 +402,7 @@ impl Cache {
 pub enum CacheBucket {
     /// Wheels (excluding built wheels), alongside their metadata and cache policy.
     ///
-    /// There are three kinds from cache entries: Wheel metadata and policy as MsgPack files, the
+    /// There are three kinds from cache entries: Wheel metadata and policy as `MsgPack` files, the
     /// wheels themselves, and the unzipped wheel archives. If a wheel file is over an in-memory
     /// size threshold, we first download the zip file into the cache, then unzip it into a
     /// directory with the same name (exclusive of the `.whl` extension).
@@ -559,7 +585,7 @@ pub enum CacheBucket {
     ///
     /// # Example
     ///
-    /// The contents of each of the MsgPack files has a timestamp field in unix time, the [PEP 508]
+    /// The contents of each of the `MsgPack` files has a timestamp field in unix time, the [PEP 508]
     /// markers and some information from the `sys`/`sysconfig` modules.
     ///
     /// ```json
@@ -611,7 +637,7 @@ impl CacheBucket {
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v1",
-            Self::Simple => "simple-v7",
+            Self::Simple => "simple-v8",
             Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
         }
@@ -770,41 +796,7 @@ impl ArchiveTimestamp {
         if metadata.is_file() {
             Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
         } else {
-            // Compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
-            // `setup.cfg` files, if they exist.
-            let pyproject_toml = path
-                .as_ref()
-                .join("pyproject.toml")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            let setup_py = path
-                .as_ref()
-                .join("setup.py")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            let setup_cfg = path
-                .as_ref()
-                .join("setup.cfg")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            // Take the most recent timestamp of the three files.
-            let Some(timestamp) = max(pyproject_toml, max(setup_py, setup_cfg)) else {
-                return Ok(None);
-            };
-
-            Ok(Some(Self::Approximate(timestamp)))
+            Self::from_source_tree(path)
         }
     }
 
@@ -812,6 +804,48 @@ impl ArchiveTimestamp {
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         Ok(Self::Exact(Timestamp::from_metadata(&metadata)))
+    }
+
+    /// Return the modification timestamp for a source tree, i.e., a directory.
+    ///
+    /// If the source tree doesn't contain an entrypoint (i.e., no `pyproject.toml`, `setup.py`, or
+    /// `setup.cfg`), returns `None`.
+    pub fn from_source_tree(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
+        // Compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
+        // `setup.cfg` files, if they exist.
+        let pyproject_toml = path
+            .as_ref()
+            .join("pyproject.toml")
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .as_ref()
+            .map(Timestamp::from_metadata);
+
+        let setup_py = path
+            .as_ref()
+            .join("setup.py")
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .as_ref()
+            .map(Timestamp::from_metadata);
+
+        let setup_cfg = path
+            .as_ref()
+            .join("setup.cfg")
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .as_ref()
+            .map(Timestamp::from_metadata);
+
+        // Take the most recent timestamp of the three files.
+        let Some(timestamp) = max(pyproject_toml, max(setup_py, setup_cfg)) else {
+            return Ok(None);
+        };
+
+        Ok(Some(Self::Approximate(timestamp)))
     }
 
     /// Return the modification timestamp for an archive.
@@ -886,10 +920,13 @@ impl Freshness {
 }
 
 /// A refresh policy for cache entries.
+///
+/// Each policy stores a timestamp, even if no entries are refreshed, to enable out-of-policy
+/// freshness checks via [`Cache::is_fresh`].
 #[derive(Debug, Clone)]
 pub enum Refresh {
     /// Don't refresh any entries.
-    None,
+    None(Timestamp),
     /// Refresh entries linked to the given packages, if created before the given timestamp.
     Packages(Vec<PackageName>, Timestamp),
     /// Refresh all entries created before the given timestamp.
@@ -898,18 +935,23 @@ pub enum Refresh {
 
 impl Refresh {
     /// Determine the refresh strategy to use based on the command-line arguments.
-    pub fn from_args(refresh: bool, refresh_package: Vec<PackageName>) -> Self {
-        if refresh {
-            Self::All(Timestamp::now())
-        } else if !refresh_package.is_empty() {
-            Self::Packages(refresh_package, Timestamp::now())
-        } else {
-            Self::None
+    pub fn from_args(refresh: Option<bool>, refresh_package: Vec<PackageName>) -> Self {
+        let timestamp = Timestamp::now();
+        match refresh {
+            Some(true) => Self::All(timestamp),
+            Some(false) => Self::None(timestamp),
+            None => {
+                if refresh_package.is_empty() {
+                    Self::None(timestamp)
+                } else {
+                    Self::Packages(refresh_package, timestamp)
+                }
+            }
         }
     }
 
     /// Returns `true` if no packages should be reinstalled.
     pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
+        matches!(self, Self::None(_))
     }
 }

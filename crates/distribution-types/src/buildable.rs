@@ -2,11 +2,13 @@ use std::borrow::Cow;
 use std::path::Path;
 
 use pep440_rs::Version;
+use pep508_rs::VerbatimUrl;
 use url::Url;
+use uv_git::GitUrl;
 
 use uv_normalize::PackageName;
 
-use crate::{GitSourceDist, Name, PathSourceDist, SourceDist};
+use crate::{DirectorySourceDist, GitSourceDist, Name, PathSourceDist, SourceDist};
 
 /// A reference to a source that can be built into a built distribution.
 ///
@@ -32,7 +34,7 @@ impl BuildableSource<'_> {
     /// Return the [`Version`] of the source, if available.
     pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Dist(SourceDist::Registry(dist)) => Some(&dist.filename.version),
+            Self::Dist(SourceDist::Registry(dist)) => Some(&dist.version),
             Self::Dist(_) => None,
             Self::Url(_) => None,
         }
@@ -43,6 +45,14 @@ impl BuildableSource<'_> {
         match self {
             Self::Dist(dist) => Some(dist),
             Self::Url(_) => None,
+        }
+    }
+
+    /// Returns `true` if the source is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Dist(dist) => dist.is_editable(),
+            Self::Url(url) => url.is_editable(),
         }
     }
 }
@@ -62,6 +72,7 @@ pub enum SourceUrl<'a> {
     Direct(DirectSourceUrl<'a>),
     Git(GitSourceUrl<'a>),
     Path(PathSourceUrl<'a>),
+    Directory(DirectorySourceUrl<'a>),
 }
 
 impl<'a> SourceUrl<'a> {
@@ -71,7 +82,16 @@ impl<'a> SourceUrl<'a> {
             Self::Direct(dist) => dist.url,
             Self::Git(dist) => dist.url,
             Self::Path(dist) => dist.url,
+            Self::Directory(dist) => dist.url,
         }
+    }
+
+    /// Returns `true` if the source is editable.
+    pub fn is_editable(&self) -> bool {
+        matches!(
+            self,
+            Self::Directory(DirectorySourceUrl { editable: true, .. })
+        )
     }
 }
 
@@ -81,6 +101,7 @@ impl std::fmt::Display for SourceUrl<'_> {
             Self::Direct(url) => write!(f, "{url}"),
             Self::Git(url) => write!(f, "{url}"),
             Self::Path(url) => write!(f, "{url}"),
+            Self::Directory(url) => write!(f, "{url}"),
         }
     }
 }
@@ -98,7 +119,11 @@ impl std::fmt::Display for DirectSourceUrl<'_> {
 
 #[derive(Debug, Clone)]
 pub struct GitSourceUrl<'a> {
-    pub url: &'a Url,
+    /// The URL with the revision and subdirectory fragment.
+    pub url: &'a VerbatimUrl,
+    pub git: &'a GitUrl,
+    /// The URL without the revision and subdirectory fragment.
+    pub subdirectory: Option<&'a Path>,
 }
 
 impl std::fmt::Display for GitSourceUrl<'_> {
@@ -109,7 +134,11 @@ impl std::fmt::Display for GitSourceUrl<'_> {
 
 impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
     fn from(dist: &'a GitSourceDist) -> Self {
-        Self { url: &dist.url }
+        Self {
+            url: &dist.url,
+            git: &dist.git,
+            subdirectory: dist.subdirectory.as_deref(),
+        }
     }
 }
 
@@ -130,6 +159,29 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
         Self {
             url: &dist.url,
             path: Cow::Borrowed(&dist.path),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DirectorySourceUrl<'a> {
+    pub url: &'a Url,
+    pub path: Cow<'a, Path>,
+    pub editable: bool,
+}
+
+impl std::fmt::Display for DirectorySourceUrl<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{url}", url = self.url)
+    }
+}
+
+impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
+    fn from(dist: &'a DirectorySourceDist) -> Self {
+        Self {
+            url: &dist.url,
+            path: Cow::Borrowed(&dist.path),
+            editable: dist.editable,
         }
     }
 }

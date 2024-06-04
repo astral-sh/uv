@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "tomli",
@@ -13,12 +13,17 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/include-b.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "numpy",
@@ -37,6 +42,11 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/include-a.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],

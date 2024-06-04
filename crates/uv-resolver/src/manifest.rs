@@ -1,7 +1,7 @@
-use distribution_types::LocalEditable;
 use either::Either;
-use pep508_rs::{MarkerEnvironment, Requirement};
-use pypi_types::Metadata23;
+
+use pep508_rs::MarkerEnvironment;
+use pypi_types::Requirement;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
@@ -30,12 +30,6 @@ pub struct Manifest {
     /// The name of the project.
     pub(crate) project: Option<PackageName>,
 
-    /// The editable requirements for the project, which are built in advance.
-    ///
-    /// The requirements of the editables should be included in resolution as if they were
-    /// direct requirements in their own right.
-    pub(crate) editables: Vec<(LocalEditable, Metadata23)>,
-
     /// The installed packages to exclude from consideration during resolution.
     ///
     /// These typically represent packages that are being upgraded or reinstalled
@@ -58,7 +52,6 @@ impl Manifest {
         overrides: Overrides,
         preferences: Vec<Preference>,
         project: Option<PackageName>,
-        editables: Vec<(LocalEditable, Metadata23)>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -68,7 +61,6 @@ impl Manifest {
             overrides,
             preferences,
             project,
-            editables,
             exclusions,
             lookaheads,
         }
@@ -81,7 +73,6 @@ impl Manifest {
             overrides: Overrides::default(),
             preferences: Vec::new(),
             project: None,
-            editables: Vec::new(),
             exclusions: Exclusions::default(),
             lookaheads: Vec::new(),
         }
@@ -97,51 +88,44 @@ impl Manifest {
     /// - Determining which requirements should allow local version specifiers (e.g., `torch==2.2.0+cpu`).
     pub fn requirements<'a>(
         &'a self,
-        markers: &'a MarkerEnvironment,
+        markers: Option<&'a MarkerEnvironment>,
         mode: DependencyMode,
-    ) -> impl Iterator<Item = &Requirement> {
+    ) -> impl Iterator<Item = &Requirement> + 'a {
         match mode {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left( self
                 .lookaheads
                 .iter()
-                .flat_map(|lookahead| {
+                .flat_map(move |lookahead| {
                     self.overrides
                         .apply(lookahead.requirements())
-                        .filter(|requirement| {
+                        .filter(move |requirement| {
                             requirement.evaluate_markers(markers, lookahead.extras())
                         })
                 })
-                .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                    self.overrides
-                        .apply(&metadata.requires_dist)
-                        .filter(|requirement| {
-                            requirement.evaluate_markers(markers, &editable.extras)
-                        })
-                }))
                 .chain(
                     self.overrides
                         .apply(&self.requirements)
-                        .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                        .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
                 )
                 .chain(
                     self.constraints
                         .requirements()
-                        .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                        .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
                 )
                 .chain(
                     self.overrides
                         .requirements()
-                        .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                        .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
                 ))
             ,
 
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
-                self.overrides.apply(&   self.requirements)
+                self.overrides.apply(&self.requirements)
                 .chain(self.constraints.requirements())
                 .chain(self.overrides.requirements())
-                .filter(|requirement| requirement.evaluate_markers(markers, &[]))),
+                .filter(move |requirement| requirement.evaluate_markers(markers, &[]))),
         }
     }
 
@@ -157,9 +141,9 @@ impl Manifest {
     ///   the `lowest-direct` strategy is in use.
     pub fn user_requirements<'a>(
         &'a self,
-        markers: &'a MarkerEnvironment,
+        markers: Option<&'a MarkerEnvironment>,
         mode: DependencyMode,
-    ) -> impl Iterator<Item = &Requirement> {
+    ) -> impl Iterator<Item = &PackageName> + 'a {
         match mode {
             // Include direct requirements, dependencies of editables, and transitive dependencies
             // of local packages.
@@ -167,32 +151,27 @@ impl Manifest {
                 self.lookaheads
                     .iter()
                     .filter(|lookahead| lookahead.direct())
-                    .flat_map(|lookahead| {
+                    .flat_map(move |lookahead| {
                         self.overrides
                             .apply(lookahead.requirements())
-                            .filter(|requirement| {
+                            .filter(move |requirement| {
                                 requirement.evaluate_markers(markers, lookahead.extras())
                             })
                     })
-                    .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                        self.overrides
-                            .apply(&metadata.requires_dist)
-                            .filter(|requirement| {
-                                requirement.evaluate_markers(markers, &editable.extras)
-                            })
-                    }))
                     .chain(
                         self.overrides
                             .apply(&self.requirements)
-                            .filter(|requirement| requirement.evaluate_markers(markers, &[])),
-                    ),
+                            .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+                    )
+                    .map(|requirement| &requirement.name),
             ),
 
             // Restrict to the direct requirements.
             DependencyMode::Direct => Either::Right(
                 self.overrides
                     .apply(self.requirements.iter())
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                    .filter(move |requirement| requirement.evaluate_markers(markers, &[]))
+                    .map(|requirement| &requirement.name),
             ),
         }
     }
@@ -206,5 +185,10 @@ impl Manifest {
         requirements: impl IntoIterator<Item = &'a Requirement>,
     ) -> impl Iterator<Item = &Requirement> {
         self.constraints.apply(self.overrides.apply(requirements))
+    }
+
+    /// Returns the number of input requirements.
+    pub fn num_requirements(&self) -> usize {
+        self.requirements.len()
     }
 }

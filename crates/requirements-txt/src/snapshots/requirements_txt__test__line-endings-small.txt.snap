@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "tqdm",
@@ -24,12 +24,17 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/small.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "tomli-w",
@@ -48,6 +53,11 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/small.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],

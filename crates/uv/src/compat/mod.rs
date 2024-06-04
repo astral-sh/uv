@@ -249,7 +249,9 @@ impl CompatArgs for PipSyncCompatArgs {
         }
 
         if self.user {
-            return Err(anyhow!("pip-sync's `--user` is unsupported."));
+            return Err(anyhow!(
+                "pip-sync's `--user` is unsupported (use a virtual environment instead)."
+            ));
         }
 
         if self.client_cert.is_some() {
@@ -347,6 +349,32 @@ impl CompatArgs for VenvCompatArgs {
             warn_user!("virtualenv's `--no-wheel` has no effect (uv omits `wheel` by default).");
         }
 
+        Ok(())
+    }
+}
+
+/// Arguments for `pip install` compatibility.
+///
+/// These represent a subset of the `pip install` interface that uv supports by default.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct PipInstallCompatArgs {
+    #[clap(long, hide = false)]
+    user: bool,
+}
+
+impl CompatArgs for PipInstallCompatArgs {
+    /// Validate the arguments passed for `pip install` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches uv's
+    /// behavior. If an argument is passed that does _not_ match uv's behavior, this method will
+    /// return an error.
+    fn validate(&self) -> Result<()> {
+        if self.user {
+            return Err(anyhow!(
+                "pip install's `--user` is unsupported (use a virtual environment instead)."
+            ));
+        }
         Ok(())
     }
 }

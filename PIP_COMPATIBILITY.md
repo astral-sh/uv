@@ -128,11 +128,20 @@ internal package, thus causing the malicious package to be installed instead of 
 package. See, for example, [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/)
 from December 2022.
 
-As of v0.1.29, users can opt in to `pip`-style behavior for multiple indexes via the
-`--index-strategy unsafe-any-match` command-line option, or the `UV_INDEX_STRATEGY` environment
-variable. When enabled, uv will search for each package across all indexes, and consider all
-available versions when resolving dependencies, prioritizing the `--extra-index-url` indexes over
-the default index URL. (Versions that are duplicated _across_ indexes will be ignored.)
+As of v0.1.39, users can opt in to `pip`-style behavior for multiple indexes via the
+`--index-strategy` command-line option, or the `UV_INDEX_STRATEGY` environment
+variable, which supports the following values:
+
+- `first-match` (default): Search for each package across all indexes, limiting the candidate
+  versions to those present in the first index that contains the package, prioritizing the
+  `--extra-index-url` indexes over the default index URL.
+- `unsafe-first-match`: Search for each package across all indexes, but prefer the first index
+  with a compatible version, even if newer versions are available on other indexes.
+- `unsafe-best-match`: Search for each package across all indexes, and select the best version
+  from the combined set of candidate versions.
+
+While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users to the risk of
+"dependency confusion" attacks.
 
 In the future, uv will support pinning packages to dedicated indexes (see: [#171](https://github.com/astral-sh/uv/issues/171)).
 Additionally, [PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to
@@ -273,6 +282,34 @@ In some cases, `uv pip check` will surface diagnostics that `pip check` does not
 For example, unlike `uv pip check`, `pip check` will _not_ warn when multiple versions of a package
 are installed in the current environment.
 
+## `--user` and the `user` install scheme
+
+uv does not support the `--user` flag, which installs packages based on the `user` install scheme.
+Instead, we recommend the use of virtual environments to isolate package installations.
+
+Additionally, pip will fall back to the `user` install scheme if it detects that the user does not
+have write permissions to the target directory, as is the case on some systems when installing into
+the system Python. uv does not implement any such fallback.
+
+For more, see [#2077](https://github.com/astral-sh/uv/issues/2077).
+
+## `--only-binary` enforcement
+
+The `--only-binary` argument is used to restrict installation to pre-built binary distributions.
+When `--only-binary :all:` is provided, both pip and uv will refuse to build source distributions
+from PyPI and other registries.
+
+However, when a dependency is provided as a direct URL (e.g., `uv pip install https://...`), pip
+does _not_ enforce `--only-binary`, and will build source distributions for all such packages.
+
+uv, meanwhile, _does_ enforce `--only-binary` for direct URL dependencies, with one exception:
+given `uv pip install https://... --only-binary flask`, uv _will_ build the source distribution at
+the given URL if it cannot infer the package name ahead of time, since uv can't determine whether
+the package is "allowed" in such cases without building its metadata.
+
+Both pip and uv allow editables requirements to be built and installed even when `--only-binary` is
+provided. For example, `uv pip install -e . --only-binary :all:` is allowed.
+
 ## Strictness and spec enforcement
 
 uv tends to be stricter than `pip`, and will often reject packages that `pip` would install.
@@ -294,6 +331,7 @@ does support a large subset.
 Missing options and subcommands are prioritized based on user demand and the complexity of
 the implementation, and tend to be tracked in individual issues. For example:
 
+- [`--prefix`](https://github.com/astral-sh/uv/issues/3076)
 - [`--trusted-host`](https://github.com/astral-sh/uv/issues/1339)
 - [`--user`](https://github.com/astral-sh/uv/issues/2077)
 
@@ -311,10 +349,15 @@ Unlike `pip`, uv does not enable keyring authentication by default.
 Unlike `pip`, uv does not wait until a request returns a HTTP 401 before searching for
 authentication. uv attaches authentication to all requests for hosts with credentials available.
 
-## Legacy features
+## `egg` support
 
 uv does not support features that are considered legacy or deprecated in `pip`. For example,
 uv does not support `.egg`-style distributions.
 
-uv does not plan to support features that the `pip` maintainers explicitly recommend against,
-like `--target`.
+However, uv does have partial support for (1) `.egg-info`-style distributions (which are
+occasionally found in Docker images and Conda environments) and (2) legacy editable
+`.egg-link`-style distributions.
+
+Specifically, uv does not support installing new `.egg-info`- or `.egg-link`-style distributions,
+but will respect any such existing distributions during resolution, list them with `uv pip list` and
+`uv pip freeze`, and uninstall them with `uv pip uninstall`.

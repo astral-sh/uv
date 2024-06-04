@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "inflection",
@@ -24,12 +24,17 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "upsidedown",
@@ -48,12 +53,17 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "numpy",
@@ -61,12 +71,17 @@ RequirementsTxt {
                     extras: [],
                     version_or_url: None,
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "pandas",
@@ -93,6 +108,11 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],

@@ -1,15 +1,16 @@
-use std::path::PathBuf;
+use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
 use serde::Deserialize;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
+use pypi_types::VerbatimParsedUrl;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
+use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::PythonVersion;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -28,14 +29,23 @@ pub(crate) struct Tools {
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
     pub native_tls: Option<bool>,
+    pub offline: Option<bool>,
     pub no_cache: Option<bool>,
     pub preview: Option<bool>,
     pub cache_dir: Option<PathBuf>,
     pub pip: Option<PipOptions>,
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "PEP 508 style requirements, e.g. `flask==3.0.0`, or `black @ https://...`."
+        )
+    )]
+    pub override_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
 /// A `[tool.uv.pip]` section.
@@ -47,7 +57,7 @@ pub struct PipOptions {
     pub python: Option<String>,
     pub system: Option<bool>,
     pub break_system_packages: Option<bool>,
-    pub offline: Option<bool>,
+    pub target: Option<PathBuf>,
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
     pub no_index: Option<bool>,
@@ -84,4 +94,7 @@ pub struct PipOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub require_hashes: Option<bool>,
+    pub concurrent_downloads: Option<NonZeroUsize>,
+    pub concurrent_builds: Option<NonZeroUsize>,
+    pub concurrent_installs: Option<NonZeroUsize>,
 }

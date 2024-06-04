@@ -5,12 +5,14 @@ use tracing::warn;
 
 use distribution_types::Verbatim;
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::MarkerEnvironment;
+use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
+use uv_git::GitResolver;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::specifier::PubGrubSpecifier;
-use crate::pubgrub::PubGrubPackage;
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::{Locals, Urls};
 use crate::ResolveError;
 
@@ -18,7 +20,7 @@ use crate::ResolveError;
 pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
 
 impl PubGrubDependencies {
-    /// Generate a set of `PubGrub` dependencies from a set of requirements.
+    /// Generate a set of PubGrub dependencies from a set of requirements.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_requirements(
         requirements: &[Requirement],
@@ -28,7 +30,8 @@ impl PubGrubDependencies {
         source_extra: Option<&ExtraName>,
         urls: &Urls,
         locals: &Locals,
-        env: &MarkerEnvironment,
+        git: &GitResolver,
+        env: Option<&MarkerEnvironment>,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = Vec::default();
         let mut seen = FxHashSet::default();
@@ -41,6 +44,7 @@ impl PubGrubDependencies {
             source_extra,
             urls,
             locals,
+            git,
             env,
             &mut dependencies,
             &mut seen,
@@ -70,7 +74,8 @@ fn add_requirements(
     source_extra: Option<&ExtraName>,
     urls: &Urls,
     locals: &Locals,
-    env: &MarkerEnvironment,
+    git: &GitResolver,
+    env: Option<&MarkerEnvironment>,
     dependencies: &mut Vec<(PubGrubPackage, Range<Version>)>,
     seen: &mut FxHashSet<ExtraName>,
 ) -> Result<(), ResolveError> {
@@ -79,6 +84,9 @@ fn add_requirements(
         // If the requirement isn't relevant for the current platform, skip it.
         match source_extra {
             Some(source_extra) => {
+                if requirement.evaluate_markers(env, &[]) {
+                    continue;
+                }
                 if !requirement.evaluate_markers(env, std::slice::from_ref(source_extra)) {
                     continue;
                 }
@@ -91,17 +99,20 @@ fn add_requirements(
         }
 
         // Add the package, plus any extra variants.
-        for result in std::iter::once(to_pubgrub(requirement, None, urls, locals)).chain(
-            requirement
-                .extras
-                .clone()
-                .into_iter()
-                .map(|extra| to_pubgrub(requirement, Some(extra), urls, locals)),
-        ) {
-            let (package, version) = result?;
+        for result in std::iter::once(PubGrubRequirement::from_requirement(
+            requirement,
+            None,
+            urls,
+            locals,
+            git,
+        ))
+        .chain(requirement.extras.clone().into_iter().map(|extra| {
+            PubGrubRequirement::from_requirement(requirement, Some(extra), urls, locals, git)
+        })) {
+            let PubGrubRequirement { package, version } = result?;
 
-            match &package {
-                PubGrubPackage::Package(name, ..) => {
+            match &*package {
+                PubGrubPackageInner::Package { name, .. } => {
                     // Detect self-dependencies.
                     if source_name.is_some_and(|source_name| source_name == name) {
                         warn!("{name} has a dependency on itself");
@@ -110,7 +121,7 @@ fn add_requirements(
 
                     dependencies.push((package.clone(), version.clone()));
                 }
-                PubGrubPackage::Extra(name, extra, ..) => {
+                PubGrubPackageInner::Extra { name, extra, .. } => {
                     // Recursively add the dependencies of the current package (e.g., `black` depending on
                     // `black[colorama]`).
                     if source_name.is_some_and(|source_name| source_name == name) {
@@ -123,6 +134,7 @@ fn add_requirements(
                                 Some(extra),
                                 urls,
                                 locals,
+                                git,
                                 env,
                                 dependencies,
                                 seen,
@@ -140,6 +152,9 @@ fn add_requirements(
                 // If the requirement isn't relevant for the current platform, skip it.
                 match source_extra {
                     Some(source_extra) => {
+                        if constraint.evaluate_markers(env, &[]) {
+                            continue;
+                        }
                         if !constraint.evaluate_markers(env, std::slice::from_ref(source_extra)) {
                             continue;
                         }
@@ -152,10 +167,11 @@ fn add_requirements(
                 }
 
                 // Add the package.
-                let (package, version) = to_pubgrub(constraint, None, urls, locals)?;
+                let PubGrubRequirement { package, version } =
+                    PubGrubRequirement::from_constraint(constraint, urls, locals, git)?;
 
                 // Ignore self-dependencies.
-                if let PubGrubPackage::Package(name, ..) = &package {
+                if let PubGrubPackageInner::Package { name, .. } = &*package {
                     // Detect self-dependencies.
                     if source_name.is_some_and(|source_name| source_name == name) {
                         warn!("{name} has a dependency on itself");
@@ -178,71 +194,146 @@ impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
     }
 }
 
-/// Convert a [`Requirement`] to a `PubGrub`-compatible package and range.
-fn to_pubgrub(
-    requirement: &Requirement,
-    extra: Option<ExtraName>,
-    urls: &Urls,
-    locals: &Locals,
-) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
-    match requirement.version_or_url.as_ref() {
-        // The requirement has no specifier (e.g., `flask`).
-        None => Ok((
-            PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
-            Range::full(),
-        )),
+/// A PubGrub-compatible package and version range.
+#[derive(Debug, Clone)]
+pub(crate) struct PubGrubRequirement {
+    pub(crate) package: PubGrubPackage,
+    pub(crate) version: Range<Version>,
+}
 
-        // The requirement has a specifier (e.g., `flask>=1.0`).
-        Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
-            // If the specifier is an exact version, and the user requested a local version that's
-            // more precise than the specifier, use the local version instead.
-            let version = if let Some(expected) = locals.get(&requirement.name) {
-                specifiers
-                    .iter()
-                    .map(|specifier| {
-                        Locals::map(expected, specifier)
-                            .map_err(ResolveError::InvalidVersion)
-                            .and_then(|specifier| PubGrubSpecifier::try_from(&specifier))
-                    })
-                    .fold_ok(Range::full(), |range, specifier| {
-                        range.intersection(&specifier.into())
-                    })?
-            } else {
-                specifiers
-                    .iter()
-                    .map(PubGrubSpecifier::try_from)
-                    .fold_ok(Range::full(), |range, specifier| {
-                        range.intersection(&specifier.into())
-                    })?
-            };
+impl PubGrubRequirement {
+    /// Convert a [`Requirement`] to a PubGrub-compatible package and range.
+    pub(crate) fn from_requirement(
+        requirement: &Requirement,
+        extra: Option<ExtraName>,
+        urls: &Urls,
+        locals: &Locals,
+        git: &GitResolver,
+    ) -> Result<Self, ResolveError> {
+        match &requirement.source {
+            RequirementSource::Registry { specifier, .. } => {
+                // TODO(konsti): We're currently losing the index information here, but we need
+                // either pass it to `PubGrubPackage` or the `ResolverProvider` beforehand.
+                // If the specifier is an exact version, and the user requested a local version that's
+                // more precise than the specifier, use the local version instead.
+                let version = if let Some(expected) = locals.get(&requirement.name) {
+                    specifier
+                        .iter()
+                        .map(|specifier| {
+                            Locals::map(expected, specifier)
+                                .map_err(ResolveError::InvalidVersion)
+                                .and_then(|specifier| PubGrubSpecifier::try_from(&specifier))
+                        })
+                        .fold_ok(Range::full(), |range, specifier| {
+                            range.intersection(&specifier.into())
+                        })?
+                } else {
+                    specifier
+                        .iter()
+                        .map(PubGrubSpecifier::try_from)
+                        .fold_ok(Range::full(), |range, specifier| {
+                            range.intersection(&specifier.into())
+                        })?
+                };
 
-            Ok((
-                PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
-                version,
-            ))
-        }
-
-        // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
-        Some(VersionOrUrl::Url(url)) => {
-            let Some(expected) = urls.get(&requirement.name) else {
-                return Err(ResolveError::DisallowedUrl(
-                    requirement.name.clone(),
-                    url.verbatim().to_string(),
-                ));
-            };
-
-            if !Urls::is_allowed(expected, url) {
-                return Err(ResolveError::ConflictingUrlsTransitive(
-                    requirement.name.clone(),
-                    expected.verbatim().to_string(),
-                    url.verbatim().to_string(),
-                ));
+                Ok(Self {
+                    package: PubGrubPackage::from_package(
+                        requirement.name.clone(),
+                        extra,
+                        requirement.marker.clone(),
+                        urls,
+                    ),
+                    version,
+                })
             }
+            RequirementSource::Url { url, .. } => {
+                let Some(expected) = urls.get(&requirement.name) else {
+                    return Err(ResolveError::DisallowedUrl(
+                        requirement.name.clone(),
+                        url.to_string(),
+                    ));
+                };
 
-            Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
-                Range::full(),
-            ))
+                if !Urls::is_allowed(&expected.verbatim, url, git) {
+                    return Err(ResolveError::ConflictingUrlsTransitive(
+                        requirement.name.clone(),
+                        expected.verbatim.verbatim().to_string(),
+                        url.verbatim().to_string(),
+                    ));
+                }
+
+                Ok(Self {
+                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
+                        name: requirement.name.clone(),
+                        extra,
+                        marker: requirement.marker.clone(),
+                        url: Some(expected.clone()),
+                    }),
+                    version: Range::full(),
+                })
+            }
+            RequirementSource::Git { url, .. } => {
+                let Some(expected) = urls.get(&requirement.name) else {
+                    return Err(ResolveError::DisallowedUrl(
+                        requirement.name.clone(),
+                        url.to_string(),
+                    ));
+                };
+
+                if !Urls::is_allowed(&expected.verbatim, url, git) {
+                    return Err(ResolveError::ConflictingUrlsTransitive(
+                        requirement.name.clone(),
+                        expected.verbatim.verbatim().to_string(),
+                        url.verbatim().to_string(),
+                    ));
+                }
+
+                Ok(Self {
+                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
+                        name: requirement.name.clone(),
+                        extra,
+                        marker: requirement.marker.clone(),
+                        url: Some(expected.clone()),
+                    }),
+                    version: Range::full(),
+                })
+            }
+            RequirementSource::Path { url, .. } => {
+                let Some(expected) = urls.get(&requirement.name) else {
+                    return Err(ResolveError::DisallowedUrl(
+                        requirement.name.clone(),
+                        url.to_string(),
+                    ));
+                };
+
+                if !Urls::is_allowed(&expected.verbatim, url, git) {
+                    return Err(ResolveError::ConflictingUrlsTransitive(
+                        requirement.name.clone(),
+                        expected.verbatim.verbatim().to_string(),
+                        url.verbatim().to_string(),
+                    ));
+                }
+
+                Ok(Self {
+                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
+                        name: requirement.name.clone(),
+                        extra,
+                        marker: requirement.marker.clone(),
+                        url: Some(expected.clone()),
+                    }),
+                    version: Range::full(),
+                })
+            }
         }
+    }
+
+    /// Convert a constraint to a PubGrub-compatible package and range.
+    pub(crate) fn from_constraint(
+        constraint: &Requirement,
+        urls: &Urls,
+        locals: &Locals,
+        git: &GitResolver,
+    ) -> Result<Self, ResolveError> {
+        Self::from_requirement(constraint, None, urls, locals, git)
     }
 }

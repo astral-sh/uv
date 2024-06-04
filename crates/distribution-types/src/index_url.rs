@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use itertools::Either;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use url::Url;
 
 use pep508_rs::{expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl};
@@ -19,8 +18,8 @@ static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").
 static DEFAULT_INDEX_URL: Lazy<IndexUrl> =
     Lazy::new(|| IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())));
 
-/// The url of an index, newtype'd to avoid mixing it with file urls.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+/// The URL of an index to use for fetching packages (e.g., PyPI).
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum IndexUrl {
     Pypi(VerbatimUrl),
     Url(VerbatimUrl),
@@ -36,6 +35,11 @@ impl schemars::JsonSchema for IndexUrl {
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
+            format: Some("uri".to_owned()),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some("The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).".to_string()),
+              ..schemars::schema::Metadata::default()
+            })),
             ..schemars::schema::SchemaObject::default()
         }
         .into()
@@ -100,6 +104,25 @@ impl FromStr for IndexUrl {
     }
 }
 
+impl serde::ser::Serialize for IndexUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for IndexUrl {
+    fn deserialize<D>(deserializer: D) -> Result<IndexUrl, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        IndexUrl::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 impl From<VerbatimUrl> for IndexUrl {
     fn from(url: VerbatimUrl) -> Self {
         if *url.raw() == *PYPI_URL {
@@ -135,7 +158,7 @@ impl Deref for IndexUrl {
 /// A directory with distributions or a URL to an HTML file with a flat listing of distributions.
 ///
 /// Also known as `--find-links`.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum FlatIndexLocation {
     Path(PathBuf),
     Url(Url),
@@ -150,9 +173,33 @@ impl schemars::JsonSchema for FlatIndexLocation {
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
+            format: Some("uri".to_owned()),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some("The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.".to_string()),
+              ..schemars::schema::Metadata::default()
+            })),
             ..schemars::schema::SchemaObject::default()
         }
         .into()
+    }
+}
+
+impl serde::ser::Serialize for FlatIndexLocation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for FlatIndexLocation {
+    fn deserialize<D>(deserializer: D) -> Result<FlatIndexLocation, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        FlatIndexLocation::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 

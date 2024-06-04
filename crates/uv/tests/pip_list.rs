@@ -1,8 +1,10 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
+use assert_fs::prelude::*;
 
 use common::uv_snapshot;
 
@@ -34,12 +36,14 @@ fn install_command(context: &TestContext) -> Command {
 }
 
 #[test]
-fn list_empty() {
+fn list_empty_columns() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("list")
+        .arg("--format")
+        .arg("columns")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -48,6 +52,53 @@ fn list_empty() {
     success: true
     exit_code: 0
     ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn list_empty_freeze() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(Command::new(get_bin())
+        .arg("pip")
+        .arg("list")
+        .arg("--format")
+        .arg("freeze")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn list_empty_json() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(Command::new(get_bin())
+        .arg("pip")
+        .arg("list")
+        .arg("--format")
+        .arg("json")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    []
 
     ----- stderr -----
     "###
@@ -114,9 +165,8 @@ fn list_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -167,9 +217,8 @@ fn list_editable_only() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -258,9 +307,8 @@ fn list_exclude() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -362,9 +410,8 @@ fn list_format_json() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -449,6 +496,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
+    []
 
     ----- stderr -----
     "###
@@ -468,9 +516,8 @@ fn list_format_freeze() {
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -564,4 +611,112 @@ fn list_format_freeze() {
     ----- stderr -----
     "###
     );
+}
+
+#[test]
+fn list_legacy_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    let target = context.temp_dir.child("zstandard_project");
+    target.child("zstd").create_dir_all()?;
+    target.child("zstd").child("__init__.py").write_str("")?;
+
+    target.child("zstandard.egg-info").create_dir_all()?;
+    target
+        .child("zstandard.egg-info")
+        .child("PKG-INFO")
+        .write_str(
+            "Metadata-Version: 2.1
+Name: zstandard
+Version: 0.22.0
+",
+        )?;
+
+    site_packages
+        .child("zstandard.egg-link")
+        .write_str(target.path().to_str().unwrap())?;
+
+    site_packages.child("easy-install.pth").write_str(&format!(
+        "something\n{}\nanother thing\n",
+        target.path().to_str().unwrap()
+    ))?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("list")
+        .arg("--editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version Editable project location
+    [UNDERLINE]
+    zstandard 0.22.0 [TEMP_DIR]/zstandard_project
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn list_legacy_editable_invalid_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    let target = context.temp_dir.child("paramiko_project");
+    target.child("paramiko.egg-info").create_dir_all()?;
+    target
+        .child("paramiko.egg-info")
+        .child("PKG-INFO")
+        .write_str(
+            "Metadata-Version: 1.0
+Name: paramiko
+Version: 0.1-bulbasaur
+",
+        )?;
+    site_packages
+        .child("paramiko.egg-link")
+        .write_str(target.path().to_str().unwrap())?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("list")
+        .arg("--editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read metadata: from [SITE_PACKAGES]/paramiko.egg-link
+     Caused by: after parsing '0.1-b', found 'ulbasaur', which is not part of a valid version
+    "###
+    );
+
+    Ok(())
 }

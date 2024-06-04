@@ -1,27 +1,25 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
-use std::ops::Deref;
 use std::sync::Arc;
 
-use dashmap::{DashMap, DashSet};
 use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
-use distribution_types::{
-    BuiltDist, IndexLocations, InstalledDist, PathBuiltDist, PathSourceDist, SourceDist,
-};
-use once_map::OnceMap;
+use dashmap::DashMap;
+use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
 use pep440_rs::Version;
 use pep508_rs::Requirement;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
-use crate::resolver::{IncompletePackage, UnavailablePackage, VersionsResponse};
+use crate::resolver::{
+    FxOnceMap, IncompletePackage, UnavailablePackage, UnavailableReason, VersionsResponse,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -71,14 +69,14 @@ pub enum ResolveError {
     FetchAndBuild(Box<SourceDist>, #[source] uv_distribution::Error),
 
     #[error("Failed to read `{0}`")]
-    Read(Box<PathBuiltDist>, #[source] uv_distribution::Error),
+    Read(Box<BuiltDist>, #[source] uv_distribution::Error),
 
     // TODO(zanieb): Use `thiserror` in `InstalledDist` so we can avoid chaining `anyhow`
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] anyhow::Error),
 
     #[error("Failed to build `{0}`")]
-    Build(Box<PathSourceDist>, #[source] uv_distribution::Error),
+    Build(Box<SourceDist>, #[source] uv_distribution::Error),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
@@ -111,8 +109,10 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
 }
 
 /// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
-/// wrap an [`PubGrubPackage::Extra`] package.
-fn collapse_extra_proxies(derivation_tree: &mut DerivationTree<PubGrubPackage, Range<Version>>) {
+/// wrap an [`PubGrubPackageInner::Extra`] package.
+fn collapse_extra_proxies(
+    derivation_tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
     match derivation_tree {
         DerivationTree::External(_) => {}
         DerivationTree::Derived(derived) => {
@@ -121,22 +121,16 @@ fn collapse_extra_proxies(derivation_tree: &mut DerivationTree<PubGrubPackage, R
                 Arc::make_mut(&mut derived.cause2),
             ) {
                 (
-                    DerivationTree::External(External::FromDependencyOf(
-                        PubGrubPackage::Extra(..),
-                        ..,
-                    )),
+                    DerivationTree::External(External::FromDependencyOf(package, ..)),
                     ref mut cause,
-                ) => {
+                ) if matches!(&**package, PubGrubPackageInner::Extra { .. }) => {
                     collapse_extra_proxies(cause);
                     *derivation_tree = cause.clone();
                 }
                 (
                     ref mut cause,
-                    DerivationTree::External(External::FromDependencyOf(
-                        PubGrubPackage::Extra(..),
-                        ..,
-                    )),
-                ) => {
+                    DerivationTree::External(External::FromDependencyOf(package, ..)),
+                ) if matches!(&**package, PubGrubPackageInner::Extra { .. }) => {
                     collapse_extra_proxies(cause);
                     *derivation_tree = cause.clone();
                 }
@@ -186,7 +180,7 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
 /// A wrapper around [`pubgrub::error::PubGrubError::NoSolution`] that displays a resolution failure report.
 #[derive(Debug)]
 pub struct NoSolutionError {
-    derivation_tree: DerivationTree<PubGrubPackage, Range<Version>>,
+    derivation_tree: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
     available_versions: IndexMap<PubGrubPackage, BTreeSet<Version>>,
     selector: Option<CandidateSelector>,
     python_requirement: Option<PythonRequirement>,
@@ -230,28 +224,16 @@ impl NoSolutionError {
     #[must_use]
     pub(crate) fn with_available_versions(
         mut self,
-        python_requirement: &PythonRequirement,
-        visited: &DashSet<PackageName>,
-        package_versions: &OnceMap<PackageName, Arc<VersionsResponse>>,
+        visited: &FxHashSet<PackageName>,
+        package_versions: &FxOnceMap<PackageName, Arc<VersionsResponse>>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {
-            match package {
-                PubGrubPackage::Root(_) => {}
-                PubGrubPackage::Python(PubGrubPython::Installed) => {
-                    available_versions.insert(
-                        package.clone(),
-                        BTreeSet::from([python_requirement.installed().deref().clone()]),
-                    );
-                }
-                PubGrubPackage::Python(PubGrubPython::Target) => {
-                    available_versions.insert(
-                        package.clone(),
-                        BTreeSet::from([python_requirement.target().deref().clone()]),
-                    );
-                }
-                PubGrubPackage::Extra(_, _, _) => {}
-                PubGrubPackage::Package(name, _, _) => {
+            match &**package {
+                PubGrubPackageInner::Root(_) => {}
+                PubGrubPackageInner::Python(_) => {}
+                PubGrubPackageInner::Extra { .. } => {}
+                PubGrubPackageInner::Package { name, .. } => {
                     // Avoid including available versions for packages that exist in the derivation
                     // tree, but were never visited during resolution. We _may_ have metadata for
                     // these packages, but it's non-deterministic, and omitting them ensures that
@@ -299,9 +281,8 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package(name, _, _) = package {
-                if let Some(entry) = unavailable_packages.get(name) {
-                    let reason = entry.value();
+            if let PubGrubPackageInner::Package { name, .. } = &**package {
+                if let Some(reason) = unavailable_packages.get(name) {
                     new.insert(name.clone(), reason.clone());
                 }
             }
@@ -318,10 +299,9 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package(name, _, _) = package {
-                if let Some(entry) = incomplete_packages.get(name) {
-                    let versions = entry.value();
-                    for entry in versions {
+            if let PubGrubPackageInner::Package { name, .. } = &**package {
+                if let Some(versions) = incomplete_packages.get(name) {
+                    for entry in versions.iter() {
                         let (version, reason) = entry.pair();
                         new.entry(name.clone())
                             .or_insert_with(BTreeMap::default)

@@ -13,9 +13,10 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-pep440_rs = { workspace = true, features = ["rkyv", "serde"] }
-pep508_rs = { workspace = true, features = ["rkyv", "serde"] }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
 uv-normalize = { workspace = true }
+uv-git = { workspace = true }
 
 chrono = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true, features = ["serde"] }
@@ -30,3 +31,4 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }

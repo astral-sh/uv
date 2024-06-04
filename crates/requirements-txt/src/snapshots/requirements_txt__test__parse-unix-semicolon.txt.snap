@@ -1,0 +1,19 @@
+---
+source: crates/requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxtFileError {
+    file: "<REQUIREMENTS_DIR>/semicolon.txt",
+    error: Pep508 {
+        source: Pep508Error {
+            message: String(
+                "Missing space before ';', the end of the URL is ambiguous",
+            ),
+            start: 11,
+            len: 1,
+            input: "./editable; python_version >= \"3.9\" and os_name == \"posix\"",
+        },
+        start: 50,
+        end: 108,
+    },
+}

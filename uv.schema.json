@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Options",
-  "description": "A `[tool.uv]` section.",
+  "title": "ToolUv",
+  "description": "Metadata and configuration for uv.",
   "type": "object",
   "properties": {
     "cache-dir": {
@@ -22,6 +22,22 @@
         "null"
       ]
     },
+    "offline": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "override-dependencies": {
+      "description": "PEP 508 style requirements, e.g. `flask==3.0.0`, or `black @ https://...`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "pip": {
       "anyOf": [
         {
@@ -37,9 +53,27 @@
         "boolean",
         "null"
       ]
+    },
+    "sources": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/definitions/Source"
+      }
+    },
+    "workspace": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ToolUvWorkspace"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
-  "additionalProperties": false,
   "definitions": {
     "AnnotationStyle": {
       "description": "Indicate the style of annotation comments, used to indicate the dependencies that requested each package.",
@@ -101,15 +135,18 @@
       }
     },
     "ExcludeNewer": {
+      "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).",
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2}))?$"
     },
     "ExtraName": {
-      "description": "The normalized name of an extra dependency group.\n\nConverts the name to lowercase and collapses any run of the characters `-`, `_` and `.` down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "description": "The normalized name of an extra dependency group.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
     },
     "FlatIndexLocation": {
-      "type": "string"
+      "description": "The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.",
+      "type": "string",
+      "format": "uri"
     },
     "IndexStrategy": {
       "oneOf": [
@@ -117,20 +154,29 @@
           "description": "Only use results from the first index that returns a match for a given package name.\n\nWhile this differs from pip's behavior, it's the default index strategy as it's the most secure.",
           "type": "string",
           "enum": [
-            "first-match"
+            "first-index"
           ]
         },
         {
-          "description": "Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next.\n\nIn this strategy, we look for every package across all indexes. When resolving, we attempt to use versions from the indexes in order, such that we exhaust all available versions from the first index before moving on to the next. Further, if a version is found to be incompatible in the first index, we do not reconsider that version in subsequent indexes, even if the secondary index might contain compatible versions (e.g., variants of the same versions with different ABI tags or Python version constraints).\n\nSee: https://peps.python.org/pep-0708/",
+          "description": "Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next.\n\nIn this strategy, we look for every package across all indexes. When resolving, we attempt to use versions from the indexes in order, such that we exhaust all available versions from the first index before moving on to the next. Further, if a version is found to be incompatible in the first index, we do not reconsider that version in subsequent indexes, even if the secondary index might contain compatible versions (e.g., variants of the same versions with different ABI tags or Python version constraints).\n\nSee: <https://peps.python.org/pep-0708/>",
           "type": "string",
           "enum": [
-            "unsafe-any-match"
+            "unsafe-first-match"
+          ]
+        },
+        {
+          "description": "Search for every package name across all indexes, preferring the \"best\" version found. If a package version is in multiple indexes, only look at the entry for the first index.\n\nIn this strategy, we look for every package across all indexes. When resolving, we consider all versions from all indexes, choosing the \"best\" version found (typically, the highest compatible version).\n\nThis most closely matches pip's behavior, but exposes the resolver to \"dependency confusion\" attacks whereby malicious actors can publish packages to public indexes with the same name as internal packages, causing the resolver to install the malicious package in lieu of the intended internal package.\n\nSee: <https://peps.python.org/pep-0708/>",
+          "type": "string",
+          "enum": [
+            "unsafe-best-match"
           ]
         }
       ]
     },
     "IndexUrl": {
-      "type": "string"
+      "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).",
+      "type": "string",
+      "format": "uri"
     },
     "KeyringProviderType": {
       "description": "Keyring provider type to use for credential lookup.",
@@ -177,10 +223,11 @@
       ]
     },
     "PackageName": {
-      "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses any run of the characters `-`, `_` and `.` down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
     },
     "PackageNameSpecifier": {
+      "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
       "type": "string",
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
     },
@@ -215,6 +262,30 @@
             "boolean",
             "null"
           ]
+        },
+        "concurrent-builds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
+        },
+        "concurrent-downloads": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
+        },
+        "concurrent-installs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
         },
         "config-settings": {
           "anyOf": [
@@ -405,12 +476,6 @@
             "null"
           ]
         },
-        "offline": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "only-binary": {
           "type": [
             "array",
@@ -489,6 +554,12 @@
             "boolean",
             "null"
           ]
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
@@ -533,7 +604,9 @@
       ]
     },
     "PythonVersion": {
-      "type": "string"
+      "description": "A Python version specifier, e.g. `3.7` or `3.8.0`.",
+      "type": "string",
+      "pattern": "^3\\.\\d+(\\.\\d+)?$"
     },
     "ResolutionMode": {
       "oneOf": [
@@ -559,6 +632,182 @@
           ]
         }
       ]
+    },
+    "Source": {
+      "description": "A `tool.uv.sources` value.",
+      "anyOf": [
+        {
+          "description": "A remote Git repository, available over HTTPS or SSH.\n\nExample: ```toml flask = { git = \"https://github.com/pallets/flask\", tag = \"3.0.0\" } ```",
+          "type": "object",
+          "required": [
+            "git"
+          ],
+          "properties": {
+            "branch": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "git": {
+              "description": "The repository URL (without the `git+` prefix).",
+              "type": "string",
+              "format": "uri"
+            },
+            "rev": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subdirectory": {
+              "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution (`.zip`, `.tar.gz`).\n\nExample: ```toml flask = { url = \"https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl\" } ```",
+          "type": "object",
+          "required": [
+            "url"
+          ],
+          "properties": {
+            "subdirectory": {
+              "description": "For source distributions, the path to the directory with the `pyproject.toml`, if it's not in the archive root.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or `.tag.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or `setup.py` file in the root).",
+          "type": "object",
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "editable": {
+              "description": "`false` by default.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.",
+          "type": "object",
+          "required": [
+            "index"
+          ],
+          "properties": {
+            "index": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A dependency on another package in the workspace.",
+          "type": "object",
+          "required": [
+            "workspace"
+          ],
+          "properties": {
+            "editable": {
+              "description": "`true` by default.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "workspace": {
+              "description": "When set to `false`, the package will be fetched from the remote index, rather than included as a workspace package.",
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "A catch-all variant used to emit precise error messages when deserializing.",
+          "type": "object",
+          "required": [
+            "git",
+            "index",
+            "patch",
+            "url",
+            "workspace"
+          ],
+          "properties": {
+            "branch": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "git": {
+              "type": "string"
+            },
+            "index": {
+              "type": "string"
+            },
+            "patch": {
+              "type": "string"
+            },
+            "rev": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subdirectory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": "string"
+            },
+            "workspace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "String": {
+      "type": "string"
     },
     "TargetTriple": {
       "description": "The supported target triples. Each triple consists of an architecture, vendor, and operating system.\n\nSee: <https://doc.rust-lang.org/nightly/rustc/platform-support.html>",
@@ -588,28 +837,28 @@
           "description": "An x86 Windows target.",
           "type": "string",
           "enum": [
-            "x8664-pc-windows-msvc"
+            "x86_64-pc-windows-msvc"
           ]
         },
         {
           "description": "An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.",
           "type": "string",
           "enum": [
-            "x8664-unknown-linux-gnu"
+            "x86_64-unknown-linux-gnu"
           ]
         },
         {
-          "description": "An ARM-based macOS target, as seen on Apple Silicon devices.",
+          "description": "An ARM-based macOS target, as seen on Apple Silicon devices\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
             "aarch64-apple-darwin"
           ]
         },
         {
-          "description": "An x86 macOS target.",
+          "description": "An x86 macOS target.\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
-            "x8664-apple-darwin"
+            "x86_64-apple-darwin"
           ]
         },
         {
@@ -627,41 +876,64 @@
           ]
         },
         {
-          "description": "An x86_64 Linux target.",
+          "description": "An `x86_64` Linux target.",
           "type": "string",
           "enum": [
-            "x8664-unknown-linux-musl"
+            "x86_64-unknown-linux-musl"
           ]
         },
         {
-          "description": "An x86_64 target for the `manylinux_2_17` platform.",
+          "description": "An `x86_64` target for the `manylinux_2_17` platform.",
           "type": "string",
           "enum": [
-            "x8664-manylinux217"
+            "x86_64-manylinux_2_17"
           ]
         },
         {
-          "description": "An x86_64 target for the `manylinux_2_28` platform.",
+          "description": "An `x86_64` target for the `manylinux_2_28` platform.",
           "type": "string",
           "enum": [
-            "x8664-manylinux228"
+            "x86_64-manylinux_2_28"
           ]
         },
         {
           "description": "An ARM64 target for the `manylinux_2_17` platform.",
           "type": "string",
           "enum": [
-            "aarch64-manylinux217"
+            "aarch64-manylinux_2_17"
           ]
         },
         {
           "description": "An ARM64 target for the `manylinux_2_28` platform.",
           "type": "string",
           "enum": [
-            "aarch64-manylinux228"
+            "aarch64-manylinux_2_28"
           ]
         }
       ]
+    },
+    "ToolUvWorkspace": {
+      "type": "object",
+      "properties": {
+        "exclude": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/String"
+          }
+        },
+        "members": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/String"
+          }
+        }
+      }
     }
   }
 }

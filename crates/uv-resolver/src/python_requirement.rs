@@ -1,5 +1,5 @@
-use pep508_rs::{MarkerEnvironment, StringVersion};
-use uv_interpreter::Interpreter;
+use pep508_rs::StringVersion;
+use uv_interpreter::{Interpreter, PythonVersion};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {
@@ -8,14 +8,29 @@ pub struct PythonRequirement {
     /// The target version of Python; that is, the version of Python for which we are resolving
     /// dependencies. This is typically the same as the installed version, but may be different
     /// when specifying an alternate Python version for the resolution.
-    target: StringVersion,
+    ///
+    /// If `None`, the target version is the same as the installed version.
+    target: Option<StringVersion>,
 }
 
 impl PythonRequirement {
-    pub fn new(interpreter: &Interpreter, markers: &MarkerEnvironment) -> Self {
+    /// Create a [`PythonRequirement`] to resolve against both an [`Interpreter`] and a
+    /// [`PythonVersion`].
+    pub fn from_python_version(interpreter: &Interpreter, python_version: &PythonVersion) -> Self {
         Self {
             installed: interpreter.python_full_version().clone(),
-            target: markers.python_full_version.clone(),
+            target: Some(StringVersion {
+                string: python_version.to_string(),
+                version: python_version.python_full_version(),
+            }),
+        }
+    }
+
+    /// Create a [`PythonRequirement`] to resolve against an [`Interpreter`].
+    pub fn from_interpreter(interpreter: &Interpreter) -> Self {
+        Self {
+            installed: interpreter.python_full_version().clone(),
+            target: None,
         }
     }
 
@@ -25,7 +40,7 @@ impl PythonRequirement {
     }
 
     /// Return the target version of Python.
-    pub fn target(&self) -> &StringVersion {
-        &self.target
+    pub fn target(&self) -> Option<&StringVersion> {
+        self.target.as_ref()
     }
 }

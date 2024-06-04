@@ -191,7 +191,7 @@ impl Middleware for AuthMiddleware {
             .as_ref()
             .is_some_and(|credentials| credentials.username().is_some());
 
-        // Otherise, attempt an anonymous request
+        // Otherwise, attempt an anonymous request
         trace!("Attempting unauthenticated request for {url}");
 
         // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
@@ -322,7 +322,7 @@ impl AuthMiddleware {
             if credentials.is_some() {
                 trace!("Using credentials from previous fetch for {url}");
             } else {
-                trace!("Skipping fetch of credentails for {url}, previous attempt failed");
+                trace!("Skipping fetch of credentials for {url}, previous attempt failed");
             };
 
             return credentials;
@@ -330,7 +330,7 @@ impl AuthMiddleware {
 
         // Netrc support based on: <https://github.com/gribouille/netrc>.
         let credentials = if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
-            trace!("Checking netrc for credentials for {url}");
+            debug!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
                 url,
@@ -352,7 +352,7 @@ impl AuthMiddleware {
                     keyring.fetch(url, username).await
                 }
                 None => {
-                    trace!("Skipping keyring lookup for {url} with no username");
+                    debug!("Skipping keyring lookup for {url} with no username");
                     None
                 }
             },
@@ -714,7 +714,7 @@ mod tests {
         assert_eq!(
             client.get(server.uri()).send().await?.status(),
             401,
-            "Credentials should not be pulled from the netrc file due to host mistmatch"
+            "Credentials should not be pulled from the netrc file due to host mismatch"
         );
 
         let mut url = Url::parse(&server.uri())?;
@@ -1031,7 +1031,7 @@ mod tests {
             .await;
 
         // Create a third, public prefix
-        // It will throw a 401 if it recieves credentials
+        // It will throw a 401 if it receives credentials
         Mock::given(method("GET"))
             .and(path_regex("/prefix_3.*"))
             .and(basic_auth(username_1, password_1))
@@ -1154,7 +1154,7 @@ mod tests {
             .await;
 
         // Create a third, public prefix
-        // It will throw a 401 if it recieves credentials
+        // It will throw a 401 if it receives credentials
         Mock::given(method("GET"))
             .and(path_regex("/prefix_3.*"))
             .and(basic_auth(username_1, password_1))

@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "numpy",
@@ -24,12 +24,17 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/basic.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "pandas",
@@ -48,12 +53,17 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/basic.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "python-dateutil",
@@ -72,12 +82,17 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/basic.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "pytz",
@@ -96,12 +111,17 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/basic.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "six",
@@ -120,12 +140,17 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/basic.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "tzdata",
@@ -144,6 +169,11 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/basic.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],

@@ -5,7 +5,7 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
+            requirement: Named(
                 Requirement {
                     name: PackageName(
                         "django-debug-toolbar",
@@ -24,6 +24,11 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/constraints-a.txt",
+                        ),
+                    ),
                 },
             ),
             hashes: [],
@@ -48,6 +53,11 @@ RequirementsTxt {
                 ),
             ),
             marker: None,
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/constraints-b.txt",
+                ),
+            ),
         },
         Requirement {
             name: PackageName(
@@ -67,6 +77,11 @@ RequirementsTxt {
                 ),
             ),
             marker: None,
+            origin: Some(
+                File(
+                    "<REQUIREMENTS_DIR>/constraints-b.txt",
+                ),
+            ),
         },
     ],
     editables: [],

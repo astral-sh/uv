@@ -7,28 +7,34 @@ use pep440_rs::Version;
 use uv_normalize::PackageName;
 
 use crate::pubgrub::package::PubGrubPackage;
+use crate::pubgrub::PubGrubPackageInner;
 
-/// A prioritization map to guide the `PubGrub` resolution process.
+/// A prioritization map to guide the PubGrub resolution process.
 ///
-/// During resolution, `PubGrub` needs to decide which package to consider next. The priorities
+/// During resolution, PubGrub needs to decide which package to consider next. The priorities
 /// encoded here are used to guide that decision.
 ///
 /// Like `pip`, we prefer packages that are pinned to direct URLs over packages pinned to a single
 /// version over packages that are constrained in some way over packages that are unconstrained.
 ///
 /// See: <https://github.com/pypa/pip/blob/ef78c129b1a966dbbbdb8ebfffc43723e89110d1/src/pip/_internal/resolution/resolvelib/provider.py#L120>
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities(FxHashMap<PackageName, PubGrubPriority>);
 
 impl PubGrubPriorities {
     /// Add a [`PubGrubPackage`] to the priority map.
     pub(crate) fn insert(&mut self, package: &PubGrubPackage, version: &Range<Version>) {
         let next = self.0.len();
-        match package {
-            PubGrubPackage::Root(_) => {}
-            PubGrubPackage::Python(_) => {}
+        match &**package {
+            PubGrubPackageInner::Root(_) => {}
+            PubGrubPackageInner::Python(_) => {}
 
-            PubGrubPackage::Extra(name, _, None) | PubGrubPackage::Package(name, _, None) => {
+            PubGrubPackageInner::Extra {
+                name, url: None, ..
+            }
+            | PubGrubPackageInner::Package {
+                name, url: None, ..
+            } => {
                 match self.0.entry(name.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
@@ -61,7 +67,12 @@ impl PubGrubPriorities {
                     }
                 }
             }
-            PubGrubPackage::Extra(name, _, Some(_)) | PubGrubPackage::Package(name, _, Some(_)) => {
+            PubGrubPackageInner::Extra {
+                name, url: Some(_), ..
+            }
+            | PubGrubPackageInner::Package {
+                name, url: Some(_), ..
+            } => {
                 match self.0.entry(name.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
@@ -91,11 +102,11 @@ impl PubGrubPriorities {
 
     /// Return the [`PubGrubPriority`] of the given package, if it exists.
     pub(crate) fn get(&self, package: &PubGrubPackage) -> Option<PubGrubPriority> {
-        match package {
-            PubGrubPackage::Root(_) => Some(PubGrubPriority::Root),
-            PubGrubPackage::Python(_) => Some(PubGrubPriority::Root),
-            PubGrubPackage::Extra(name, _, _) => self.0.get(name).copied(),
-            PubGrubPackage::Package(name, _, _) => self.0.get(name).copied(),
+        match &**package {
+            PubGrubPackageInner::Root(_) => Some(PubGrubPriority::Root),
+            PubGrubPackageInner::Python(_) => Some(PubGrubPriority::Root),
+            PubGrubPackageInner::Extra { name, .. } => self.0.get(name).copied(),
+            PubGrubPackageInner::Package { name, .. } => self.0.get(name).copied(),
         }
     }
 }

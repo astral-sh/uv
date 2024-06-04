@@ -31,7 +31,7 @@ use crate::{Error, Layout};
 /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl>
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
-#[instrument(skip_all, fields(wheel = % wheel.as_ref().display()))]
+#[instrument(skip_all, fields(wheel = %filename))]
 pub fn install_wheel(
     layout: &Layout,
     wheel: impl AsRef<Path>,
@@ -52,7 +52,7 @@ pub fn install_wheel(
         }
 
         let version = Version::from_str(&version)?;
-        if version != filename.version {
+        if version != filename.version && version != filename.version.clone().without_local() {
             return Err(Error::MismatchedVersion(version, filename.version.clone()));
         }
     }
@@ -85,11 +85,18 @@ pub fn install_wheel(
     )?;
     let mut record = read_record_file(&mut record_file)?;
 
-    debug!(name, "Writing entrypoints");
     let (console_scripts, gui_scripts) =
         parse_scripts(&wheel, &dist_info_prefix, None, layout.python_version.1)?;
-    write_script_entrypoints(layout, site_packages, &console_scripts, &mut record, false)?;
-    write_script_entrypoints(layout, site_packages, &gui_scripts, &mut record, true)?;
+
+    if console_scripts.is_empty() && gui_scripts.is_empty() {
+        debug!(name, "No entrypoints");
+    } else {
+        debug!(name, "Writing entrypoints");
+
+        fs_err::create_dir_all(&layout.scheme.scripts)?;
+        write_script_entrypoints(layout, site_packages, &console_scripts, &mut record, false)?;
+        write_script_entrypoints(layout, site_packages, &gui_scripts, &mut record, true)?;
+    }
 
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
@@ -319,6 +326,15 @@ fn clone_recursive(
     let to = site_packages.join(from.strip_prefix(wheel).unwrap());
 
     debug!("Cloning {} to {}", from.display(), to.display());
+
+    if cfg!(windows) && from.is_dir() {
+        // On Windows, reflinking directories is not supported, so we copy each file instead.
+        fs::create_dir_all(&to)?;
+        for entry in fs::read_dir(from)? {
+            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+        }
+        return Ok(());
+    }
 
     match attempt {
         Attempt::Initial => {

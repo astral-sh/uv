@@ -8,17 +8,20 @@ pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
 use distribution_types::InstalledMetadata;
-pub(crate) use pip_check::pip_check;
-pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile};
-pub(crate) use pip_freeze::pip_freeze;
-pub(crate) use pip_install::pip_install;
-pub(crate) use pip_list::pip_list;
-pub(crate) use pip_show::pip_show;
-pub(crate) use pip_sync::pip_sync;
-pub(crate) use pip_uninstall::pip_uninstall;
-pub(crate) use run::run;
+pub(crate) use pip::check::pip_check;
+pub(crate) use pip::compile::{extra_name_with_clap_error, pip_compile};
+pub(crate) use pip::freeze::pip_freeze;
+pub(crate) use pip::install::pip_install;
+pub(crate) use pip::list::pip_list;
+pub(crate) use pip::show::pip_show;
+pub(crate) use pip::sync::pip_sync;
+pub(crate) use pip::uninstall::pip_uninstall;
+pub(crate) use project::lock::lock;
+pub(crate) use project::run::run;
+pub(crate) use project::sync::sync;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
+pub(crate) use tool::run::run as run_tool;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
@@ -32,16 +35,11 @@ use crate::printer::Printer;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;
-mod pip_check;
-mod pip_compile;
-mod pip_freeze;
-mod pip_install;
-mod pip_list;
-mod pip_show;
-mod pip_sync;
-mod pip_uninstall;
-mod reporters;
-mod run;
+mod pip;
+mod project;
+pub(crate) mod reporters;
+mod tool;
+
 #[cfg(feature = "self-update")]
 mod self_update;
 mod venv;
@@ -50,15 +48,12 @@ mod version;
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
     /// The command succeeded.
-    #[allow(unused)]
     Success,
 
     /// The command failed due to an error in the user input.
-    #[allow(unused)]
     Failure,
 
     /// The command failed with an unexpected error.
-    #[allow(unused)]
     Error,
 }
 

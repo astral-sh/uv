@@ -16,14 +16,16 @@ workspace = true
 uv-warnings = { workspace = true }
 
 backoff = { workspace = true }
+cachedir = { workspace = true }
 dunce = { workspace = true }
+either = { workspace = true }
 encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
 once_cell = { workspace = true }
 path-absolutize = { workspace = true }
+path-slash = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
 
@@ -32,4 +34,4 @@ junction = { workspace = true }
 
 [features]
 default = []
-tokio = ["dep:tokio", "fs-err/tokio", "backoff/tokio"]
+tokio = ["fs-err/tokio", "backoff/tokio"]

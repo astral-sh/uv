@@ -13,7 +13,7 @@ use pep508_rs::{Pep508Error, Requirement};
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
 use crate::lenient_requirement::LenientRequirement;
-use crate::LenientVersionSpecifiers;
+use crate::{LenientVersionSpecifiers, VerbatimParsedUrl};
 
 /// Python Package Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
@@ -29,7 +29,7 @@ pub struct Metadata23 {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
-    pub requires_dist: Vec<Requirement>,
+    pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
 }
@@ -50,7 +50,7 @@ pub enum MetadataError {
     #[error(transparent)]
     Pep440Error(#[from] VersionSpecifiersParseError),
     #[error(transparent)]
-    Pep508Error(#[from] Pep508Error),
+    Pep508Error(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
     #[error(transparent)]
     InvalidName(#[from] InvalidNameError),
     #[error("Invalid `Metadata-Version` field: {0}")]
@@ -59,6 +59,12 @@ pub enum MetadataError {
     UnsupportedMetadataVersion(String),
     #[error("The following field was marked as dynamic: {0}")]
     DynamicField(&'static str),
+}
+
+impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
+    fn from(error: Pep508Error<VerbatimParsedUrl>) -> Self {
+        Self::Pep508Error(Box::new(error))
+    }
 }
 
 /// From <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/metadata.rs#LL78C2-L91C26>
@@ -285,6 +291,7 @@ pub(crate) struct Project {
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata10 {
     pub name: PackageName,
+    pub version: String,
 }
 
 impl Metadata10 {
@@ -296,7 +303,10 @@ impl Metadata10 {
                 .get_first_value("Name")
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
         )?;
-        Ok(Self { name })
+        let version = headers
+            .get_first_value("Version")
+            .ok_or(MetadataError::FieldNotFound("Version"))?;
+        Ok(Self { name, version })
     }
 }
 

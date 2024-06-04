@@ -117,7 +117,7 @@ This is a little extra cost, but the idea is that a `CachePolicy` (not an
 `ArchivedCachePolicy`) should only be used in the slower path (i.e., when you
 actually need to make an HTTP request).
 
-[`rkyv::vec::ArchivedVec`]: hhttps://docs.rs/rkyv/0.7.43/rkyv/vec/struct.ArchivedVec.html
+[`rkyv::vec::ArchivedVec`]: https://docs.rs/rkyv/0.7.43/rkyv/vec/struct.ArchivedVec.html
 [`rkyv::string::ArchivedString`]: https://docs.rs/rkyv/0.7.43/rkyv/string/struct.ArchivedString.html
 
 # Additional reading

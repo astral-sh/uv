@@ -1,12 +1,13 @@
 use std::str::FromStr;
 
 use anstream::println;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::Parser;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, DirectUrlBuiltDist};
+use distribution_types::{BuiltDist, DirectUrlBuiltDist, RemoteSource};
 use pep508_rs::VerbatimUrl;
+use pypi_types::ParsedUrl;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
 
@@ -18,21 +19,19 @@ pub(crate) struct WheelMetadataArgs {
 }
 
 pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
-    let cache_dir = Cache::try_from(args.cache_args)?;
+    let cache = Cache::try_from(args.cache_args)?.init()?;
+    let client = RegistryClientBuilder::new(cache).build();
 
-    let client = RegistryClientBuilder::new(cache_dir.clone()).build();
+    let filename = WheelFilename::from_str(&args.url.filename()?)?;
 
-    let filename = WheelFilename::from_str(
-        args.url
-            .path()
-            .rsplit_once('/')
-            .unwrap_or(("", args.url.path()))
-            .1,
-    )?;
+    let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
+        bail!("Only HTTPS is supported");
+    };
 
     let metadata = client
         .wheel_metadata(&BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
+            location: archive.url,
             url: args.url,
         }))
         .await?;

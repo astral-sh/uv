@@ -22,10 +22,13 @@ impl Workspace {
         };
         let root = dir.join("uv");
         let file = root.join("uv.toml");
-        Ok(Some(Self {
-            options: read_file(&file).unwrap_or_default(),
-            root,
-        }))
+
+        debug!("Loading user configuration from: `{}`", file.display());
+        match read_file(&file) {
+            Ok(options) => Ok(Some(Self { options, root })),
+            Err(WorkspaceError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 
     /// Find the [`Workspace`] for the given path.
@@ -44,9 +47,9 @@ impl Workspace {
                 Ok(None) => {
                     // Continue traversing the directory tree.
                 }
-                Err(err @ WorkspaceError::PyprojectToml(..)) => {
+                Err(WorkspaceError::PyprojectToml(file, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
-                    warn_user!("{err}");
+                    warn_user!("Failed to parse `{file}`: {err}");
                 }
                 Err(err) => {
                     // Otherwise, warn and stop.
@@ -57,7 +60,7 @@ impl Workspace {
         Ok(None)
     }
 
-    /// Load a [`Workspace`] from a `pyproject.toml` or `uv.toml` file.
+    /// Load a [`Workspace`] from a `uv.toml` file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         Ok(Self {
             options: read_file(path.as_ref())?,
@@ -136,18 +139,12 @@ fn find_in_directory(dir: &Path) -> Result<Option<Options>, WorkspaceError> {
     Ok(None)
 }
 
-/// Load [`Options`] from a `pyproject.toml` or `uv.toml` file.
+/// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, WorkspaceError> {
     let content = fs_err::read_to_string(path)?;
-    if path.ends_with("pyproject.toml") {
-        let pyproject: PyProjectToml = toml::from_str(&content)
-            .map_err(|err| WorkspaceError::PyprojectToml(path.user_display().to_string(), err))?;
-        Ok(pyproject.tool.and_then(|tool| tool.uv).unwrap_or_default())
-    } else {
-        let options: Options = toml::from_str(&content)
-            .map_err(|err| WorkspaceError::UvToml(path.user_display().to_string(), err))?;
-        Ok(options)
-    }
+    let options: Options = toml::from_str(&content)
+        .map_err(|err| WorkspaceError::UvToml(path.user_display().to_string(), err))?;
+    Ok(options)
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -155,9 +152,9 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    #[error("Failed to parse `{0}`")]
+    #[error("Failed to parse: `{0}`")]
     PyprojectToml(String, #[source] toml::de::Error),
 
-    #[error("Failed to parse `{0}`")]
+    #[error("Failed to parse: `{0}`")]
     UvToml(String, #[source] toml::de::Error),
 }

@@ -1,10 +1,44 @@
 use url::Url;
 
 use pep508_rs::VerbatimUrl;
+use pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_git::{GitReference, GitResolver};
+
+/// Map a URL to a precise URL, if possible.
+pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> VerbatimParsedUrl {
+    let ParsedUrl::Git(ParsedGitUrl {
+        url: git_url,
+        subdirectory,
+    }) = &url.parsed_url
+    else {
+        return url;
+    };
+
+    let Some(new_git_url) = git.precise(git_url.clone()) else {
+        debug_assert!(
+            matches!(git_url.reference(), GitReference::FullCommit(_)),
+            "Unseen Git URL: {}, {:?}",
+            url.verbatim,
+            git_url
+        );
+        return url;
+    };
+
+    let new_parsed_url = ParsedGitUrl {
+        url: new_git_url,
+        subdirectory: subdirectory.clone(),
+    };
+    let new_url = Url::from(new_parsed_url.clone());
+    let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
+    VerbatimParsedUrl {
+        parsed_url: ParsedUrl::Git(new_parsed_url),
+        verbatim: new_verbatim_url,
+    }
+}
 
 /// Given a [`VerbatimUrl`] and a redirect, apply the redirect to the URL while preserving as much
 /// of the verbatim representation as possible.
-pub(crate) fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
+fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
     let redirect = VerbatimUrl::from_url(redirect);
 
     // The redirect should be the "same" URL, but with a specific commit hash added after the `@`.
@@ -38,7 +72,11 @@ pub(crate) fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use url::Url;
+
+    use pep508_rs::VerbatimUrl;
+
+    use crate::redirect::apply_redirect;
 
     #[test]
     fn test_apply_redirect() -> Result<(), url::ParseError> {

@@ -5,26 +5,26 @@ use std::path::{Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_fs::normalize_path;
+use uv_fs::{normalize_path, normalize_url_path};
+
+use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
-#[derive(Debug, Clone, Eq, derivative::Derivative)]
-#[derivative(PartialEq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Eq, derivative::Derivative, serde::Deserialize, serde::Serialize)]
+#[derivative(PartialEq, Hash, Ord)]
 pub struct VerbatimUrl {
     /// The parsed URL.
-    #[cfg_attr(
-        feature = "serde",
-        serde(
-            serialize_with = "Url::serialize_internal",
-            deserialize_with = "Url::deserialize_internal"
-        )
+    #[serde(
+        serialize_with = "Url::serialize_internal",
+        deserialize_with = "Url::deserialize_internal"
     )]
     url: Url,
     /// The URL as it was provided by the user.
     #[derivative(PartialEq = "ignore")]
+    #[derivative(Ord = "ignore")]
     #[derivative(Hash = "ignore")]
     given: Option<String>,
 }
@@ -38,25 +38,26 @@ impl VerbatimUrl {
     /// Create a [`VerbatimUrl`] from a file path.
     ///
     /// Assumes that the path is absolute.
-    pub fn from_path(path: impl AsRef<Path>) -> Self {
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
         let path = path.as_ref();
 
         // Normalize the path.
-        let path = normalize_path(path).expect("path is absolute");
+        let path = normalize_path(path)
+            .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
         let mut url = Url::from_file_path(path.clone())
-            .unwrap_or_else(|_| panic!("path is absolute: {}", path.display()));
+            .map_err(|_| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
 
-        Self { url, given: None }
+        Ok(Self { url, given: None })
     }
 
     /// Parse a URL from a string, expanding any environment variables.
@@ -67,37 +68,37 @@ impl VerbatimUrl {
 
     /// Parse a URL from an absolute or relative path.
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
-    pub fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>) -> Self {
+    pub fn parse_path(
+        path: impl AsRef<Path>,
+        base_dir: impl AsRef<Path>,
+    ) -> Result<Self, VerbatimUrlError> {
+        debug_assert!(base_dir.as_ref().is_absolute(), "base dir must be absolute");
         let path = path.as_ref();
 
         // Convert the path to an absolute path, if necessary.
         let path = if path.is_absolute() {
             path.to_path_buf()
         } else {
-            working_dir.as_ref().join(path)
+            base_dir.as_ref().join(path)
         };
 
         // Normalize the path.
-        let path = normalize_path(&path).expect("path is absolute");
+        let path = normalize_path(&path)
+            .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone()).unwrap_or_else(|_| {
-            panic!(
-                "path is absolute: {}, {}",
-                path.display(),
-                working_dir.as_ref().display()
-            )
-        });
+        let mut url = Url::from_file_path(path.clone())
+            .map_err(|_| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
 
-        Self { url, given: None }
+        Ok(Self { url, given: None })
     }
 
     /// Parse a URL from an absolute path.
@@ -108,12 +109,12 @@ impl VerbatimUrl {
         let path = if path.is_absolute() {
             path.to_path_buf()
         } else {
-            return Err(VerbatimUrlError::RelativePath(path.to_path_buf()));
+            return Err(VerbatimUrlError::WorkingDirectory(path.to_path_buf()));
         };
 
         // Normalize the path.
         let Ok(path) = normalize_path(&path) else {
-            return Err(VerbatimUrlError::RelativePath(path));
+            return Err(VerbatimUrlError::WorkingDirectory(path));
         };
 
         // Extract the fragment, if it exists.
@@ -155,12 +156,21 @@ impl VerbatimUrl {
         self.url.clone()
     }
 
-    /// Create a [`VerbatimUrl`] from a [`Url`].
-    ///
-    /// This method should be used sparingly (ideally, not at all), as it represents a loss of the
-    /// verbatim representation.
-    pub fn unknown(url: Url) -> Self {
-        Self { given: None, url }
+    /// Return the underlying [`Path`], if the URL is a file URL.
+    pub fn as_path(&self) -> Result<PathBuf, VerbatimUrlError> {
+        self.url
+            .to_file_path()
+            .map_err(|_| VerbatimUrlError::UrlConversion(self.url.to_file_path().unwrap()))
+    }
+}
+
+// This impl is written out because the `derive` doesn't seem to get it right.
+// Or does it in a way where Clippy complains about non-canonical `PartialOrd`
+// impls. So we just do it by hand by deferring to the derived `Ord` impl. This
+// guarantees they are consistent.
+impl PartialOrd for VerbatimUrl {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -186,8 +196,78 @@ impl Deref for VerbatimUrl {
     }
 }
 
+impl From<Url> for VerbatimUrl {
+    fn from(url: Url) -> Self {
+        VerbatimUrl::from_url(url)
+    }
+}
+
+impl Pep508Url for VerbatimUrl {
+    type Err = VerbatimUrlError;
+
+    /// Create a `VerbatimUrl` to represent the requirement.
+    fn parse_url(
+        url: &str,
+        #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_variables))]
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Self::Err> {
+        // Expand environment variables in the URL.
+        let expanded = expand_env_vars(url);
+
+        if let Some((scheme, path)) = split_scheme(&expanded) {
+            match Scheme::parse(scheme) {
+                // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
+                Some(Scheme::File) => {
+                    // Strip the leading slashes, along with the `localhost` host, if present.
+                    let path = strip_host(path);
+
+                    // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                    let path = normalize_url_path(path);
+
+                    #[cfg(feature = "non-pep508-extensions")]
+                    if let Some(working_dir) = working_dir {
+                        return Ok(VerbatimUrl::parse_path(path.as_ref(), working_dir)?
+                            .with_given(url.to_string()));
+                    }
+
+                    Ok(
+                        VerbatimUrl::parse_absolute_path(path.as_ref())?
+                            .with_given(url.to_string()),
+                    )
+                }
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                Some(_) => {
+                    // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                    Ok(VerbatimUrl::parse_url(expanded.as_ref())?.with_given(url.to_string()))
+                }
+
+                // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
+                _ => {
+                    #[cfg(feature = "non-pep508-extensions")]
+                    if let Some(working_dir) = working_dir {
+                        return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)?
+                            .with_given(url.to_string()));
+                    }
+
+                    Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())?
+                        .with_given(url.to_string()))
+                }
+            }
+        } else {
+            // Ex) `../editable/`
+            #[cfg(feature = "non-pep508-extensions")]
+            if let Some(working_dir) = working_dir {
+                return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)?
+                    .with_given(url.to_string()));
+            }
+
+            Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())?.with_given(url.to_string()))
+        }
+    }
+}
+
 /// An error that can occur when parsing a [`VerbatimUrl`].
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]
@@ -195,7 +275,15 @@ pub enum VerbatimUrlError {
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
-    RelativePath(PathBuf),
+    WorkingDirectory(PathBuf),
+
+    /// Received a path that could not be converted to a URL.
+    #[error("path could not be converted to a URL: {0}")]
+    UrlConversion(PathBuf),
+
+    /// Received a path that could not be normalized.
+    #[error("path could not be normalized: {0}")]
+    Normalization(PathBuf, #[source] std::io::Error),
 }
 
 /// Expand all available environment variables.

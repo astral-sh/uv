@@ -1,116 +1,140 @@
-use pep508_rs::{
-    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Requirement, UnnamedRequirement,
-    VersionOrUrl, VersionOrUrlRef,
-};
-use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
 use std::path::Path;
-use std::str::FromStr;
-use uv_normalize::ExtraName;
+
+use pep508_rs::{
+    Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
+};
+use pypi_types::{ParsedPathUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_normalize::PackageName;
+
+#[derive(Debug, thiserror::Error)]
+pub enum EditableError {
+    #[error("Editable `{0}` must refer to a local directory")]
+    MissingVersion(PackageName),
+
+    #[error("Editable `{0}` must refer to a local directory, not a versioned package")]
+    Versioned(PackageName),
+
+    #[error("Editable `{0}` must refer to a local directory, not an HTTPS URL: `{1}`")]
+    Https(PackageName, String),
+
+    #[error("Editable `{0}` must refer to a local directory, not a Git URL: `{1}`")]
+    Git(PackageName, String),
+
+    #[error("Editable must refer to a local directory, not an HTTPS URL: `{0}`")]
+    UnnamedHttps(String),
+
+    #[error("Editable must refer to a local directory, not a Git URL: `{0}`")]
+    UnnamedGit(String),
+}
 
 /// A requirement specifier in a `requirements.txt` file.
-#[derive(Hash, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+///
+/// Analog to `SpecifiedRequirement` but with `pep508_rs::Requirement` instead of
+/// `distribution_types::Requirement`.
+#[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub enum RequirementsTxtRequirement {
-    /// A PEP 508-compliant dependency specifier.
-    Pep508(Requirement),
+    /// The uv-specific superset over PEP 508 requirements specifier incorporating
+    /// `tool.uv.sources`.
+    Named(pep508_rs::Requirement<VerbatimParsedUrl>),
     /// A PEP 508-like, direct URL dependency specifier.
-    Unnamed(UnnamedRequirement),
-}
-
-impl Display for RequirementsTxtRequirement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pep508(requirement) => write!(f, "{requirement}"),
-            Self::Unnamed(requirement) => write!(f, "{requirement}"),
-        }
-    }
+    Unnamed(UnnamedRequirement<VerbatimParsedUrl>),
 }
 
 impl RequirementsTxtRequirement {
-    /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
         match self {
-            Self::Pep508(requirement) => requirement.evaluate_markers(env, extras),
-            Self::Unnamed(requirement) => requirement.evaluate_markers(env, extras),
+            Self::Named(requirement) => Self::Named(requirement.with_origin(origin)),
+            Self::Unnamed(requirement) => Self::Unnamed(requirement.with_origin(origin)),
         }
     }
 
-    /// Returns the extras for the requirement.
-    pub fn extras(&self) -> &[ExtraName] {
+    /// Convert the [`RequirementsTxtRequirement`] into an editable requirement.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EditableError`] if the requirement cannot be interpreted as editable.
+    /// Specifically, only local directory URLs are supported.
+    pub fn into_editable(self) -> Result<Self, EditableError> {
         match self {
-            Self::Pep508(requirement) => requirement.extras.as_slice(),
-            Self::Unnamed(requirement) => requirement.extras.as_slice(),
-        }
-    }
+            RequirementsTxtRequirement::Named(requirement) => {
+                let Some(version_or_url) = requirement.version_or_url else {
+                    return Err(EditableError::MissingVersion(requirement.name));
+                };
 
-    /// Returns the markers for the requirement.
-    pub fn markers(&self) -> Option<&MarkerTree> {
-        match self {
-            Self::Pep508(requirement) => requirement.marker.as_ref(),
-            Self::Unnamed(requirement) => requirement.marker.as_ref(),
-        }
-    }
+                let pep508_rs::VersionOrUrl::Url(url) = version_or_url else {
+                    return Err(EditableError::Versioned(requirement.name));
+                };
 
-    /// Return the version specifier or URL for the requirement.
-    pub fn version_or_url(&self) -> Option<VersionOrUrlRef> {
-        match self {
-            Self::Pep508(requirement) => match requirement.version_or_url.as_ref() {
-                Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
-                    Some(VersionOrUrlRef::VersionSpecifier(specifiers))
-                }
-                Some(VersionOrUrl::Url(url)) => Some(VersionOrUrlRef::Url(url)),
-                None => None,
-            },
-            Self::Unnamed(requirement) => Some(VersionOrUrlRef::Url(&requirement.url)),
-        }
-    }
-}
+                let parsed_url = match url.parsed_url {
+                    ParsedUrl::Path(parsed_url) => parsed_url,
+                    ParsedUrl::Archive(_) => {
+                        return Err(EditableError::Https(requirement.name, url.to_string()))
+                    }
+                    ParsedUrl::Git(_) => {
+                        return Err(EditableError::Git(requirement.name, url.to_string()))
+                    }
+                };
 
-impl From<Requirement> for RequirementsTxtRequirement {
-    fn from(requirement: Requirement) -> Self {
-        Self::Pep508(requirement)
-    }
-}
+                Ok(Self::Named(pep508_rs::Requirement {
+                    version_or_url: Some(pep508_rs::VersionOrUrl::Url(VerbatimParsedUrl {
+                        verbatim: url.verbatim,
+                        parsed_url: ParsedUrl::Path(ParsedPathUrl {
+                            editable: true,
+                            ..parsed_url
+                        }),
+                    })),
+                    ..requirement
+                }))
+            }
+            RequirementsTxtRequirement::Unnamed(requirement) => {
+                let parsed_url = match requirement.url.parsed_url {
+                    ParsedUrl::Path(parsed_url) => parsed_url,
+                    ParsedUrl::Archive(_) => {
+                        return Err(EditableError::UnnamedHttps(requirement.to_string()))
+                    }
+                    ParsedUrl::Git(_) => {
+                        return Err(EditableError::UnnamedGit(requirement.to_string()))
+                    }
+                };
 
-impl From<UnnamedRequirement> for RequirementsTxtRequirement {
-    fn from(requirement: UnnamedRequirement) -> Self {
-        Self::Unnamed(requirement)
-    }
-}
-
-impl FromStr for RequirementsTxtRequirement {
-    type Err = Pep508Error;
-
-    /// Parse a requirement as seen in a `requirements.txt` file.
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match Requirement::from_str(input) {
-            Ok(requirement) => Ok(Self::Pep508(requirement)),
-            Err(err) => match err.message {
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    Ok(Self::Unnamed(UnnamedRequirement::from_str(input)?))
-                }
-                _ => Err(err),
-            },
+                Ok(Self::Unnamed(UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        verbatim: requirement.url.verbatim,
+                        parsed_url: ParsedUrl::Path(ParsedPathUrl {
+                            editable: true,
+                            ..parsed_url
+                        }),
+                    },
+                    ..requirement
+                }))
+            }
         }
     }
 }
 
 impl RequirementsTxtRequirement {
     /// Parse a requirement as seen in a `requirements.txt` file.
-    pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
+    pub fn parse(
+        input: &str,
+        working_dir: impl AsRef<Path>,
+    ) -> Result<Self, Box<Pep508Error<VerbatimParsedUrl>>> {
         // Attempt to parse as a PEP 508-compliant requirement.
-        match Requirement::parse(input, &working_dir) {
-            Ok(requirement) => Ok(Self::Pep508(requirement)),
+        match pep508_rs::Requirement::parse(input, &working_dir) {
+            Ok(requirement) => Ok(Self::Named(requirement)),
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     // If that fails, attempt to parse as a direct URL requirement.
                     Ok(Self::Unnamed(UnnamedRequirement::parse(
                         input,
                         &working_dir,
+                        &mut TracingReporter,
                     )?))
                 }
                 _ => Err(err),
             },
         }
+        .map_err(Box::new)
     }
 }

@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use console::Term;
 
 use uv_fs::Simplified;
-use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
 
 use crate::confirm;
@@ -22,6 +21,8 @@ pub enum RequirementsSource {
     SetupPy(PathBuf),
     /// Dependencies were provided via a `setup.cfg` file (e.g., `pip-compile setup.cfg`).
     SetupCfg(PathBuf),
+    /// Dependencies were provided via a path to a source tree (e.g., `pip install .`).
+    SourceTree(PathBuf),
 }
 
 impl RequirementsSource {
@@ -122,6 +123,12 @@ impl RequirementsSource {
         Self::Package(name)
     }
 
+    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a path to a source
+    /// tree.
+    pub fn from_source_tree(path: PathBuf) -> Self {
+        Self::SourceTree(path)
+    }
+
     /// Returns `true` if the source allows extras to be specified.
     pub fn allows_extras(&self) -> bool {
         matches!(
@@ -139,43 +146,10 @@ impl std::fmt::Display for RequirementsSource {
             Self::RequirementsTxt(path)
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
-            | Self::SetupCfg(path) => {
+            | Self::SetupCfg(path)
+            | Self::SourceTree(path) => {
                 write!(f, "{}", path.simplified_display())
             }
         }
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub enum ExtrasSpecification {
-    #[default]
-    None,
-    All,
-    Some(Vec<ExtraName>),
-}
-
-impl ExtrasSpecification {
-    /// Determine the extras specification to use based on the command-line arguments.
-    pub fn from_args(all_extras: bool, extra: Vec<ExtraName>) -> Self {
-        if all_extras {
-            ExtrasSpecification::All
-        } else if extra.is_empty() {
-            ExtrasSpecification::None
-        } else {
-            ExtrasSpecification::Some(extra)
-        }
-    }
-
-    /// Returns true if a name is included in the extra specification.
-    pub fn contains(&self, name: &ExtraName) -> bool {
-        match self {
-            ExtrasSpecification::All => true,
-            ExtrasSpecification::None => false,
-            ExtrasSpecification::Some(extras) => extras.contains(name),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        matches!(self, ExtrasSpecification::None)
     }
 }

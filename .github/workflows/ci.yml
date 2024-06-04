@@ -18,6 +18,26 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  determine_changes:
+    name: "Determine changes"
+    runs-on: ubuntu-latest
+    outputs:
+      # Flag that is raised when any code is changed
+      code: ${{ steps.changed.outputs.code_any_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: tj-actions/changed-files@v44
+        id: changed
+        with:
+          files_yaml: |
+            code:
+              - "**/*"
+              - "!**/*.md"
+              - "!bin/**"
+              - "!assets/**"
   cargo-fmt:
     name: "cargo fmt"
     runs-on: ubuntu-latest
@@ -40,16 +60,8 @@ jobs:
         run: pipx run ruff check .
 
   cargo-clippy:
-    strategy:
-      matrix:
-        include:
-          - os: "ubuntu"
-            runner: "ubuntu-latest"
-          - os: "windows"
-            runner: "windows-latest-large"
-      fail-fast: false
-    runs-on: ["${{ matrix.runner }}"]
-    name: "cargo clippy | ${{ matrix.os }}"
+    runs-on: ubuntu-latest
+    name: "cargo clippy | ubuntu"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
@@ -59,6 +71,43 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  cargo-clippy-xwin:
+    runs-on: ubuntu-latest
+    name: "cargo clippy | windows"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup target add x86_64-pc-windows-msvc
+      - name: Load xwin cache
+        uses: actions/cache@v4
+        with:
+          path: "${{ github.workspace}}/.xwin"
+          key: cargo-xwin
+      - name: Load rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Install cargo-xwin"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-xwin
+      - name: Install xwin dependencies
+        run: sudo apt-get install --no-install-recommends -y llvm clang cmake ninja-build
+      - name: "Clippy"
+        run: cargo xwin clippy --target x86_64-pc-windows-msvc --workspace --all-targets --all-features --locked --profile fast-build -- -D warnings
+        env:
+          XWIN_ARCH: "x86_64"
+          XWIN_CACHE_DIR: "${{ github.workspace}}/.xwin"
+
+  cargo-shear:
+    name: "cargo shear"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall --no-confirm cargo-shear
+      - run: cargo shear
 
   cargo-test-unix:
     strategy:
@@ -96,6 +145,7 @@ jobs:
       - name: "Cargo test"
         run: |
           cargo nextest run \
+            --features python-patch \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
@@ -116,8 +166,28 @@ jobs:
       labels: ${{ matrix.runner }}
     name: "cargo test | ${{ matrix.os }}"
     steps:
+      - name: Create Dev Drive using ReFS
+        run: |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+                    Mount-VHD -Passthru |
+                    Initialize-Disk -Passthru |
+                    New-Partition -AssignDriveLetter -UseMaximumSize |
+                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
+          Write-Output $Volume
+          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v4
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+
       - name: "Install Rust toolchain"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: rustup show
 
       # We do not test with Python patch versions on Windows
@@ -133,17 +203,35 @@ jobs:
             3.12
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
 
       - name: "Cargo test"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: |
           cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv
@@ -154,21 +242,53 @@ jobs:
     runs-on: windows-latest
     name: "check windows trampoline"
     steps:
+      - name: Create Dev Drive using ReFS
+        run: |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+                    Mount-VHD -Passthru |
+                    Initialize-Disk -Passthru |
+                    New-Partition -AssignDriveLetter -UseMaximumSize |
+                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
+          Write-Output $Volume
+          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v4
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+
       - name: "Install Rust toolchain"
-        working-directory: crates/uv-trampoline
+        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: |
           rustup target add x86_64-pc-windows-msvc
-          rustup component add clippy rust-src --toolchain nightly-2024-03-19-x86_64-pc-windows-msvc
+          rustup component add clippy rust-src --toolchain nightly-2024-05-27-x86_64-pc-windows-msvc
+
       - uses: rui314/setup-mold@v1
+
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "crates/uv-trampoline"
+          workspaces: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
       - name: "Clippy"
-        working-directory: crates/uv-trampoline
+        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
+
       - name: "Build"
-        working-directory: crates/uv-trampoline
+        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: cargo build --release --target x86_64-pc-windows-msvc
 
   build-binary-linux:
@@ -241,19 +361,44 @@ jobs:
       labels: windows-latest-large
     name: "build binary | windows"
     steps:
+      - name: Create Dev Drive using ReFS
+        run: |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+                    Mount-VHD -Passthru |
+                    Initialize-Disk -Passthru |
+                    New-Partition -AssignDriveLetter -UseMaximumSize |
+                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
+          Write-Output $Volume
+          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v4
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
 
       - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
       - name: "Build"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: cargo build
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-${{ github.sha }}
-          path: ./target/debug/uv.exe
+          path: ${{ env.DEV_DRIVE }}/uv/target/debug/uv.exe
           retention-days: 1
 
   ecosystem-test:
@@ -291,6 +436,69 @@ jobs:
         run: |
           ./uv venv
           ./${{ matrix.command }}
+
+  integration-test-conda:
+    needs: build-binary-linux
+    name: "integration test | conda on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: latest
+          activate-environment: uv
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: Conda info
+        shell: bash -el {0}
+        run: conda info
+
+      - name: "Install a package"
+        shell: bash -el {0}
+        run: |
+          echo "$CONDA_PREFIX"
+          ./uv pip install anyio
+
+  integration-test-github-actions:
+    needs: build-binary-linux
+    name: "integration test | github actions"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Install a package without system opt-in"
+        run: |
+          ./uv pip install anyio && exit 1 || echo "Failed as expected"
+
+      - name: "Install a package with system opt-in"
+        run: |
+          ./uv pip install anyio --system
+
+      - name: Configure uv to use the system Python by default
+        run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
+
+      - name: "Install a package with environment system opt-in"
+        run: |
+          ./uv pip install anyio --reinstall
 
   cache-test-ubuntu:
     needs: build-binary-linux
@@ -795,6 +1003,9 @@ jobs:
 
       - name: "Validate global Python install"
         shell: bash -el {0}
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
@@ -858,3 +1069,37 @@ jobs:
 
       - name: "Validate embedded Python install"
         run: python ./scripts/check_embedded_python.py --uv ./uv.exe
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    needs: determine_changes
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    timeout-minutes: 20
+    steps:
+      - name: "Checkout Branch"
+        uses: actions/checkout@v4
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install codspeed"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-codspeed
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install requirements and prime cache"
+        run: |
+          sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
+          cargo run --bin uv -- venv --cache-dir .cache
+          cargo run --bin uv -- pip compile scripts/requirements/airflow.in --cache-dir .cache
+
+      - name: "Build benchmarks"
+        run: cargo codspeed build --features codspeed -p bench
+
+      - name: "Run benchmarks"
+        uses: CodSpeedHQ/action@v2
+        with:
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}

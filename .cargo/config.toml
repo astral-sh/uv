@@ -1,2 +1,9 @@
 [alias]
 dev = "run --package uv-dev"
+
+# statically link the C runtime so the executable does not depend on
+# that shared/dynamic library.
+#
+# See: https://github.com/astral-sh/ruff/issues/11503
+[target.'cfg(all(target_env = "msvc", target_os = "windows"))']
+rustflags = ["-C", "target-feature=+crt-static"]

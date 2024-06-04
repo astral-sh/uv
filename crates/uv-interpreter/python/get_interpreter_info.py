@@ -22,7 +22,15 @@ def format_full_version(info):
 
 
 if sys.version_info[0] < 3:
-    print(json.dumps({"result": "error", "kind": "unsupported_python_version"}))
+    print(
+        json.dumps(
+            {
+                "result": "error",
+                "kind": "unsupported_python_version",
+                "python_version": format_full_version(sys.version_info),
+            }
+        )
+    )
     sys.exit(0)
 
 if hasattr(sys, "implementation"):
@@ -435,6 +443,18 @@ def get_operating_system_and_architecture():
         architecture = version_arch
 
     if operating_system == "linux":
+        if sys.version_info < (3, 7):
+            print(
+                json.dumps(
+                    {
+                        "result": "error",
+                        "kind": "unsupported_python_version",
+                        "python_version": format_full_version(sys.version_info),
+                    }
+                )
+            )
+            sys.exit(0)
+
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version
 
@@ -449,7 +469,7 @@ def get_operating_system_and_architecture():
                 "major": musl_version[0],
                 "minor": musl_version[1],
             }
-        elif glibc_version:
+        elif glibc_version != (-1, -1):
             operating_system = {
                 "name": "manylinux",
                 "major": glibc_version[0],
@@ -530,13 +550,17 @@ def main() -> None:
         "prefix": sys.prefix,
         "base_executable": getattr(sys, "_base_executable", None),
         "sys_executable": sys.executable,
+        "sys_path": sys.path,
         "stdlib": sysconfig.get_path("stdlib"),
         "scheme": get_scheme(),
         "virtualenv": get_virtualenv(),
         "platform": get_operating_system_and_architecture(),
-        # The `t` abiflag for freethreading python
+        # The `t` abiflag for freethreading Python.
         # https://peps.python.org/pep-0703/#build-configuration-changes
         "gil_disabled": bool(sysconfig.get_config_var("Py_GIL_DISABLED")),
+        # Determine if the interpreter is 32-bit or 64-bit.
+        # https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L136
+        "pointer_size": "64" if sys.maxsize > 2**32 else "32",
     }
     print(json.dumps(interpreter_info))
 

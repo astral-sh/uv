@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{instrument, warn};
 use walkdir::WalkDir;
-use zip::write::SimpleFileOptions;
+use zip::write::FileOptions;
 use zip::ZipWriter;
 
 use pypi_types::DirectUrl;
@@ -22,6 +22,14 @@ use crate::script::Script;
 use crate::{Error, Layout};
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
+
+#[cfg(all(windows, target_arch = "x86"))]
+const LAUNCHER_I686_GUI: &[u8] =
+    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-gui.exe");
+
+#[cfg(all(windows, target_arch = "x86"))]
+const LAUNCHER_I686_CONSOLE: &[u8] =
+    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-console.exe");
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 const LAUNCHER_X86_64_GUI: &[u8] =
@@ -161,6 +169,14 @@ pub(crate) fn windows_script_launcher(
     }
 
     let launcher_bin: &[u8] = match env::consts::ARCH {
+        #[cfg(all(windows, target_arch = "x86"))]
+        "x86" => {
+            if is_gui {
+                LAUNCHER_I686_GUI
+            } else {
+                LAUNCHER_I686_CONSOLE
+            }
+        }
         #[cfg(all(windows, target_arch = "x86_64"))]
         "x86_64" => {
             if is_gui {
@@ -190,8 +206,7 @@ pub(crate) fn windows_script_launcher(
         // We're using the zip writer, but with stored compression
         // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
         // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-        let stored =
-            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let stored = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
         let mut archive = ZipWriter::new(Cursor::new(&mut payload));
         let error_msg = "Writing to Vec<u8> should never fail";
         archive.start_file("__main__.py", stored).expect(error_msg);
@@ -537,6 +552,7 @@ pub(crate) fn install_data(
                 move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
+                let mut initialized = false;
                 for file in fs::read_dir(path)? {
                     let file = file?;
 
@@ -554,6 +570,12 @@ pub(crate) fn install_data(
                         .any(|script| script.name == match_name)
                     {
                         continue;
+                    }
+
+                    // Create the scripts directory, if it doesn't exist.
+                    if !initialized {
+                        fs::create_dir_all(&layout.scheme.scripts)?;
+                        initialized = true;
                     }
 
                     install_script(layout, site_packages, record, &file)?;

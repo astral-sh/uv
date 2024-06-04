@@ -2,8 +2,7 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -12,15 +11,18 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
-use pep508_rs::Requirement;
+use distribution_types::{CachedDist, IndexLocations, Name, Resolution, SourceDist};
+use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
+use uv_configuration::{Concurrency, PreviewMode};
+use uv_distribution::DistributionDatabase;
+use uv_git::GitResolver;
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
-use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, Resolver};
+use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -32,6 +34,7 @@ pub struct BuildDispatch<'a> {
     index_locations: &'a IndexLocations,
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
+    git: &'a GitResolver,
     in_flight: &'a InFlight,
     setup_py: SetupPyStrategy,
     build_isolation: BuildIsolation<'a>,
@@ -42,6 +45,8 @@ pub struct BuildDispatch<'a> {
     source_build_context: SourceBuildContext,
     options: Options,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
+    concurrency: Concurrency,
+    preview_mode: PreviewMode,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -53,6 +58,7 @@ impl<'a> BuildDispatch<'a> {
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
+        git: &'a GitResolver,
         in_flight: &'a InFlight,
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
@@ -60,6 +66,8 @@ impl<'a> BuildDispatch<'a> {
         link_mode: install_wheel_rs::linker::LinkMode,
         no_build: &'a NoBuild,
         no_binary: &'a NoBinary,
+        concurrency: Concurrency,
+        preview_mode: PreviewMode,
     ) -> Self {
         Self {
             client,
@@ -68,6 +76,7 @@ impl<'a> BuildDispatch<'a> {
             index_locations,
             flat_index,
             index,
+            git,
             in_flight,
             setup_py,
             config_settings,
@@ -75,9 +84,11 @@ impl<'a> BuildDispatch<'a> {
             link_mode,
             no_build,
             no_binary,
+            concurrency,
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
             build_extra_env_vars: FxHashMap::default(),
+            preview_mode,
         }
     }
 
@@ -110,6 +121,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.cache
     }
 
+    fn git(&self) -> &GitResolver {
+        self.git
+    }
+
     fn interpreter(&self) -> &Interpreter {
         self.interpreter
     }
@@ -135,20 +150,26 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
+        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()),
             self.options,
-            markers,
-            self.interpreter,
+            &python_requirement,
+            Some(markers),
             tags,
-            self.client,
             self.flat_index,
             self.index,
             &HashStrategy::None,
             self,
-            &EmptyInstalledPackages,
+            EmptyInstalledPackages,
+            DistributionDatabase::new(
+                self.client,
+                self,
+                self.concurrency.downloads,
+                self.preview_mode,
+            ),
         )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
@@ -170,7 +191,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
-    ) -> Result<()> {
+    ) -> Result<Vec<CachedDist>> {
         debug!(
             "Installing in {} in {}",
             resolution
@@ -186,17 +207,18 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         // Determine the set of installed packages.
         let site_packages = SitePackages::from_executable(venv)?;
 
+        let requirements = resolution.requirements().collect::<Vec<_>>();
+
         let Plan {
             cached,
             remote,
-            installed: _,
             reinstalls,
             extraneous: _,
-        } = Planner::with_requirements(&resolution.requirements()).build(
+        } = Planner::new(&requirements).build(
             site_packages,
-            &Reinstall::None,
-            &NoBinary::None,
-            &HashStrategy::None,
+            &Reinstall::default(),
+            &NoBinary::default(),
+            &HashStrategy::default(),
             self.index_locations,
             self.cache(),
             venv,
@@ -206,7 +228,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         // Nothing to do.
         if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
             debug!("No build requirements to install for build");
-            return Ok(());
+            return Ok(vec![]);
         }
 
         // Resolve any registry-based requirements.
@@ -225,8 +247,18 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             vec![]
         } else {
             // TODO(konstin): Check that there is no endless recursion.
-            let downloader =
-                Downloader::new(self.cache, tags, &HashStrategy::None, self.client, self);
+            let downloader = Downloader::new(
+                self.cache,
+                tags,
+                &HashStrategy::None,
+                DistributionDatabase::new(
+                    self.client,
+                    self,
+                    self.concurrency.downloads,
+                    self.preview_mode,
+                ),
+            );
+
             debug!(
                 "Downloading and building requirement{} for build: {}",
                 if remote.len() == 1 { "" } else { "s" },
@@ -270,7 +302,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .context("Failed to install build dependencies")?;
         }
 
-        Ok(())
+        Ok(wheels)
     }
 
     #[instrument(skip_all, fields(version_id = version_id, subdirectory = ?subdirectory))]
@@ -314,8 +346,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.build_isolation,
             build_kind,
             self.build_extra_env_vars.clone(),
+            self.concurrency.builds,
         )
-        .boxed()
+        .boxed_local()
         .await?;
         Ok(builder)
     }

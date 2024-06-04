@@ -1,11 +1,13 @@
+use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 
 use configparser::ini::Ini;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use thiserror::Error;
+use tracing::{trace, warn};
 
 use cache_key::digest;
 use install_wheel_rs::Layout;
@@ -16,10 +18,9 @@ use platform_tags::{Tags, TagsError};
 use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
-use uv_toolchain::PythonVersion;
 
-use crate::Error;
-use crate::Virtualenv;
+use crate::pointer_size::PointerSize;
+use crate::{PythonVersion, Target, VirtualEnvironment};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -33,8 +34,11 @@ pub struct Interpreter {
     base_prefix: PathBuf,
     base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
     tags: OnceCell<Tags>,
+    target: Option<Target>,
+    pointer_size: PointerSize,
     gil_disabled: bool,
 }
 
@@ -56,12 +60,15 @@ impl Interpreter {
             virtualenv: info.virtualenv,
             prefix: info.prefix,
             base_exec_prefix: info.base_exec_prefix,
+            pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
             base_prefix: info.base_prefix,
             base_executable: info.base_executable,
             sys_executable: info.sys_executable,
+            sys_path: info.sys_path,
             stdlib: info.stdlib,
             tags: OnceCell::new(),
+            target: None,
         })
     }
 
@@ -89,19 +96,34 @@ impl Interpreter {
             base_prefix: PathBuf::from("/dev/null"),
             base_executable: None,
             sys_executable: PathBuf::from("/dev/null"),
+            sys_path: vec![],
             stdlib: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
+            target: None,
+            pointer_size: PointerSize::_64,
             gil_disabled: false,
         }
     }
 
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
-    pub fn with_virtualenv(self, virtualenv: Virtualenv) -> Self {
+    pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
         Self {
             scheme: virtualenv.scheme,
             sys_executable: virtualenv.executable,
             prefix: virtualenv.root,
+            target: None,
+            ..self
+        }
+    }
+
+    /// Return a new [`Interpreter`] to install into the given `--target` directory.
+    ///
+    /// Initializes the `--target` directory with the expected layout.
+    #[must_use]
+    pub fn with_target(self, target: Target) -> Self {
+        Self {
+            target: Some(target),
             ..self
         }
     }
@@ -135,7 +157,13 @@ impl Interpreter {
     ///
     /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14>
     pub fn is_virtualenv(&self) -> bool {
+        // Maybe this should return `false` if it's a target?
         self.prefix != self.base_prefix
+    }
+
+    /// Returns `true` if the environment is a `--target` environment.
+    pub fn is_target(&self) -> bool {
+        self.target.is_some()
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -145,6 +173,11 @@ impl Interpreter {
     pub fn is_externally_managed(&self) -> Option<ExternallyManaged> {
         // Per the spec, a virtual environment is never externally managed.
         if self.is_virtualenv() {
+            return None;
+        }
+
+        // If we're installing into a target directory, it's never externally managed.
+        if self.is_target() {
             return None;
         }
 
@@ -178,31 +211,31 @@ impl Interpreter {
 
     /// Returns the Python version.
     #[inline]
-    pub const fn python_version(&self) -> &Version {
-        &self.markers.python_full_version.version
+    pub fn python_version(&self) -> &Version {
+        &self.markers.python_full_version().version
     }
 
     /// Returns the `python_full_version` marker corresponding to this Python version.
     #[inline]
-    pub const fn python_full_version(&self) -> &StringVersion {
-        &self.markers.python_full_version
+    pub fn python_full_version(&self) -> &StringVersion {
+        self.markers.python_full_version()
     }
 
     /// Return the major version of this Python version.
     pub fn python_major(&self) -> u8 {
-        let major = self.markers.python_full_version.version.release()[0];
+        let major = self.markers.python_full_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of this Python version.
     pub fn python_minor(&self) -> u8 {
-        let minor = self.markers.python_full_version.version.release()[1];
+        let minor = self.markers.python_full_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
     /// Return the patch version of this Python version.
     pub fn python_patch(&self) -> u8 {
-        let minor = self.markers.python_full_version.version.release()[2];
+        let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
 
@@ -213,13 +246,13 @@ impl Interpreter {
 
     /// Return the major version of the implementation (e.g., `CPython` or `PyPy`).
     pub fn implementation_major(&self) -> u8 {
-        let major = self.markers.implementation_version.version.release()[0];
+        let major = self.markers.implementation_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of the implementation (e.g., `CPython` or `PyPy`).
     pub fn implementation_minor(&self) -> u8 {
-        let minor = self.markers.implementation_version.version.release()[1];
+        let minor = self.markers.implementation_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
@@ -230,7 +263,7 @@ impl Interpreter {
 
     /// Returns the implementation name (e.g., `CPython` or `PyPy`).
     pub fn implementation_name(&self) -> &str {
-        &self.markers.implementation_name
+        self.markers.implementation_name()
     }
 
     /// Return the `sys.base_exec_prefix` path for this Python interpreter.
@@ -257,6 +290,11 @@ impl Interpreter {
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
+    }
+
+    /// Return the `sys.path` for this Python interpreter.
+    pub fn sys_path(&self) -> &Vec<PathBuf> {
+        &self.sys_path
     }
 
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
@@ -294,6 +332,11 @@ impl Interpreter {
         &self.virtualenv
     }
 
+    /// Return the [`PointerSize`] of the Python interpreter (i.e., 32- vs. 64-bit).
+    pub fn pointer_size(&self) -> PointerSize {
+        self.pointer_size
+    }
+
     /// Return whether this is a Python 3.13+ freethreading Python, as specified by the sysconfig var
     /// `Py_GIL_DISABLED`.
     ///
@@ -303,28 +346,37 @@ impl Interpreter {
         self.gil_disabled
     }
 
+    /// Return the `--target` directory for this interpreter, if any.
+    pub fn target(&self) -> Option<&Target> {
+        self.target.as_ref()
+    }
+
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
     pub fn layout(&self) -> Layout {
         Layout {
             python_version: self.python_tuple(),
             sys_executable: self.sys_executable().to_path_buf(),
-            os_name: self.markers.os_name.clone(),
-            scheme: Scheme {
-                purelib: self.purelib().to_path_buf(),
-                platlib: self.platlib().to_path_buf(),
-                scripts: self.scripts().to_path_buf(),
-                data: self.data().to_path_buf(),
-                include: if self.is_virtualenv() {
-                    // If the interpreter is a venv, then the `include` directory has a different structure.
-                    // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
-                    self.prefix.join("include").join("site").join(format!(
-                        "python{}.{}",
-                        self.python_major(),
-                        self.python_minor()
-                    ))
-                } else {
-                    self.include().to_path_buf()
-                },
+            os_name: self.markers.os_name().to_string(),
+            scheme: if let Some(target) = self.target.as_ref() {
+                target.scheme()
+            } else {
+                Scheme {
+                    purelib: self.purelib().to_path_buf(),
+                    platlib: self.platlib().to_path_buf(),
+                    scripts: self.scripts().to_path_buf(),
+                    data: self.data().to_path_buf(),
+                    include: if self.is_virtualenv() {
+                        // If the interpreter is a venv, then the `include` directory has a different structure.
+                        // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
+                        self.prefix.join("include").join("site").join(format!(
+                            "python{}.{}",
+                            self.python_major(),
+                            self.python_minor()
+                        ))
+                    } else {
+                        self.include().to_path_buf()
+                    },
+                }
             },
         }
     }
@@ -357,6 +409,41 @@ impl ExternallyManaged {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("Failed to query Python interpreter at `{path}`")]
+    SpawnFailed {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Querying Python at `{}` did not return the expected data\n{err}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
+    UnexpectedResponse {
+        err: serde_json::Error,
+        stdout: String,
+        stderr: String,
+        path: PathBuf,
+    },
+
+    #[error("Querying Python at `{}` failed with exit status {code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
+    StatusCode {
+        code: ExitStatus,
+        stdout: String,
+        stderr: String,
+        path: PathBuf,
+    },
+    #[error("Can't use Python at `{path}`")]
+    QueryScript {
+        #[source]
+        err: InterpreterInfoError,
+        path: PathBuf,
+    },
+    #[error("Failed to write to cache")]
+    Encode(#[from] rmp_serde::encode::Error),
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "result", rename_all = "lowercase")]
 enum InterpreterInfoResult {
@@ -371,8 +458,10 @@ pub enum InterpreterInfoError {
     LibcNotFound,
     #[error("Unknown operation system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
-    #[error("Python 2 is not supported. Please use Python 3.8 or newer.")]
-    UnsupportedPythonVersion,
+    #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
+    UnsupportedPythonVersion { python_version: String },
+    #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
+    UnsupportedPython,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -386,7 +475,9 @@ struct InterpreterInfo {
     base_prefix: PathBuf,
     base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
+    pointer_size: PointerSize,
     gil_disabled: bool,
 }
 
@@ -408,41 +499,54 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(|err| Error::PythonSubcommandLaunch {
-                interpreter: interpreter.to_path_buf(),
+            .map_err(|err| Error::SpawnFailed {
+                path: interpreter.to_path_buf(),
                 err,
             })?;
 
         if !output.status.success() {
-            return Err(Error::PythonSubcommandOutput {
-                message: format!(
-                    "Querying Python at `{}` failed with status {}",
-                    interpreter.display(),
-                    output.status,
-                ),
-                exit_code: output.status,
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+            // If the Python version is too old, we may not even be able to invoke the query script
+            if stderr.contains("Unknown option: -I") {
+                return Err(Error::QueryScript {
+                    err: InterpreterInfoError::UnsupportedPython,
+                    path: interpreter.to_path_buf(),
+                });
+            }
+
+            return Err(Error::StatusCode {
+                code: output.status,
+                stderr,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                path: interpreter.to_path_buf(),
             });
         }
 
         let result: InterpreterInfoResult =
             serde_json::from_slice(&output.stdout).map_err(|err| {
-                Error::PythonSubcommandOutput {
-                    message: format!(
-                        "Querying Python at `{}` did not return the expected data: {err}",
-                        interpreter.display(),
-                    ),
-                    exit_code: output.status,
-                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+                // If the Python version is too old, we may not even be able to invoke the query script
+                if stderr.contains("Unknown option: -I") {
+                    Error::QueryScript {
+                        err: InterpreterInfoError::UnsupportedPython,
+                        path: interpreter.to_path_buf(),
+                    }
+                } else {
+                    Error::UnexpectedResponse {
+                        err,
+                        stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                        stderr,
+                        path: interpreter.to_path_buf(),
+                    }
                 }
             })?;
 
         match result {
             InterpreterInfoResult::Error(err) => Err(Error::QueryScript {
                 err,
-                interpreter: interpreter.to_path_buf(),
+                path: interpreter.to_path_buf(),
             }),
             InterpreterInfoResult::Success(data) => Ok(*data),
         }
@@ -491,9 +595,13 @@ impl InterpreterInfo {
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             "",
-            format!("{}.msgpack", digest(&executable)),
+            // We use the absolute path for the cache entry to avoid cache collisions for relative paths
+            // but we do not want to query the executable with symbolic links resolved
+            format!("{}.msgpack", digest(&uv_fs::absolutize_path(executable)?)),
         );
 
+        // We check the timestamp of the canonicalized executable to check if an underlying
+        // interpreter has been modified
         let modified = Timestamp::from_path(uv_fs::canonicalize_executable(executable)?)?;
 
         // Read from the cache.
@@ -505,22 +613,22 @@ impl InterpreterInfo {
                 match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
                     Ok(cached) => {
                         if cached.timestamp == modified {
-                            debug!(
+                            trace!(
                                 "Cached interpreter info for Python {}, skipping probing: {}",
-                                cached.data.markers.python_full_version,
+                                cached.data.markers.python_full_version(),
                                 executable.user_display()
                             );
                             return Ok(cached.data);
                         }
 
-                        debug!(
-                            "Ignoring stale cached markers for: {}",
+                        trace!(
+                            "Ignoring stale interpreter markers for: {}",
                             executable.user_display()
                         );
                     }
                     Err(err) => {
                         warn!(
-                            "Broken cache entry at {}, removing: {err}",
+                            "Broken interpreter cache entry at {}, removing: {err}",
                             cache_entry.path().user_display()
                         );
                         let _ = fs_err::remove_file(cache_entry.path());
@@ -530,13 +638,11 @@ impl InterpreterInfo {
         }
 
         // Otherwise, run the Python script.
-        debug!("Probing interpreter info for: {}", executable.display());
-        let info = Self::query(executable, cache)?;
-        debug!(
-            "Found Python {} for: {}",
-            info.markers.python_full_version,
+        trace!(
+            "Querying interpreter executable at {}",
             executable.display()
         );
+        let info = Self::query(executable, cache)?;
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
@@ -601,6 +707,10 @@ mod tests {
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "prefix": "/home/ferris/projects/uv/.venv",
                 "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
+                "sys_path": [
+                    "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
+                    "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+                ],
                 "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
                 "scheme": {
                     "data": "/home/ferris/.pyenv/versions/3.12.0",
@@ -616,11 +726,12 @@ mod tests {
                     "purelib": "lib/python3.12/site-packages",
                     "scripts": "bin"
                 },
+                "pointer_size": "64",
                 "gil_disabled": true
             }
         "##};
 
-        let cache = Cache::temp().unwrap();
+        let cache = Cache::temp().unwrap().init().unwrap();
 
         fs::write(
             &mocked_interpreter,
@@ -630,6 +741,7 @@ mod tests {
             "##},
         )
         .unwrap();
+
         fs::set_permissions(
             &mocked_interpreter,
             std::os::unix::fs::PermissionsExt::from_mode(0o770),
@@ -637,7 +749,7 @@ mod tests {
         .unwrap();
         let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
-            interpreter.markers.python_version.version,
+            interpreter.markers.python_version().version,
             Version::from_str("3.12").unwrap()
         );
         fs::write(
@@ -650,7 +762,7 @@ mod tests {
         .unwrap();
         let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
-            interpreter.markers.python_version.version,
+            interpreter.markers.python_version().version,
             Version::from_str("3.13").unwrap()
         );
     }

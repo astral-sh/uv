@@ -1,10 +1,7 @@
 use std::future::Future;
 
-use anyhow::Result;
-
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-use uv_client::RegistryClient;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
@@ -46,12 +43,12 @@ pub enum MetadataResponse {
     Offline,
 }
 
-pub trait ResolverProvider: Send + Sync {
+pub trait ResolverProvider {
     /// Get the version map for a package.
     fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
-    ) -> impl Future<Output = PackageVersionsResult> + Send + 'io;
+    ) -> impl Future<Output = PackageVersionsResult> + 'io;
 
     /// Get the metadata for a distribution.
     ///
@@ -61,7 +58,7 @@ pub trait ResolverProvider: Send + Sync {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
-    ) -> impl Future<Output = WheelMetadataResult> + Send + 'io;
+    ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     fn index_locations(&self) -> &IndexLocations;
 
@@ -72,11 +69,9 @@ pub trait ResolverProvider: Send + Sync {
 
 /// The main IO backend for the resolver, which does cached requests network requests using the
 /// [`RegistryClient`] and [`DistributionDatabase`].
-pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
+pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
-    /// The [`RegistryClient`] used to query the index.
-    client: RegistryClient,
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: FlatIndex,
     tags: Tags,
@@ -88,11 +83,10 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     no_build: NoBuild,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
+impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
         tags: &'a Tags,
@@ -105,7 +99,6 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
     ) -> Self {
         Self {
             fetcher,
-            client: client.clone(),
             flat_index: flat_index.clone(),
             tags: tags.clone(),
             python_requirement,
@@ -118,15 +111,19 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
     }
 }
 
-impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
-    for DefaultResolverProvider<'a, Context>
-{
+impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a, Context> {
     /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
     ) -> PackageVersionsResult {
-        match self.client.simple(package_name).await {
+        let result = self
+            .fetcher
+            .client()
+            .managed(|client| client.simple(package_name))
+            .await;
+
+        match result {
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()

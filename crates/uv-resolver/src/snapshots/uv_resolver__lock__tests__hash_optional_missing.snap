@@ -1,0 +1,99 @@
+---
+source: crates/uv-resolver/src/lock.rs
+expression: result
+---
+Ok(
+    Lock {
+        version: 1,
+        distributions: [
+            Distribution {
+                id: DistributionId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: "4.3.0",
+                    source: Source {
+                        kind: Path,
+                        url: Url {
+                            scheme: "file",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: None,
+                            port: None,
+                            path: "/foo/bar",
+                            query: None,
+                            fragment: None,
+                        },
+                    },
+                },
+                marker: None,
+                sdist: None,
+                wheels: [
+                    Wheel {
+                        url: Url {
+                            scheme: "file",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: None,
+                            port: None,
+                            path: "/foo/bar/anyio-4.3.0-py3-none-any.whl",
+                            query: None,
+                            fragment: None,
+                        },
+                        hash: Some(
+                            Hash(
+                                HashDigest {
+                                    algorithm: Sha256,
+                                    digest: "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8",
+                                },
+                            ),
+                        ),
+                        size: None,
+                        filename: WheelFilename {
+                            name: PackageName(
+                                "anyio",
+                            ),
+                            version: "4.3.0",
+                            build_tag: None,
+                            python_tag: [
+                                "py3",
+                            ],
+                            abi_tag: [
+                                "none",
+                            ],
+                            platform_tag: [
+                                "any",
+                            ],
+                        },
+                    },
+                ],
+                dependencies: [],
+                optional_dependencies: {},
+            },
+        ],
+        by_id: {
+            DistributionId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: "4.3.0",
+                source: Source {
+                    kind: Path,
+                    url: Url {
+                        scheme: "file",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: None,
+                        port: None,
+                        path: "/foo/bar",
+                        query: None,
+                        fragment: None,
+                    },
+                },
+            }: 0,
+        },
+    },
+)

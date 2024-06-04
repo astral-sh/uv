@@ -16,25 +16,36 @@ workspace = true
 cache-key = { workspace = true }
 install-wheel-rs = { workspace = true }
 pep440_rs = { workspace = true }
-pep508_rs = { workspace = true, features = ["serde"] }
+pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-cache = { workspace = true }
+uv-configuration = { workspace = true }
+uv-client = { workspace = true }
+uv-extract = { workspace = true }
 uv-fs = { workspace = true }
-uv-toolchain = { workspace = true }
+uv-state = { workspace = true }
 uv-warnings = { workspace = true }
 
+anyhow = { workspace = true }
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
+itertools = { workspace = true }
+futures = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
 same-file = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
+url = { workspace = true }
 which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -42,7 +53,9 @@ winapi = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }
+assert_fs = { version = "1.1.1" }
 indoc = { version = "2.0.4" }
-insta = { version = "1.36.1", features = ["filters"] }
-itertools = { version = "0.12.1" }
+itertools = { version = "0.13.0" }
+temp-env = { version = "0.3.6" }
 tempfile = { version = "3.9.0" }
+test-log = { version = "0.2.15", features = ["trace"], default-features = false }

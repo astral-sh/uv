@@ -196,13 +196,9 @@ impl NoBuild {
     }
 }
 
-#[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(deny_unknown_fields, rename_all = "kebab-case")
-)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum IndexStrategy {
     /// Only use results from the first index that returns a match for a given package name.
@@ -210,7 +206,8 @@ pub enum IndexStrategy {
     /// While this differs from pip's behavior, it's the default index strategy as it's the most
     /// secure.
     #[default]
-    FirstMatch,
+    #[cfg_attr(feature = "clap", clap(alias = "first-match"))]
+    FirstIndex,
     /// Search for every package name across all indexes, exhausting the versions from the first
     /// index before moving on to the next.
     ///
@@ -221,8 +218,24 @@ pub enum IndexStrategy {
     /// even if the secondary index might contain compatible versions (e.g., variants of the same
     /// versions with different ABI tags or Python version constraints).
     ///
-    /// See: https://peps.python.org/pep-0708/
-    UnsafeAnyMatch,
+    /// See: <https://peps.python.org/pep-0708/>
+    #[cfg_attr(feature = "clap", clap(alias = "unsafe-any-match"))]
+    #[serde(alias = "unsafe-any-match")]
+    UnsafeFirstMatch,
+    /// Search for every package name across all indexes, preferring the "best" version found. If a
+    /// package version is in multiple indexes, only look at the entry for the first index.
+    ///
+    /// In this strategy, we look for every package across all indexes. When resolving, we consider
+    /// all versions from all indexes, choosing the "best" version found (typically, the highest
+    /// compatible version).
+    ///
+    /// This most closely matches pip's behavior, but exposes the resolver to "dependency confusion"
+    /// attacks whereby malicious actors can publish packages to public indexes with the same name
+    /// as internal packages, causing the resolver to install the malicious package in lieu of
+    /// the intended internal package.
+    ///
+    /// See: <https://peps.python.org/pep-0708/>
+    UnsafeBestMatch,
 }
 
 #[cfg(test)]

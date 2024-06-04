@@ -7,8 +7,9 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
-    Dist, Hash, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    SourceDistCompatibility, WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    PythonRequirementKind, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::{TagCompatibility, Tags};
@@ -396,11 +397,11 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
-                        let dist = Dist::from_registry(
-                            DistFilename::WheelFilename(filename),
-                            file,
-                            self.index.clone(),
-                        );
+                        let dist = RegistryBuiltWheel {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                        };
                         priority_dist.insert_built(dist, hashes, compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
@@ -412,11 +413,13 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
-                        let dist = Dist::from_registry(
-                            DistFilename::SourceDistFilename(filename),
-                            file,
-                            self.index.clone(),
-                        );
+                        let dist = RegistrySourceDist {
+                            name: filename.name.clone(),
+                            version: filename.version.clone(),
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                            wheels: vec![],
+                        };
                         priority_dist.insert_source(dist, hashes, compatibility);
                     }
                 }
@@ -463,28 +466,37 @@ impl VersionMapLazy {
         // Source distributions must meet both the _target_ Python version and the
         // _installed_ Python version (to build successfully)
         if let Some(requires_python) = requires_python {
-            if !requires_python.contains(self.python_requirement.target())
-                || !requires_python.contains(self.python_requirement.installed())
-            {
+            if let Some(target) = self.python_requirement.target() {
+                if !requires_python.contains(target) {
+                    return SourceDistCompatibility::Incompatible(
+                        IncompatibleSource::RequiresPython(
+                            requires_python,
+                            PythonRequirementKind::Target,
+                        ),
+                    );
+                }
+            }
+            if !requires_python.contains(self.python_requirement.installed()) {
                 return SourceDistCompatibility::Incompatible(IncompatibleSource::RequiresPython(
                     requires_python,
+                    PythonRequirementKind::Installed,
                 ));
             }
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
         let hash = if self.required_hashes.is_empty() {
-            Hash::Matched
+            HashComparison::Matched
         } else {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if hashes
                 .iter()
                 .any(|hash| self.required_hashes.contains(hash))
             {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         };
 
@@ -521,10 +533,20 @@ impl VersionMapLazy {
 
         // Check for a Python version incompatibility`
         if let Some(requires_python) = requires_python {
-            if !requires_python.contains(self.python_requirement.target()) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
-                    requires_python,
-                ));
+            if let Some(target) = self.python_requirement.target() {
+                if !requires_python.contains(target) {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
+                        requires_python,
+                        PythonRequirementKind::Target,
+                    ));
+                }
+            } else {
+                if !requires_python.contains(self.python_requirement.installed()) {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
+                        requires_python,
+                        PythonRequirementKind::Installed,
+                    ));
+                }
             }
         }
 
@@ -538,21 +560,24 @@ impl VersionMapLazy {
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
         let hash = if self.required_hashes.is_empty() {
-            Hash::Matched
+            HashComparison::Matched
         } else {
             if hashes.is_empty() {
-                Hash::Missing
+                HashComparison::Missing
             } else if hashes
                 .iter()
                 .any(|hash| self.required_hashes.contains(hash))
             {
-                Hash::Matched
+                HashComparison::Matched
             } else {
-                Hash::Mismatched
+                HashComparison::Mismatched
             }
         };
 
-        WheelCompatibility::Compatible(hash, priority)
+        // Break ties with the build tag.
+        let build_tag = filename.build_tag.clone();
+
+        WheelCompatibility::Compatible(hash, priority, build_tag)
     }
 }
 

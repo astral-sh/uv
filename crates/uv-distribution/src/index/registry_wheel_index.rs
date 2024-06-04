@@ -94,10 +94,10 @@ impl<'a> RegistryWheelIndex<'a> {
             .filter_map(|flat_index| match flat_index {
                 FlatIndexLocation::Path(path) => {
                     let path = fs_err::canonicalize(path).ok()?;
-                    Some(IndexUrl::Path(VerbatimUrl::from_path(path)))
+                    Some(IndexUrl::Path(VerbatimUrl::from_path(path).ok()?))
                 }
                 FlatIndexLocation::Url(url) => {
-                    Some(IndexUrl::Url(VerbatimUrl::unknown(url.clone())))
+                    Some(IndexUrl::Url(VerbatimUrl::from_url(url.clone())))
                 }
             })
             .collect();

@@ -3,9 +3,10 @@ use pep508_rs::PackageName;
 use rustc_hash::FxHashSet;
 
 /// Whether to reinstall packages.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum Reinstall {
     /// Don't reinstall any packages; respect the existing installation.
+    #[default]
     None,
 
     /// Reinstall all packages in the plan.
@@ -17,13 +18,17 @@ pub enum Reinstall {
 
 impl Reinstall {
     /// Determine the reinstall strategy to use.
-    pub fn from_args(reinstall: bool, reinstall_package: Vec<PackageName>) -> Self {
-        if reinstall {
-            Self::All
-        } else if !reinstall_package.is_empty() {
-            Self::Packages(reinstall_package)
-        } else {
-            Self::None
+    pub fn from_args(reinstall: Option<bool>, reinstall_package: Vec<PackageName>) -> Self {
+        match reinstall {
+            Some(true) => Self::All,
+            Some(false) => Self::None,
+            None => {
+                if reinstall_package.is_empty() {
+                    Self::None
+                } else {
+                    Self::Packages(reinstall_package)
+                }
+            }
         }
     }
 
@@ -39,9 +44,10 @@ impl Reinstall {
 }
 
 /// Whether to allow package upgrades.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum Upgrade {
     /// Prefer pinned versions from the existing lockfile, if possible.
+    #[default]
     None,
 
     /// Allow package upgrades for all packages, ignoring the existing lockfile.
@@ -53,13 +59,17 @@ pub enum Upgrade {
 
 impl Upgrade {
     /// Determine the upgrade strategy from the command-line arguments.
-    pub fn from_args(upgrade: bool, upgrade_package: Vec<PackageName>) -> Self {
-        if upgrade {
-            Self::All
-        } else if !upgrade_package.is_empty() {
-            Self::Packages(upgrade_package.into_iter().collect())
-        } else {
-            Self::None
+    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<PackageName>) -> Self {
+        match upgrade {
+            Some(true) => Self::All,
+            Some(false) => Self::None,
+            None => {
+                if upgrade_package.is_empty() {
+                    Self::None
+                } else {
+                    Self::Packages(upgrade_package.into_iter().collect())
+                }
+            }
         }
     }
 

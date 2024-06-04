@@ -1,23 +1,17 @@
 use std::cmp::Reverse;
-use std::path::Path;
 use std::sync::Arc;
 
-use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
+use pep508_rs::PackageName;
 use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
 
-use distribution_types::{
-    BuildableSource, CachedDist, Dist, Hashed, Identifier, LocalEditable, LocalEditables,
-    RemoteSource,
-};
+use distribution_types::{BuildableSource, CachedDist, Dist, Hashed, Identifier, RemoteSource};
 use platform_tags::Tags;
 use uv_cache::Cache;
-use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_types::{BuildContext, HashStrategy, InFlight};
-
-use crate::editable::BuiltEditable;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -37,7 +31,7 @@ pub enum Error {
 }
 
 /// Download, build, and unzip a set of distributions.
-pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
+pub struct Downloader<'a, Context: BuildContext> {
     tags: &'a Tags,
     cache: &'a Cache,
     hashes: &'a HashStrategy,
@@ -45,19 +39,18 @@ pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
+impl<'a, Context: BuildContext> Downloader<'a, Context> {
     pub fn new(
         cache: &'a Cache,
         tags: &'a Tags,
         hashes: &'a HashStrategy,
-        client: &'a RegistryClient,
-        build_context: &'a Context,
+        database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             tags,
             cache,
             hashes,
-            database: DistributionDatabase::new(client, build_context),
+            database,
             reporter: None,
         }
     }
@@ -81,17 +74,16 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         distributions: Vec<Dist>,
         in_flight: &'stream InFlight,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
-        futures::stream::iter(distributions)
+        distributions
+            .into_iter()
             .map(|dist| async {
-                let wheel = self.get_wheel(dist, in_flight).boxed().await?;
+                let wheel = self.get_wheel(dist, in_flight).boxed_local().await?;
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
                 Ok::<CachedDist, Error>(wheel)
             })
-            // TODO(charlie): The number of concurrent fetches, such that we limit the number of
-            // concurrent builds to the number of cores, while allowing more concurrent downloads.
-            .buffer_unordered(50)
+            .collect::<FuturesUnordered<_>>()
     }
 
     /// Download, build, and unzip a set of downloaded wheels.
@@ -117,64 +109,17 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         Ok(wheels)
     }
 
-    /// Build a set of editables
-    #[instrument(skip_all)]
-    pub async fn build_editables(
-        &self,
-        editables: LocalEditables,
-        editable_wheel_dir: &Path,
-    ) -> Result<Vec<BuiltEditable>, Error> {
-        // Build editables in parallel
-        let mut results = Vec::with_capacity(editables.len());
-        let mut fetches = futures::stream::iter(editables)
-            .map(|editable| async move {
-                let task_id = self
-                    .reporter
-                    .as_ref()
-                    .map(|reporter| reporter.on_editable_build_start(&editable));
-                let (local_wheel, metadata) = self
-                    .database
-                    .build_wheel_editable(&editable, editable_wheel_dir)
-                    .await
-                    .map_err(Error::Editable)?;
-                let cached_dist = CachedDist::from(local_wheel);
-                if let Some(task_id) = task_id {
-                    if let Some(reporter) = &self.reporter {
-                        reporter.on_editable_build_complete(&editable, task_id);
-                    }
-                }
-                Ok::<_, Error>((editable, cached_dist, metadata))
-            })
-            .buffer_unordered(50);
-
-        while let Some((editable, wheel, metadata)) = fetches.next().await.transpose()? {
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_progress(&wheel);
-            }
-            results.push(BuiltEditable {
-                editable,
-                wheel,
-                metadata,
-            });
-        }
-
-        if let Some(reporter) = self.reporter.as_ref() {
-            reporter.on_complete();
-        }
-
-        Ok(results)
-    }
-
     /// Download, build, and unzip a single wheel.
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
         if in_flight.downloads.register(id.clone()) {
             let policy = self.hashes.get(&dist);
+
             let result = self
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
-                .boxed()
+                .boxed_local()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
                 .await
                 .and_then(|wheel: LocalWheel| {
@@ -225,17 +170,21 @@ pub trait Reporter: Send + Sync {
     /// Callback to invoke when the operation is complete.
     fn on_complete(&self);
 
+    /// Callback to invoke when a download is kicked off.
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize;
+
+    /// Callback to invoke when a download makes progress (i.e. some number of bytes are
+    /// downloaded).
+    fn on_download_progress(&self, index: usize, bytes: u64);
+
+    /// Callback to invoke when a download is complete.
+    fn on_download_complete(&self, name: &PackageName, index: usize);
+
     /// Callback to invoke when a source distribution build is kicked off.
     fn on_build_start(&self, source: &BuildableSource) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
     fn on_build_complete(&self, source: &BuildableSource, id: usize);
-
-    /// Callback to invoke when a editable build is kicked off.
-    fn on_editable_build_start(&self, dist: &LocalEditable) -> usize;
-
-    /// Callback to invoke when a editable build is complete.
-    fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -270,5 +219,17 @@ impl uv_distribution::Reporter for Facade {
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
         self.reporter.on_checkout_complete(url, rev, index);
+    }
+
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+        self.reporter.on_download_start(name, size)
+    }
+
+    fn on_download_progress(&self, index: usize, inc: u64) {
+        self.reporter.on_download_progress(index, inc);
+    }
+
+    fn on_download_complete(&self, name: &PackageName, index: usize) {
+        self.reporter.on_download_complete(name, index);
     }
 }

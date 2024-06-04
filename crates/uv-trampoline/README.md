@@ -1,9 +1,77 @@
 # Windows trampolines
 
-This is a fork
-of [posy trampolines](https://github.com/njsmith/posy/tree/dda22e6f90f5fefa339b869dd2bbe107f5b48448/src/trampolines/windows-trampolines/posy-trampoline).
+This is a fork of [posy trampolines](https://github.com/njsmith/posy/tree/dda22e6f90f5fefa339b869dd2bbe107f5b48448/src/trampolines/windows-trampolines/posy-trampoline).
 
-# What is this?
+## Building
+
+### Cross-compiling from Linux
+
+Install [cargo xwin](https://github.com/rust-cross/cargo-xwin). Use your
+package manager to install LLD and add the `rustup` targets:
+
+```shell
+sudo apt install llvm clang lld
+rustup target add i686-pc-windows-msvc
+rustup target add x86_64-pc-windows-msvc
+rustup target add aarch64-pc-windows-msvc
+```
+
+Then, build the trampolines for both supported architectures:
+
+```shell
+cargo +nightly-2024-05-27 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target aarch64-pc-windows-msvc
+```
+
+### Cross-compiling from macOS
+
+Install [cargo xwin](https://github.com/rust-cross/cargo-xwin). Use your
+package manager to install LLVM and add the `rustup` targets:
+
+```shell
+brew install llvm
+rustup target add i686-pc-windows-msvc
+rustup target add x86_64-pc-windows-msvc
+rustup target add aarch64-pc-windows-msvc
+```
+
+Then, build the trampolines for both supported architectures:
+
+```shell
+cargo +nightly-2024-05-27 xwin build --release --target i686-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-05-27 xwin build --release --target aarch64-pc-windows-msvc
+```
+
+### Updating the prebuilt executables
+
+After building the trampolines for both supported architectures:
+
+```shell
+cp target/aarch64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-aarch64-console.exe
+cp target/aarch64-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-aarch64-gui.exe
+cp target/x86_64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-x86_64-console.exe
+cp target/x86_64-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-x86_64-gui.exe
+cp target/i686-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-i686-console.exe
+cp target/i686-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-i686-gui.exe
+```
+
+### Testing the trampolines
+
+To perform a basic smoke test of the trampolines, run the following commands on a Windows machine, from the root of the
+repository:
+
+```shell
+cargo clean
+cargo run venv
+cargo run pip install black
+.venv\Scripts\black --version
+```
+
+## Background
+
+### What is this?
 
 Sometimes you want to run a tool on Windows that's written in Python, like
 `black` or `mypy` or `jupyter` or whatever. But, Windows does not know how to
@@ -14,7 +82,7 @@ That's what this does: it's a generic "trampoline" that lets us generate custom
 `.exe`s for arbitrary Python scripts, and when invoked it bounces to invoking
 `python <the script>` instead.
 
-# How do you use it?
+### How do you use it?
 
 Basically, this looks up `python.exe` (for console programs) or
 `pythonw.exe` (for GUI programs) in the adjacent directory, and invokes
@@ -41,7 +109,7 @@ Then when you run `python` on the `.exe`, it will see the `.zip` trailer at the
 end of the `.exe`, and automagically look inside to find and execute
 `__main__.py`. Easy-peasy.
 
-# Why does this exist?
+### Why does this exist?
 
 I probably could have used Vinay's C++ implementation from `distlib`, but what's
 the fun in that? In particular, optimizing for binary size was entertaining
@@ -54,7 +122,7 @@ Python-finding logic we want. But mostly it was just an interesting challenge.
 This does owe a *lot* to the `distlib` implementation though. The overall logic
 is copied more-or-less directly.
 
-# Anything I should know for hacking on this?
+### Anything I should know for hacking on this?
 
 In order to minimize binary size, this uses `#![no_std]`, `panic="abort"`, and
 carefully avoids using `core::fmt`. This removes a bunch of runtime overhead: by
@@ -91,7 +159,7 @@ Miscellaneous tips:
   `.unwrap_unchecked()` avoids this. Similar for `slice[idx]` vs
   `slice.get_unchecked(idx)`.
 
-# How do you build this stupid thing?
+### How do you build this stupid thing?
 
 Building this can be frustrating, because the low-level compiler/runtime
 machinery have a bunch of implicit assumptions about the environment they'll run
@@ -105,6 +173,7 @@ might not realize that, and still emit references to the unwinding helper
 exist.
 
 ```
+cargo build --release --target i686-pc-windows-msvc
 cargo build --release --target x86_64-pc-windows-msvc
 cargo build --release --target aarch64-pc-windows-msvc
 ```
@@ -112,19 +181,3 @@ cargo build --release --target aarch64-pc-windows-msvc
 Hopefully in the future as `#![no_std]` develops, this will get smoother.
 
 Also, sometimes it helps to fiddle with optimization levels.
-
-# Cross compiling from linux
-
-Install [cargo xwin](https://github.com/rust-cross/cargo-xwin). Use your
-package manager to install LLD and add the rustup targets:
-
-```shell
-sudo apt install llvm clang lld
-rustup target add x86_64-pc-windows-msvc
-rustup target add aarch64-pc-windows-msvc
-```
-
-```shell
-cargo +nightly-2024-03-19 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2024-03-19 xwin build --release --target aarch64-pc-windows-msvc
-```

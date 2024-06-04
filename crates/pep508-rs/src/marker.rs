@@ -9,20 +9,24 @@
 //! outcomes. This implementation tries to carefully validate everything and emit warnings whenever
 //! bogus comparisons with unintended semantics are made.
 
-use crate::{Cursor, Pep508Error, Pep508ErrorSource};
-use pep440_rs::{Version, VersionPattern, VersionSpecifier};
+use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+use std::str::FromStr;
+use std::sync::Arc;
+
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, types::PyAnyMethods, PyResult,
     Python,
 };
-#[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashSet;
-use std::fmt::{Display, Formatter};
-use std::ops::Deref;
-use std::str::FromStr;
+
+use pep440_rs::{Version, VersionParseError, VersionPattern, VersionSpecifier};
 use uv_normalize::ExtraName;
+
+use crate::cursor::Cursor;
+use crate::{Pep508Error, Pep508ErrorSource, Pep508Url, Reporter, TracingReporter};
 
 /// Ways in which marker evaluation can fail
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
@@ -59,7 +63,7 @@ impl MarkerWarningKind {
 }
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(clippy::enum_variant_names)]
 pub enum MarkerValueVersion {
     /// `implementation_version`
@@ -81,7 +85,7 @@ impl Display for MarkerValueVersion {
 }
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueString {
     /// `implementation_name`
     ImplementationName,
@@ -138,7 +142,7 @@ impl Display for MarkerValueString {
 /// One of the predefined environment values
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValue {
     /// Those environment markers with a PEP 440 version as value such as `python_version`
     MarkerEnvVersion(MarkerValueVersion),
@@ -210,7 +214,7 @@ impl Display for MarkerValue {
 }
 
 /// How to compare key and value, such as by `==`, `>` or `not in`
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerOperator {
     /// `==`
     Equal,
@@ -234,7 +238,7 @@ pub enum MarkerOperator {
 
 impl MarkerOperator {
     /// Compare two versions, returning None for `in` and `not in`
-    fn to_pep440_operator(&self) -> Option<pep440_rs::Operator> {
+    fn to_pep440_operator(self) -> Option<pep440_rs::Operator> {
         match self {
             Self::Equal => Some(pep440_rs::Operator::Equal),
             Self::NotEqual => Some(pep440_rs::Operator::NotEqual),
@@ -308,12 +312,12 @@ pub struct StringVersion {
 }
 
 impl FromStr for StringVersion {
-    type Err = String;
+    type Err = VersionParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self {
             string: s.to_string(),
-            version: Version::from_str(s).map_err(|e| e.to_string())?,
+            version: Version::from_str(s)?,
         })
     }
 }
@@ -324,7 +328,6 @@ impl Display for StringVersion {
     }
 }
 
-#[cfg(feature = "serde")]
 impl Serialize for StringVersion {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -334,7 +337,6 @@ impl Serialize for StringVersion {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for StringVersion {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -359,55 +361,295 @@ impl Deref for StringVersion {
 ///
 /// Some are `(String, Version)` because we have to support version comparison
 #[allow(missing_docs, clippy::unsafe_derive_deserialize)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 pub struct MarkerEnvironment {
-    pub implementation_name: String,
-    pub implementation_version: StringVersion,
-    pub os_name: String,
-    pub platform_machine: String,
-    pub platform_python_implementation: String,
-    pub platform_release: String,
-    pub platform_system: String,
-    pub platform_version: String,
-    pub python_full_version: StringVersion,
-    pub python_version: StringVersion,
-    pub sys_platform: String,
+    #[serde(flatten)]
+    inner: Arc<MarkerEnvironmentInner>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+struct MarkerEnvironmentInner {
+    implementation_name: String,
+    implementation_version: StringVersion,
+    os_name: String,
+    platform_machine: String,
+    platform_python_implementation: String,
+    platform_release: String,
+    platform_system: String,
+    platform_version: String,
+    python_full_version: StringVersion,
+    python_version: StringVersion,
+    sys_platform: String,
 }
 
 impl MarkerEnvironment {
     /// Returns of the PEP 440 version typed value of the key in the current environment
     pub fn get_version(&self, key: &MarkerValueVersion) -> &Version {
         match key {
-            MarkerValueVersion::ImplementationVersion => &self.implementation_version.version,
-            MarkerValueVersion::PythonFullVersion => &self.python_full_version.version,
-            MarkerValueVersion::PythonVersion => &self.python_version.version,
+            MarkerValueVersion::ImplementationVersion => &self.implementation_version().version,
+            MarkerValueVersion::PythonFullVersion => &self.python_full_version().version,
+            MarkerValueVersion::PythonVersion => &self.python_version().version,
         }
     }
 
     /// Returns of the stringly typed value of the key in the current environment
     pub fn get_string(&self, key: &MarkerValueString) -> &str {
         match key {
-            MarkerValueString::ImplementationName => &self.implementation_name,
-            MarkerValueString::OsName | MarkerValueString::OsNameDeprecated => &self.os_name,
+            MarkerValueString::ImplementationName => self.implementation_name(),
+            MarkerValueString::OsName | MarkerValueString::OsNameDeprecated => self.os_name(),
             MarkerValueString::PlatformMachine | MarkerValueString::PlatformMachineDeprecated => {
-                &self.platform_machine
+                self.platform_machine()
             }
             MarkerValueString::PlatformPythonImplementation
             | MarkerValueString::PlatformPythonImplementationDeprecated
             | MarkerValueString::PythonImplementationDeprecated => {
-                &self.platform_python_implementation
+                self.platform_python_implementation()
             }
-            MarkerValueString::PlatformRelease => &self.platform_release,
-            MarkerValueString::PlatformSystem => &self.platform_system,
+            MarkerValueString::PlatformRelease => self.platform_release(),
+            MarkerValueString::PlatformSystem => self.platform_system(),
             MarkerValueString::PlatformVersion | MarkerValueString::PlatformVersionDeprecated => {
-                &self.platform_version
+                self.platform_version()
             }
             MarkerValueString::SysPlatform | MarkerValueString::SysPlatformDeprecated => {
-                &self.sys_platform
+                self.sys_platform()
             }
         }
+    }
+}
+
+/// APIs for retrieving specific parts of a marker environment.
+impl MarkerEnvironment {
+    /// Returns the name of the Python implementation for this environment.
+    ///
+    /// This is equivalent to `sys.implementation.name`.
+    ///
+    /// Some example values are: `cpython`.
+    #[inline]
+    pub fn implementation_name(&self) -> &str {
+        &self.inner.implementation_name
+    }
+
+    /// Returns the Python implementation version for this environment.
+    ///
+    /// This value is derived from `sys.implementation.version`. See [PEP 508
+    /// environment markers] for full details.
+    ///
+    /// This is equivalent to `sys.implementation.name`.
+    ///
+    /// Some example values are: `3.4.0`, `3.5.0b1`.
+    ///
+    /// [PEP 508 environment markers]: https://peps.python.org/pep-0508/#environment-markers
+    #[inline]
+    pub fn implementation_version(&self) -> &StringVersion {
+        &self.inner.implementation_version
+    }
+
+    /// Returns the name of the operating system for this environment.
+    ///
+    /// This is equivalent to `os.name`.
+    ///
+    /// Some example values are: `posix`, `java`.
+    #[inline]
+    pub fn os_name(&self) -> &str {
+        &self.inner.os_name
+    }
+
+    /// Returns the name of the machine for this environment's platform.
+    ///
+    /// This is equivalent to `platform.machine()`.
+    ///
+    /// Some example values are: `x86_64`.
+    #[inline]
+    pub fn platform_machine(&self) -> &str {
+        &self.inner.platform_machine
+    }
+
+    /// Returns the name of the Python implementation for this environment's
+    /// platform.
+    ///
+    /// This is equivalent to `platform.python_implementation()`.
+    ///
+    /// Some example values are: `CPython`, `Jython`.
+    #[inline]
+    pub fn platform_python_implementation(&self) -> &str {
+        &self.inner.platform_python_implementation
+    }
+
+    /// Returns the release for this environment's platform.
+    ///
+    /// This is equivalent to `platform.release()`.
+    ///
+    /// Some example values are: `3.14.1-x86_64-linode39`, `14.5.0`, `1.8.0_51`.
+    #[inline]
+    pub fn platform_release(&self) -> &str {
+        &self.inner.platform_release
+    }
+
+    /// Returns the system for this environment's platform.
+    ///
+    /// This is equivalent to `platform.system()`.
+    ///
+    /// Some example values are: `Linux`, `Windows`, `Java`.
+    #[inline]
+    pub fn platform_system(&self) -> &str {
+        &self.inner.platform_system
+    }
+
+    /// Returns the version for this environment's platform.
+    ///
+    /// This is equivalent to `platform.version()`.
+    ///
+    /// Some example values are: `#1 SMP Fri Apr 25 13:07:35 EDT 2014`,
+    /// `Java HotSpot(TM) 64-Bit Server VM, 25.51-b03, Oracle Corporation`,
+    /// `Darwin Kernel Version 14.5.0: Wed Jul 29 02:18:53 PDT 2015;
+    /// root:xnu-2782.40.9~2/RELEASE_X86_64`.
+    #[inline]
+    pub fn platform_version(&self) -> &str {
+        &self.inner.platform_version
+    }
+
+    /// Returns the full version of Python for this environment.
+    ///
+    /// This is equivalent to `platform.python_version()`.
+    ///
+    /// Some example values are: `3.4.0`, `3.5.0b1`.
+    #[inline]
+    pub fn python_full_version(&self) -> &StringVersion {
+        &self.inner.python_full_version
+    }
+
+    /// Returns the version of Python for this environment.
+    ///
+    /// This is equivalent to `'.'.join(platform.python_version_tuple()[:2])`.
+    ///
+    /// Some example values are: `3.4`, `2.7`.
+    #[inline]
+    pub fn python_version(&self) -> &StringVersion {
+        &self.inner.python_version
+    }
+
+    /// Returns the name of the system platform for this environment.
+    ///
+    /// This is equivalent to `sys.platform`.
+    ///
+    /// Some example values are: `linux`, `linux2`, `darwin`, `java1.8.0_51`
+    /// (note that `linux` is from Python3 and `linux2` from Python2).
+    #[inline]
+    pub fn sys_platform(&self) -> &str {
+        &self.inner.sys_platform
+    }
+}
+
+/// APIs for setting specific parts of a marker environment.
+impl MarkerEnvironment {
+    /// Set the name of the Python implementation for this environment.
+    ///
+    /// See also [`MarkerEnvironment::implementation_name`].
+    #[inline]
+    pub fn with_implementation_name(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).implementation_name = value.into();
+        self
+    }
+
+    /// Set the Python implementation version for this environment.
+    ///
+    /// See also [`MarkerEnvironment::implementation_version`].
+    #[inline]
+    pub fn with_implementation_version(
+        mut self,
+        value: impl Into<StringVersion>,
+    ) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).implementation_version = value.into();
+        self
+    }
+
+    /// Set the name of the operating system for this environment.
+    ///
+    /// See also [`MarkerEnvironment::os_name`].
+    #[inline]
+    pub fn with_os_name(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).os_name = value.into();
+        self
+    }
+
+    /// Set the name of the machine for this environment's platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_machine`].
+    #[inline]
+    pub fn with_platform_machine(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_machine = value.into();
+        self
+    }
+
+    /// Set the name of the Python implementation for this environment's
+    /// platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_python_implementation`].
+    #[inline]
+    pub fn with_platform_python_implementation(
+        mut self,
+        value: impl Into<String>,
+    ) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_python_implementation = value.into();
+        self
+    }
+
+    /// Set the release for this environment's platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_release`].
+    #[inline]
+    pub fn with_platform_release(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_release = value.into();
+        self
+    }
+
+    /// Set the system for this environment's platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_system`].
+    #[inline]
+    pub fn with_platform_system(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_system = value.into();
+        self
+    }
+
+    /// Set the version for this environment's platform.
+    ///
+    /// See also [`MarkerEnvironment::platform_version`].
+    #[inline]
+    pub fn with_platform_version(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).platform_version = value.into();
+        self
+    }
+
+    /// Set the full version of Python for this environment.
+    ///
+    /// See also [`MarkerEnvironment::python_full_version`].
+    #[inline]
+    pub fn with_python_full_version(
+        mut self,
+        value: impl Into<StringVersion>,
+    ) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).python_full_version = value.into();
+        self
+    }
+
+    /// Set the version of Python for this environment.
+    ///
+    /// See also [`MarkerEnvironment::python_full_version`].
+    #[inline]
+    pub fn with_python_version(mut self, value: impl Into<StringVersion>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).python_version = value.into();
+        self
+    }
+
+    /// Set the name of the system platform for this environment.
+    ///
+    /// See also [`MarkerEnvironment::sys_platform`].
+    #[inline]
+    pub fn with_sys_platform(mut self, value: impl Into<String>) -> MarkerEnvironment {
+        Arc::make_mut(&mut self.inner).sys_platform = value.into();
+        self
     }
 }
 
@@ -460,17 +702,19 @@ impl MarkerEnvironment {
             ))
         })?;
         Ok(Self {
-            implementation_name: implementation_name.to_string(),
-            implementation_version,
-            os_name: os_name.to_string(),
-            platform_machine: platform_machine.to_string(),
-            platform_python_implementation: platform_python_implementation.to_string(),
-            platform_release: platform_release.to_string(),
-            platform_system: platform_system.to_string(),
-            platform_version: platform_version.to_string(),
-            python_full_version,
-            python_version,
-            sys_platform: sys_platform.to_string(),
+            inner: Arc::new(MarkerEnvironmentInner {
+                implementation_name: implementation_name.to_string(),
+                implementation_version,
+                os_name: os_name.to_string(),
+                platform_machine: platform_machine.to_string(),
+                platform_python_implementation: platform_python_implementation.to_string(),
+                platform_release: platform_release.to_string(),
+                platform_system: platform_system.to_string(),
+                platform_version: platform_version.to_string(),
+                python_full_version,
+                python_version,
+                sys_platform: sys_platform.to_string(),
+            }),
         })
     }
 
@@ -522,202 +766,586 @@ impl MarkerEnvironment {
             ))
         })?;
         Ok(Self {
-            implementation_name: name,
-            implementation_version,
-            os_name: os.getattr("name")?.extract()?,
-            platform_machine: platform.getattr("machine")?.call0()?.extract()?,
-            platform_python_implementation: platform
-                .getattr("python_implementation")?
-                .call0()?
-                .extract()?,
-            platform_release: platform.getattr("release")?.call0()?.extract()?,
-            platform_system: platform.getattr("system")?.call0()?.extract()?,
-            platform_version: platform.getattr("version")?.call0()?.extract()?,
-            python_full_version,
-            python_version,
-            sys_platform: sys.getattr("platform")?.extract()?,
+            inner: Arc::new(MarkerEnvironmentInner {
+                implementation_name: name,
+                implementation_version,
+                os_name: os.getattr("name")?.extract()?,
+                platform_machine: platform.getattr("machine")?.call0()?.extract()?,
+                platform_python_implementation: platform
+                    .getattr("python_implementation")?
+                    .call0()?
+                    .extract()?,
+                platform_release: platform.getattr("release")?.call0()?.extract()?,
+                platform_system: platform.getattr("system")?.call0()?.extract()?,
+                platform_version: platform.getattr("version")?.call0()?.extract()?,
+                python_full_version,
+                python_version,
+                sys_platform: sys.getattr("platform")?.extract()?,
+            }),
+        })
+    }
+
+    /// Returns the name of the Python implementation for this environment.
+    #[getter]
+    pub fn py_implementation_name(&self) -> String {
+        self.implementation_name().to_string()
+    }
+
+    /// Returns the Python implementation version for this environment.
+    #[getter]
+    pub fn py_implementation_version(&self) -> StringVersion {
+        self.implementation_version().clone()
+    }
+
+    /// Returns the name of the operating system for this environment.
+    #[getter]
+    pub fn py_os_name(&self) -> String {
+        self.os_name().to_string()
+    }
+
+    /// Returns the name of the machine for this environment's platform.
+    #[getter]
+    pub fn py_platform_machine(&self) -> String {
+        self.platform_machine().to_string()
+    }
+
+    /// Returns the name of the Python implementation for this environment's
+    /// platform.
+    #[getter]
+    pub fn py_platform_python_implementation(&self) -> String {
+        self.platform_python_implementation().to_string()
+    }
+
+    /// Returns the release for this environment's platform.
+    #[getter]
+    pub fn py_platform_release(&self) -> String {
+        self.platform_release().to_string()
+    }
+
+    /// Returns the system for this environment's platform.
+    #[getter]
+    pub fn py_platform_system(&self) -> String {
+        self.platform_system().to_string()
+    }
+
+    /// Returns the version for this environment's platform.
+    #[getter]
+    pub fn py_platform_version(&self) -> String {
+        self.platform_version().to_string()
+    }
+
+    /// Returns the full version of Python for this environment.
+    #[getter]
+    pub fn py_python_full_version(&self) -> StringVersion {
+        self.python_full_version().clone()
+    }
+
+    /// Returns the version of Python for this environment.
+    #[getter]
+    pub fn py_python_version(&self) -> StringVersion {
+        self.python_version().clone()
+    }
+
+    /// Returns the name of the system platform for this environment.
+    #[getter]
+    pub fn py_sys_platform(&self) -> String {
+        self.sys_platform().to_string()
+    }
+}
+
+/// A builder for constructing a marker environment.
+///
+/// A value of this type can be fallibly converted to a full
+/// [`MarkerEnvironment`] via [`MarkerEnvironment::try_from`]. This can fail when
+/// the version strings given aren't valid.
+///
+/// The main utility of this type is for constructing dummy or test environment
+/// values.
+#[allow(missing_docs)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct MarkerEnvironmentBuilder<'a> {
+    pub implementation_name: &'a str,
+    pub implementation_version: &'a str,
+    pub os_name: &'a str,
+    pub platform_machine: &'a str,
+    pub platform_python_implementation: &'a str,
+    pub platform_release: &'a str,
+    pub platform_system: &'a str,
+    pub platform_version: &'a str,
+    pub python_full_version: &'a str,
+    pub python_version: &'a str,
+    pub sys_platform: &'a str,
+}
+
+impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
+    type Error = VersionParseError;
+
+    fn try_from(builder: MarkerEnvironmentBuilder<'a>) -> Result<Self, Self::Error> {
+        Ok(MarkerEnvironment {
+            inner: Arc::new(MarkerEnvironmentInner {
+                implementation_name: builder.implementation_name.to_string(),
+                implementation_version: builder.implementation_version.parse()?,
+                os_name: builder.os_name.to_string(),
+                platform_machine: builder.platform_machine.to_string(),
+                platform_python_implementation: builder.platform_python_implementation.to_string(),
+                platform_release: builder.platform_release.to_string(),
+                platform_system: builder.platform_system.to_string(),
+                platform_version: builder.platform_version.to_string(),
+                python_full_version: builder.python_full_version.parse()?,
+                python_version: builder.python_version.parse()?,
+                sys_platform: builder.sys_platform.to_string(),
+            }),
         })
     }
 }
 
-/// Represents one clause such as `python_version > "3.8"` in the form
-/// ```text
-/// <a name from the PEP508 list | a string> <an operator> <a name from the PEP508 list | a string>
-/// ```
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct MarkerExpression {
-    /// A name from the PEP508 list or a string
-    pub l_value: MarkerValue,
-    /// an operator, such as `>=` or `not in`
-    pub operator: MarkerOperator,
-    /// A name from the PEP508 list or a string
-    pub r_value: MarkerValue,
+/// Represents one clause such as `python_version > "3.8"`.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[allow(missing_docs)]
+pub enum MarkerExpression {
+    /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
+    Version {
+        key: MarkerValueVersion,
+        specifier: VersionSpecifier,
+    },
+    /// An inverted version expression, e.g `<quoted PEP 440 version> <version op> <version key>`.
+    VersionInverted {
+        /// No star allowed here, `'3.*' == python_version` is not a valid PEP 440 comparison.
+        version: Version,
+        operator: pep440_rs::Operator,
+        key: MarkerValueVersion,
+    },
+    /// An string marker comparison, e.g. `sys_platform == '...'`.
+    String {
+        key: MarkerValueString,
+        operator: MarkerOperator,
+        value: String,
+    },
+    /// An inverted string marker comparison, e.g. `'...' == sys_platform`.
+    StringInverted {
+        value: String,
+        operator: MarkerOperator,
+        key: MarkerValueString,
+    },
+    /// `extra <extra op> '...'` or `'...' <extra op> extra`
+    Extra {
+        operator: ExtraOperator,
+        name: ExtraName,
+    },
+    /// An invalid or meaningless expression, such as '...' == '...'.
+    ///
+    /// Invalid expressions always evaluate to `false`, and are warned for during parsing.
+    Arbitrary {
+        l_value: MarkerValue,
+        operator: MarkerOperator,
+        r_value: MarkerValue,
+    },
+}
+
+/// The operator for an extra expression, either '==' or '!='.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum ExtraOperator {
+    /// `==`
+    Equal,
+    /// `!=`
+    NotEqual,
+}
+
+impl ExtraOperator {
+    fn from_marker_operator(operator: MarkerOperator) -> Option<ExtraOperator> {
+        match operator {
+            MarkerOperator::Equal => Some(ExtraOperator::Equal),
+            MarkerOperator::NotEqual => Some(ExtraOperator::NotEqual),
+            _ => None,
+        }
+    }
+}
+
+impl Display for ExtraOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Equal => "==",
+            Self::NotEqual => "!=",
+        })
+    }
 }
 
 impl MarkerExpression {
-    /// Evaluate a <`marker_value`> <`marker_op`> <`marker_value`> expression
-    fn evaluate(
-        &self,
-        env: &MarkerEnvironment,
-        extras: &[ExtraName],
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &Self),
-    ) -> bool {
-        match &self.l_value {
+    /// Parse a [`MarkerExpression`] from a string with the given reporter.
+    pub fn parse_reporter(s: &str, reporter: &mut impl Reporter) -> Result<Self, Pep508Error> {
+        let mut chars = Cursor::new(s);
+        let expression = parse_marker_key_op_value(&mut chars, reporter)?;
+        chars.eat_whitespace();
+        if let Some((pos, unexpected)) = chars.next() {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::String(format!(
+                    "Unexpected character '{unexpected}', expected end of input"
+                )),
+                start: pos,
+                len: chars.remaining(),
+                input: chars.to_string(),
+            });
+        }
+        Ok(expression)
+    }
+
+    /// Convert a <`marker_value`> <`marker_op`> <`marker_value`> expression into it's
+    /// typed equivalent.
+    fn new(
+        l_value: MarkerValue,
+        operator: MarkerOperator,
+        r_value: MarkerValue,
+        reporter: &mut impl Reporter,
+    ) -> MarkerExpression {
+        match l_value {
             // The only sound choice for this is `<version key> <version op> <quoted PEP 440 version>`
-            MarkerValue::MarkerEnvVersion(l_key) => {
-                let value = &self.r_value;
-                let r_vpat = if let MarkerValue::QuotedString(r_string) = &value {
-                    match r_string.parse::<VersionPattern>() {
-                        Ok(vpat) => vpat,
-                        Err(err) => {
-                            reporter(MarkerWarningKind::Pep440Error, format!(
-                                "Expected PEP 440 version to compare with {}, found {}, evaluating to false: {}",
-                                l_key, self.r_value, err
-                            ), self);
-                            return false;
-                        }
-                    }
-                } else {
-                    reporter(MarkerWarningKind::Pep440Error, format!(
-                        "Expected double quoted PEP 440 version to compare with {}, found {}, evaluating to false",
-                        l_key, self.r_value
-                    ), self);
-                    return false;
+            MarkerValue::MarkerEnvVersion(key) => {
+                let MarkerValue::QuotedString(value) = r_value else {
+                    reporter.report(
+                        MarkerWarningKind::Pep440Error,
+                        format!(
+                            "Expected double quoted PEP 440 version to compare with {}, found {},
+                            will evaluate to false",
+                            key, r_value
+                        ),
+                    );
+
+                    return MarkerExpression::arbitrary(
+                        MarkerValue::MarkerEnvVersion(key),
+                        operator,
+                        r_value,
+                    );
                 };
 
-                let operator = match self.operator.to_pep440_operator() {
-                    None => {
-                        reporter(MarkerWarningKind::Pep440Error, format!(
-                            "Expected PEP 440 version operator to compare {} with '{}', found '{}', evaluating to false",
-                            l_key, r_vpat.version(), self.operator
-                        ), self);
-                        return false;
-                    }
-                    Some(operator) => operator,
-                };
-
-                let specifier = match VersionSpecifier::from_pattern(operator, r_vpat) {
-                    Ok(specifier) => specifier,
-                    Err(err) => {
-                        reporter(
-                            MarkerWarningKind::Pep440Error,
-                            format!("Invalid operator/version combination: {err}"),
-                            self,
-                        );
-                        return false;
-                    }
-                };
-
-                let l_version = env.get_version(l_key);
-                specifier.contains(l_version)
+                match MarkerExpression::version(key.clone(), operator, &value, reporter) {
+                    Some(expr) => expr,
+                    None => MarkerExpression::arbitrary(
+                        MarkerValue::MarkerEnvVersion(key),
+                        operator,
+                        MarkerValue::QuotedString(value),
+                    ),
+                }
             }
-            // This is half the same block as above inverted
-            MarkerValue::MarkerEnvString(l_key) => {
-                let r_string = match &self.r_value {
+            // The only sound choice for this is `<env key> <op> <string>`
+            MarkerValue::MarkerEnvString(key) => {
+                let value = match r_value {
                     MarkerValue::Extra
                     | MarkerValue::MarkerEnvVersion(_)
                     | MarkerValue::MarkerEnvString(_) => {
-                        reporter(MarkerWarningKind::MarkerMarkerComparison, "Comparing two markers with each other doesn't make any sense, evaluating to false".to_string(), self);
-                        return false;
+                        reporter.report(
+                            MarkerWarningKind::MarkerMarkerComparison,
+                            "Comparing two markers with each other doesn't make any sense,
+                            will evaluate to false"
+                                .to_string(),
+                        );
+
+                        return MarkerExpression::arbitrary(
+                            MarkerValue::MarkerEnvString(key),
+                            operator,
+                            r_value,
+                        );
                     }
                     MarkerValue::QuotedString(r_string) => r_string,
                 };
 
-                let l_string = env.get_string(l_key);
-                self.compare_strings(l_string, r_string, reporter)
+                MarkerExpression::String {
+                    key,
+                    operator,
+                    value,
+                }
             }
             // `extra == '...'`
             MarkerValue::Extra => {
-                let r_value_string = match &self.r_value {
+                let value = match r_value {
                     MarkerValue::MarkerEnvVersion(_)
                     | MarkerValue::MarkerEnvString(_)
                     | MarkerValue::Extra => {
-                        reporter(MarkerWarningKind::ExtraInvalidComparison, "Comparing extra with something other than a quoted string is wrong, evaluating to false".to_string(), self);
-                        return false;
+                        reporter.report(
+                            MarkerWarningKind::ExtraInvalidComparison,
+                            "Comparing extra with something other than a quoted string is wrong,
+                            will evaluate to false"
+                                .to_string(),
+                        );
+                        return MarkerExpression::arbitrary(l_value, operator, r_value);
                     }
-                    MarkerValue::QuotedString(r_value_string) => r_value_string,
+                    MarkerValue::QuotedString(value) => value,
                 };
-                match ExtraName::from_str(r_value_string) {
-                    Ok(r_extra) => extras.contains(&r_extra),
-                    Err(err) => {
-                        reporter(MarkerWarningKind::ExtraInvalidComparison, format!(
-                            "Expected extra name, found '{r_value_string}', evaluating to false: {err}"
-                        ), self);
-                        false
-                    }
+
+                match MarkerExpression::extra(operator, &value, reporter) {
+                    Some(expr) => expr,
+                    None => MarkerExpression::arbitrary(
+                        MarkerValue::Extra,
+                        operator,
+                        MarkerValue::QuotedString(value),
+                    ),
                 }
             }
             // This is either MarkerEnvVersion, MarkerEnvString or Extra inverted
             MarkerValue::QuotedString(l_string) => {
-                match &self.r_value {
+                match r_value {
                     // The only sound choice for this is `<quoted PEP 440 version> <version op>` <version key>
-                    MarkerValue::MarkerEnvVersion(r_key) => {
-                        let l_version = match Version::from_str(l_string) {
-                            Ok(l_version) => l_version,
-                            Err(err) => {
-                                reporter(MarkerWarningKind::Pep440Error, format!(
-                                    "Expected double quoted PEP 440 version to compare with {}, found {}, evaluating to false: {}",
-                                    l_string, self.r_value, err
-                                ), self);
-                                return false;
-                            }
-                        };
-                        let r_version = env.get_version(r_key);
-
-                        let operator = match self.operator.to_pep440_operator() {
-                            None => {
-                                reporter(MarkerWarningKind::Pep440Error, format!(
-                                    "Expected PEP 440 version operator to compare '{}' with {}, found '{}', evaluating to false",
-                                    l_string, r_key, self.operator
-                                ), self);
-                                return false;
-                            }
-                            Some(operator) => operator,
-                        };
-
-                        let specifier = match VersionSpecifier::from_pattern(
+                    MarkerValue::MarkerEnvVersion(key) => {
+                        match MarkerExpression::version_inverted(
+                            &l_string,
                             operator,
-                            VersionPattern::verbatim(r_version.clone()),
+                            key.clone(),
+                            reporter,
                         ) {
-                            Ok(specifier) => specifier,
-                            Err(err) => {
-                                reporter(
-                                    MarkerWarningKind::Pep440Error,
-                                    format!("Invalid operator/version combination: {err}"),
-                                    self,
-                                );
-                                return false;
-                            }
-                        };
-
-                        specifier.contains(&l_version)
-                    }
-                    // This is half the same block as above inverted
-                    MarkerValue::MarkerEnvString(r_key) => {
-                        let r_string = env.get_string(r_key);
-                        self.compare_strings(l_string, r_string, reporter)
-                    }
-                    // `'...' == extra`
-                    MarkerValue::Extra => match ExtraName::from_str(l_string) {
-                        Ok(l_extra) => self.marker_compare(&l_extra, extras, reporter),
-                        Err(err) => {
-                            reporter(MarkerWarningKind::ExtraInvalidComparison, format!(
-                                    "Expected extra name, found '{l_string}', evaluating to false: {err}"
-                                ), self);
-                            false
+                            Some(expr) => expr,
+                            None => MarkerExpression::arbitrary(
+                                MarkerValue::QuotedString(l_string),
+                                operator,
+                                MarkerValue::MarkerEnvVersion(key),
+                            ),
                         }
+                    }
+                    // '...' == <env key>
+                    MarkerValue::MarkerEnvString(key) => MarkerExpression::StringInverted {
+                        key,
+                        operator,
+                        value: l_string,
                     },
+                    // `'...' == extra`
+                    MarkerValue::Extra => {
+                        match MarkerExpression::extra(operator, &l_string, reporter) {
+                            Some(expr) => expr,
+                            None => MarkerExpression::arbitrary(
+                                MarkerValue::QuotedString(l_string),
+                                operator,
+                                MarkerValue::Extra,
+                            ),
+                        }
+                    }
                     // `'...' == '...'`, doesn't make much sense
                     MarkerValue::QuotedString(_) => {
                         // Not even pypa/packaging 22.0 supports this
                         // https://github.com/pypa/packaging/issues/632
-                        reporter(MarkerWarningKind::StringStringComparison, format!(
-                            "Comparing two quoted strings with each other doesn't make sense: {self}, evaluating to false"
-                        ), self);
-                        false
+                        let expr = MarkerExpression::arbitrary(
+                            MarkerValue::QuotedString(l_string),
+                            operator,
+                            r_value,
+                        );
+
+                        reporter.report(MarkerWarningKind::StringStringComparison, format!(
+                            "Comparing two quoted strings with each other doesn't make sense: {expr},
+                            will evaluate to false"
+                        ));
+
+                        expr
                     }
                 }
             }
+        }
+    }
+
+    /// Creates an instance of [`MarkerExpression::Arbitrary`] with the given values.
+    fn arbitrary(
+        l_value: MarkerValue,
+        operator: MarkerOperator,
+        r_value: MarkerValue,
+    ) -> MarkerExpression {
+        MarkerExpression::Arbitrary {
+            l_value,
+            operator,
+            r_value,
+        }
+    }
+
+    /// Creates an instance of [`MarkerExpression::Version`] with the given values.
+    ///
+    /// Reports a warning on failure, and returns `None`.
+    pub fn version(
+        key: MarkerValueVersion,
+        marker_operator: MarkerOperator,
+        value: &str,
+        reporter: &mut impl Reporter,
+    ) -> Option<MarkerExpression> {
+        let pattern = match value.parse::<VersionPattern>() {
+            Ok(pattern) => pattern,
+            Err(err) => {
+                reporter.report(
+                    MarkerWarningKind::Pep440Error,
+                    format!(
+                        "Expected PEP 440 version to compare with {}, found {}, will evaluate to false: {}",
+                        key, value, err
+                    ),
+                );
+
+                return None;
+            }
+        };
+
+        let Some(operator) = marker_operator.to_pep440_operator() else {
+            reporter.report(
+                MarkerWarningKind::Pep440Error,
+                format!(
+                    "Expected PEP 440 version operator to compare {} with '{}',
+                    found '{}', will evaluate to false",
+                    key,
+                    pattern.version(),
+                    marker_operator
+                ),
+            );
+
+            return None;
+        };
+
+        let specifier = match VersionSpecifier::from_pattern(operator, pattern) {
+            Ok(specifier) => specifier,
+            Err(err) => {
+                reporter.report(
+                    MarkerWarningKind::Pep440Error,
+                    format!("Invalid operator/version combination: {err}"),
+                );
+                return None;
+            }
+        };
+
+        Some(MarkerExpression::Version { key, specifier })
+    }
+
+    /// Creates an instance of [`MarkerExpression::VersionInverted`] with the given values.
+    ///
+    /// Reports a warning on failure, and returns `None`.
+    fn version_inverted(
+        value: &str,
+        marker_operator: MarkerOperator,
+        key: MarkerValueVersion,
+        reporter: &mut impl Reporter,
+    ) -> Option<MarkerExpression> {
+        let version = match value.parse::<Version>() {
+            Ok(version) => version,
+            Err(err) => {
+                reporter.report(
+                    MarkerWarningKind::Pep440Error,
+                    format!(
+                        "Expected PEP 440 version to compare with {}, found {}, will evaluate to false: {}",
+                        key, value, err
+                    ),
+                );
+
+                return None;
+            }
+        };
+
+        let Some(operator) = marker_operator.to_pep440_operator() else {
+            reporter.report(
+                MarkerWarningKind::Pep440Error,
+                format!(
+                    "Expected PEP 440 version operator to compare {} with '{}',
+                    found '{}', will evaluate to false",
+                    key, version, marker_operator
+                ),
+            );
+
+            return None;
+        };
+
+        Some(MarkerExpression::VersionInverted {
+            version,
+            operator,
+            key,
+        })
+    }
+
+    /// Creates an instance of [`MarkerExpression::Extra`] with the given values, falling back to
+    /// [`MarkerExpression::Arbitrary`] on failure.
+    fn extra(
+        operator: MarkerOperator,
+        value: &str,
+        reporter: &mut impl Reporter,
+    ) -> Option<MarkerExpression> {
+        let name = match ExtraName::from_str(value) {
+            Ok(name) => name,
+            Err(err) => {
+                reporter.report(
+                    MarkerWarningKind::ExtraInvalidComparison,
+                    format!("Expected extra name, found '{value}', will evaluate to false: {err}"),
+                );
+
+                return None;
+            }
+        };
+
+        match ExtraOperator::from_marker_operator(operator) {
+            Some(operator) => Some(MarkerExpression::Extra { operator, name }),
+            None => {
+                reporter.report(
+                    MarkerWarningKind::ExtraInvalidComparison,
+                    "Comparing extra with something other than a quoted string is wrong,
+                    will evaluate to false"
+                        .to_string(),
+                );
+                None
+            }
+        }
+    }
+
+    /// Evaluate a <`marker_value`> <`marker_op`> <`marker_value`> expression
+    ///
+    /// When `env` is `None`, all expressions that reference the environment
+    /// will evaluate as `true`.
+    fn evaluate(
+        &self,
+        env: Option<&MarkerEnvironment>,
+        extras: &[ExtraName],
+        reporter: &mut impl Reporter,
+    ) -> bool {
+        match self {
+            MarkerExpression::Version { key, specifier } => env
+                .map(|env| specifier.contains(env.get_version(key)))
+                .unwrap_or(true),
+            MarkerExpression::VersionInverted {
+                key,
+                operator,
+                version,
+            } => env
+                .map(|env| {
+                    let r_version = VersionPattern::verbatim(env.get_version(key).clone());
+                    let specifier = match VersionSpecifier::from_pattern(*operator, r_version) {
+                        Ok(specifier) => specifier,
+                        Err(err) => {
+                            reporter.report(
+                                MarkerWarningKind::Pep440Error,
+                                format!("Invalid operator/version combination: {err}"),
+                            );
+
+                            return false;
+                        }
+                    };
+
+                    specifier.contains(version)
+                })
+                .unwrap_or(true),
+            MarkerExpression::String {
+                key,
+                operator,
+                value,
+            } => env
+                .map(|env| {
+                    let l_string = env.get_string(key);
+                    self.compare_strings(l_string, operator, value, reporter)
+                })
+                .unwrap_or(true),
+            MarkerExpression::StringInverted {
+                key,
+                operator,
+                value,
+            } => env
+                .map(|env| {
+                    let r_string = env.get_string(key);
+                    self.compare_strings(value, operator, r_string, reporter)
+                })
+                .unwrap_or(true),
+            MarkerExpression::Extra {
+                operator: ExtraOperator::Equal,
+                name,
+            } => extras.contains(name),
+            MarkerExpression::Extra {
+                operator: ExtraOperator::NotEqual,
+                name,
+            } => !extras.contains(name),
+            MarkerExpression::Arbitrary { .. } => false,
         }
     }
 
@@ -757,71 +1385,39 @@ impl MarkerExpression {
         extras: &HashSet<ExtraName>,
         python_versions: &[Version],
     ) -> bool {
-        match (&self.l_value, &self.operator, &self.r_value) {
-            // `extra == '...'`
-            (MarkerValue::Extra, MarkerOperator::Equal, MarkerValue::QuotedString(r_string)) => {
-                ExtraName::from_str(r_string).is_ok_and(|r_extra| extras.contains(&r_extra))
-            }
-            // `'...' == extra`
-            (MarkerValue::QuotedString(l_string), MarkerOperator::Equal, MarkerValue::Extra) => {
-                ExtraName::from_str(l_string).is_ok_and(|l_extra| extras.contains(&l_extra))
-            }
-            // `extra != '...'`
-            (MarkerValue::Extra, MarkerOperator::NotEqual, MarkerValue::QuotedString(r_string)) => {
-                ExtraName::from_str(r_string).is_ok_and(|r_extra| !extras.contains(&r_extra))
-            }
-            // `'...' != extra`
-            (MarkerValue::QuotedString(l_string), MarkerOperator::NotEqual, MarkerValue::Extra) => {
-                ExtraName::from_str(l_string).is_ok_and(|l_extra| !extras.contains(&l_extra))
-            }
-            (
-                MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
+        match self {
+            MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion,
+                specifier,
+            } => python_versions
+                .iter()
+                .any(|l_version| specifier.contains(l_version)),
+            MarkerExpression::VersionInverted {
+                key: MarkerValueVersion::PythonVersion,
                 operator,
-                MarkerValue::QuotedString(r_string),
-            ) => {
-                // ignore all errors block
-                (|| {
-                    // The right hand side is allowed to contain a star, e.g. `python_version == '3.*'`
-                    let r_vpat = r_string.parse::<VersionPattern>().ok()?;
-                    let operator = operator.to_pep440_operator()?;
-                    // operator and right hand side make the specifier
-                    let specifier = VersionSpecifier::from_pattern(operator, r_vpat).ok()?;
+                version,
+            } => {
+                python_versions.iter().any(|r_version| {
+                    // operator and right hand side make the specifier and in this case the
+                    // right hand is `python_version` so changes every iteration
+                    let Ok(specifier) = VersionSpecifier::from_pattern(
+                        *operator,
+                        VersionPattern::verbatim(r_version.clone()),
+                    ) else {
+                        return true;
+                    };
 
-                    let compatible = python_versions
-                        .iter()
-                        .any(|l_version| specifier.contains(l_version));
-                    Some(compatible)
-                })()
-                .unwrap_or(true)
+                    specifier.contains(version)
+                })
             }
-            (
-                MarkerValue::QuotedString(l_string),
-                operator,
-                MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
-            ) => {
-                // ignore all errors block
-                (|| {
-                    // Not star allowed here, `'3.*' == python_version` is not a valid PEP 440
-                    // comparison
-                    let l_version = Version::from_str(l_string).ok()?;
-                    let operator = operator.to_pep440_operator()?;
-
-                    let compatible = python_versions.iter().any(|r_version| {
-                        // operator and right hand side make the specifier and in this case the
-                        // right hand is `python_version` so changes every iteration
-                        match VersionSpecifier::from_pattern(
-                            operator,
-                            VersionPattern::verbatim(r_version.clone()),
-                        ) {
-                            Ok(specifier) => specifier.contains(&l_version),
-                            Err(_) => true,
-                        }
-                    });
-
-                    Some(compatible)
-                })()
-                .unwrap_or(true)
-            }
+            MarkerExpression::Extra {
+                operator: ExtraOperator::Equal,
+                name,
+            } => extras.contains(name),
+            MarkerExpression::Extra {
+                operator: ExtraOperator::NotEqual,
+                name,
+            } => !extras.contains(name),
             _ => true,
         }
     }
@@ -830,71 +1426,50 @@ impl MarkerExpression {
     fn compare_strings(
         &self,
         l_string: &str,
+        operator: &MarkerOperator,
         r_string: &str,
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &Self),
+        reporter: &mut impl Reporter,
     ) -> bool {
-        match self.operator {
+        match operator {
             MarkerOperator::Equal => l_string == r_string,
             MarkerOperator::NotEqual => l_string != r_string,
             MarkerOperator::GreaterThan => {
-                reporter(
+                reporter.report(
                     MarkerWarningKind::LexicographicComparison,
                     format!("Comparing {l_string} and {r_string} lexicographically"),
-                    self,
                 );
                 l_string > r_string
             }
             MarkerOperator::GreaterEqual => {
-                reporter(
+                reporter.report(
                     MarkerWarningKind::LexicographicComparison,
                     format!("Comparing {l_string} and {r_string} lexicographically"),
-                    self,
                 );
                 l_string >= r_string
             }
             MarkerOperator::LessThan => {
-                reporter(
+                reporter.report(
                     MarkerWarningKind::LexicographicComparison,
                     format!("Comparing {l_string} and {r_string} lexicographically"),
-                    self,
                 );
                 l_string < r_string
             }
             MarkerOperator::LessEqual => {
-                reporter(
+                reporter.report(
                     MarkerWarningKind::LexicographicComparison,
                     format!("Comparing {l_string} and {r_string} lexicographically"),
-                    self,
                 );
                 l_string <= r_string
             }
             MarkerOperator::TildeEqual => {
-                reporter(
+                reporter.report(
                     MarkerWarningKind::LexicographicComparison,
                     format!("Can't compare {l_string} and {r_string} with `~=`"),
-                    self,
                 );
                 false
             }
             MarkerOperator::In => r_string.contains(l_string),
             MarkerOperator::NotIn => !r_string.contains(l_string),
-        }
-    }
-
-    // The `marker <op> '...'` comparison
-    fn marker_compare(
-        &self,
-        value: &ExtraName,
-        extras: &[ExtraName],
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &Self),
-    ) -> bool {
-        match self.operator {
-            MarkerOperator::Equal => extras.contains(value),
-            MarkerOperator::NotEqual => !extras.contains(value),
-            _ => {
-                reporter(MarkerWarningKind::ExtraInvalidComparison, "Comparing extra with something other than equal (`==`) or unequal (`!=`) is wrong, evaluating to false".to_string(), self);
-                false
-            }
         }
     }
 }
@@ -903,31 +1478,58 @@ impl FromStr for MarkerExpression {
     type Err = Pep508Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut chars = Cursor::new(s);
-        let expression = parse_marker_key_op_value(&mut chars)?;
-        chars.eat_whitespace();
-        if let Some((pos, unexpected)) = chars.next() {
-            return Err(Pep508Error {
-                message: Pep508ErrorSource::String(format!(
-                    "Unexpected character '{unexpected}', expected end of input"
-                )),
-                start: pos,
-                len: chars.chars.clone().count(),
-                input: chars.to_string(),
-            });
-        }
-        Ok(expression)
+        MarkerExpression::parse_reporter(s, &mut TracingReporter)
     }
 }
 
 impl Display for MarkerExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {} {}", self.l_value, self.operator, self.r_value)
+        match self {
+            MarkerExpression::Version { key, specifier } => {
+                write!(
+                    f,
+                    "{key} {} '{}'",
+                    specifier.operator(),
+                    specifier.version()
+                )
+            }
+            MarkerExpression::VersionInverted {
+                version,
+                operator,
+                key,
+            } => {
+                write!(f, "'{version}' {operator} {key}")
+            }
+            MarkerExpression::String {
+                key,
+                operator,
+                value,
+            } => {
+                write!(f, "{key} {operator} '{value}'")
+            }
+            MarkerExpression::StringInverted {
+                value,
+                operator,
+                key,
+            } => {
+                write!(f, "'{value}' {operator} {key}")
+            }
+            MarkerExpression::Extra { operator, name } => {
+                write!(f, "extra {operator} '{name}'")
+            }
+            MarkerExpression::Arbitrary {
+                l_value,
+                operator,
+                r_value,
+            } => {
+                write!(f, "{l_value} {operator} {r_value}")
+            }
+        }
     }
 }
 
 /// Represents one of the nested marker expressions with and/or/parentheses
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerTree {
     /// A simple expression such as `python_version > "3.8"`
     Expression(MarkerExpression),
@@ -939,32 +1541,73 @@ pub enum MarkerTree {
     Or(Vec<MarkerTree>),
 }
 
+impl<'de> Deserialize<'de> for MarkerTree {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        FromStr::from_str(&s).map_err(de::Error::custom)
+    }
+}
+
+impl Serialize for MarkerTree {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 impl FromStr for MarkerTree {
     type Err = Pep508Error;
 
     fn from_str(markers: &str) -> Result<Self, Self::Err> {
-        parse_markers(markers)
+        parse_markers(markers, &mut TracingReporter)
     }
 }
 
 impl MarkerTree {
+    /// Like [`FromStr::from_str`], but the caller chooses the return type generic.
+    pub fn parse_str<T: Pep508Url>(markers: &str) -> Result<Self, Pep508Error<T>> {
+        parse_markers(markers, &mut TracingReporter)
+    }
+
+    /// Parse a [`MarkerTree`] from a string with the given reporter.
+    pub fn parse_reporter(
+        markers: &str,
+        reporter: &mut impl Reporter,
+    ) -> Result<Self, Pep508Error> {
+        parse_markers(markers, reporter)
+    }
+
     /// Does this marker apply in the given environment?
     pub fn evaluate(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        let mut reporter = |_kind, _message, _marker_expression: &MarkerExpression| {
-            #[cfg(feature = "tracing")]
-            {
-                tracing::warn!("{}", _message);
-            }
-        };
-        self.report_deprecated_options(&mut reporter);
+        self.evaluate_optional_environment(Some(env), extras)
+    }
+
+    /// Evaluates this marker tree against an optional environment and a
+    /// possibly empty sequence of extras.
+    ///
+    /// When an environment is not provided, all marker expressions based on
+    /// the environment evaluate to `true`. That is, this provides environment
+    /// independent marker evaluation. In practice, this means only the extras
+    /// are evaluated when an environment is not provided.
+    pub fn evaluate_optional_environment(
+        &self,
+        env: Option<&MarkerEnvironment>,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.report_deprecated_options(&mut TracingReporter);
         match self {
-            Self::Expression(expression) => expression.evaluate(env, extras, &mut reporter),
+            Self::Expression(expression) => expression.evaluate(env, extras, &mut TracingReporter),
             Self::And(expressions) => expressions
                 .iter()
-                .all(|x| x.evaluate_reporter_impl(env, extras, &mut reporter)),
+                .all(|x| x.evaluate_reporter_impl(env, extras, &mut TracingReporter)),
             Self::Or(expressions) => expressions
                 .iter()
-                .any(|x| x.evaluate_reporter_impl(env, extras, &mut reporter)),
+                .any(|x| x.evaluate_reporter_impl(env, extras, &mut TracingReporter)),
         }
     }
 
@@ -977,31 +1620,50 @@ impl MarkerTree {
     /// For example, if `dev` is a provided extra, given `sys_platform == 'linux' and extra == 'dev'`,
     /// the marker will be simplified to `sys_platform == 'linux'`.
     pub fn simplify_extras(self, extras: &[ExtraName]) -> Option<MarkerTree> {
+        self.simplify_extras_with(|name| extras.contains(name))
+    }
+
+    /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
+    ///
+    /// Any `extra` markers that are always `true` given the provided predicate will be removed.
+    /// Any `extra` markers that are always `false` given the provided predicate will be left
+    /// unchanged.
+    ///
+    /// For example, if `is_extra('dev')` is true, given
+    /// `sys_platform == 'linux' and extra == 'dev'`, the marker will be simplified to
+    /// `sys_platform == 'linux'`.
+    pub fn simplify_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> Option<MarkerTree> {
+        // Because `simplify_extras_with_impl` is recursive, and we need to use
+        // our predicate in recursive calls, we need the predicate itself to
+        // have some indirection (or else we'd have to clone it). To avoid a
+        // recursive type at codegen time, we just introduce the indirection
+        // here, but keep the calling API ergonomic.
+        self.simplify_extras_with_impl(&is_extra)
+    }
+
+    fn simplify_extras_with_impl(
+        self,
+        is_extra: &impl Fn(&ExtraName) -> bool,
+    ) -> Option<MarkerTree> {
         /// Returns `true` if the given expression is always `true` given the set of extras.
-        pub fn is_true(expression: &MarkerExpression, extras: &[ExtraName]) -> bool {
-            // Ex) `extra == 'dev'`
-            if expression.l_value == MarkerValue::Extra {
-                if let MarkerValue::QuotedString(r_string) = &expression.r_value {
-                    if let Ok(r_extra) = ExtraName::from_str(r_string) {
-                        return extras.contains(&r_extra);
-                    }
-                }
+        fn is_true(expression: &MarkerExpression, is_extra: impl Fn(&ExtraName) -> bool) -> bool {
+            match expression {
+                MarkerExpression::Extra {
+                    operator: ExtraOperator::Equal,
+                    name,
+                } => is_extra(name),
+                MarkerExpression::Extra {
+                    operator: ExtraOperator::NotEqual,
+                    name,
+                } => !is_extra(name),
+                _ => false,
             }
-            // Ex) `'dev' == extra`
-            if expression.r_value == MarkerValue::Extra {
-                if let MarkerValue::QuotedString(l_string) = &expression.l_value {
-                    if let Ok(l_extra) = ExtraName::from_str(l_string) {
-                        return extras.contains(&l_extra);
-                    }
-                }
-            }
-            false
         }
 
         match self {
             Self::Expression(expression) => {
                 // If the expression is true, we can remove the marker entirely.
-                if is_true(&expression, extras) {
+                if is_true(&expression, is_extra) {
                     None
                 } else {
                     // If not, return the original marker.
@@ -1012,7 +1674,7 @@ impl MarkerTree {
                 // Remove any expressions that are _true_ due to the presence of an extra.
                 let simplified = expressions
                     .into_iter()
-                    .filter_map(|marker| marker.simplify_extras(extras))
+                    .filter_map(|marker| marker.simplify_extras_with_impl(is_extra))
                     .collect::<Vec<_>>();
 
                 // If there are no expressions left, return None.
@@ -1032,7 +1694,7 @@ impl MarkerTree {
                 // Remove any expressions that are _true_ due to the presence of an extra.
                 let simplified = expressions
                     .into_iter()
-                    .filter_map(|marker| marker.simplify_extras(extras))
+                    .filter_map(|marker| marker.simplify_extras_with_impl(is_extra))
                     .collect::<Vec<_>>();
 
                 // If _any_ of the expressions are true (i.e., if any of the markers were filtered
@@ -1056,17 +1718,17 @@ impl MarkerTree {
         &self,
         env: &MarkerEnvironment,
         extras: &[ExtraName],
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
+        reporter: &mut impl Reporter,
     ) -> bool {
         self.report_deprecated_options(reporter);
-        self.evaluate_reporter_impl(env, extras, reporter)
+        self.evaluate_reporter_impl(Some(env), extras, reporter)
     }
 
     fn evaluate_reporter_impl(
         &self,
-        env: &MarkerEnvironment,
+        env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
+        reporter: &mut impl Reporter,
     ) -> bool {
         match self {
             Self::Expression(expression) => expression.evaluate(env, extras, reporter),
@@ -1111,79 +1773,64 @@ impl MarkerTree {
         &self,
         env: &MarkerEnvironment,
         extras: &[ExtraName],
-    ) -> (bool, Vec<(MarkerWarningKind, String, String)>) {
+    ) -> (bool, Vec<(MarkerWarningKind, String)>) {
         let mut warnings = Vec::new();
-        let mut reporter = |kind, warning, marker: &MarkerExpression| {
-            warnings.push((kind, warning, marker.to_string()));
+        let mut reporter = |kind, warning| {
+            warnings.push((kind, warning));
         };
         self.report_deprecated_options(&mut reporter);
-        let result = self.evaluate_reporter_impl(env, extras, &mut reporter);
+        let result = self.evaluate_reporter_impl(Some(env), extras, &mut reporter);
         (result, warnings)
     }
 
     /// Report the deprecated marker from <https://peps.python.org/pep-0345/#environment-markers>
-    fn report_deprecated_options(
-        &self,
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
-    ) {
+    fn report_deprecated_options(&self, reporter: &mut impl Reporter) {
         match self {
             Self::Expression(expression) => {
-                for value in [&expression.l_value, &expression.r_value] {
-                    match value {
-                        MarkerValue::MarkerEnvString(MarkerValueString::OsNameDeprecated) => {
-                            reporter(
-                                MarkerWarningKind::DeprecatedMarkerName,
-                                "os.name is deprecated in favor of os_name".to_string(),
-                                expression,
-                            );
-                        }
-                        MarkerValue::MarkerEnvString(
-                            MarkerValueString::PlatformMachineDeprecated,
-                        ) => {
-                            reporter(
-                                MarkerWarningKind::DeprecatedMarkerName,
-                                "platform.machine is deprecated in favor of platform_machine"
-                                    .to_string(),
-                                expression,
-                            );
-                        }
-                        MarkerValue::MarkerEnvString(
-                            MarkerValueString::PlatformPythonImplementationDeprecated,
-                        ) => {
-                            reporter(
+                let MarkerExpression::String { key, .. } = expression else {
+                    return;
+                };
+
+                match key {
+                    MarkerValueString::OsNameDeprecated => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "os.name is deprecated in favor of os_name".to_string(),
+                        );
+                    }
+                    MarkerValueString::PlatformMachineDeprecated => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "platform.machine is deprecated in favor of platform_machine"
+                                .to_string(),
+                        );
+                    }
+                    MarkerValueString::PlatformPythonImplementationDeprecated => {
+                        reporter.report(
                                 MarkerWarningKind::DeprecatedMarkerName,
                                 "platform.python_implementation is deprecated in favor of platform_python_implementation".to_string(),
-                                expression,
                             );
-                        }
-                        MarkerValue::MarkerEnvString(
-                            MarkerValueString::PythonImplementationDeprecated,
-                        ) => {
-                            reporter(
+                    }
+                    MarkerValueString::PythonImplementationDeprecated => {
+                        reporter.report(
                                 MarkerWarningKind::DeprecatedMarkerName,
                                 "python_implementation is deprecated in favor of platform_python_implementation".to_string(),
-                                expression,
                             );
-                        }
-                        MarkerValue::MarkerEnvString(
-                            MarkerValueString::PlatformVersionDeprecated,
-                        ) => {
-                            reporter(
-                                MarkerWarningKind::DeprecatedMarkerName,
-                                "platform.version is deprecated in favor of platform_version"
-                                    .to_string(),
-                                expression,
-                            );
-                        }
-                        MarkerValue::MarkerEnvString(MarkerValueString::SysPlatformDeprecated) => {
-                            reporter(
-                                MarkerWarningKind::DeprecatedMarkerName,
-                                "sys.platform  is deprecated in favor of sys_platform".to_string(),
-                                expression,
-                            );
-                        }
-                        _ => {}
                     }
+                    MarkerValueString::PlatformVersionDeprecated => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "platform.version is deprecated in favor of platform_version"
+                                .to_string(),
+                        );
+                    }
+                    MarkerValueString::SysPlatformDeprecated => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "sys.platform  is deprecated in favor of sys_platform".to_string(),
+                        );
+                    }
+                    _ => {}
                 }
             }
             Self::And(expressions) => {
@@ -1196,6 +1843,42 @@ impl MarkerTree {
                     expression.report_deprecated_options(reporter);
                 }
             }
+        }
+    }
+
+    /// Combine this marker tree with the one given via a conjunction.
+    ///
+    /// This does some shallow flattening. That is, if `self` is a conjunction
+    /// already, then `tree` is added to it instead of creating a new
+    /// conjunction.
+    pub fn and(&mut self, tree: MarkerTree) {
+        match *self {
+            MarkerTree::Expression(_) | MarkerTree::Or(_) => {
+                let this = std::mem::replace(self, MarkerTree::And(vec![]));
+                *self = MarkerTree::And(vec![this]);
+            }
+            _ => {}
+        }
+        if let MarkerTree::And(ref mut exprs) = *self {
+            exprs.push(tree);
+        }
+    }
+
+    /// Combine this marker tree with the one given via a disjunction.
+    ///
+    /// This does some shallow flattening. That is, if `self` is a disjunction
+    /// already, then `tree` is added to it instead of creating a new
+    /// disjunction.
+    pub fn or(&mut self, tree: MarkerTree) {
+        match *self {
+            MarkerTree::Expression(_) | MarkerTree::And(_) => {
+                let this = std::mem::replace(self, MarkerTree::And(vec![]));
+                *self = MarkerTree::Or(vec![this]);
+            }
+            _ => {}
+        }
+        if let MarkerTree::Or(ref mut exprs) = *self {
+            exprs.push(tree);
         }
     }
 }
@@ -1234,7 +1917,9 @@ impl Display for MarkerTree {
 /// marker_op     = version_cmp | (wsp* 'in') | (wsp* 'not' wsp+ 'in')
 /// ```
 /// The `wsp*` has already been consumed by the caller.
-fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Error> {
+fn parse_marker_operator<T: Pep508Url>(
+    cursor: &mut Cursor,
+) -> Result<MarkerOperator, Pep508Error<T>> {
     let (start, len) = if cursor.peek_char().is_some_and(|c| c.is_alphabetic()) {
         // "in" or "not"
         cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"')
@@ -1287,7 +1972,7 @@ fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Er
 /// '`os_name`', '`sys_platform`', '`platform_release`', '`platform_system`', '`platform_version`',
 /// '`platform_machine`', '`platform_python_implementation`', '`implementation_name`',
 /// '`implementation_version`', 'extra'
-fn parse_marker_value(cursor: &mut Cursor) -> Result<MarkerValue, Pep508Error> {
+fn parse_marker_value<T: Pep508Url>(cursor: &mut Cursor) -> Result<MarkerValue, Pep508Error<T>> {
     // > User supplied constants are always encoded as strings with either ' or " quote marks. Note
     // > that backslash escapes are not defined, but existing implementations do support them. They
     // > are not included in this specification because they add complexity and there is no observable
@@ -1331,7 +2016,10 @@ fn parse_marker_value(cursor: &mut Cursor) -> Result<MarkerValue, Pep508Error> {
 /// ```text
 /// marker_var:l marker_op:o marker_var:r
 /// ```
-fn parse_marker_key_op_value(cursor: &mut Cursor) -> Result<MarkerExpression, Pep508Error> {
+fn parse_marker_key_op_value<T: Pep508Url>(
+    cursor: &mut Cursor,
+    reporter: &mut impl Reporter,
+) -> Result<MarkerExpression, Pep508Error<T>> {
     cursor.eat_whitespace();
     let lvalue = parse_marker_value(cursor)?;
     cursor.eat_whitespace();
@@ -1341,25 +2029,27 @@ fn parse_marker_key_op_value(cursor: &mut Cursor) -> Result<MarkerExpression, Pe
     let operator = parse_marker_operator(cursor)?;
     cursor.eat_whitespace();
     let rvalue = parse_marker_value(cursor)?;
-    Ok(MarkerExpression {
-        l_value: lvalue,
-        operator,
-        r_value: rvalue,
-    })
+
+    Ok(MarkerExpression::new(lvalue, operator, rvalue, reporter))
 }
 
 /// ```text
 /// marker_expr   = marker_var:l marker_op:o marker_var:r -> (o, l, r)
 ///               | wsp* '(' marker:m wsp* ')' -> m
 /// ```
-fn parse_marker_expr(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+fn parse_marker_expr<T: Pep508Url>(
+    cursor: &mut Cursor,
+    reporter: &mut impl Reporter,
+) -> Result<MarkerTree, Pep508Error<T>> {
     cursor.eat_whitespace();
     if let Some(start_pos) = cursor.eat_char('(') {
-        let marker = parse_marker_or(cursor)?;
+        let marker = parse_marker_or(cursor, reporter)?;
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(MarkerTree::Expression(parse_marker_key_op_value(cursor)?))
+        Ok(MarkerTree::Expression(parse_marker_key_op_value(
+            cursor, reporter,
+        )?))
     }
 }
 
@@ -1367,27 +2057,34 @@ fn parse_marker_expr(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
 /// marker_and    = marker_expr:l wsp* 'and' marker_expr:r -> ('and', l, r)
 ///               | marker_expr:m -> m
 /// ```
-fn parse_marker_and(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
-    parse_marker_op(cursor, "and", MarkerTree::And, parse_marker_expr)
+fn parse_marker_and<T: Pep508Url>(
+    cursor: &mut Cursor,
+    reporter: &mut impl Reporter,
+) -> Result<MarkerTree, Pep508Error<T>> {
+    parse_marker_op(cursor, "and", MarkerTree::And, parse_marker_expr, reporter)
 }
 
 /// ```text
 /// marker_or     = marker_and:l wsp* 'or' marker_and:r -> ('or', l, r)
 ///                   | marker_and:m -> m
 /// ```
-fn parse_marker_or(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
-    parse_marker_op(cursor, "or", MarkerTree::Or, parse_marker_and)
+fn parse_marker_or<T: Pep508Url>(
+    cursor: &mut Cursor,
+    reporter: &mut impl Reporter,
+) -> Result<MarkerTree, Pep508Error<T>> {
+    parse_marker_op(cursor, "or", MarkerTree::Or, parse_marker_and, reporter)
 }
 
 /// Parses both `marker_and` and `marker_or`
-fn parse_marker_op(
+fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
     op: &str,
     op_constructor: fn(Vec<MarkerTree>) -> MarkerTree,
-    parse_inner: fn(&mut Cursor) -> Result<MarkerTree, Pep508Error>,
-) -> Result<MarkerTree, Pep508Error> {
+    parse_inner: fn(&mut Cursor, &mut R) -> Result<MarkerTree, Pep508Error<T>>,
+    reporter: &mut R,
+) -> Result<MarkerTree, Pep508Error<T>> {
     // marker_and or marker_expr
-    let first_element = parse_inner(cursor)?;
+    let first_element = parse_inner(cursor, reporter)?;
     // wsp*
     cursor.eat_whitespace();
     // Check if we're done here instead of invoking the whole vec allocating loop
@@ -1405,7 +2102,7 @@ fn parse_marker_op(
         match cursor.slice(start, len) {
             value if value == op => {
                 cursor.take_while(|c| !c.is_whitespace());
-                let expression = parse_inner(cursor)?;
+                let expression = parse_inner(cursor, reporter)?;
                 expressions.push(expression);
             }
             _ => {
@@ -1421,10 +2118,13 @@ fn parse_marker_op(
 }
 
 /// ```text
-/// marker        = marker_or
+/// marker        = marker_or^
 /// ```
-pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
-    let marker = parse_marker_or(cursor)?;
+pub(crate) fn parse_markers_cursor<T: Pep508Url>(
+    cursor: &mut Cursor,
+    reporter: &mut impl Reporter,
+) -> Result<MarkerTree, Pep508Error<T>> {
+    let marker = parse_marker_or(cursor, reporter)?;
     cursor.eat_whitespace();
     if let Some((pos, unexpected)) = cursor.next() {
         // If we're here, both parse_marker_or and parse_marker_and returned because the next
@@ -1434,7 +2134,7 @@ pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep5
                 "Unexpected character '{unexpected}', expected 'and', 'or' or end of input"
             )),
             start: pos,
-            len: cursor.chars.clone().count(),
+            len: cursor.remaining(),
             input: cursor.to_string(),
         });
     };
@@ -1443,42 +2143,47 @@ pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep5
 
 /// Parses markers such as `python_version < '3.8'` or
 /// `python_version == "3.10" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))`
-fn parse_markers(markers: &str) -> Result<MarkerTree, Pep508Error> {
+fn parse_markers<T: Pep508Url>(
+    markers: &str,
+    reporter: &mut impl Reporter,
+) -> Result<MarkerTree, Pep508Error<T>> {
     let mut chars = Cursor::new(markers);
-    parse_markers_impl(&mut chars)
+    parse_markers_cursor(&mut chars, reporter)
 }
 
 #[cfg(test)]
 mod test {
-    use crate::marker::{MarkerEnvironment, StringVersion};
-    use crate::{
-        MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
-        MarkerValueVersion,
-    };
-    use insta::assert_snapshot;
     use std::str::FromStr;
+
+    use insta::assert_snapshot;
+
+    use pep440_rs::VersionSpecifier;
     use uv_normalize::ExtraName;
+
+    use crate::marker::{ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder};
+    use crate::{
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
+    };
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
     }
 
     fn env37() -> MarkerEnvironment {
-        let v37 = StringVersion::from_str("3.7").unwrap();
-
-        MarkerEnvironment {
-            implementation_name: String::new(),
-            implementation_version: v37.clone(),
-            os_name: "linux".to_string(),
-            platform_machine: String::new(),
-            platform_python_implementation: String::new(),
-            platform_release: String::new(),
-            platform_system: String::new(),
-            platform_version: String::new(),
-            python_full_version: v37.clone(),
-            python_version: v37,
-            sys_platform: "linux".to_string(),
-        }
+        MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "",
+            implementation_version: "3.7",
+            os_name: "linux",
+            platform_machine: "",
+            platform_python_implementation: "",
+            platform_release: "",
+            platform_system: "",
+            platform_version: "",
+            python_full_version: "3.7",
+            python_version: "3.7",
+            sys_platform: "linux",
+        })
+        .unwrap()
     }
 
     /// Copied from <https://github.com/pypa/packaging/blob/85ff971a250dc01db188ef9775499c15553a8c95/tests/test_markers.py#L175-L221>
@@ -1520,20 +2225,20 @@ mod test {
 
     #[test]
     fn test_marker_evaluation() {
-        let v27 = StringVersion::from_str("2.7").unwrap();
-        let env27 = MarkerEnvironment {
-            implementation_name: String::new(),
-            implementation_version: v27.clone(),
-            os_name: "linux".to_string(),
-            platform_machine: String::new(),
-            platform_python_implementation: String::new(),
-            platform_release: String::new(),
-            platform_system: String::new(),
-            platform_version: String::new(),
-            python_full_version: v27.clone(),
-            python_version: v27,
-            sys_platform: "linux".to_string(),
-        };
+        let env27 = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "",
+            implementation_version: "2.7",
+            os_name: "linux",
+            platform_machine: "",
+            platform_python_implementation: "",
+            platform_release: "",
+            platform_system: "",
+            platform_version: "",
+            python_full_version: "2.7",
+            python_version: "2.7",
+            sys_platform: "linux",
+        })
+        .unwrap();
         let env37 = env37();
         let marker1 = MarkerTree::from_str("python_version == '2.7'").unwrap();
         let marker2 = MarkerTree::from_str(
@@ -1561,7 +2266,7 @@ mod test {
         testing_logger::validate(|captured_logs| {
             assert_eq!(
                 captured_logs[0].body,
-                "Comparing two markers with each other doesn't make any sense, evaluating to false"
+                "Comparing two markers with each other doesn't make any sense, will evaluate to false"
             );
             assert_eq!(captured_logs[0].level, log::Level::Warn);
             assert_eq!(captured_logs.len(), 1);
@@ -1572,8 +2277,8 @@ mod test {
             assert_eq!(
                 captured_logs[0].body,
                 "Expected PEP 440 version to compare with python_version, found '3.9.', \
-                 evaluating to false: after parsing 3.9, found \".\" after it, \
-                 which is not part of a valid version"
+                 will evaluate to false: after parsing '3.9', found '.', which is \
+                 not part of a valid version"
             );
             assert_eq!(captured_logs[0].level, log::Level::Warn);
             assert_eq!(captured_logs.len(), 1);
@@ -1583,7 +2288,7 @@ mod test {
         testing_logger::validate(|captured_logs| {
             assert_eq!(
                 captured_logs[0].body,
-                "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', evaluating to false"
+                "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false"
             );
             assert_eq!(captured_logs[0].level, log::Level::Warn);
             assert_eq!(captured_logs.len(), 1);
@@ -1612,6 +2317,38 @@ mod test {
     #[test]
     fn test_not_in() {
         MarkerTree::from_str("'posix' not in os_name").unwrap();
+    }
+
+    #[test]
+    fn test_marker_version_inverted() {
+        let env37 = env37();
+        let (result, warnings) = MarkerTree::from_str("python_version > '3.6'")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(result);
+
+        let (result, warnings) = MarkerTree::from_str("'3.6' > python_version")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_marker_string_inverted() {
+        let env37 = env37();
+        let (result, warnings) = MarkerTree::from_str("'nux' in sys_platform")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(result);
+
+        let (result, warnings) = MarkerTree::from_str("sys_platform in 'nux'")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(!result);
     }
 
     #[test]
@@ -1661,11 +2398,41 @@ mod test {
     fn test_marker_expression() {
         assert_eq!(
             MarkerExpression::from_str(r#"os_name == "nt""#).unwrap(),
-            MarkerExpression {
-                l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+            MarkerExpression::String {
+                key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("nt".to_string()),
+                value: "nt".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn test_marker_expression_inverted() {
+        assert_eq!(
+            MarkerTree::from_str(
+                r#""nt" in os_name and '3.7' >= python_version and python_full_version >= '3.7'"#
+            )
+            .unwrap(),
+            MarkerTree::And(vec![
+                MarkerTree::Expression(MarkerExpression::StringInverted {
+                    value: "nt".to_string(),
+                    operator: MarkerOperator::In,
+                    key: MarkerValueString::OsName,
+                }),
+                MarkerTree::Expression(MarkerExpression::VersionInverted {
+                    key: MarkerValueVersion::PythonVersion,
+                    operator: pep440_rs::Operator::GreaterThanEqual,
+                    version: "3.7".parse().unwrap(),
+                }),
+                MarkerTree::Expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::from_pattern(
+                        pep440_rs::Operator::GreaterThanEqual,
+                        "3.7".parse().unwrap()
+                    )
+                    .unwrap()
+                }),
+            ])
         );
     }
 
@@ -1683,7 +2450,6 @@ mod test {
         );
     }
 
-    #[cfg(feature = "serde")]
     #[test]
     fn test_marker_environment_from_json() {
         let _env: MarkerEnvironment = serde_json::from_str(
@@ -1711,10 +2477,10 @@ mod test {
         let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(
             simplified,
-            Some(MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+            Some(MarkerTree::Expression(MarkerExpression::String {
+                key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("nt".to_string()),
+                value: "nt".to_string(),
             }))
         );
 
@@ -1733,10 +2499,9 @@ mod test {
         let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(
             simplified,
-            Some(MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::Extra,
-                operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("test".to_string()),
+            Some(MarkerTree::Expression(MarkerExpression::Extra {
+                operator: ExtraOperator::Equal,
+                name: ExtraName::from_str("test").unwrap(),
             }))
         );
 
@@ -1746,15 +2511,14 @@ mod test {
         assert_eq!(
             simplified,
             Some(MarkerTree::And(vec![
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                MarkerTree::Expression(MarkerExpression::String {
+                    key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("nt".to_string()),
+                    value: "nt".to_string(),
                 }),
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::Extra,
-                    operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("test".to_string()),
+                MarkerTree::Expression(MarkerExpression::Extra {
+                    operator: ExtraOperator::Equal,
+                    name: ExtraName::from_str("test").unwrap(),
                 }),
             ]))
         );
@@ -1768,10 +2532,10 @@ mod test {
         let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(
             simplified,
-            Some(MarkerTree::Expression(MarkerExpression {
-                l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+            Some(MarkerTree::Expression(MarkerExpression::String {
+                key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                r_value: MarkerValue::QuotedString("nt".to_string()),
+                value: "nt".to_string(),
             }))
         );
 
@@ -1785,15 +2549,18 @@ mod test {
         assert_eq!(
             simplified,
             Some(MarkerTree::Or(vec![
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                MarkerTree::Expression(MarkerExpression::String {
+                    key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("nt".to_string()),
+                    value: "nt".to_string(),
                 }),
-                MarkerTree::Expression(MarkerExpression {
-                    l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
-                    operator: MarkerOperator::Equal,
-                    r_value: MarkerValue::QuotedString("3.7".to_string()),
+                MarkerTree::Expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonVersion,
+                    specifier: VersionSpecifier::from_pattern(
+                        pep440_rs::Operator::Equal,
+                        "3.7".parse().unwrap()
+                    )
+                    .unwrap(),
                 }),
             ]))
         );

@@ -1,16 +1,17 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::Arc};
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use thiserror::Error;
+use tracing::trace;
 
-use distribution_types::{BuiltDist, Dist, DistributionMetadata, LocalEditable, SourceDist};
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
-use pypi_types::Metadata23;
-use uv_client::RegistryClient;
+use distribution_types::{BuiltDist, Dist, DistributionMetadata, GitSourceDist, SourceDist};
+use pep508_rs::MarkerEnvironment;
+use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
+use uv_git::GitUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
@@ -40,15 +41,13 @@ pub enum LookaheadError {
 /// possible because a direct URL points to a _specific_ version of a package, and so we know that
 /// any correct resolution will _have_ to include it (unlike with PyPI dependencies, which may
 /// require a range of versions and backtracking).
-pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
+pub struct LookaheadResolver<'a, Context: BuildContext> {
     /// The direct requirements for the project.
     requirements: &'a [Requirement],
     /// The constraints for the project.
     constraints: &'a Constraints,
     /// The overrides for the project.
     overrides: &'a Overrides,
-    /// The editable requirements for the project.
-    editables: &'a [(LocalEditable, Metadata23)],
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -57,27 +56,24 @@ pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
     database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
+impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
-        editables: &'a [(LocalEditable, Metadata23)],
         hasher: &'a HashStrategy,
-        context: &'a Context,
-        client: &'a RegistryClient,
         index: &'a InMemoryIndex,
+        database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             requirements,
             constraints,
             overrides,
-            editables,
             hasher,
             index,
-            database: DistributionDatabase::new(client, context),
+            database,
         }
     }
 
@@ -91,30 +87,30 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
     }
 
     /// Resolve the requirements from the provided source trees.
+    ///
+    /// When the environment is not given, this treats all marker expressions
+    /// that reference the environment as true. In other words, it does
+    /// environment independent expression evaluation. (Which in turn devolves
+    /// to "only evaluate marker expressions that reference an extra name.")
     pub async fn resolve(
         self,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
     ) -> Result<Vec<RequestedRequirements>, LookaheadError> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
         let mut seen = FxHashSet::default();
 
         // Queue up the initial requirements.
-        let mut queue: VecDeque<Requirement> = self
+        let mut queue: VecDeque<_> = self
             .constraints
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-            .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                self.constraints
-                    .apply(self.overrides.apply(&metadata.requires_dist))
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
-            }))
             .cloned()
             .collect();
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
-                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                if !matches!(requirement.source, RequirementSource::Registry { .. }) {
                     if seen.insert(requirement.clone()) {
                         futures.push(self.lookahead(requirement));
                     }
@@ -144,31 +140,65 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
     ) -> Result<Option<RequestedRequirements>, LookaheadError> {
-        // Determine whether the requirement represents a local distribution.
-        let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() else {
-            return Ok(None);
+        trace!("Performing lookahead for {requirement}");
+        // Determine whether the requirement represents a local distribution and convert to a
+        // buildable distribution.
+        let dist = match requirement.source {
+            RequirementSource::Registry { .. } => return Ok(None),
+            RequirementSource::Url {
+                subdirectory,
+                location,
+                url,
+            } => Dist::from_http_url(requirement.name, url, location, subdirectory)?,
+            RequirementSource::Git {
+                repository,
+                reference,
+                precise,
+                subdirectory,
+                url,
+            } => {
+                let mut git_url = GitUrl::new(repository, reference);
+                if let Some(precise) = precise {
+                    git_url = git_url.with_precise(precise);
+                }
+                Dist::Source(SourceDist::Git(GitSourceDist {
+                    name: requirement.name,
+                    git: Box::new(git_url),
+                    subdirectory,
+                    url,
+                }))
+            }
+            RequirementSource::Path {
+                path,
+                url,
+                editable,
+            } => Dist::from_file_url(requirement.name, url, &path, editable)?,
         };
-
-        // Convert to a buildable distribution.
-        let dist = Dist::from_url(requirement.name, url.clone())?;
 
         // Fetch the metadata for the distribution.
         let requires_dist = {
             let id = dist.version_id();
-            if let Some(archive) = self
-                .index
-                .get_metadata(&id)
-                .as_deref()
-                .and_then(|response| {
-                    if let MetadataResponse::Found(archive, ..) = response {
-                        Some(archive)
-                    } else {
-                        None
-                    }
-                })
+            if let Some(archive) =
+                self.index
+                    .distributions()
+                    .get(&id)
+                    .as_deref()
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive, ..) = response {
+                            Some(archive)
+                        } else {
+                            None
+                        }
+                    })
             {
                 // If the metadata is already in the index, return it.
-                archive.metadata.requires_dist.clone()
+                archive
+                    .metadata
+                    .requires_dist
+                    .iter()
+                    .cloned()
+                    .map(Requirement::from)
+                    .collect()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
@@ -186,9 +216,10 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
                 // Insert the metadata into the index.
                 self.index
-                    .insert_metadata(id, MetadataResponse::Found(archive));
+                    .distributions()
+                    .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                requires_dist
+                requires_dist.into_iter().map(Requirement::from).collect()
             }
         };
 

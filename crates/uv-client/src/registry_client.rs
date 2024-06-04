@@ -102,7 +102,7 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn cache<T>(mut self, cache: Cache) -> Self {
+    pub fn cache(mut self, cache: Cache) -> Self {
         self.cache = cache;
         self
     }
@@ -203,12 +203,6 @@ impl RegistryClient {
         self.timeout
     }
 
-    /// Set the index URLs to use for fetching packages.
-    #[must_use]
-    pub fn with_index_url(self, index_urls: IndexUrls) -> Self {
-        Self { index_urls, ..self }
-    }
-
     /// Fetch a package from the `PyPI` simple API.
     ///
     /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
@@ -221,7 +215,7 @@ impl RegistryClient {
     ) -> Result<Vec<(IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
         let mut it = self.index_urls.indexes().peekable();
         if it.peek().is_none() {
-            return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
+            return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }
 
         let mut results = Vec::new();
@@ -231,7 +225,7 @@ impl RegistryClient {
                     results.push((index.clone(), metadata));
 
                     // If we're only using the first match, we can stop here.
-                    if self.index_strategy == IndexStrategy::FirstMatch {
+                    if self.index_strategy == IndexStrategy::FirstIndex {
                         break;
                     }
                 }
@@ -239,6 +233,7 @@ impl RegistryClient {
                     ErrorKind::Offline(_) => continue,
                     ErrorKind::ReqwestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND)
+                            || err.status() == Some(StatusCode::UNAUTHORIZED)
                             || err.status() == Some(StatusCode::FORBIDDEN)
                         {
                             continue;
@@ -344,7 +339,7 @@ impl RegistryClient {
                 };
                 OwnedArchive::from_unarchived(&unarchived)
             }
-            .boxed()
+            .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         let result = self
@@ -368,27 +363,30 @@ impl RegistryClient {
     #[instrument(skip_all, fields(% built_dist))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata23, Error> {
         let metadata = match &built_dist {
-            BuiltDist::Registry(wheel) => match &wheel.file.url {
-                FileLocation::RelativeUrl(base, url) => {
-                    let url = pypi_types::base_url_join_relative(base, url)
-                        .map_err(ErrorKind::JoinRelativeError)?;
-                    self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
-                        .await?
+            BuiltDist::Registry(wheels) => {
+                let wheel = wheels.best_wheel();
+                match &wheel.file.url {
+                    FileLocation::RelativeUrl(base, url) => {
+                        let url = pypi_types::base_url_join_relative(base, url)
+                            .map_err(ErrorKind::JoinRelativeError)?;
+                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
+                            .await?
+                    }
+                    FileLocation::AbsoluteUrl(url) => {
+                        let url = Url::parse(url).map_err(ErrorKind::UrlParseError)?;
+                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
+                            .await?
+                    }
+                    FileLocation::Path(path) => {
+                        let file = fs_err::tokio::File::open(&path)
+                            .await
+                            .map_err(ErrorKind::Io)?;
+                        let reader = tokio::io::BufReader::new(file);
+                        read_metadata_async_seek(&wheel.filename, built_dist.to_string(), reader)
+                            .await?
+                    }
                 }
-                FileLocation::AbsoluteUrl(url) => {
-                    let url = Url::parse(url).map_err(ErrorKind::UrlParseError)?;
-                    self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
-                        .await?
-                }
-                FileLocation::Path(path) => {
-                    let file = fs_err::tokio::File::open(&path)
-                        .await
-                        .map_err(ErrorKind::Io)?;
-                    let reader = tokio::io::BufReader::new(file);
-                    read_metadata_async_seek(&wheel.filename, built_dist.to_string(), reader)
-                        .await?
-                }
-            },
+            }
             BuiltDist::DirectUrl(wheel) => {
                 self.wheel_metadata_no_pep658(
                     &wheel.filename,
@@ -518,6 +516,7 @@ impl RegistryClient {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
                     self.uncached_client().client(),
                     response,
+                    url.clone(),
                     headers,
                 )
                 .await
@@ -533,7 +532,7 @@ impl RegistryClient {
                 })?;
                 Ok::<Metadata23, CachedClientError<Error>>(metadata)
             }
-            .boxed()
+            .boxed_local()
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 
@@ -845,9 +844,10 @@ impl MediaType {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum Connectivity {
     /// Allow access to the network.
+    #[default]
     Online,
 
     /// Do not allow access to the network.

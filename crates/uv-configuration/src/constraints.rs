@@ -2,7 +2,7 @@ use std::hash::BuildHasherDefault;
 
 use rustc_hash::FxHashMap;
 
-use pep508_rs::Requirement;
+use pypi_types::Requirement;
 use uv_normalize::PackageName;
 
 /// A set of constraints for a set of requirements.

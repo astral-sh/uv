@@ -1,4 +1,4 @@
-use pep508_rs::Requirement;
+use pypi_types::Requirement;
 use uv_normalize::ExtraName;
 
 /// A set of requirements as requested by a parent requirement.

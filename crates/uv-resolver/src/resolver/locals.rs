@@ -1,12 +1,13 @@
+use std::iter;
 use std::str::FromStr;
 
-use either::Either;
 use rustc_hash::FxHashMap;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::RemoteSource;
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
-use pep508_rs::{MarkerEnvironment, VersionOrUrl};
+use pep508_rs::MarkerEnvironment;
+use pypi_types::RequirementSource;
 use uv_normalize::PackageName;
 
 use crate::{DependencyMode, Manifest};
@@ -21,7 +22,7 @@ impl Locals {
     /// Determine the set of permitted local versions in the [`Manifest`].
     pub(crate) fn from_manifest(
         manifest: &Manifest,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Self {
         let mut required: FxHashMap<PackageName, Version> = FxHashMap::default();
@@ -29,10 +30,8 @@ impl Locals {
         // Add all direct requirements and constraints. There's no need to look for conflicts,
         // since conflicts will be enforced by the solver.
         for requirement in manifest.requirements(markers, dependencies) {
-            if let Some(version_or_url) = requirement.version_or_url.as_ref() {
-                for local in iter_locals(version_or_url) {
-                    required.insert(requirement.name.clone(), local);
-                }
+            for local in iter_locals(&requirement.source) {
+                required.insert(requirement.name.clone(), local);
             }
         }
 
@@ -143,12 +142,14 @@ fn is_compatible(expected: &Version, provided: &Version) -> bool {
 
 /// If a [`VersionSpecifier`] contains exact equality specifiers for a local version, returns an
 /// iterator over the local versions.
-fn iter_locals(version_or_url: &VersionOrUrl) -> impl Iterator<Item = Version> + '_ {
-    match version_or_url {
+fn iter_locals(source: &RequirementSource) -> Box<dyn Iterator<Item = Version> + '_> {
+    match source {
         // Extract all local versions from specifiers that require an exact version (e.g.,
         // `==1.0.0+local`).
-        VersionOrUrl::VersionSpecifier(specifiers) => Either::Left(
-            specifiers
+        RequirementSource::Registry {
+            specifier: version, ..
+        } => Box::new(
+            version
                 .iter()
                 .filter(|specifier| {
                     matches!(specifier.operator(), Operator::Equal | Operator::ExactEqual)
@@ -158,29 +159,40 @@ fn iter_locals(version_or_url: &VersionOrUrl) -> impl Iterator<Item = Version> +
         ),
         // Exact a local version from a URL, if it includes a fully-qualified filename (e.g.,
         // `torch-2.2.1%2Bcu118-cp311-cp311-linux_x86_64.whl`).
-        VersionOrUrl::Url(url) => Either::Right(
+        RequirementSource::Url { url, .. } => Box::new(
             url.filename()
                 .ok()
                 .and_then(|filename| {
                     if let Ok(filename) = WheelFilename::from_str(&filename) {
-                        if filename.version.is_local() {
-                            Some(filename.version)
-                        } else {
-                            None
-                        }
+                        Some(filename.version)
                     } else if let Ok(filename) =
                         SourceDistFilename::parsed_normalized_filename(&filename)
                     {
-                        if filename.version.is_local() {
-                            Some(filename.version)
-                        } else {
-                            None
-                        }
+                        Some(filename.version)
                     } else {
                         None
                     }
                 })
-                .into_iter(),
+                .into_iter()
+                .filter(pep440_rs::Version::is_local),
+        ),
+        RequirementSource::Git { .. } => Box::new(iter::empty()),
+        RequirementSource::Path { path, .. } => Box::new(
+            path.file_name()
+                .and_then(|filename| {
+                    let filename = filename.to_string_lossy();
+                    if let Ok(filename) = WheelFilename::from_str(&filename) {
+                        Some(filename.version)
+                    } else if let Ok(filename) =
+                        SourceDistFilename::parsed_normalized_filename(&filename)
+                    {
+                        Some(filename.version)
+                    } else {
+                        None
+                    }
+                })
+                .into_iter()
+                .filter(pep440_rs::Version::is_local),
         ),
     }
 }
@@ -193,46 +205,59 @@ mod tests {
     use url::Url;
 
     use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
-    use pep508_rs::{VerbatimUrl, VersionOrUrl};
+    use pep508_rs::VerbatimUrl;
+    use pypi_types::ParsedUrl;
+    use pypi_types::RequirementSource;
 
     use crate::resolver::locals::{iter_locals, Locals};
 
     #[test]
     fn extract_locals() -> Result<()> {
         // Extract from a source distribution in a URL.
-        let version_or_url = VersionOrUrl::Url(VerbatimUrl::from_url(Url::parse(
-            "https://example.com/foo-1.0.0+local.tar.gz",
-        )?));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        let url = VerbatimUrl::from_url(Url::parse("https://example.com/foo-1.0.0+local.tar.gz")?);
+        let source =
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Extract from a wheel in a URL.
-        let version_or_url = VersionOrUrl::Url(VerbatimUrl::from_url(Url::parse(
+        let url = VerbatimUrl::from_url(Url::parse(
             "https://example.com/foo-1.0.0+local-cp39-cp39-linux_x86_64.whl",
-        )?));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        )?);
+        let source =
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Don't extract anything if the URL is opaque.
-        let version_or_url = VersionOrUrl::Url(VerbatimUrl::from_url(Url::parse(
-            "git+https://example.com/foo/bar",
-        )?));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        let url = VerbatimUrl::from_url(Url::parse("git+https://example.com/foo/bar")?);
+        let source =
+            RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert!(locals.is_empty());
 
         // Extract from `==` specifiers.
-        let version_or_url = VersionOrUrl::VersionSpecifier(VersionSpecifiers::from_iter([
+        let version = VersionSpecifiers::from_iter([
             VersionSpecifier::from_version(Operator::GreaterThan, Version::from_str("1.0.0")?)?,
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?,
-        ]));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        ]);
+        let source = RequirementSource::Registry {
+            specifier: version,
+            index: None,
+        };
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Ignore other specifiers.
-        let version_or_url = VersionOrUrl::VersionSpecifier(VersionSpecifiers::from_iter([
-            VersionSpecifier::from_version(Operator::NotEqual, Version::from_str("1.0.0+local")?)?,
-        ]));
-        let locals: Vec<_> = iter_locals(&version_or_url).collect();
+        let version = VersionSpecifiers::from_iter([VersionSpecifier::from_version(
+            Operator::NotEqual,
+            Version::from_str("1.0.0+local")?,
+        )?]);
+        let source = RequirementSource::Registry {
+            specifier: version,
+            index: None,
+        };
+        let locals: Vec<_> = iter_locals(&source).collect();
         assert!(locals.is_empty());
 
         Ok(())

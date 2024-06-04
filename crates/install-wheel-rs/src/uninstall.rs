@@ -2,12 +2,15 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
 use fs_err as fs;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 use tracing::debug;
+use uv_fs::write_atomic_sync;
 
 use crate::wheel::read_record_file;
 use crate::Error;
 
-/// Uninstall the wheel represented by the given `dist_info` directory.
+/// Uninstall the wheel represented by the given `.dist-info` directory.
 pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     let Some(site_packages) = dist_info.parent() else {
         return Err(Error::BrokenVenv(
@@ -115,6 +118,172 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     Ok(Uninstall {
         file_count,
         dir_count,
+    })
+}
+
+/// Uninstall the egg represented by the `.egg-info` directory.
+///
+/// See: <https://github.com/pypa/pip/blob/41587f5e0017bcd849f42b314dc8a34a7db75621/src/pip/_internal/req/req_uninstall.py#L483>
+pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
+    let mut file_count = 0usize;
+    let mut dir_count = 0usize;
+
+    let dist_location = egg_info
+        .parent()
+        .expect("egg-info directory is not in a site-packages directory");
+
+    // Read the `namespace_packages.txt` file.
+    let namespace_packages = {
+        let namespace_packages_path = egg_info.join("namespace_packages.txt");
+        match fs_err::read_to_string(namespace_packages_path) {
+            Ok(namespace_packages) => namespace_packages
+                .lines()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                vec![]
+            }
+            Err(err) => return Err(err.into()),
+        }
+    };
+
+    // Read the `top_level.txt` file, ignoring anything in `namespace_packages.txt`.
+    let top_level = {
+        let top_level_path = egg_info.join("top_level.txt");
+        match fs_err::read_to_string(&top_level_path) {
+            Ok(top_level) => top_level
+                .lines()
+                .map(ToString::to_string)
+                .filter(|line| !namespace_packages.contains(line))
+                .collect::<Vec<_>>(),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::MissingTopLevel(top_level_path));
+            }
+            Err(err) => return Err(err.into()),
+        }
+    };
+
+    // Remove everything in `top_level.txt`.
+    for entry in top_level {
+        let path = dist_location.join(&entry);
+
+        // Remove as a directory.
+        match fs_err::remove_dir_all(&path) {
+            Ok(()) => {
+                debug!("Removed directory: {}", path.display());
+                dir_count += 1;
+                continue;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+
+        // Remove as a `.py`, `.pyc`, or `.pyo` file.
+        for exten in &["py", "pyc", "pyo"] {
+            let path = path.with_extension(exten);
+            match fs_err::remove_file(&path) {
+                Ok(()) => {
+                    debug!("Removed file: {}", path.display());
+                    file_count += 1;
+                    break;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
+    }
+
+    // Remove the `.egg-info` directory.
+    match fs_err::remove_dir_all(egg_info) {
+        Ok(()) => {
+            debug!("Removed directory: {}", egg_info.display());
+            dir_count += 1;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(err.into());
+        }
+    }
+
+    Ok(Uninstall {
+        file_count,
+        dir_count,
+    })
+}
+
+fn normcase(s: &str) -> String {
+    if cfg!(windows) {
+        s.replace('/', "\\").to_lowercase()
+    } else {
+        s.to_owned()
+    }
+}
+
+static EASY_INSTALL_PTH: Lazy<Mutex<i32>> = Lazy::new(Mutex::default);
+
+/// Uninstall the legacy editable represented by the `.egg-link` file.
+///
+/// See: <https://github.com/pypa/pip/blob/41587f5e0017bcd849f42b314dc8a34a7db75621/src/pip/_internal/req/req_uninstall.py#L534-L552>
+pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
+    let mut file_count = 0usize;
+
+    // Find the target line in the `.egg-link` file.
+    let contents = fs::read_to_string(egg_link)?;
+    let target_line = contents
+        .lines()
+        .find_map(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                None
+            } else {
+                Some(line)
+            }
+        })
+        .ok_or_else(|| Error::InvalidEggLink(egg_link.to_path_buf()))?;
+
+    // This comes from `pkg_resources.normalize_path`
+    let target_line = normcase(target_line);
+
+    match fs::remove_file(egg_link) {
+        Ok(()) => {
+            debug!("Removed file: {}", egg_link.display());
+            file_count += 1;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    let site_package = egg_link.parent().ok_or(Error::BrokenVenv(
+        "`.egg-link` file is not in a directory".to_string(),
+    ))?;
+    let easy_install = site_package.join("easy-install.pth");
+
+    // Since uv has an environment lock, it's enough to add a mutex here to ensure we never
+    // lose writes to `easy-install.pth` (this is the only place in uv where `easy-install.pth`
+    // is modified).
+    let _guard = EASY_INSTALL_PTH.lock().unwrap();
+
+    let content = fs::read_to_string(&easy_install)?;
+    let mut new_content = String::with_capacity(content.len());
+    let mut removed = false;
+
+    // https://github.com/pypa/pip/blob/41587f5e0017bcd849f42b314dc8a34a7db75621/src/pip/_internal/req/req_uninstall.py#L634
+    for line in content.lines() {
+        if !removed && line.trim() == target_line {
+            removed = true;
+        } else {
+            new_content.push_str(line);
+            new_content.push('\n');
+        }
+    }
+    if removed {
+        write_atomic_sync(&easy_install, new_content)?;
+        debug!("Removed line from `easy-install.pth`: {target_line}");
+    }
+
+    Ok(Uninstall {
+        file_count,
+        dir_count: 0usize,
     })
 }
 

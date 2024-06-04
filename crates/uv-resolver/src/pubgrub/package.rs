@@ -1,28 +1,54 @@
-use derivative::Derivative;
-
-use pep508_rs::VerbatimUrl;
+use pep508_rs::MarkerTree;
+use pypi_types::VerbatimParsedUrl;
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+use std::sync::Arc;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolver::Urls;
 
+/// [`Arc`] wrapper around [`PubGrubPackageInner`] to make cloning (inside PubGrub) cheap.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct PubGrubPackage(Arc<PubGrubPackageInner>);
+
+impl Deref for PubGrubPackage {
+    type Target = PubGrubPackageInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for PubGrubPackage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl From<PubGrubPackageInner> for PubGrubPackage {
+    fn from(package: PubGrubPackageInner) -> Self {
+        Self(Arc::new(package))
+    }
+}
+
 /// A PubGrub-compatible wrapper around a "Python package", with two notable characteristics:
 ///
-/// 1. Includes a [`PubGrubPackage::Root`] variant, to satisfy `PubGrub`'s requirement that a
+/// 1. Includes a [`PubGrubPackage::Root`] variant, to satisfy PubGrub's requirement that a
 ///    resolution starts from a single root.
 /// 2. Uses the same strategy as pip and posy to handle extras: for each extra, we create a virtual
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
-#[derive(Debug, Clone, Eq, Derivative)]
-#[derivative(PartialEq, Hash)]
-pub enum PubGrubPackage {
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum PubGrubPackageInner {
     /// The root package, which is used to start the resolution process.
     Root(Option<PackageName>),
     /// A Python version.
     Python(PubGrubPython),
     /// A Python package.
-    Package(
-        PackageName,
-        Option<ExtraName>,
+    Package {
+        name: PackageName,
+        extra: Option<ExtraName>,
+        marker: Option<MarkerTree>,
         /// The URL of the package, if it was specified in the requirement.
         ///
         /// There are a few challenges that come with URL-based packages, and how they map to
@@ -59,8 +85,8 @@ pub enum PubGrubPackage {
         /// we're going to have a dependency that's provided as a URL, we _need_ to visit the URL
         /// version before the registry version. So we could just error if we visit a URL variant
         /// _after_ a registry variant.
-        Option<VerbatimUrl>,
-    ),
+        url: Option<VerbatimParsedUrl>,
+    },
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
     ///
     /// For a given package `black`, and an extra `colorama`, we create a virtual package
@@ -74,22 +100,48 @@ pub enum PubGrubPackage {
     /// the exact same version of the base variant. Without the proxy package, then when provided
     /// requirements like `black==23.0.1` and `black[colorama]`, PubGrub may attempt to retrieve
     /// metadata for `black[colorama]` versions other than `23.0.1`.
-    Extra(PackageName, ExtraName, Option<VerbatimUrl>),
+    Extra {
+        name: PackageName,
+        extra: ExtraName,
+        marker: Option<MarkerTree>,
+        url: Option<VerbatimParsedUrl>,
+    },
 }
 
 impl PubGrubPackage {
     /// Create a [`PubGrubPackage`] from a package name and optional extra name.
-    pub(crate) fn from_package(name: PackageName, extra: Option<ExtraName>, urls: &Urls) -> Self {
+    pub(crate) fn from_package(
+        name: PackageName,
+        extra: Option<ExtraName>,
+        mut marker: Option<MarkerTree>,
+        urls: &Urls,
+    ) -> Self {
         let url = urls.get(&name).cloned();
+        // Remove all extra expressions from the marker, since we track extras
+        // separately. This also avoids an issue where packages added via
+        // extras end up having two distinct marker expressions, which in turn
+        // makes them two distinct packages. This results in PubGrub being
+        // unable to unify version constraints across such packages.
+        marker = marker.and_then(|m| m.simplify_extras_with(|_| true));
         if let Some(extra) = extra {
-            Self::Extra(name, extra, url)
+            Self(Arc::new(PubGrubPackageInner::Extra {
+                name,
+                extra,
+                marker,
+                url,
+            }))
         } else {
-            Self::Package(name, extra, url)
+            Self(Arc::new(PubGrubPackageInner::Package {
+                name,
+                extra,
+                marker,
+                url,
+            }))
         }
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub enum PubGrubPython {
     /// The Python version installed in the current environment.
     Installed,
@@ -97,7 +149,7 @@ pub enum PubGrubPython {
     Target,
 }
 
-impl std::fmt::Display for PubGrubPackage {
+impl std::fmt::Display for PubGrubPackageInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Root(name) => {
@@ -108,11 +160,35 @@ impl std::fmt::Display for PubGrubPackage {
                 }
             }
             Self::Python(_) => write!(f, "Python"),
-            Self::Package(name, None, ..) => write!(f, "{name}"),
-            Self::Package(name, Some(extra), ..) => {
+            Self::Package {
+                name,
+                extra: None,
+                marker: None,
+                ..
+            } => write!(f, "{name}"),
+            Self::Package {
+                name,
+                extra: Some(extra),
+                marker: None,
+                ..
+            } => {
                 write!(f, "{name}[{extra}]")
             }
-            Self::Extra(name, extra, ..) => write!(f, "{name}[{extra}]"),
+            Self::Package {
+                name,
+                extra: None,
+                marker: Some(marker),
+                ..
+            } => write!(f, "{name}{{{marker}}}"),
+            Self::Package {
+                name,
+                extra: Some(extra),
+                marker: Some(marker),
+                ..
+            } => {
+                write!(f, "{name}[{extra}]{{{marker}}}")
+            }
+            Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
         }
     }
 }

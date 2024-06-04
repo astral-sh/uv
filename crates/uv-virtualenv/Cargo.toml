@@ -13,30 +13,18 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
-[[bin]]
-name = "uv-virtualenv"
-required-features = ["cli"]
-
 [lints]
 workspace = true
 
 [dependencies]
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
-uv-cache = { workspace = true }
 uv-fs = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-version = { workspace = true }
 
-anstream = { workspace = true }
-cachedir = { workspace = true }
-clap = { workspace = true, features = ["derive"], optional = true }
-directories = { workspace = true }
 fs-err = { workspace = true }
+itertools = { workspace = true }
 pathdiff = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, optional = true }
-
-[features]
-cli = ["clap", "tracing-subscriber"]

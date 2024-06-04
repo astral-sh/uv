@@ -10,9 +10,10 @@ use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
+use cli::{ToolCommand, ToolNamespace};
 use uv_cache::Cache;
-
 use uv_requirements::RequirementsSource;
+use uv_workspace::Combine;
 
 use crate::cli::{CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace};
 #[cfg(feature = "self-update")]
@@ -112,10 +113,12 @@ async fn run() -> Result<ExitStatus> {
     // 3. The user configuration file.
     let workspace = if let Some(config_file) = cli.config_file.as_ref() {
         Some(uv_workspace::Workspace::from_file(config_file)?)
-    } else if let Some(workspace) = uv_workspace::Workspace::find(env::current_dir()?)? {
-        Some(workspace)
+    } else if cli.global_args.isolated {
+        None
     } else {
-        uv_workspace::Workspace::user()?
+        let project = uv_workspace::Workspace::find(env::current_dir()?)?;
+        let user = uv_workspace::Workspace::user()?;
+        project.combine(user)
     };
 
     // Resolve the global settings.
@@ -174,8 +177,14 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
-            let cache = cache.with_refresh(args.refresh);
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
             let requirements = args
                 .src_file
                 .into_iter()
@@ -196,6 +205,7 @@ async fn run() -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                args.overrides_from_workspace,
                 args.shared.extras,
                 args.shared.output_file.as_deref(),
                 args.shared.resolution,
@@ -217,7 +227,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.keyring_provider,
                 args.shared.setup_py,
                 args.shared.config_setting,
-                args.shared.connectivity,
+                globals.connectivity,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
                 args.shared.python_version,
@@ -227,8 +237,10 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.link_mode,
                 args.shared.python,
                 args.shared.system,
+                args.shared.concurrency,
                 globals.native_tls,
                 globals.quiet,
+                globals.preview,
                 cache,
                 printer,
             )
@@ -241,16 +253,28 @@ async fn run() -> Result<ExitStatus> {
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
-            let cache = cache.with_refresh(args.refresh);
-            let sources = args
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            let requirements = args
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
+            let constraints = args
+                .constraint
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
 
             commands::pip_sync(
-                &sources,
+                &requirements,
+                &constraints,
                 &args.reinstall,
                 args.shared.link_mode,
                 args.shared.compile_bytecode,
@@ -259,7 +283,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.index_strategy,
                 args.shared.keyring_provider,
                 args.shared.setup_py,
-                args.shared.connectivity,
+                globals.connectivity,
                 &args.shared.config_setting,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
@@ -267,11 +291,16 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.python_version,
                 args.shared.python_platform,
                 args.shared.strict,
+                args.shared.exclude_newer,
                 args.shared.python,
                 args.shared.system,
                 args.shared.break_system_packages,
+                args.shared.target,
+                args.shared.concurrency,
                 globals.native_tls,
+                globals.preview,
                 cache,
+                args.dry_run,
                 printer,
             )
             .await
@@ -279,10 +308,17 @@ async fn run() -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
         }) => {
+            args.compat_args.validate()?;
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, workspace);
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(args.shared.concurrency.installs)
+                .build_global()
+                .expect("failed to initialize global rayon pool");
 
-            let cache = cache.with_refresh(args.refresh);
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
             let requirements = args
                 .package
                 .into_iter()
@@ -309,6 +345,7 @@ async fn run() -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                args.overrides_from_workspace,
                 &args.shared.extras,
                 args.shared.resolution,
                 args.shared.prerelease,
@@ -322,7 +359,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.compile_bytecode,
                 args.shared.require_hashes,
                 args.shared.setup_py,
-                args.shared.connectivity,
+                globals.connectivity,
                 &args.shared.config_setting,
                 args.shared.no_build_isolation,
                 args.shared.no_build,
@@ -334,7 +371,10 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.python,
                 args.shared.system,
                 args.shared.break_system_packages,
+                args.shared.target,
+                args.shared.concurrency,
                 globals.native_tls,
+                globals.preview,
                 cache,
                 args.dry_run,
                 printer,
@@ -346,6 +386,9 @@ async fn run() -> Result<ExitStatus> {
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipUninstallSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
 
             let sources = args
                 .package
@@ -362,9 +405,11 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.python,
                 args.shared.system,
                 args.shared.break_system_packages,
+                args.shared.target,
                 cache,
-                args.shared.connectivity,
+                globals.connectivity,
                 globals.native_tls,
+                globals.preview,
                 args.shared.keyring_provider,
                 printer,
             )
@@ -376,11 +421,15 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipFreezeSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::pip_freeze(
                 args.exclude_editable,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -393,6 +442,9 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipListSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::pip_list(
                 args.editable,
                 args.exclude_editable,
@@ -401,6 +453,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -411,11 +464,15 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipShowSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::pip_show(
                 args.package,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -426,9 +483,13 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCheckSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::pip_check(
                 args.shared.python.as_deref(),
                 args.shared.system,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -452,6 +513,9 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VenvSettings::resolve(args, workspace);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
                 if args.name == PathBuf::from(".venv") {
@@ -470,10 +534,12 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
-                args.shared.connectivity,
+                globals.connectivity,
                 args.seed,
+                args.allow_existing,
                 args.shared.exclude_newer,
                 globals.native_tls,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -482,6 +548,9 @@ async fn run() -> Result<ExitStatus> {
         Commands::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::RunSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
 
             let requirements = args
                 .with
@@ -504,12 +573,50 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
+                args.index_locations,
+                args.extras,
                 args.target,
                 args.args,
                 requirements,
                 args.python,
-                args.isolated,
-                args.no_workspace,
+                args.upgrade,
+                args.exclude_newer,
+                args.package,
+                globals.isolated,
+                globals.preview,
+                globals.connectivity,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        Commands::Sync(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::SyncSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::sync(
+                args.index_locations,
+                args.extras,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        Commands::Lock(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::LockSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::lock(
+                args.index_locations,
+                args.upgrade,
+                args.exclude_newer,
                 globals.preview,
                 &cache,
                 printer,
@@ -527,6 +634,30 @@ async fn run() -> Result<ExitStatus> {
         Commands::GenerateShellCompletion { shell } => {
             shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
+        }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Run(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolRunSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::run_tool(
+                args.target,
+                args.args,
+                args.python,
+                args.from,
+                args.with,
+                globals.isolated,
+                globals.preview,
+                args.index_locations,
+                globals.connectivity,
+                &cache,
+                printer,
+            )
+            .await
         }
     }
 }

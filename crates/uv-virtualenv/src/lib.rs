@@ -14,8 +14,10 @@ mod bare;
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    #[error("Failed to determine python interpreter to use")]
-    InterpreterError(#[from] uv_interpreter::Error),
+    #[error("Failed to determine Python interpreter to use")]
+    Discovery(#[from] uv_interpreter::DiscoveryError),
+    #[error("Failed to determine Python interpreter to use")]
+    InterpreterNotFound(#[from] uv_interpreter::InterpreterNotFound),
     #[error(transparent)]
     Platform(#[from] PlatformError),
     #[error("Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}")]
@@ -51,9 +53,16 @@ pub fn create_venv(
     interpreter: Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
+    allow_existing: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
-    let virtualenv = create_bare_venv(location, &interpreter, prompt, system_site_packages)?;
+    let virtualenv = create_bare_venv(
+        location,
+        &interpreter,
+        prompt,
+        system_site_packages,
+        allow_existing,
+    )?;
 
     // Create the corresponding `PythonEnvironment`.
     let interpreter = interpreter.with_virtualenv(virtualenv);

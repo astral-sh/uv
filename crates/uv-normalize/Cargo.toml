@@ -5,6 +5,6 @@ edition = "2021"
 description = "Normalization for distribution, package and extra anmes"
 
 [dependencies]
-rkyv = { workspace = true, optional = true }
+rkyv = { workspace = true }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, features = ["derive"], optional = true }
+serde = { workspace = true, features = ["derive"] }

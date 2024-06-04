@@ -12,11 +12,11 @@ pub struct ConfigSettingEntry {
 }
 
 impl FromStr for ConfigSettingEntry {
-    type Err = anyhow::Error;
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let Some((key, value)) = s.split_once('=') else {
-            return Err(anyhow::anyhow!(
+            return Err(format!(
                 "Invalid config setting: {s} (expected `KEY=VALUE`)"
             ));
         };
@@ -36,7 +36,6 @@ enum ConfigSettingValue {
     List(Vec<String>),
 }
 
-#[cfg(feature = "serde")]
 impl serde::Serialize for ConfigSettingValue {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -46,7 +45,6 @@ impl serde::Serialize for ConfigSettingValue {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct Visitor;
@@ -84,7 +82,6 @@ impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
 /// See: <https://peps.python.org/pep-0517/#config-settings>
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[cfg_attr(not(feature = "serde"), allow(dead_code))]
 pub struct ConfigSettings(BTreeMap<String, ConfigSettingValue>);
 
 impl FromIterator<ConfigSettingEntry> for ConfigSettings {
@@ -110,15 +107,49 @@ impl FromIterator<ConfigSettingEntry> for ConfigSettings {
     }
 }
 
-#[cfg(feature = "serde")]
 impl ConfigSettings {
     /// Convert the settings to a string that can be passed directly to a PEP 517 build backend.
     pub fn escape_for_python(&self) -> String {
         serde_json::to_string(self).expect("Failed to serialize config settings")
     }
+
+    /// Merge two sets of config settings, with the values in `self` taking precedence.
+    #[must_use]
+    pub fn merge(self, other: ConfigSettings) -> ConfigSettings {
+        let mut config = self.0;
+        for (key, value) in other.0 {
+            match config.entry(key) {
+                Entry::Vacant(vacant) => {
+                    vacant.insert(value);
+                }
+                Entry::Occupied(mut occupied) => match occupied.get_mut() {
+                    ConfigSettingValue::String(existing) => {
+                        let existing = existing.clone();
+                        match value {
+                            ConfigSettingValue::String(value) => {
+                                occupied.insert(ConfigSettingValue::List(vec![existing, value]));
+                            }
+                            ConfigSettingValue::List(mut values) => {
+                                values.insert(0, existing);
+                                occupied.insert(ConfigSettingValue::List(values));
+                            }
+                        }
+                    }
+                    ConfigSettingValue::List(existing) => match value {
+                        ConfigSettingValue::String(value) => {
+                            existing.push(value);
+                        }
+                        ConfigSettingValue::List(values) => {
+                            existing.extend(values);
+                        }
+                    },
+                },
+            }
+        }
+        Self(config)
+    }
 }
 
-#[cfg(feature = "serde")]
 impl serde::Serialize for ConfigSettings {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
@@ -131,7 +162,6 @@ impl serde::Serialize for ConfigSettings {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for ConfigSettings {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct Visitor;
@@ -202,7 +232,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
     fn escape_for_python() {
         let mut settings = ConfigSettings::default();
         settings.0.insert(
@@ -235,8 +264,8 @@ mod tests {
         let mut settings = ConfigSettings::default();
         settings.0.insert(
             "key".to_string(),
-            ConfigSettingValue::String("val\\1 {}ue".to_string()),
+            ConfigSettingValue::String("val\\1 {}value".to_string()),
         );
-        assert_eq!(settings.escape_for_python(), r#"{"key":"val\\1 {}ue"}"#);
+        assert_eq!(settings.escape_for_python(), r#"{"key":"val\\1 {}value"}"#);
     }
 }

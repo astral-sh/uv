@@ -8,9 +8,10 @@ use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use insta::{assert_json_snapshot, assert_snapshot, with_settings};
-use pep508_rs::{MarkerEnvironment, StringVersion};
-use platform_tags::{Arch, Os, Platform};
 use tokio::net::TcpListener;
+
+use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
+use platform_tags::{Arch, Os, Platform};
 use uv_cache::Cache;
 use uv_client::LineHaul;
 use uv_client::RegistryClientBuilder;
@@ -48,7 +49,7 @@ async fn test_user_agent_has_version() -> Result<()> {
     });
 
     // Initialize uv-client
-    let cache = Cache::temp()?;
+    let cache = Cache::temp()?.init()?;
     let client = RegistryClientBuilder::new(cache).build();
 
     // Send request to our dummy server
@@ -106,31 +107,23 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     });
 
     // Add some representative markers for an Ubuntu CI runner
-    let markers = MarkerEnvironment {
-        implementation_name: "cpython".to_string(),
-        implementation_version: StringVersion {
-            string: "3.12.2".to_string(),
-            version: "3.12.2".parse()?,
-        },
-        os_name: "posix".to_string(),
-        platform_machine: "x86_64".to_string(),
-        platform_python_implementation: "CPython".to_string(),
-        platform_release: "6.5.0-1016-azure".to_string(),
-        platform_system: "Linux".to_string(),
-        platform_version: "#16~22.04.1-Ubuntu SMP Fri Feb 16 15:42:02 UTC 2024".to_string(),
-        python_full_version: StringVersion {
-            string: "3.12.2".to_string(),
-            version: "3.12.2".parse()?,
-        },
-        python_version: StringVersion {
-            string: "3.12".to_string(),
-            version: "3.12".parse()?,
-        },
-        sys_platform: "linux".to_string(),
-    };
+    let markers = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+        implementation_name: "cpython",
+        implementation_version: "3.12.2",
+        os_name: "posix",
+        platform_machine: "x86_64",
+        platform_python_implementation: "CPython",
+        platform_release: "6.5.0-1016-azure",
+        platform_system: "Linux",
+        platform_version: "#16~22.04.1-Ubuntu SMP Fri Feb 16 15:42:02 UTC 2024",
+        python_full_version: "3.12.2",
+        python_version: "3.12",
+        sys_platform: "linux",
+    })
+    .unwrap();
 
     // Initialize uv-client
-    let cache = Cache::temp()?;
+    let cache = Cache::temp()?.init()?;
     let mut builder = RegistryClientBuilder::new(cache).markers(&markers);
 
     let linux = Platform::new(

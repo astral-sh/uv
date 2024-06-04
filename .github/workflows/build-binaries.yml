@@ -63,7 +63,7 @@ jobs:
 
   macos-x86_64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: macos-latest
+    runs-on: macos-12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,9 +102,9 @@ jobs:
             *.tar.gz
             *.sha256
 
-  macos-universal:
+  macos-aarch64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -112,16 +112,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64
+          architecture: arm64
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
-      - name: "Build wheels - universal2"
+      - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@v1
         with:
-          args: --release --locked --target universal2-apple-darwin --out dist --features self-update
-      - name: "Test wheel - universal2"
+          target: aarch64
+          args: --release --locked --out dist --features self-update
+      - name: "Test wheel - aarch64"
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
+          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
@@ -275,11 +276,6 @@ jobs:
     strategy:
       matrix:
         platform:
-          - target: aarch64-unknown-linux-gnu
-            arch: aarch64
-            # see https://github.com/astral-sh/ruff/issues/3791
-            # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
           - target: arm-unknown-linux-musleabihf
@@ -298,8 +294,6 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
-          manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update
       - uses: uraimo/run-on-arch-action@v2
@@ -506,18 +500,19 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          manylinux: musllinux_1_2
+          manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update
       - name: "Test wheel"
         if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: addnab/docker-run-action@v3
         with:
-          image: alpine:latest
+          image: alpine:3.12
           options: -v ${{ github.workspace }}:/io -w /io
           run: |
             apk add python3
-            python -m venv .venv
-            .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade pip
+            .venv/bin/pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
@@ -556,6 +551,9 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+          - target: powerpc64le-unknown-linux-musl
+            arch: ppc64le
+            toolchain: nightly
 
     steps:
       - uses: actions/checkout@v4
@@ -570,9 +568,10 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          manylinux: musllinux_1_2
-          args: --release --locked --out dist --features self-update
+          manylinux: musllinux_1_1
+          args: --release --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
+          rust-toolchain: ${{ matrix.platform.toolchain || 'stable' }}
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
@@ -585,6 +584,20 @@ jobs:
             python -m venv .venv
             .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
+      - uses: uraimo/run-on-arch-action@v2
+        name: Test wheel (manylinux)
+        if: matrix.platform.arch == 'aarch64'
+        with:
+          arch: aarch64
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip
+            pip3 install -U pip
+          run: |
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:

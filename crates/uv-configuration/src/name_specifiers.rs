@@ -21,7 +21,6 @@ impl FromStr for PackageNameSpecifier {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for PackageNameSpecifier {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -75,6 +74,10 @@ impl schemars::JsonSchema for PackageNameSpecifier {
                         .to_string(),
                 ),
                 ..schemars::schema::StringValidation::default()
+            })),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some("The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.".to_string()),
+              ..schemars::schema::Metadata::default()
             })),
             ..schemars::schema::SchemaObject::default()
         }

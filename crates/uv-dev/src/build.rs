@@ -10,8 +10,11 @@ use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{
+    BuildKind, Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
+use uv_git::GitResolver;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex};
 use uv_types::{BuildContext, BuildIsolation, InFlight};
@@ -51,16 +54,18 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         BuildKind::Wheel
     };
 
-    let cache = Cache::try_from(args.cache_args)?;
+    let cache = Cache::try_from(args.cache_args)?.init()?;
 
-    let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
-    let index_urls = IndexLocations::default();
-    let flat_index = FlatIndex::default();
-    let index = InMemoryIndex::default();
-    let setup_py = SetupPyStrategy::default();
-    let in_flight = InFlight::default();
+    let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
+    let flat_index = FlatIndex::default();
+    let git = GitResolver::default();
+    let in_flight = InFlight::default();
+    let index = InMemoryIndex::default();
+    let index_urls = IndexLocations::default();
+    let setup_py = SetupPyStrategy::default();
+    let venv = PythonEnvironment::from_virtualenv(&cache)?;
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -69,6 +74,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &index_urls,
         &flat_index,
         &index,
+        &git,
         &in_flight,
         setup_py,
         &config_settings,
@@ -76,6 +82,8 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         install_wheel_rs::linker::LinkMode::default(),
         &NoBuild::None,
         &NoBinary::None,
+        concurrency,
+        PreviewMode::Enabled,
     );
 
     let builder = SourceBuild::setup(
@@ -90,6 +98,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         BuildIsolation::Isolated,
         build_kind,
         FxHashMap::default(),
+        concurrency.builds,
     )
     .await?;
     Ok(wheel_dir.join(builder.build_wheel(&wheel_dir).await?))

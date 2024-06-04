@@ -13,8 +13,8 @@ use tokio::time::Instant;
 use tracing::{info, info_span, Instrument};
 
 use uv_fs::Simplified;
-use uv_toolchain::{
-    DownloadResult, Error, PythonDownload, PythonDownloadRequest, TOOLCHAIN_DIRECTORY,
+use uv_interpreter::managed::{
+    DownloadResult, Error, InstalledToolchains, PythonDownload, PythonDownloadRequest,
 };
 
 #[derive(Parser, Debug)]
@@ -25,9 +25,8 @@ pub(crate) struct FetchPythonArgs {
 pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let start = Instant::now();
 
-    let bootstrap_dir = &*TOOLCHAIN_DIRECTORY;
-
-    fs_err::create_dir_all(bootstrap_dir)?;
+    let toolchains = InstalledToolchains::from_settings()?.init()?;
+    let toolchain_dir = toolchains.root();
 
     let versions = if args.versions.is_empty() {
         info!("Reading versions from file...");
@@ -57,7 +56,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut tasks = futures::stream::iter(downloads.iter())
         .map(|download| {
             async {
-                let result = download.fetch(&client, bootstrap_dir).await;
+                let result = download.fetch(&client, toolchain_dir).await;
                 (download.python_version(), result)
             }
             .instrument(info_span!("download", key = %download))
@@ -94,7 +93,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     };
 
     // Order matters here, as we overwrite previous links
-    info!("Installing to `{}`...", bootstrap_dir.user_display());
+    info!("Installing to `{}`...", toolchain_dir.user_display());
 
     // On Windows, linking the executable generally results in broken installations
     // and each toolchain path will need to be added to the PATH separately in the
@@ -106,10 +105,10 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
             // TODO(zanieb): This path should be a part of the download metadata
             let executable = path.join("install").join("bin").join("python3");
             for target in [
-                bootstrap_dir.join(format!("python{}", version.python_full_version())),
-                bootstrap_dir.join(format!("python{}.{}", version.major(), version.minor())),
-                bootstrap_dir.join(format!("python{}", version.major())),
-                bootstrap_dir.join("python"),
+                toolchain_dir.join(format!("python{}", version.python_full_version())),
+                toolchain_dir.join(format!("python{}.{}", version.major(), version.minor())),
+                toolchain_dir.join(format!("python{}", version.major())),
+                toolchain_dir.join("python"),
             ] {
                 // Attempt to remove it, we'll fail on link if we couldn't remove it for some reason
                 // but if it's missing we don't want to error

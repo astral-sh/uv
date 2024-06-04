@@ -1,10 +1,11 @@
+use pypi_types::RequirementSource;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, VersionOrUrl};
+use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
-use crate::{DependencyMode, Manifest, Preference};
+use crate::{DependencyMode, Manifest};
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
@@ -14,20 +15,17 @@ pub struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
 impl AllowedYanks {
     pub fn from_manifest(
         manifest: &Manifest,
-        markers: &MarkerEnvironment,
+        markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
 
-        for requirement in manifest
-            .requirements(markers, dependencies)
-            .chain(manifest.preferences.iter().map(Preference::requirement))
-        {
-            let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url
-            else {
+        // Allow yanks for any pinned input requirements.
+        for requirement in manifest.requirements(markers, dependencies) {
+            let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };
-            let [specifier] = specifiers.as_ref() else {
+            let [specifier] = specifier.as_ref() else {
                 continue;
             };
             if matches!(
@@ -40,6 +38,15 @@ impl AllowedYanks {
                     .insert(specifier.version().clone());
             }
         }
+
+        // Allow yanks for any packages that are already pinned in the lockfile.
+        for preference in &manifest.preferences {
+            allowed_yanks
+                .entry(preference.name().clone())
+                .or_default()
+                .insert(preference.version().clone());
+        }
+
         Self(allowed_yanks)
     }
 

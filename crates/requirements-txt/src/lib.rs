@@ -40,23 +40,24 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
+use crate::requirement::EditableError;
+use distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Requirement,
-    Scheme, VerbatimUrl,
+    expand_env_vars, split_scheme, strip_host, Pep508Error, RequirementOrigin, Scheme, VerbatimUrl,
 };
-pub use requirement::RequirementsTxtRequirement;
+use pypi_types::{Requirement, VerbatimParsedUrl};
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
-use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
+
+pub use crate::requirement::RequirementsTxtRequirement;
 
 mod requirement;
 
@@ -77,7 +78,7 @@ enum RequirementsTxtStatement {
     /// PEP 508 requirement plus metadata
     RequirementEntry(RequirementEntry),
     /// `-e`
-    EditableRequirement(EditableRequirement),
+    EditableRequirementEntry(RequirementEntry),
     /// `--index-url`
     IndexUrl(VerbatimUrl),
     /// `--extra-index-url`
@@ -159,158 +160,41 @@ impl FindLink {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct EditableRequirement {
-    pub url: VerbatimUrl,
-    pub extras: Vec<ExtraName>,
-    pub path: PathBuf,
-}
-
-impl EditableRequirement {
-    pub fn url(&self) -> &VerbatimUrl {
-        &self.url
-    }
-
-    pub fn raw(&self) -> &Url {
-        self.url.raw()
-    }
-}
-
-impl EditableRequirement {
-    /// Parse a raw string for an editable requirement (`pip install -e <editable>`), which could be
-    /// a URL or a local path, and could contain unexpanded environment variables.
-    ///
-    /// For example:
-    /// - `file:///home/ferris/project/scripts/...`
-    /// - `file:../editable/`
-    /// - `../editable/`
-    ///
-    /// We disallow URLs with schemes other than `file://` (e.g., `https://...`).
-    pub fn parse(
-        given: &str,
-        working_dir: impl AsRef<Path>,
-    ) -> Result<Self, RequirementsTxtParserError> {
-        // Identify the extras.
-        let (requirement, extras) = if let Some((requirement, extras)) = Self::split_extras(given) {
-            let extras = Extras::parse(extras).map_err(|err| {
-                // Map from error on the extras to error on the whole requirement.
-                let err = Pep508Error {
-                    message: err.message,
-                    start: requirement.len() + err.start,
-                    len: err.len,
-                    input: given.to_string(),
-                };
-                match err.message {
-                    Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                        RequirementsTxtParserError::Pep508 {
-                            start: err.start,
-                            end: err.start + err.len,
-                            source: err,
-                        }
-                    }
-                    Pep508ErrorSource::UnsupportedRequirement(_) => {
-                        RequirementsTxtParserError::UnsupportedRequirement {
-                            start: err.start,
-                            end: err.start + err.len,
-                            source: err,
-                        }
-                    }
-                }
-            })?;
-            (requirement, extras.into_vec())
-        } else {
-            (given, vec![])
-        };
-
-        // Expand environment variables.
-        let expanded = expand_env_vars(requirement);
-
-        // Create a `VerbatimUrl` to represent the editable requirement.
-        let url = if let Some((scheme, path)) = split_scheme(&expanded) {
-            match Scheme::parse(scheme) {
-                // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`
-                Some(Scheme::File) => {
-                    // Strip the leading slashes, along with the `localhost` host, if present.
-                    let path = strip_host(path);
-
-                    // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                    let path = normalize_url_path(path);
-
-                    VerbatimUrl::parse_path(path.as_ref(), working_dir.as_ref())
-                }
-
-                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                Some(_) => {
-                    return Err(RequirementsTxtParserError::UnsupportedUrl(
-                        expanded.to_string(),
-                    ));
-                }
-
-                // Ex) `C:/Users/ferris/wheel-0.42.0.tar.gz`
-                _ => VerbatimUrl::parse_path(expanded.as_ref(), working_dir.as_ref()),
-            }
-        } else {
-            // Ex) `../editable/`
-            VerbatimUrl::parse_path(expanded.as_ref(), working_dir.as_ref())
-        };
-
-        // Create a `PathBuf`.
-        let path = url
-            .to_file_path()
-            .map_err(|()| RequirementsTxtParserError::InvalidEditablePath(expanded.to_string()))?;
-
-        // Add the verbatim representation of the URL to the `VerbatimUrl`.
-        let url = url.with_given(requirement.to_string());
-
-        Ok(Self { url, extras, path })
-    }
-
-    /// Identify the extras in an editable URL (e.g., `../editable[dev]`).
-    ///
-    /// Pip uses `m = re.match(r'^(.+)(\[[^]]+])$', path)`. Our strategy is:
-    /// - If the string ends with a closing bracket (`]`)...
-    /// - Iterate backwards until you find the open bracket (`[`)...
-    /// - But abort if you find another closing bracket (`]`) first.
-    pub fn split_extras(given: &str) -> Option<(&str, &str)> {
-        let mut chars = given.char_indices().rev();
-
-        // If the string ends with a closing bracket (`]`)...
-        if !matches!(chars.next(), Some((_, ']'))) {
-            return None;
-        }
-
-        // Iterate backwards until you find the open bracket (`[`)...
-        let (index, _) = chars
-            .take_while(|(_, c)| *c != ']')
-            .find(|(_, c)| *c == '[')?;
-
-        Some(given.split_at(index))
-    }
-}
-
-impl Display for EditableRequirement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.url, f)
-    }
-}
-
-/// A [Requirement] with additional metadata from the requirements.txt, currently only hashes but in
-/// the future also editable an similar information
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Hash, Serialize)]
+/// A [Requirement] with additional metadata from the `requirements.txt`, currently only hashes but in
+/// the future also editable and similar information.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequirementEntry {
-    /// The actual PEP 508 requirement
+    /// The actual PEP 508 requirement.
     pub requirement: RequirementsTxtRequirement,
-    /// Hashes of the downloadable packages
+    /// Hashes of the downloadable packages.
     pub hashes: Vec<String>,
 }
 
-impl Display for RequirementEntry {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.requirement)?;
-        for hash in &self.hashes {
-            write!(f, " --hash {hash}")?;
+// We place the impl here instead of next to `UnresolvedRequirementSpecification` because
+// `UnresolvedRequirementSpecification` is defined in `distribution-types` and `requirements-txt`
+// depends on `distribution-types`.
+impl From<RequirementEntry> for UnresolvedRequirementSpecification {
+    fn from(value: RequirementEntry) -> Self {
+        Self {
+            requirement: match value.requirement {
+                RequirementsTxtRequirement::Named(named) => {
+                    UnresolvedRequirement::Named(Requirement::from(named))
+                }
+                RequirementsTxtRequirement::Unnamed(unnamed) => {
+                    UnresolvedRequirement::Unnamed(unnamed)
+                }
+            },
+            hashes: value.hashes,
         }
-        Ok(())
+    }
+}
+
+impl From<RequirementsTxtRequirement> for UnresolvedRequirementSpecification {
+    fn from(value: RequirementsTxtRequirement) -> Self {
+        Self::from(RequirementEntry {
+            requirement: value,
+            hashes: vec![],
+        })
     }
 }
 
@@ -320,9 +204,9 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<Requirement>,
+    pub constraints: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
     /// Editables with `-e`.
-    pub editables: Vec<EditableRequirement>,
+    pub editables: Vec<RequirementEntry>,
     /// The index URL, specified with `--index-url`.
     pub index_url: Option<VerbatimUrl>,
     /// The extra index URLs, specified with `--extra-index-url`.
@@ -388,12 +272,18 @@ impl RequirementsTxt {
             })?;
 
         let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
-        let data = Self::parse_inner(&content, working_dir, requirements_dir, client_builder)
-            .await
-            .map_err(|err| RequirementsTxtFileError {
-                file: requirements_txt.to_path_buf(),
-                error: err,
-            })?;
+        let data = Self::parse_inner(
+            &content,
+            working_dir,
+            requirements_dir,
+            client_builder,
+            requirements_txt,
+        )
+        .await
+        .map_err(|err| RequirementsTxtFileError {
+            file: requirements_txt.to_path_buf(),
+            error: err,
+        })?;
         if data == Self::default() {
             warn_user!(
                 "Requirements file {} does not contain any dependencies",
@@ -415,11 +305,12 @@ impl RequirementsTxt {
         working_dir: &Path,
         requirements_dir: &Path,
         client_builder: &BaseClientBuilder<'_>,
+        requirements_txt: &Path,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
         let mut data = Self::default();
-        while let Some(statement) = parse_entry(&mut s, content, working_dir)? {
+        while let Some(statement) = parse_entry(&mut s, content, working_dir, requirements_txt)? {
             match statement {
                 RequirementsTxtStatement::Requirements {
                     filename,
@@ -486,7 +377,7 @@ impl RequirementsTxt {
                     // _requirements_, but we don't want to support that.
                     for entry in sub_constraints.requirements {
                         match entry.requirement {
-                            RequirementsTxtRequirement::Pep508(requirement) => {
+                            RequirementsTxtRequirement::Named(requirement) => {
                                 data.constraints.push(requirement);
                             }
                             RequirementsTxtRequirement::Unnamed(_) => {
@@ -497,12 +388,14 @@ impl RequirementsTxt {
                             }
                         }
                     }
-                    data.constraints.extend(sub_constraints.constraints);
+                    for constraint in sub_constraints.constraints {
+                        data.constraints.push(constraint);
+                    }
                 }
                 RequirementsTxtStatement::RequirementEntry(requirement_entry) => {
                     data.requirements.push(requirement_entry);
                 }
-                RequirementsTxtStatement::EditableRequirement(editable) => {
+                RequirementsTxtStatement::EditableRequirementEntry(editable) => {
                     data.editables.push(editable);
                 }
                 RequirementsTxtStatement::IndexUrl(url) => {
@@ -571,6 +464,7 @@ fn parse_entry(
     s: &mut Scanner,
     content: &str,
     working_dir: &Path,
+    requirements_txt: &Path,
 ) -> Result<Option<RequirementsTxtStatement>, RequirementsTxtParserError> {
     // Eat all preceding whitespace, this may run us to the end of file
     eat_wrappable_whitespace(s);
@@ -598,10 +492,27 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-e") || s.eat_if("--editable") {
-        let path_or_url = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)
-            .map_err(|err| err.with_offset(start))?;
-        RequirementsTxtStatement::EditableRequirement(editable_requirement)
+        s.eat_whitespace();
+
+        let source = if requirements_txt == Path::new("-") {
+            None
+        } else {
+            Some(requirements_txt)
+        };
+
+        let (requirement, hashes) = parse_requirement_and_hashes(s, content, source, working_dir)?;
+        let requirement =
+            requirement
+                .into_editable()
+                .map_err(|err| RequirementsTxtParserError::NonEditable {
+                    source: err,
+                    start,
+                    end: s.cursor(),
+                })?;
+        RequirementsTxtStatement::EditableRequirementEntry(RequirementEntry {
+            requirement,
+            hashes,
+        })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
@@ -662,7 +573,13 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::OnlyBinary(NoBuild::from_arg(specifier))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
-        let (requirement, hashes) = parse_requirement_and_hashes(s, content, working_dir)?;
+        let source = if requirements_txt == Path::new("-") {
+            None
+        } else {
+            Some(requirements_txt)
+        };
+
+        let (requirement, hashes) = parse_requirement_and_hashes(s, content, source, working_dir)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
             hashes,
@@ -724,6 +641,7 @@ fn eat_trailing_line(content: &str, s: &mut Scanner) -> Result<(), RequirementsT
 fn parse_requirement_and_hashes(
     s: &mut Scanner,
     content: &str,
+    source: Option<&Path>,
     working_dir: &Path,
 ) -> Result<(RequirementsTxtRequirement, Vec<String>), RequirementsTxtParserError> {
     // PEP 508 requirement
@@ -781,24 +699,18 @@ fn parse_requirement_and_hashes(
         }
     }
 
-    let requirement =
-        RequirementsTxtRequirement::parse(requirement, working_dir).map_err(|err| {
-            match err.message {
-                Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                    RequirementsTxtParserError::Pep508 {
-                        source: err,
-                        start,
-                        end,
-                    }
-                }
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    RequirementsTxtParserError::UnsupportedRequirement {
-                        source: err,
-                        start,
-                        end,
-                    }
-                }
+    let requirement = RequirementsTxtRequirement::parse(requirement, working_dir)
+        .map(|requirement| {
+            if let Some(source) = source {
+                requirement.with_origin(RequirementOrigin::File(source.to_path_buf()))
+            } else {
+                requirement
             }
+        })
+        .map_err(|err| RequirementsTxtParserError::Pep508 {
+            source: err,
+            start,
+            end,
         })?;
 
     let hashes = if has_hashes {
@@ -900,9 +812,18 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
-    InvalidEditablePath(String),
+    VerbatimUrl {
+        source: pep508_rs::VerbatimUrlError,
+        url: String,
+    },
+    UrlConversion(String),
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
+    NonEditable {
+        source: EditableError,
+        start: usize,
+        end: usize,
+    },
     NoBinary {
         source: uv_normalize::InvalidNameError,
         specifier: String,
@@ -925,12 +846,17 @@ pub enum RequirementsTxtParserError {
         column: usize,
     },
     UnsupportedRequirement {
-        source: Pep508Error,
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
         start: usize,
         end: usize,
     },
     Pep508 {
-        source: Pep508Error,
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
+        start: usize,
+        end: usize,
+    },
+    ParsedUrl {
+        source: Box<Pep508Error<VerbatimParsedUrl>>,
         start: usize,
         end: usize,
     },
@@ -946,95 +872,24 @@ pub enum RequirementsTxtParserError {
     Reqwest(reqwest_middleware::Error),
 }
 
-impl RequirementsTxtParserError {
-    /// Add a fixed offset to the location of the error.
-    #[must_use]
-    fn with_offset(self, offset: usize) -> Self {
-        match self {
-            Self::IO(err) => Self::IO(err),
-            Self::InvalidEditablePath(given) => Self::InvalidEditablePath(given),
-            Self::Url {
-                source,
-                url,
-                start,
-                end,
-            } => Self::Url {
-                source,
-                url,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
-            Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
-            Self::NoBinary {
-                source,
-                specifier,
-                start,
-                end,
-            } => Self::NoBinary {
-                source,
-                specifier,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::OnlyBinary {
-                source,
-                specifier,
-                start,
-                end,
-            } => Self::OnlyBinary {
-                source,
-                specifier,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::UnnamedConstraint { start, end } => Self::UnnamedConstraint {
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::Parser {
-                message,
-                line,
-                column,
-            } => Self::Parser {
-                message,
-                line,
-                column,
-            },
-            Self::UnsupportedRequirement { source, start, end } => Self::UnsupportedRequirement {
-                source,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::Pep508 { source, start, end } => Self::Pep508 {
-                source,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::Subfile { source, start, end } => Self::Subfile {
-                source,
-                start: start + offset,
-                end: end + offset,
-            },
-            Self::NonUnicodeUrl { url } => Self::NonUnicodeUrl { url },
-            #[cfg(feature = "http")]
-            Self::Reqwest(err) => Self::Reqwest(err),
-        }
-    }
-}
-
 impl Display for RequirementsTxtParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::IO(err) => err.fmt(f),
-            Self::InvalidEditablePath(given) => {
-                write!(f, "Invalid editable path: {given}")
-            }
             Self::Url { url, start, .. } => {
                 write!(f, "Invalid URL at position {start}: `{url}`")
             }
+            Self::VerbatimUrl { source, url } => {
+                write!(f, "Invalid URL: `{url}`: {source}")
+            }
+            Self::UrlConversion(given) => {
+                write!(f, "Unable to convert URL to path: {given}")
+            }
             Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
+            }
+            Self::NonEditable { .. } => {
+                write!(f, "Unsupported editable requirement")
             }
             Self::MissingRequirementPrefix(given) => {
                 write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
@@ -1061,6 +916,9 @@ impl Display for RequirementsTxtParserError {
             Self::Pep508 { start, .. } => {
                 write!(f, "Couldn't parse requirement at position {start}")
             }
+            Self::ParsedUrl { start, .. } => {
+                write!(f, "Couldn't URL at position {start}")
+            }
             Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
             }
@@ -1084,14 +942,17 @@ impl std::error::Error for RequirementsTxtParserError {
         match &self {
             Self::IO(err) => err.source(),
             Self::Url { source, .. } => Some(source),
-            Self::InvalidEditablePath(_) => None,
+            Self::VerbatimUrl { source, .. } => Some(source),
+            Self::UrlConversion(_) => None,
             Self::UnsupportedUrl(_) => None,
+            Self::NonEditable { source, .. } => Some(source),
             Self::MissingRequirementPrefix(_) => None,
             Self::NoBinary { source, .. } => Some(source),
             Self::OnlyBinary { source, .. } => Some(source),
             Self::UnnamedConstraint { .. } => None,
             Self::UnsupportedRequirement { source, .. } => Some(source),
             Self::Pep508 { source, .. } => Some(source),
+            Self::ParsedUrl { source, .. } => Some(source),
             Self::Subfile { source, .. } => Some(source.as_ref()),
             Self::Parser { .. } => None,
             Self::NonUnicodeUrl { .. } => None,
@@ -1112,10 +973,13 @@ impl Display for RequirementsTxtFileError {
                     self.file.user_display(),
                 )
             }
-            RequirementsTxtParserError::InvalidEditablePath(given) => {
+            RequirementsTxtParserError::VerbatimUrl { url, .. } => {
+                write!(f, "Invalid URL in `{}`: `{url}`", self.file.user_display())
+            }
+            RequirementsTxtParserError::UrlConversion(given) => {
                 write!(
                     f,
-                    "Invalid editable path in `{}`: {given}",
+                    "Unable to convert URL to path `{}`: {given}",
                     self.file.user_display()
                 )
             }
@@ -1123,6 +987,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::NonEditable { .. } => {
+                write!(
+                    f,
+                    "Unsupported editable requirement in `{}`",
                     self.file.user_display(),
                 )
             }
@@ -1176,6 +1047,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Couldn't parse requirement in `{}` at position {start}",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::ParsedUrl { start, .. } => {
+                write!(
+                    f,
+                    "Couldn't parse URL in `{}` at position {start}",
                     self.file.user_display(),
                 )
             }
@@ -1287,10 +1165,24 @@ mod test {
     use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 
-    use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
+    use crate::{calculate_row_column, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
-        PathBuf::from("./test-data").canonicalize().unwrap()
+        Path::new("./test-data").simple_canonicalize().unwrap()
+    }
+
+    /// Filter a path for use in snapshots; in particular, match the Windows debug representation
+    /// of a path.
+    ///
+    /// We replace backslashes to match the debug representation for paths, and match _either_
+    /// backslashes or forward slashes as the latter appear when constructing a path from a URL.
+    fn path_filter(path: &Path) -> String {
+        regex::escape(&path.simplified_display().to_string()).replace(r"\\", r"(\\\\|/)")
+    }
+
+    /// Return the insta filters for a given path.
+    fn path_filters(filter: &str) -> Vec<(&str, &str)> {
+        vec![(filter, "<REQUIREMENTS_DIR>"), (r"\\\\", "/")]
     }
 
     #[test_case(Path::new("basic.txt"))]
@@ -1308,13 +1200,21 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let actual = RequirementsTxt::parse(
+            requirements_txt.clone(),
+            &working_dir,
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
-        insta::assert_debug_snapshot!(snapshot, actual);
+
+        insta::with_settings!({
+            filters => path_filters(&path_filter(&working_dir)),
+        }, {
+            insta::assert_debug_snapshot!(snapshot, actual);
+        });
     }
 
     #[test_case(Path::new("basic.txt"))]
@@ -1327,7 +1227,6 @@ mod test {
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
-    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
     async fn line_endings(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
@@ -1359,13 +1258,19 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
-        insta::assert_debug_snapshot!(snapshot, actual);
+
+        insta::with_settings!({
+            filters => path_filters(&path_filter(temp_dir.path())),
+        }, {
+            insta::assert_debug_snapshot!(snapshot, actual);
+        });
     }
 
     #[cfg(unix)]
     #[test_case(Path::new("bare-url.txt"))]
+    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
-    async fn parse_unnamed_unix(path: &Path) {
+    async fn parse_unix(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
@@ -1375,10 +1280,30 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
-        let pattern = regex::escape(&working_dir.simplified_display().to_string());
-        let filters = vec![(pattern.as_str(), "[WORKSPACE_DIR]")];
+
         insta::with_settings!({
-            filters => filters
+            filters => path_filters(&path_filter(&working_dir)),
+        }, {
+            insta::assert_debug_snapshot!(snapshot, actual);
+        });
+    }
+
+    #[cfg(unix)]
+    #[test_case(Path::new("semicolon.txt"))]
+    #[tokio::test]
+    async fn parse_err(path: &Path) {
+        let working_dir = workspace_test_data_dir().join("requirements-txt");
+        let requirements_txt = working_dir.join(path);
+
+        let actual =
+            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
+                .await
+                .unwrap_err();
+
+        let snapshot = format!("parse-unix-{}", path.to_string_lossy());
+
+        insta::with_settings!({
+            filters => path_filters(&path_filter(&working_dir)),
         }, {
             insta::assert_debug_snapshot!(snapshot, actual);
         });
@@ -1386,8 +1311,9 @@ mod test {
 
     #[cfg(windows)]
     #[test_case(Path::new("bare-url.txt"))]
+    #[test_case(Path::new("editable.txt"))]
     #[tokio::test]
-    async fn parse_unnamed_windows(path: &Path) {
+    async fn parse_windows(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
@@ -1397,15 +1323,9 @@ mod test {
                 .unwrap();
 
         let snapshot = format!("parse-windows-{}", path.to_string_lossy());
-        let pattern = regex::escape(
-            &working_dir
-                .simplified_display()
-                .to_string()
-                .replace('\\', "/"),
-        );
-        let filters = vec![(pattern.as_str(), "[WORKSPACE_DIR]")];
+
         insta::with_settings!({
-            filters => filters
+            filters => path_filters(&path_filter(&working_dir)),
         }, {
             insta::assert_debug_snapshot!(snapshot, actual);
         });
@@ -1438,7 +1358,6 @@ mod test {
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (missing_txt.as_str(), "<MISSING_TXT>"),
-            (r"\\", "/"),
         ];
         insta::with_settings!({
             filters => filters,
@@ -1470,10 +1389,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1506,10 +1422,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1542,14 +1455,14 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `http://localhost:8080/`");
+            insta::assert_snapshot!(errors, @r###"
+            Unsupported editable requirement in `<REQUIREMENTS_TXT>`
+            Editable must refer to a local directory, not an HTTPS URL: `http://localhost:8080/`
+            "###);
         });
 
         Ok(())
@@ -1578,7 +1491,7 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @r###"
-            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 6
+            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
             Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
             black[,abcdef]
                   ^
@@ -1606,10 +1519,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1640,10 +1550,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1679,10 +1586,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1722,33 +1626,43 @@ mod test {
         )
         .await
         .unwrap();
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [
-                RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
-                            name: PackageName(
-                                "flask",
-                            ),
-                            extras: [],
-                            version_or_url: None,
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-            ],
-            constraints: [],
-            editables: [],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: false,
-            no_binary: None,
-            only_binary: None,
-        }
-        "###);
+
+        insta::with_settings!({
+            filters => path_filters(&path_filter(temp_dir.path())),
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "flask",
+                                ),
+                                extras: [],
+                                version_or_url: None,
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/subdir/sibling.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                ],
+                constraints: [],
+                editables: [],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: None,
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
     }
@@ -1776,39 +1690,49 @@ mod test {
         )
         .await
         .unwrap();
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [
-                RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
-                            name: PackageName(
-                                "flask",
-                            ),
-                            extras: [],
-                            version_or_url: None,
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-            ],
-            constraints: [],
-            editables: [],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: false,
-            no_binary: Packages(
-                [
-                    PackageName(
-                        "flask",
-                    ),
+
+        insta::with_settings!({
+            filters => path_filters(&path_filter(temp_dir.path())),
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "flask",
+                                ),
+                                extras: [],
+                                version_or_url: None,
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
                 ],
-            ),
-            only_binary: None,
-        }
-        "###);
+                constraints: [],
+                editables: [],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: Packages(
+                    [
+                        PackageName(
+                            "flask",
+                        ),
+                    ],
+                ),
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
     }
@@ -1842,40 +1766,73 @@ mod test {
         .await
         .unwrap();
 
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [],
-            constraints: [],
-            editables: [
-                EditableRequirement {
-                    url: VerbatimUrl {
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "/foo/bar",
-                            query: None,
-                            fragment: None,
-                        },
-                        given: Some(
-                            "/foo/bar",
+        insta::with_settings!({
+            filters => path_filters(&path_filter(temp_dir.path())),
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [],
+                constraints: [],
+                editables: [
+                    RequirementEntry {
+                        requirement: Unnamed(
+                            UnnamedRequirement {
+                                url: VerbatimParsedUrl {
+                                    parsed_url: Path(
+                                        ParsedPathUrl {
+                                            url: Url {
+                                                scheme: "file",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: None,
+                                                port: None,
+                                                path: "/foo/bar",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            path: "/foo/bar",
+                                            editable: true,
+                                        },
+                                    ),
+                                    verbatim: VerbatimUrl {
+                                        url: Url {
+                                            scheme: "file",
+                                            cannot_be_a_base: false,
+                                            username: "",
+                                            password: None,
+                                            host: None,
+                                            port: None,
+                                            path: "/foo/bar",
+                                            query: None,
+                                            fragment: None,
+                                        },
+                                        given: Some(
+                                            "/foo/bar",
+                                        ),
+                                    },
+                                },
+                                extras: [],
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/grandchild.txt",
+                                    ),
+                                ),
+                            },
                         ),
+                        hashes: [],
                     },
-                    extras: [],
-                    path: "/foo/bar",
-                },
-            ],
-            index_url: None,
-            extra_index_urls: [],
-            find_links: [],
-            no_index: true,
-            no_binary: None,
-            only_binary: None,
-        }
-        "###);
+                ],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: true,
+                no_binary: None,
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
     }
@@ -1910,10 +1867,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -1958,176 +1912,186 @@ mod test {
         )
         .await
         .unwrap();
-        insta::assert_debug_snapshot!(requirements, @r###"
-        RequirementsTxt {
-            requirements: [
-                RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
-                            name: PackageName(
-                                "httpx",
-                            ),
-                            extras: [],
-                            version_or_url: None,
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-                RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
-                            name: PackageName(
-                                "flask",
-                            ),
-                            extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "3.0.0",
-                                            },
-                                        ],
+
+        insta::with_settings!({
+            filters => path_filters(&path_filter(temp_dir.path())),
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "httpx",
+                                ),
+                                extras: [],
+                                version_or_url: None,
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/./sibling.txt",
                                     ),
                                 ),
-                            ),
-                            marker: None,
-                        },
-                    ),
-                    hashes: [
-                        "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-                    ],
-                },
-                RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
-                            name: PackageName(
-                                "requests",
-                            ),
-                            extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "2.26.0",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
-                            marker: None,
-                        },
-                    ),
-                    hashes: [
-                        "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
-                    ],
-                },
-                RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
-                            name: PackageName(
-                                "black",
-                            ),
-                            extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "21.12b0",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-                RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
-                            name: PackageName(
-                                "mypy",
-                            ),
-                            extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "0.910",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
-                            marker: None,
-                        },
-                    ),
-                    hashes: [],
-                },
-            ],
-            constraints: [],
-            editables: [],
-            index_url: Some(
-                VerbatimUrl {
-                    url: Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "test.pypi.org",
-                            ),
+                            },
                         ),
-                        port: None,
-                        path: "/simple/",
-                        query: None,
-                        fragment: None,
+                        hashes: [],
                     },
-                    given: Some(
-                        "https://test.pypi.org/simple/",
-                    ),
-                },
-            ),
-            extra_index_urls: [],
-            find_links: [],
-            no_index: false,
-            no_binary: All,
-            only_binary: None,
-        }
-        "###);
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "flask",
+                                ),
+                                extras: [],
+                                version_or_url: Some(
+                                    VersionSpecifier(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: Equal,
+                                                    version: "3.0.0",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [
+                            "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                        ],
+                    },
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "requests",
+                                ),
+                                extras: [],
+                                version_or_url: Some(
+                                    VersionSpecifier(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: Equal,
+                                                    version: "2.26.0",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [
+                            "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+                        ],
+                    },
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "black",
+                                ),
+                                extras: [],
+                                version_or_url: Some(
+                                    VersionSpecifier(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: Equal,
+                                                    version: "21.12b0",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                    RequirementEntry {
+                        requirement: Named(
+                            Requirement {
+                                name: PackageName(
+                                    "mypy",
+                                ),
+                                extras: [],
+                                version_or_url: Some(
+                                    VersionSpecifier(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: Equal,
+                                                    version: "0.910",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                                marker: None,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                ],
+                constraints: [],
+                editables: [],
+                index_url: Some(
+                    VerbatimUrl {
+                        url: Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "test.pypi.org",
+                                ),
+                            ),
+                            port: None,
+                            path: "/simple/",
+                            query: None,
+                            fragment: None,
+                        },
+                        given: Some(
+                            "https://test.pypi.org/simple/",
+                        ),
+                    },
+                ),
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: All,
+                only_binary: None,
+            }
+            "###);
+        });
 
         Ok(())
-    }
-
-    #[test]
-    fn editable_extra() {
-        assert_eq!(
-            EditableRequirement::split_extras("../editable[dev]"),
-            Some(("../editable", "[dev]"))
-        );
-        assert_eq!(
-            EditableRequirement::split_extras("../editable[dev]more[extra]"),
-            Some(("../editable[dev]more", "[extra]"))
-        );
-        assert_eq!(
-            EditableRequirement::split_extras("../editable[[dev]]"),
-            None
-        );
-        assert_eq!(
-            EditableRequirement::split_extras("../editable[[dev]"),
-            Some(("../editable[", "[dev]"))
-        );
     }
 
     #[tokio::test]
@@ -2136,7 +2100,7 @@ mod test {
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
             numpy>=1,<2
-              --borken
+              --broken
             tqdm
         "})?;
 
@@ -2150,10 +2114,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
-        let filters = vec![
-            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
-            (r"\\", "/"),
-        ];
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
@@ -2165,15 +2126,15 @@ mod test {
         Ok(())
     }
 
-    #[test_case("numpy>=1,<2\n  @-borken\ntqdm", "2:4"; "ASCII Character with LF")]
-    #[test_case("numpy>=1,<2\r\n  #-borken\ntqdm", "2:4"; "ASCII Character with CRLF")]
-    #[test_case("numpy>=1,<2\n  \n-borken\ntqdm", "3:1"; "ASCII Character LF then LF")]
-    #[test_case("numpy>=1,<2\n  \r-borken\ntqdm", "3:1"; "ASCII Character LF then CR but no LF")]
-    #[test_case("numpy>=1,<2\n  \r\n-borken\ntqdm", "3:1"; "ASCII Character LF then CRLF")]
-    #[test_case("numpy>=1,<2\n  🚀-borken\ntqdm", "2:4"; "Emoji (Wide) Character")]
-    #[test_case("numpy>=1,<2\n  中-borken\ntqdm", "2:4"; "Fullwidth character")]
-    #[test_case("numpy>=1,<2\n  e\u{0301}-borken\ntqdm", "2:5"; "Two codepoints")]
-    #[test_case("numpy>=1,<2\n  a\u{0300}\u{0316}-borken\ntqdm", "2:6"; "Three codepoints")]
+    #[test_case("numpy>=1,<2\n  @-broken\ntqdm", "2:4"; "ASCII Character with LF")]
+    #[test_case("numpy>=1,<2\r\n  #-broken\ntqdm", "2:4"; "ASCII Character with CRLF")]
+    #[test_case("numpy>=1,<2\n  \n-broken\ntqdm", "3:1"; "ASCII Character LF then LF")]
+    #[test_case("numpy>=1,<2\n  \r-broken\ntqdm", "3:1"; "ASCII Character LF then CR but no LF")]
+    #[test_case("numpy>=1,<2\n  \r\n-broken\ntqdm", "3:1"; "ASCII Character LF then CRLF")]
+    #[test_case("numpy>=1,<2\n  🚀-broken\ntqdm", "2:4"; "Emoji (Wide) Character")]
+    #[test_case("numpy>=1,<2\n  中-broken\ntqdm", "2:4"; "Fullwidth character")]
+    #[test_case("numpy>=1,<2\n  e\u{0301}-broken\ntqdm", "2:5"; "Two codepoints")]
+    #[test_case("numpy>=1,<2\n  a\u{0300}\u{0316}-broken\ntqdm", "2:6"; "Three codepoints")]
     fn test_calculate_line_column_pair(input: &str, expected: &str) {
         let mut s = Scanner::new(input);
         // Place cursor right after the character we want to test

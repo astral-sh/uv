@@ -3,14 +3,15 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{IndexLocations, InstalledDist, Resolution, SourceDist};
-
-use pep508_rs::{PackageName, Requirement};
+use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, SourceDist};
+use pep508_rs::PackageName;
+use pypi_types::Requirement;
 use uv_cache::Cache;
+use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
+use uv_git::GitResolver;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
 use crate::BuildIsolation;
-use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -47,13 +48,16 @@ use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
 /// ```
 ///
 /// Put in a different way, the types here allow `uv-resolver` to depend on `uv-build` and
-/// `uv-build` to depend on `uv-resolver` which having actual crate dependencies between
+/// `uv-build` to depend on `uv-resolver` without having actual crate dependencies between
 /// them.
-pub trait BuildContext: Sync {
-    type SourceDistBuilder: SourceBuildTrait + Send + Sync;
+pub trait BuildContext {
+    type SourceDistBuilder: SourceBuildTrait;
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
+
+    /// Return a reference to the Git resolver.
+    fn git(&self) -> &GitResolver;
 
     /// All (potentially nested) source distribution builds use the same base python and can reuse
     /// it's metadata (e.g. wheel compatibility tags).
@@ -80,7 +84,7 @@ pub trait BuildContext: Sync {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> impl Future<Output = Result<Resolution>> + Send + 'a;
+    ) -> impl Future<Output = Result<Resolution>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base Python as [`BuildContext::interpreter`]
@@ -88,7 +92,7 @@ pub trait BuildContext: Sync {
         &'a self,
         resolution: &'a Resolution,
         venv: &'a PythonEnvironment,
-    ) -> impl Future<Output = Result<()>> + Send + 'a;
+    ) -> impl Future<Output = Result<Vec<CachedDist>>> + 'a;
 
     /// Setup a source distribution build by installing the required dependencies. A wrapper for
     /// `uv_build::SourceBuild::setup`.
@@ -104,7 +108,7 @@ pub trait BuildContext: Sync {
         version_id: &'a str,
         dist: Option<&'a SourceDist>,
         build_kind: BuildKind,
-    ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a;
+    ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
@@ -118,24 +122,24 @@ pub trait SourceBuildTrait {
     ///
     /// Returns the metadata directory if we're having a PEP 517 build and the
     /// `prepare_metadata_for_build_wheel` hook exists
-    fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>>> + Send;
+    fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>>>;
 
     /// A wrapper for `uv_build::SourceBuild::build`.
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
-    fn wheel<'a>(&'a self, wheel_dir: &'a Path)
-        -> impl Future<Output = Result<String>> + Send + 'a;
+    fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> impl Future<Output = Result<String>> + 'a;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]
-pub trait InstalledPackagesProvider {
+pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
 }
 
 /// An [`InstalledPackagesProvider`] with no packages in it.
+#[derive(Clone)]
 pub struct EmptyInstalledPackages;
 
 impl InstalledPackagesProvider for EmptyInstalledPackages {

@@ -1,2 +1,2 @@
 def a():
-    pass
+    return "a"

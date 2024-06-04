@@ -1,0 +1,18 @@
+[package]
+name = "uv-state"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+directories = { workspace = true }
+tempfile = { workspace = true }
+fs-err = { workspace = true }

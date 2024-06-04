@@ -6,11 +6,11 @@ use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use distribution_types::{DistributionMetadata, ResolvedDistRef};
+use distribution_types::DistributionMetadata;
 use pep440_rs::Version;
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
-use crate::pubgrub::PubGrubPackage;
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::Request;
 use crate::{InMemoryIndex, ResolveError, VersionsResponse};
 
@@ -44,7 +44,7 @@ pub(crate) struct BatchPrefetcher {
 
 impl BatchPrefetcher {
     /// Prefetch a large number of versions if we already unsuccessfully tried many versions.
-    pub(crate) async fn prefetch_batches(
+    pub(crate) fn prefetch_batches(
         &mut self,
         next: &PubGrubPackage,
         version: &Version,
@@ -53,7 +53,13 @@ impl BatchPrefetcher {
         index: &InMemoryIndex,
         selector: &CandidateSelector,
     ) -> anyhow::Result<(), ResolveError> {
-        let PubGrubPackage::Package(package_name, None, None) = &next else {
+        let PubGrubPackageInner::Package {
+            name,
+            extra: None,
+            marker: _marker,
+            url: None,
+        } = &**next
+        else {
             return Ok(());
         };
 
@@ -65,9 +71,8 @@ impl BatchPrefetcher {
 
         // This is immediate, we already fetched the version map.
         let versions_response = index
-            .packages
-            .wait(package_name)
-            .await
+            .packages()
+            .wait_blocking(name)
             .ok_or(ResolveError::Unregistered)?;
 
         let VersionsResponse::Found(ref version_map) = *versions_response else {
@@ -86,7 +91,7 @@ impl BatchPrefetcher {
                     previous,
                 } => {
                     if let Some(candidate) =
-                        selector.select_no_preference(package_name, &compatible, version_map)
+                        selector.select_no_preference(name, &compatible, version_map)
                     {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
@@ -104,13 +109,13 @@ impl BatchPrefetcher {
                     }
                 }
                 BatchPrefetchStrategy::InOrder { previous } => {
-                    let range = if selector.use_highest_version(package_name) {
+                    let range = if selector.use_highest_version(name) {
                         Range::strictly_lower_than(previous)
                     } else {
                         Range::strictly_higher_than(previous)
                     };
                     if let Some(candidate) =
-                        selector.select_no_preference(package_name, &range, version_map)
+                        selector.select_no_preference(name, &range, version_map)
                     {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),
@@ -142,16 +147,14 @@ impl BatchPrefetcher {
                 dist
             );
             prefetch_count += 1;
-            if index.distributions.register(candidate.version_id()) {
-                let request = match dist {
-                    ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
-                    ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
-                };
-                request_sink.send(request).await?;
+
+            if index.distributions().register(candidate.version_id()) {
+                let request = Request::from(dist);
+                request_sink.blocking_send(request)?;
             }
         }
 
-        debug!("Prefetching {prefetch_count} {package_name} versions");
+        debug!("Prefetching {prefetch_count} {name} versions");
 
         self.last_prefetch.insert(next.clone(), num_tried);
         Ok(())
@@ -160,7 +163,10 @@ impl BatchPrefetcher {
     /// Each time we tried a version for a package, we register that here.
     pub(crate) fn version_tried(&mut self, package: PubGrubPackage) {
         // Only track base packages, no virtual packages from extras.
-        if matches!(package, PubGrubPackage::Package(_, Some(_), _)) {
+        if matches!(
+            &*package,
+            PubGrubPackageInner::Package { extra: Some(_), .. }
+        ) {
             return;
         }
         *self.tried_versions.entry(package).or_default() += 1;

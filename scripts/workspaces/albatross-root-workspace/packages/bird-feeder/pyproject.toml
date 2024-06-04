@@ -1,0 +1,11 @@
+[project]
+name = "bird-feeder"
+version = "1.0.0"
+dependencies = ["anyio>=4.3.0,<5", "seeds"]
+
+[tool.uv.sources]
+seeds = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

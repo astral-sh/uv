@@ -3,11 +3,25 @@ use std::path::PathBuf;
 use anstream::println;
 use anyhow::{bail, Result};
 use pretty_assertions::StrComparison;
-use schemars::schema_for;
+use schemars::{schema_for, JsonSchema};
+use serde::Deserialize;
 
 use uv_workspace::Options;
 
 use crate::ROOT_DIR;
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+// The names and docstrings of this struct and the types it contains are used as `title` and
+// `description` in uv.schema.json, see https://github.com/SchemaStore/schemastore/blob/master/editor-features.md#title-as-an-expected-object-type
+/// Metadata and configuration for uv.
+struct ToolUv {
+    #[serde(flatten)]
+    options: Options,
+    #[serde(flatten)]
+    dep_spec: uv_distribution::pyproject::ToolUv,
+}
 
 #[derive(clap::Args)]
 pub(crate) struct GenerateJsonSchemaArgs {
@@ -30,7 +44,7 @@ enum Mode {
 }
 
 pub(crate) fn main(args: &GenerateJsonSchemaArgs) -> Result<()> {
-    let schema = schema_for!(Options);
+    let schema = schema_for!(ToolUv);
     let schema_string = serde_json::to_string_pretty(&schema).unwrap();
     let filename = "uv.schema.json";
     let schema_path = PathBuf::from(ROOT_DIR).join(filename);

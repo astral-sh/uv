@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 cache-key = { workspace = true }
-distribution-filename = { workspace = true, features = ["serde"] }
+distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true }
 once-map = { workspace = true }
@@ -25,12 +25,13 @@ pypi-types = { workspace = true }
 requirements-txt = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
+uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
+uv-git = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
-uv-configuration = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
@@ -49,11 +50,12 @@ pubgrub = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
+toml_edit = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
@@ -62,6 +64,7 @@ uv-interpreter = { workspace = true }
 
 once_cell = { version = "1.19.0" }
 insta = { version = "1.36.1" }
+toml = { workspace = true }
 
 [features]
 default = ["pypi"]

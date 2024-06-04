@@ -1,8 +1,9 @@
 use uv_interpreter::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub enum BuildIsolation<'a> {
+    #[default]
     Isolated,
     Shared(&'a PythonEnvironment),
 }
