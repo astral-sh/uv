@@ -86,16 +86,18 @@ impl RequirementsSpecification {
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
-                let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse: `{name}`"))?;
+                let requirement =
+                    RequirementsTxtRequirement::parse(name, std::env::current_dir()?, false)
+                        .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
                     requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
                     ..Self::default()
                 }
             }
             RequirementsSource::Editable(name) => {
-                let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse: `{name}`"))?;
+                let requirement =
+                    RequirementsTxtRequirement::parse(name, std::env::current_dir()?, true)
+                        .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
                     requirements: vec![UnresolvedRequirementSpecification::from(
                         requirement.into_editable()?,

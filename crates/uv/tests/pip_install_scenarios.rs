@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.15/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.17/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.15/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.17/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.15/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.17/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -359,7 +359,7 @@ fn excluded_only_compatible_version() {
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that any of:
               package-a<2.0.0
               package-a>2.0.0
-          depends on one of:
+          depend on one of:
               package-b==1.0.0
               package-b==3.0.0
 
@@ -501,7 +501,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// There is a non-contiguous range of compatible versions for the requested package
 /// `a`, but another dependency `c` excludes the range. This is the same as
 /// `dependency-excludes-range-of-compatible-versions` but some of the versions of
-/// `a` are incompatible for another reason e.g. dependency on non-existent package
+/// `a` are incompatible for another reason e.g. dependency on non-existant package
 /// `d`.
 ///
 /// ```text
@@ -3530,7 +3530,7 @@ fn package_only_prereleases_boundary() {
     "###);
 
     // Since there are only prerelease versions of `a` available, a prerelease is
-    // allowed. Since the user did not explicitly request a pre-release, pre-releases at
+    // allowed. Since the user did not explictly request a pre-release, pre-releases at
     // the boundary should not be selected.
     assert_installed(
         &context.venv,
@@ -4011,14 +4011,14 @@ fn python_greater_than_current_excluded() {
               Python>=3.10,<3.11
               Python>=3.12
            are incompatible.
-          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 are incompatible.
+          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 is incompatible.
           And because package-a==2.0.0 depends on Python>=3.10 and only the following versions of package-a are available:
               package-a<=2.0.0
               package-a==3.0.0
               package-a==4.0.0
           we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 is incompatible.
           And because package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
           And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
 

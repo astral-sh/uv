@@ -219,6 +219,7 @@ pub(crate) async fn update_environment(
         interpreter,
         tags,
         Some(markers),
+        None,
         &client,
         &flat_index,
         &index,

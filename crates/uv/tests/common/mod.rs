@@ -28,7 +28,7 @@ pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub const BUILD_VENDOR_LINKS_URL: &str =
-    "https://raw.githubusercontent.com/astral-sh/packse/0.3.15/vendor/links.html";
+    "https://raw.githubusercontent.com/astral-sh/packse/0.3.17/vendor/links.html";
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
@@ -623,6 +623,21 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
             copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
         } else {
             fs_err::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Recursively copy a directory and its contents, skipping gitignored files.
+pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+    for entry in ignore::Walk::new(&src) {
+        let entry = entry?;
+        let relative = entry.path().strip_prefix(&src)?;
+        let ty = entry.file_type().unwrap();
+        if ty.is_dir() {
+            fs_err::create_dir(dst.as_ref().join(relative))?;
+        } else {
+            fs_err::copy(entry.path(), dst.as_ref().join(relative))?;
         }
     }
     Ok(())

@@ -49,12 +49,14 @@ TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
 INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
 COMPILE_TEMPLATE = TEMPLATES / "compile.mustache"
+LOCK_TEMPLATE = TEMPLATES / "lock.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "requirements.txt"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
 TESTS = PROJECT_ROOT / "crates" / "uv" / "tests"
 INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
 COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
+LOCK_TESTS = TESTS / "lock_scenarios.rs"
 TESTS_COMMON_MOD_RS = TESTS / "common/mod.rs"
 
 try:
@@ -106,7 +108,8 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
     targets = []
     for target in scenarios:
         if target.is_dir():
-            targets.extend(target.glob("*.json"))
+            targets.extend(target.glob("**/*.json"))
+            targets.extend(target.glob("**/*.toml"))
         else:
             targets.append(target)
 
@@ -119,8 +122,8 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
     data["scenarios"] = [
         scenario
         for scenario in data["scenarios"]
-        # Drop the example scenario
-        if scenario["name"] != "example"
+        # Drop example scenarios
+        if not scenario["name"].startswith("example")
     ]
 
     # Wrap the description onto multiple lines
@@ -158,12 +161,17 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
                 "We do not have correct behavior for local version identifiers yet"
             )
 
-    # Split scenarios into `install` and `compile` cases
+    # Split scenarios into `install`, `compile` and `lock` cases
     install_scenarios = []
     compile_scenarios = []
+    lock_scenarios = []
 
     for scenario in data["scenarios"]:
-        if (scenario["resolver_options"] or {}).get("python") is not None:
+        resolver_options = scenario["resolver_options"] or {}
+        if resolver_options.get("universal"):
+            print(scenario["name"])
+            lock_scenarios.append(scenario)
+        elif resolver_options.get("python") is not None:
             compile_scenarios.append(scenario)
         else:
             install_scenarios.append(scenario)
@@ -171,6 +179,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
     for template, tests, scenarios in [
         (INSTALL_TEMPLATE, INSTALL_TESTS, install_scenarios),
         (COMPILE_TEMPLATE, COMPILE_TESTS, compile_scenarios),
+        (LOCK_TEMPLATE, LOCK_TESTS, lock_scenarios),
     ]:
         data = {"scenarios": scenarios}
 
@@ -221,7 +230,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
                     "insta",
                     "test",
                     "--features",
-                    "pypi,python",
+                    "pypi,python,python-patch",
                     "--accept",
                     "--test-runner",
                     "nextest",

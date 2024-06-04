@@ -4,19 +4,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
 
 use derivative::Derivative;
-use distribution_types::IndexLocations;
 use indexmap::{IndexMap, IndexSet};
 use owo_colors::OwoColorize;
-use pep440_rs::Version;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
 use rustc_hash::FxHashMap;
+
+use distribution_types::IndexLocations;
+use pep440_rs::{Version, VersionSpecifiers};
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::python_requirement::PythonRequirement;
+use crate::python_requirement::{PythonRequirement, RequiresPython};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
@@ -194,7 +195,15 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         _ => (),
                     }
                 }
-                result.push_str(" are incompatible");
+                if let [(p, t)] = slice {
+                    if PackageTerm::new(p, t).plural() {
+                        result.push_str(" are incompatible");
+                    } else {
+                        result.push_str(" is incompatible");
+                    }
+                } else {
+                    result.push_str(" are incompatible");
+                }
                 result
             }
         }
@@ -526,8 +535,27 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
                 }
+                External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
+                    // Check for no versions due to `Requires-Python`.
+                    if matches!(
+                        &**dependency,
+                        PubGrubPackageInner::Python(PubGrubPython::Target)
+                    ) {
+                        if let Some(python) = self.python_requirement {
+                            if let Some(RequiresPython::Specifiers(specifiers)) = python.target() {
+                                hints.insert(PubGrubHint::RequiresPython {
+                                    requires_python: specifiers.clone(),
+                                    package: package.clone(),
+                                    package_set: self
+                                        .simplify_set(package_set, package)
+                                        .into_owned(),
+                                    package_requires_python: dependency_set.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
                 External::NotRoot(..) => {}
-                External::FromDependencyOf(..) => {}
             },
             DerivationTree::Derived(derived) => {
                 hints.extend(self.hints(
@@ -609,6 +637,16 @@ pub(crate) enum PubGrubHint {
         version: Version,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         reason: String,
+    },
+    /// The `Requires-Python` requirement was not satisfied.
+    RequiresPython {
+        requires_python: VersionSpecifiers,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        package_set: Range<Version>,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        package_requires_python: Range<Version>,
     },
 }
 
@@ -701,7 +739,7 @@ impl std::fmt::Display for PubGrubHint {
                     textwrap::indent(reason, "  ")
                 )
             }
-            PubGrubHint::InconsistentVersionMetadata {
+            Self::InconsistentVersionMetadata {
                 package,
                 version,
                 reason,
@@ -714,6 +752,23 @@ impl std::fmt::Display for PubGrubHint {
                     package.bold(),
                     version.bold(),
                     textwrap::indent(reason, "  ")
+                )
+            }
+            Self::RequiresPython {
+                requires_python,
+                package,
+                package_set,
+                package_requires_python,
+            } => {
+                write!(
+                    f,
+                    "{}{} The `Requires-Python` requirement ({}) defined in your `pyproject.toml` includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `Requires-Python` requirement (like {}).",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    requires_python.bold(),
+                    PackageRange::compatibility(package, package_set).bold(),
+                    package_requires_python.bold(),
+                    package_requires_python.bold(),
                 )
             }
         }
@@ -749,13 +804,28 @@ impl std::fmt::Display for PackageTerm<'_> {
 }
 
 impl PackageTerm<'_> {
+    /// Create a new [`PackageTerm`] from a [`PubGrubPackage`] and a [`Term`].
     fn new<'a>(package: &'a PubGrubPackage, term: &'a Term<Range<Version>>) -> PackageTerm<'a> {
         PackageTerm { package, term }
+    }
+
+    /// Returns `true` if the predicate following this package term should be singular or plural.
+    fn plural(&self) -> bool {
+        match self.term {
+            Term::Positive(set) => PackageRange::compatibility(self.package, set).plural(),
+            Term::Negative(set) => {
+                if set.as_singleton().is_some() {
+                    false
+                } else {
+                    PackageRange::compatibility(self.package, &set.complement()).plural()
+                }
+            }
+        }
     }
 }
 
 /// The kind of version ranges being displayed in [`PackageRange`]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PackageRangeKind {
     Dependency,
     Compatibility,
@@ -775,12 +845,19 @@ impl PackageRange<'_> {
     /// be singular or plural e.g. if false use "<range> depends on <...>" and
     /// if true use "<range> depend on <...>"
     fn plural(&self) -> bool {
-        if self.range.is_empty() {
-            false
+        let mut segments = self.range.iter();
+        if let Some(segment) = segments.next() {
+            // A single unbounded compatibility segment is always plural ("all versions of").
+            if self.kind == PackageRangeKind::Compatibility {
+                if matches!(segment, (Bound::Unbounded, Bound::Unbounded)) {
+                    return true;
+                }
+            }
+            // Otherwise, multiple segments are always plural.
+            segments.next().is_some()
         } else {
-            let segments: Vec<_> = self.range.iter().collect();
-            // "all versions of" is the only plural case
-            matches!(segments.as_slice(), [(Bound::Unbounded, Bound::Unbounded)])
+            // An empty range is always singular.
+            false
         }
     }
 }

@@ -7,7 +7,6 @@ use std::thread;
 
 use dashmap::DashMap;
 use futures::{FutureExt, StreamExt, TryFutureExt};
-use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
@@ -309,11 +308,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut resolutions = vec![];
 
         debug!(
-            "Solving with target Python version {}",
-            self.python_requirement
-                .target()
-                .unwrap_or(self.python_requirement.installed())
+            "Solving with installed Python version: {}",
+            self.python_requirement.installed()
         );
+        if let Some(target) = self.python_requirement.target() {
+            debug!("Solving with target Python version: {}", target);
+        }
 
         'FORK: while let Some(mut state) = forked_states.pop() {
             loop {
@@ -414,12 +414,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             )),
                         ) = reason
                         {
-                            let python_version = requires_python
-                                .iter()
-                                .map(PubGrubSpecifier::try_from)
-                                .fold_ok(Range::full(), |range, specifier| {
-                                    range.intersection(&specifier.into())
-                                })?;
+                            let python_version: Range<Version> =
+                                PubGrubSpecifier::try_from(&requires_python)?.into();
 
                             let package = &state.next;
                             state
@@ -720,7 +716,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // The version is incompatible due to its Python requirement.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
                     if let Some(target) = self.python_requirement.target() {
-                        if !requires_python.contains(target) {
+                        if !target.subset_of(requires_python) {
                             return Ok(Some(ResolverVersion::Unavailable(
                                 version.clone(),
                                 UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
@@ -732,9 +728,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             )));
                         }
                     }
-
-                    let installed = self.python_requirement.installed();
-                    if !requires_python.contains(installed) {
+                    if !requires_python.contains(self.python_requirement.installed()) {
                         return Ok(Some(ResolverVersion::Unavailable(
                             version.clone(),
                             UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
