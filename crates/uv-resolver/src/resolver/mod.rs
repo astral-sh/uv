@@ -949,14 +949,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for (package, version) in dependencies.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
+                    // Warn the user if the direct dependency is not pinned.
                     if matches!(
                         resolution_strategy,
                         ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
-                    ) {
-                        debug!("new_warning: direct {package}{version}");
-                        if *version == (Range::full()) {
-                            warn_user_once!("new_warning_match: direct {package}{version}");
-                        }
+                    ) && *version == (Range::full())
+                    {
+                        warn_user_once!("new_warning_match: direct {package}{version}");
                     }
                     // Update the package priorities.
                     priorities.insert(package, version);
@@ -1093,14 +1092,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for (dep_package, dep_version) in dependencies.iter() {
                     debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
+                    // Warn the user if the transitive dependency is not pinned.
                     if matches!(
                         resolution_strategy,
                         ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
-                    ) {
-                        debug!("new_warning: transitive {package}{dep_version}");
-                        if *dep_version == (Range::full()) {
-                            warn_user_once!("new_warning_match: transitive {package}{dep_version}");
-                        }
+                    ) && *dep_version == (Range::full())
+                    {
+                        warn_user_once!("new_warning_match: transitive {package}{dep_version}");
                     }
                     // Update the package priorities.
                     priorities.insert(dep_package, dep_version);
