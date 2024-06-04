@@ -44,7 +44,6 @@ use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use crate::requirement::EditableError;
 use distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep508_rs::{
     expand_env_vars, split_scheme, strip_host, Pep508Error, RequirementOrigin, Scheme, VerbatimUrl,
@@ -57,11 +56,12 @@ use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
 use uv_warnings::warn_user;
 
+use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
 
 mod requirement;
 
-/// We emit one of those for each requirements.txt entry
+/// We emit one of those for each `requirements.txt` entry.
 enum RequirementsTxtStatement {
     /// `-r` inclusion filename
     Requirements {
@@ -500,7 +500,8 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (requirement, hashes) = parse_requirement_and_hashes(s, content, source, working_dir)?;
+        let (requirement, hashes) =
+            parse_requirement_and_hashes(s, content, source, working_dir, true)?;
         let requirement =
             requirement
                 .into_editable()
@@ -579,7 +580,8 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (requirement, hashes) = parse_requirement_and_hashes(s, content, source, working_dir)?;
+        let (requirement, hashes) =
+            parse_requirement_and_hashes(s, content, source, working_dir, false)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
             hashes,
@@ -643,6 +645,7 @@ fn parse_requirement_and_hashes(
     content: &str,
     source: Option<&Path>,
     working_dir: &Path,
+    editable: bool,
 ) -> Result<(RequirementsTxtRequirement, Vec<String>), RequirementsTxtParserError> {
     // PEP 508 requirement
     let start = s.cursor();
@@ -699,7 +702,7 @@ fn parse_requirement_and_hashes(
         }
     }
 
-    let requirement = RequirementsTxtRequirement::parse(requirement, working_dir)
+    let requirement = RequirementsTxtRequirement::parse(requirement, working_dir, editable)
         .map(|requirement| {
             if let Some(source) = source {
                 requirement.with_origin(RequirementOrigin::File(source.to_path_buf()))
