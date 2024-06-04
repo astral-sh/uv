@@ -2,10 +2,16 @@
 #    uv pip compile scripts/scenarios/requirements.in -o scripts/scenarios/requirements.txt --refresh-package packse
 certifi==2024.2.2
     # via requests
+cffi==1.16.0
+    # via cryptography
 charset-normalizer==3.3.2
     # via requests
 chevron-blue==0.2.1
-    # via packse
+    # via
+    #   -r scripts/scenarios/requirements.in
+    #   packse
+cryptography==42.0.7
+    # via secretstorage
 docutils==0.21.2
     # via readme-renderer
 hatchling==1.24.2
@@ -20,6 +26,10 @@ jaraco-context==5.3.0
     # via keyring
 jaraco-functools==4.0.1
     # via keyring
+jeepney==0.8.0
+    # via
+    #   keyring
+    #   secretstorage
 keyring==25.1.0
     # via twine
 markdown-it-py==3.0.0
@@ -36,13 +46,16 @@ nh3==0.2.17
     # via readme-renderer
 packaging==24.0
     # via hatchling
-packse==0.3.15
+packse==0.3.17
+    # via -r scripts/scenarios/requirements.in
 pathspec==0.12.1
     # via hatchling
 pkginfo==1.10.0
     # via twine
 pluggy==1.5.0
     # via hatchling
+pycparser==2.22
+    # via cffi
 pygments==2.17.2
     # via
     #   readme-renderer
@@ -61,6 +74,8 @@ rfc3986==2.0.0
     # via twine
 rich==13.7.1
     # via twine
+secretstorage==3.3.3
+    # via keyring
 setuptools==69.5.1
     # via packse
 trove-classifiers==2024.4.10
