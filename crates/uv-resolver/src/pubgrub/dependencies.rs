@@ -228,12 +228,7 @@ impl PubGrubRequirement {
                             range.intersection(&specifier.into())
                         })?
                 } else {
-                    specifier
-                        .iter()
-                        .map(PubGrubSpecifier::try_from)
-                        .fold_ok(Range::full(), |range, specifier| {
-                            range.intersection(&specifier.into())
-                        })?
+                    PubGrubSpecifier::try_from(specifier)?.into()
                 };
 
                 Ok(Self {

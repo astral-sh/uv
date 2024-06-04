@@ -7,7 +7,6 @@ use std::thread;
 
 use dashmap::DashMap;
 use futures::{FutureExt, StreamExt, TryFutureExt};
-use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
@@ -412,12 +411,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             )),
                         ) = reason
                         {
-                            let python_version = requires_python
-                                .iter()
-                                .map(PubGrubSpecifier::try_from)
-                                .fold_ok(Range::full(), |range, specifier| {
-                                    range.intersection(&specifier.into())
-                                })?;
+                            let python_version: Range<Version> =
+                                PubGrubSpecifier::try_from(&requires_python)?.into();
 
                             let package = &state.next;
                             state
