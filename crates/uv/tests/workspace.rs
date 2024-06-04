@@ -4,7 +4,7 @@ use std::process::Command;
 
 use anyhow::Result;
 
-use crate::common::{copy_dir_all, get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
+use crate::common::{copy_dir_ignore, get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
@@ -373,7 +373,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
 
-    copy_dir_all(
+    copy_dir_ignore(
         workspaces_dir().join("albatross-virtual-workspace"),
         &work_dir,
     )?;
@@ -444,7 +444,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
 
-    copy_dir_all(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
+    copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
 
     // TODO(konsti): `--python` is being ignored atm, so we need to create the correct venv
     // ourselves and add the output filters.

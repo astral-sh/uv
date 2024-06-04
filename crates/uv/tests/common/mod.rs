@@ -628,6 +628,21 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
     Ok(())
 }
 
+/// Recursively copy a directory and its contents, skipping gitignored files.
+pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+    for entry in ignore::Walk::new(&src) {
+        let entry = entry?;
+        let relative = entry.path().strip_prefix(&src)?;
+        let ty = entry.file_type().unwrap();
+        if ty.is_dir() {
+            fs_err::create_dir(dst.as_ref().join(relative))?;
+        } else {
+            fs_err::copy(entry.path(), dst.as_ref().join(relative))?;
+        }
+    }
+    Ok(())
+}
+
 /// Utility macro to return the name of the current function.
 ///
 /// https://stackoverflow.com/a/40234666/3549270
