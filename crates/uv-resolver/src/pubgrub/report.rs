@@ -4,19 +4,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
 
 use derivative::Derivative;
-use distribution_types::IndexLocations;
 use indexmap::{IndexMap, IndexSet};
 use owo_colors::OwoColorize;
-use pep440_rs::Version;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
 use rustc_hash::FxHashMap;
+
+use distribution_types::IndexLocations;
+use pep440_rs::{Version, VersionSpecifiers};
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::python_requirement::PythonRequirement;
+use crate::python_requirement::{PythonRequirement, RequiresPython};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
@@ -534,8 +535,27 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
                 }
+                External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
+                    // Check for no versions due to `Requires-Python`.
+                    if matches!(
+                        &**dependency,
+                        PubGrubPackageInner::Python(PubGrubPython::Target)
+                    ) {
+                        if let Some(python) = self.python_requirement {
+                            if let Some(RequiresPython::Specifiers(specifiers)) = python.target() {
+                                hints.insert(PubGrubHint::RequiresPython {
+                                    requires_python: specifiers.clone(),
+                                    package: package.clone(),
+                                    package_set: self
+                                        .simplify_set(package_set, package)
+                                        .into_owned(),
+                                    package_requires_python: dependency_set.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
                 External::NotRoot(..) => {}
-                External::FromDependencyOf(..) => {}
             },
             DerivationTree::Derived(derived) => {
                 hints.extend(self.hints(
@@ -617,6 +637,16 @@ pub(crate) enum PubGrubHint {
         version: Version,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         reason: String,
+    },
+    /// The `Requires-Python` requirement was not satisfied.
+    RequiresPython {
+        requires_python: VersionSpecifiers,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        package_set: Range<Version>,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        package_requires_python: Range<Version>,
     },
 }
 
@@ -709,7 +739,7 @@ impl std::fmt::Display for PubGrubHint {
                     textwrap::indent(reason, "  ")
                 )
             }
-            PubGrubHint::InconsistentVersionMetadata {
+            Self::InconsistentVersionMetadata {
                 package,
                 version,
                 reason,
@@ -722,6 +752,23 @@ impl std::fmt::Display for PubGrubHint {
                     package.bold(),
                     version.bold(),
                     textwrap::indent(reason, "  ")
+                )
+            }
+            Self::RequiresPython {
+                requires_python,
+                package,
+                package_set,
+                package_requires_python,
+            } => {
+                write!(
+                    f,
+                    "{}{} The `Requires-Python` requirement ({}) defined in your `pyproject.toml` includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `Requires-Python` requirement (like {}).",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    requires_python.bold(),
+                    PackageRange::compatibility(package, package_set).bold(),
+                    package_requires_python.bold(),
+                    package_requires_python.bold(),
                 )
             }
         }
