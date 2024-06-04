@@ -20,9 +20,7 @@ use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPy
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
-use uv_interpreter::{
-    find_default_interpreter, find_interpreter, InterpreterRequest, SourceSelector,
-};
+use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
@@ -121,18 +119,17 @@ async fn venv_impl(
     cache: &Cache,
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
-    // Locate the Python interpreter.
-    let interpreter = if let Some(python) = python_request.as_ref() {
-        let system = uv_interpreter::SystemPython::Required;
-        let request = InterpreterRequest::parse(python);
-        let sources = SourceSelector::from_settings(system, preview);
-        find_interpreter(&request, system, &sources, cache)
+    // Locate the Python interpreter to use in the environment
+    // If a specific interpreter is requested, it is required to come from the system.
+    // Otherwise, we'll allow the interpeter from a virtual environment to be used.
+    let system = if python_request.is_some() {
+        SystemPython::Required
     } else {
-        find_default_interpreter(preview, cache)
-    }
-    .into_diagnostic()?
-    .into_diagnostic()?
-    .into_interpreter();
+        SystemPython::Allowed
+    };
+    let interpreter = PythonEnvironment::find(python_request, system, preview, cache)
+        .into_diagnostic()?
+        .into_interpreter();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
