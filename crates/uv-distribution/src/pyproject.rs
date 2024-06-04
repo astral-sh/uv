@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::ops::Deref;
 
 use glob::Pattern;
+use pep440_rs::VersionSpecifiers;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -56,6 +57,8 @@ pub struct PyProjectToml {
 pub struct Project {
     /// The name of the project
     pub name: PackageName,
+    /// The Python versions this project is compatible with.
+    pub requires_python: Option<VersionSpecifiers>,
     /// The optional dependencies of the project.
     pub optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
 }
