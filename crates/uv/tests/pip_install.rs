@@ -1644,7 +1644,7 @@ fn install_git_private_https_pat_not_authorized() {
     let context = TestContext::new("3.8");
 
     // A revoked token
-    let token = "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t";
+    let token = "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";
 
     let mut filters = context.filters();
     filters.insert(0, (token, "***"));
