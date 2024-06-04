@@ -1881,6 +1881,30 @@ impl MarkerTree {
             exprs.push(tree);
         }
     }
+
+    /// Normalizes this marker tree such that all conjunctions and disjunctions
+    /// are sorted.
+    ///
+    /// This is useful in cases where creating conjunctions or disjunctions
+    /// might occur in a non-deterministic order. This routine will erase the
+    /// distinction created by such a construction.
+    pub fn normalize(&mut self) {
+        match *self {
+            MarkerTree::Expression(_) => {}
+            MarkerTree::And(ref mut trees) | MarkerTree::Or(ref mut trees) => {
+                // This is kind of cheesy, because we're doing a recursive call
+                // followed by a sort, and that sort is also recursive (due to
+                // the corresponding Ord impl being recursive).
+                //
+                // We should consider refactoring `MarkerTree` to a "smart
+                // constructor" design that normalizes them by construction.
+                for tree in &mut *trees {
+                    tree.normalize();
+                }
+                trees.sort();
+            }
+        }
+    }
 }
 
 impl Display for MarkerTree {
