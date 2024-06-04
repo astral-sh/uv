@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use glob::Pattern;
+use glob::{MatchOptions, Pattern};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
 
@@ -27,8 +27,6 @@ pub enum WorkspaceError {
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
     DynamicNotAllowed(&'static str),
     // Syntax and other errors.
-    #[error("Failed to find directories for glob: `{0}`")]
-    Walk(String, #[source] walkdir::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
@@ -228,8 +226,6 @@ impl Workspace {
         // Add all other workspace members.
         for member_glob in workspace_definition.members.unwrap_or_default() {
             for member_root in WorkspaceGlobIter::new(&workspace_root, &member_glob) {
-                let member_root = member_root
-                    .map_err(|err| WorkspaceError::Walk(member_glob.to_string(), err))?;
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
@@ -771,12 +767,10 @@ fn is_excluded_from_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
-        for excluded_root in WorkspaceGlobIter::new(workspace_root, exclude_glob) {
-            let excluded_root =
-                excluded_root.map_err(|err| WorkspaceError::Walk(exclude_glob.to_string(), err))?;
-            if excluded_root == project_path {
-                return Ok(true);
-            }
+        if WorkspaceGlobIter::new(workspace_root, exclude_glob)
+            .any(|excluded_root| excluded_root == project_path)
+        {
+            return Ok(true);
         }
     }
     Ok(false)
@@ -784,7 +778,7 @@ fn is_excluded_from_workspace(
 
 /// An iterator over a [`Pattern`] in a workspace.
 ///
-/// Iterates from the workspace root, returning paths that match the pattern.
+/// Iterates from the workspace root, returning the paths of any directories that match the pattern.
 #[derive(Debug)]
 struct WorkspaceGlobIter<'a> {
     root: &'a Path,
@@ -803,25 +797,28 @@ impl<'a> WorkspaceGlobIter<'a> {
 }
 
 impl<'a> Iterator for WorkspaceGlobIter<'a> {
-    type Item = Result<PathBuf, walkdir::Error>;
+    type Item = PathBuf;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let entry = match self.iter.next()? {
                 Ok(entry) => entry,
-                Err(err) => return Some(Err(err)),
+                Err(err) => {
+                    debug!("Error walking directory: {err}");
+                    continue;
+                }
             };
             if entry.file_type().is_dir() {
-                if self.glob.matches_path(entry.path())
-                    || entry
-                        .path()
-                        .strip_prefix(self.root)
-                        .is_ok_and(|path| self.glob.matches_path(path))
-                {
-                    // Match, but avoid recursing into the directory.
-                    let path = entry.path().to_path_buf();
-                    self.iter.skip_current_dir();
-                    return Some(Ok(path));
+                if entry.path().strip_prefix(self.root).is_ok_and(|path| {
+                    self.glob.matches_path_with(
+                        path,
+                        MatchOptions {
+                            require_literal_separator: true,
+                            ..MatchOptions::default()
+                        },
+                    )
+                }) {
+                    return Some(entry.path().to_path_buf());
                 }
             }
         }
