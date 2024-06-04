@@ -2,6 +2,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use distribution_types::IndexLocations;
 use itertools::Itertools;
 use tempfile::tempdir_in;
 use tokio::process::Command;
@@ -23,6 +24,7 @@ use crate::printer::Printer;
 /// Run a command.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
+    index_locations: IndexLocations,
     extras: ExtrasSpecification,
     target: Option<String>,
     mut args: Vec<OsString>,
@@ -64,6 +66,7 @@ pub(crate) async fn run(
         let lock = project::lock::do_lock(
             &project,
             &venv,
+            &index_locations,
             upgrade,
             exclude_newer,
             preview,
@@ -71,7 +74,17 @@ pub(crate) async fn run(
             printer,
         )
         .await?;
-        project::sync::do_sync(&project, &venv, &lock, extras, preview, cache, printer).await?;
+        project::sync::do_sync(
+            &project,
+            &venv,
+            &lock,
+            &index_locations,
+            extras,
+            preview,
+            cache,
+            printer,
+        )
+        .await?;
 
         Some(venv)
     };
@@ -113,8 +126,16 @@ pub(crate) async fn run(
 
         // Install the ephemeral requirements.
         Some(
-            project::update_environment(venv, &requirements, connectivity, cache, printer, preview)
-                .await?,
+            project::update_environment(
+                venv,
+                &requirements,
+                &index_locations,
+                connectivity,
+                cache,
+                printer,
+                preview,
+            )
+            .await?,
         )
     };
 

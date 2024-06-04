@@ -7,11 +7,13 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
-use cache_key::RepositoryUrl;
+use either::Either;
+use indexmap::IndexMap;
 use rustc_hash::FxHashMap;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
+use cache_key::RepositoryUrl;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
@@ -26,6 +28,7 @@ use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryRefere
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolution::AnnotatedDist;
+use crate::{lock, ResolutionGraph};
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -47,12 +50,53 @@ pub struct Lock {
 }
 
 impl Lock {
-    pub(crate) fn new(distributions: Vec<Distribution>) -> Result<Lock, LockError> {
+    /// Initialize a [`Lock`] from a [`ResolutionGraph`].
+    pub fn from_resolution_graph(graph: &ResolutionGraph) -> Result<Self, LockError> {
+        let mut locked_dists = IndexMap::with_capacity(graph.petgraph.node_count());
+
+        // Lock all base packages.
+        for node_index in graph.petgraph.node_indices() {
+            let dist = &graph.petgraph[node_index];
+            if dist.extra.is_some() {
+                continue;
+            }
+
+            let mut locked_dist = lock::Distribution::from_annotated_dist(dist)?;
+            for neighbor in graph.petgraph.neighbors(node_index) {
+                let dependency_dist = &graph.petgraph[neighbor];
+                locked_dist.add_dependency(dependency_dist);
+            }
+            if let Some(locked_dist) = locked_dists.insert(locked_dist.id.clone(), locked_dist) {
+                return Err(LockError::duplicate_distribution(locked_dist.id));
+            }
+        }
+
+        // Lock all extras.
+        for node_index in graph.petgraph.node_indices() {
+            let dist = &graph.petgraph[node_index];
+            if let Some(extra) = dist.extra.as_ref() {
+                let id = lock::DistributionId::from_annotated_dist(dist);
+                let Some(locked_dist) = locked_dists.get_mut(&id) else {
+                    return Err(LockError::missing_base(id, extra.clone()));
+                };
+                for neighbor in graph.petgraph.neighbors(node_index) {
+                    let dependency_dist = &graph.petgraph[neighbor];
+                    locked_dist.add_optional_dependency(extra.clone(), dependency_dist);
+                }
+            }
+        }
+
+        let lock = Self::new(locked_dists.into_values().collect())?;
+        Ok(lock)
+    }
+
+    /// Initialize a [`Lock`] from a list of [`Distribution`] entries.
+    fn new(distributions: Vec<Distribution>) -> Result<Self, LockError> {
         let wire = LockWire {
             version: 1,
             distributions,
         };
-        Lock::try_from(wire)
+        Self::try_from(wire)
     }
 
     /// Returns the [`Distribution`] entries in this lock.
@@ -60,6 +104,7 @@ impl Lock {
         &self.distributions
     }
 
+    /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub fn to_resolution(
         &self,
         marker_env: &MarkerEnvironment,
@@ -67,27 +112,33 @@ impl Lock {
         root_name: &PackageName,
         extras: &[ExtraName],
     ) -> Resolution {
-        let mut queue: VecDeque<&Distribution> = VecDeque::new();
+        let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
 
         // Add the root distribution to the queue.
+        let root = self
+            .find_by_name(root_name)
+            .expect("found too many distributions matching root")
+            .expect("could not find root");
         for extra in std::iter::once(None).chain(extras.iter().map(Some)) {
-            let root = self
-                .find_by_name(root_name, extra)
-                .expect("found too many distributions matching root")
-                .expect("could not find root");
-            queue.push_back(root);
+            queue.push_back((root, extra));
         }
 
         let mut map = BTreeMap::default();
-        while let Some(dist) = queue.pop_front() {
-            for dep in &dist.dependencies {
+        while let Some((dist, extra)) = queue.pop_front() {
+            let deps = if let Some(extra) = extra {
+                Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
+            } else {
+                Either::Right(dist.dependencies.iter())
+            };
+            for dep in deps {
                 let dep_dist = self.find_by_id(&dep.id);
                 if dep_dist
                     .marker
                     .as_ref()
                     .map_or(true, |marker| marker.evaluate(marker_env, &[]))
                 {
-                    queue.push_back(dep_dist);
+                    let dep_extra = dep.extra.as_ref();
+                    queue.push_back((dep_dist, dep_extra));
                 }
             }
             let name = dist.id.name.clone();
@@ -101,20 +152,12 @@ impl Lock {
     /// Returns the distribution with the given name. If there are multiple
     /// matching distributions, then an error is returned. If there are no
     /// matching distributions, then `Ok(None)` is returned.
-    fn find_by_name(
-        &self,
-        name: &PackageName,
-        extra: Option<&ExtraName>,
-    ) -> Result<Option<&Distribution>, String> {
+    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Distribution>, String> {
         let mut found_dist = None;
         for dist in &self.distributions {
-            if &dist.id.name == name && dist.id.extra.as_ref() == extra {
+            if &dist.id.name == name {
                 if found_dist.is_some() {
-                    return Err(if let Some(extra) = extra {
-                        format!("found multiple distributions matching `{name}[{extra}]`")
-                    } else {
-                        format!("found multiple distributions matching `{name}`")
-                    });
+                    return Err(format!("found multiple distributions matching `{name}`"));
                 }
                 found_dist = Some(dist);
             }
@@ -163,9 +206,6 @@ impl Lock {
             table.insert("name", value(dist.id.name.to_string()));
             table.insert("version", value(dist.id.version.to_string()));
             table.insert("source", value(dist.id.source.to_string()));
-            if let Some(ref extra) = dist.id.extra {
-                table.insert("extra", value(extra.to_string()));
-            }
 
             if let Some(ref marker) = dist.marker {
                 table.insert("marker", value(marker.to_string()));
@@ -182,6 +222,18 @@ impl Lock {
                     .map(Dependency::to_toml)
                     .collect::<ArrayOfTables>();
                 table.insert("dependencies", Item::ArrayOfTables(deps));
+            }
+
+            if !dist.optional_dependencies.is_empty() {
+                let mut optional_deps = Table::new();
+                for (extra, deps) in &dist.optional_dependencies {
+                    let deps = deps
+                        .iter()
+                        .map(Dependency::to_toml)
+                        .collect::<ArrayOfTables>();
+                    optional_deps.insert(extra.as_ref(), Item::ArrayOfTables(deps));
+                }
+                table.insert("optional-dependencies", Item::Table(optional_deps));
             }
 
             if !dist.wheels.is_empty() {
@@ -286,19 +338,23 @@ pub struct Distribution {
     #[serde(flatten)]
     pub(crate) id: DistributionId,
     #[serde(default)]
-    pub(crate) marker: Option<MarkerTree>,
+    marker: Option<MarkerTree>,
     #[serde(default)]
-    pub(crate) sdist: Option<SourceDist>,
+    sdist: Option<SourceDist>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) wheels: Vec<Wheel>,
+    wheels: Vec<Wheel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) dependencies: Vec<Dependency>,
+    dependencies: Vec<Dependency>,
+    #[serde(
+        default,
+        skip_serializing_if = "IndexMap::is_empty",
+        rename = "optional-dependencies"
+    )]
+    optional_dependencies: IndexMap<ExtraName, Vec<Dependency>>,
 }
 
 impl Distribution {
-    pub(crate) fn from_annotated_dist(
-        annotated_dist: &AnnotatedDist,
-    ) -> Result<Distribution, LockError> {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Self, LockError> {
         let id = DistributionId::from_annotated_dist(annotated_dist);
         let marker = annotated_dist.marker.clone();
         let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
@@ -309,12 +365,23 @@ impl Distribution {
             sdist,
             wheels,
             dependencies: vec![],
+            optional_dependencies: IndexMap::default(),
         })
     }
 
-    pub(crate) fn add_dependency(&mut self, annotated_dist: &AnnotatedDist) {
+    /// Add the [`AnnotatedDist`] as a dependency of the [`Distribution`].
+    fn add_dependency(&mut self, annotated_dist: &AnnotatedDist) {
         self.dependencies
             .push(Dependency::from_annotated_dist(annotated_dist));
+    }
+
+    /// Add the [`AnnotatedDist`] as an optional dependency of the [`Distribution`].
+    fn add_optional_dependency(&mut self, extra: ExtraName, annotated_dist: &AnnotatedDist) {
+        let dep = Dependency::from_annotated_dist(annotated_dist);
+        self.optional_dependencies
+            .entry(extra)
+            .or_default()
+            .push(dep);
     }
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
@@ -511,21 +578,17 @@ impl Distribution {
 pub(crate) struct DistributionId {
     pub(crate) name: PackageName,
     pub(crate) version: Version,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) extra: Option<ExtraName>,
-    pub(crate) source: Source,
+    source: Source,
 }
 
 impl DistributionId {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> DistributionId {
         let name = annotated_dist.metadata.name.clone();
         let version = annotated_dist.metadata.version.clone();
-        let extra = annotated_dist.extra.clone();
         let source = Source::from_resolved_dist(&annotated_dist.dist);
         DistributionId {
             name,
             version,
-            extra,
             source,
         }
     }
@@ -538,7 +601,7 @@ impl std::fmt::Display for DistributionId {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) struct Source {
+struct Source {
     kind: SourceKind,
     url: Url,
 }
@@ -734,7 +797,7 @@ impl<'de> serde::Deserialize<'de> for Source {
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) enum SourceKind {
+enum SourceKind {
     Registry,
     Git(GitSource),
     Direct(DirectSource),
@@ -768,7 +831,7 @@ impl SourceKind {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
-pub(crate) struct DirectSource {
+struct DirectSource {
     subdirectory: Option<String>,
 }
 
@@ -796,7 +859,7 @@ impl DirectSource {
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) struct GitSource {
+struct GitSource {
     precise: GitSha,
     subdirectory: Option<String>,
     kind: GitSourceKind,
@@ -850,7 +913,7 @@ enum GitSourceKind {
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize)]
-pub(crate) struct SourceDist {
+struct SourceDist {
     /// A URL or file path (via `file://`) where the source dist that was
     /// locked against was found. The location does not need to exist in the
     /// future, so this should be treated as only a hint to where to look
@@ -1057,7 +1120,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "WheelWire")]
-pub(crate) struct Wheel {
+struct Wheel {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
     /// so this should be treated as only a hint to where to look and/or
@@ -1238,15 +1301,18 @@ impl TryFrom<WheelWire> for Wheel {
 
 /// A single dependency of a distribution in a lock file.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
-pub(crate) struct Dependency {
+struct Dependency {
     #[serde(flatten)]
     id: DistributionId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extra: Option<ExtraName>,
 }
 
 impl Dependency {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Dependency {
         let id = DistributionId::from_annotated_dist(annotated_dist);
-        Dependency { id }
+        let extra = annotated_dist.extra.clone();
+        Dependency { id, extra }
     }
 
     /// Returns the TOML representation of this dependency.
@@ -1255,7 +1321,7 @@ impl Dependency {
         table.insert("name", value(self.id.name.to_string()));
         table.insert("version", value(self.id.version.to_string()));
         table.insert("source", value(self.id.source.to_string()));
-        if let Some(ref extra) = self.id.extra {
+        if let Some(ref extra) = self.extra {
             table.insert("extra", value(extra.to_string()));
         }
 
@@ -1268,7 +1334,7 @@ impl Dependency {
 /// A hash is encoded as a single TOML string in the format
 /// `{algorithm}:{digest}`.
 #[derive(Clone, Debug)]
-pub(crate) struct Hash(HashDigest);
+struct Hash(HashDigest);
 
 impl From<HashDigest> for Hash {
     fn from(hd: HashDigest) -> Hash {
@@ -1360,6 +1426,13 @@ impl LockError {
             kind: Box::new(kind),
         }
     }
+
+    fn missing_base(id: DistributionId, extra: ExtraName) -> LockError {
+        let kind = LockErrorKind::MissingBase { id, extra };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
 }
 
 impl std::error::Error for LockError {
@@ -1370,6 +1443,7 @@ impl std::error::Error for LockError {
             LockErrorKind::InvalidFileUrl { ref err } => Some(err),
             LockErrorKind::UnrecognizedDependency { ref err } => Some(err),
             LockErrorKind::Hash { .. } => None,
+            LockErrorKind::MissingBase { .. } => None,
         }
     }
 }
@@ -1419,6 +1493,12 @@ impl std::fmt::Display for LockError {
                     source = id.source.kind.name(),
                 )
             }
+            LockErrorKind::MissingBase { ref id, ref extra } => {
+                write!(
+                    f,
+                    "found distribution `{id}` with extra `{extra}` but no base distribution",
+                )
+            }
         }
     }
 }
@@ -1465,13 +1545,21 @@ enum LockErrorKind {
         /// When true, a hash is expected to be present.
         expected: bool,
     },
+    /// An error that occurs when a distribution is included with an extra name,
+    /// but no corresponding base distribution (i.e., without the extra) exists.
+    MissingBase {
+        /// The ID of the distribution that has a missing base.
+        id: DistributionId,
+        /// The extra name that was found.
+        extra: ExtraName,
+    },
 }
 
 /// An error that occurs when there's an unrecognized dependency.
 ///
 /// That is, a dependency for a distribution that isn't in the lock file.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct UnrecognizedDependencyError {
+struct UnrecognizedDependencyError {
     /// The ID of the distribution that has an unrecognized dependency.
     id: DistributionId,
     /// The ID of the dependency that doesn't have a corresponding distribution
@@ -1496,7 +1584,7 @@ impl std::fmt::Display for UnrecognizedDependencyError {
 
 /// An error that occurs when a source string could not be parsed.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct SourceParseError {
+struct SourceParseError {
     given: String,
     kind: SourceParseErrorKind,
 }
@@ -1585,7 +1673,7 @@ enum SourceParseErrorKind {
 
 /// An error that occurs when a hash digest could not be parsed.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct HashParseError(&'static str);
+struct HashParseError(&'static str);
 
 impl std::error::Error for HashParseError {}
 

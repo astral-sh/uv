@@ -2,7 +2,7 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -97,6 +97,21 @@ impl<'a> BuildDispatch<'a> {
         self.options = options;
         self
     }
+
+    /// Set the environment variables to be used when building a source distribution.
+    #[must_use]
+    pub fn with_build_extra_env_vars<I, K, V>(mut self, sdist_build_env_variables: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.build_extra_env_vars = sdist_build_env_variables
+            .into_iter()
+            .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
+            .collect();
+        self
+    }
 }
 
 impl<'a> BuildContext for BuildDispatch<'a> {
@@ -135,9 +150,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
+        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let markers = self.interpreter.markers();
-        let python_requirement =
-            PythonRequirement::from_marker_environment(self.interpreter, markers);
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()),

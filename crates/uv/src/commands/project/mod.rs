@@ -109,6 +109,7 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
+    index_locations: &IndexLocations,
     connectivity: Connectivity,
     cache: &Cache,
     printer: Printer,
@@ -148,7 +149,7 @@ pub(crate) async fn update_environment(
     }
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let interpreter = venv.interpreter().clone();
+    let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
@@ -156,6 +157,7 @@ pub(crate) async fn update_environment(
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
         .connectivity(connectivity)
+        .index_urls(index_locations.index_urls())
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
@@ -172,7 +174,6 @@ pub(crate) async fn update_environment(
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let index_locations = IndexLocations::default();
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
@@ -186,8 +187,8 @@ pub(crate) async fn update_environment(
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &interpreter,
-        &index_locations,
+        interpreter,
+        index_locations,
         &flat_index,
         &index,
         &git,
@@ -215,7 +216,7 @@ pub(crate) async fn update_environment(
         &hasher,
         &reinstall,
         &upgrade,
-        &interpreter,
+        interpreter,
         tags,
         Some(markers),
         &client,
@@ -244,8 +245,8 @@ pub(crate) async fn update_environment(
         BuildDispatch::new(
             &client,
             cache,
-            &interpreter,
-            &index_locations,
+            interpreter,
+            index_locations,
             &flat_index,
             &index,
             &git,
@@ -270,7 +271,7 @@ pub(crate) async fn update_environment(
         &no_binary,
         link_mode,
         compile,
-        &index_locations,
+        index_locations,
         &hasher,
         tags,
         &client,

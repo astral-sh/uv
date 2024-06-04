@@ -84,6 +84,9 @@ fn add_requirements(
         // If the requirement isn't relevant for the current platform, skip it.
         match source_extra {
             Some(source_extra) => {
+                if requirement.evaluate_markers(env, &[]) {
+                    continue;
+                }
                 if !requirement.evaluate_markers(env, std::slice::from_ref(source_extra)) {
                     continue;
                 }
@@ -149,6 +152,9 @@ fn add_requirements(
                 // If the requirement isn't relevant for the current platform, skip it.
                 match source_extra {
                     Some(source_extra) => {
+                        if constraint.evaluate_markers(env, &[]) {
+                            continue;
+                        }
                         if !constraint.evaluate_markers(env, std::slice::from_ref(source_extra)) {
                             continue;
                         }
@@ -222,12 +228,7 @@ impl PubGrubRequirement {
                             range.intersection(&specifier.into())
                         })?
                 } else {
-                    specifier
-                        .iter()
-                        .map(PubGrubSpecifier::try_from)
-                        .fold_ok(Range::full(), |range, specifier| {
-                            range.intersection(&specifier.into())
-                        })?
+                    PubGrubSpecifier::try_from(specifier)?.into()
                 };
 
                 Ok(Self {

@@ -25,6 +25,7 @@ use crate::printer::Printer;
 /// Resolve the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
+    index_locations: IndexLocations,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
     preview: PreviewMode,
@@ -45,6 +46,7 @@ pub(crate) async fn lock(
     match do_lock(
         &project,
         &venv,
+        &index_locations,
         upgrade,
         exclude_newer,
         preview,
@@ -67,9 +69,11 @@ pub(crate) async fn lock(
 }
 
 /// Lock the project requirements into a lockfile.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn do_lock(
     project: &ProjectWorkspace,
     venv: &PythonEnvironment,
+    index_locations: &IndexLocations,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
     preview: PreviewMode,
@@ -88,13 +92,14 @@ pub(super) async fn do_lock(
     let project_name = project.project_name().clone();
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let interpreter = venv.interpreter().clone();
+    let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .index_urls(index_locations.index_urls())
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
@@ -107,7 +112,6 @@ pub(super) async fn do_lock(
     let flat_index = FlatIndex::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let index_locations = IndexLocations::default();
     let link_mode = LinkMode::default();
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
@@ -127,8 +131,8 @@ pub(super) async fn do_lock(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &interpreter,
-        &index_locations,
+        interpreter,
+        index_locations,
         &flat_index,
         &index,
         &git,
@@ -156,7 +160,7 @@ pub(super) async fn do_lock(
         &hasher,
         &reinstall,
         &upgrade,
-        &interpreter,
+        interpreter,
         tags,
         None,
         &client,
@@ -174,7 +178,7 @@ pub(super) async fn do_lock(
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Write the lockfile to disk.
-    let lock = resolution.lock()?;
+    let lock = Lock::from_resolution_graph(&resolution)?;
     let encoded = lock.to_toml()?;
     fs_err::tokio::write(
         project.workspace().root().join("uv.lock"),

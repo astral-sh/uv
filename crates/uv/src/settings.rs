@@ -23,7 +23,7 @@ use uv_workspace::{Combine, PipOptions, Workspace};
 use crate::cli::{
     ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
     PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs,
-    VenvArgs,
+    ToolRunArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -99,6 +99,7 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
+    pub(crate) index_locations: IndexLocations,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
@@ -127,12 +128,28 @@ impl RunSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
+
+            index_args,
             python,
             exclude_newer,
             package,
         } = args;
 
         Self {
+            index_locations: IndexLocations::new(
+                index_args.index_url.and_then(Maybe::into_option),
+                index_args
+                    .extra_index_url
+                    .map(|extra_index_urls| {
+                        extra_index_urls
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                index_args.find_links.unwrap_or_default(),
+                index_args.no_index,
+            ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             extras: ExtrasSpecification::from_args(
@@ -149,10 +166,60 @@ impl RunSettings {
     }
 }
 
+/// The resolved settings to use for a `tool run` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolRunSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) target: String,
+    pub(crate) args: Vec<OsString>,
+    pub(crate) from: Option<String>,
+    pub(crate) with: Vec<String>,
+    pub(crate) python: Option<String>,
+}
+
+impl ToolRunSettings {
+    /// Resolve the [`ToolRunSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolRunArgs, _workspace: Option<Workspace>) -> Self {
+        let ToolRunArgs {
+            target,
+            args,
+            from,
+            with,
+            index_args,
+            python,
+        } = args;
+
+        Self {
+            index_locations: IndexLocations::new(
+                index_args.index_url.and_then(Maybe::into_option),
+                index_args
+                    .extra_index_url
+                    .map(|extra_index_urls| {
+                        extra_index_urls
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                index_args.find_links.unwrap_or_default(),
+                index_args.no_index,
+            ),
+            target,
+            args,
+            from,
+            with,
+            python,
+        }
+    }
+}
+
 /// The resolved settings to use for a `sync` invocation.
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
+    pub(crate) index_locations: IndexLocations,
     pub(crate) refresh: Refresh,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) python: Option<String>,
@@ -169,10 +236,25 @@ impl SyncSettings {
             refresh,
             no_refresh,
             refresh_package,
+            index_args,
             python,
         } = args;
 
         Self {
+            index_locations: IndexLocations::new(
+                index_args.index_url.and_then(Maybe::into_option),
+                index_args
+                    .extra_index_url
+                    .map(|extra_index_urls| {
+                        extra_index_urls
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                index_args.find_links.unwrap_or_default(),
+                index_args.no_index,
+            ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
@@ -187,6 +269,7 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
+    pub(crate) index_locations: IndexLocations,
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
@@ -204,11 +287,26 @@ impl LockSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
+            index_args,
             exclude_newer,
             python,
         } = args;
 
         Self {
+            index_locations: IndexLocations::new(
+                index_args.index_url.and_then(Maybe::into_option),
+                index_args
+                    .extra_index_url
+                    .map(|extra_index_urls| {
+                        extra_index_urls
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                index_args.find_links.unwrap_or_default(),
+                index_args.no_index,
+            ),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             exclude_newer,
@@ -227,7 +325,6 @@ pub(crate) struct PipCompileSettings {
     pub(crate) r#override: Vec<PathBuf>,
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
-    pub(crate) uv_lock: bool,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -263,12 +360,9 @@ impl PipCompileSettings {
             no_refresh,
             refresh_package,
             link_mode,
-            index_url,
-            extra_index_url,
-            no_index,
+            index_args,
             index_strategy,
             keyring_provider,
-            find_links,
             python,
             system,
             no_system,
@@ -297,8 +391,6 @@ impl PipCompileSettings {
             no_emit_marker_expression,
             emit_index_annotation,
             no_emit_index_annotation,
-            unstable_uv_lock_file,
-            no_unstable_uv_lock_file,
             compat_args: _,
         } = args;
 
@@ -327,7 +419,6 @@ impl PipCompileSettings {
             r#override,
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
-            uv_lock: flag(unstable_uv_lock_file, no_unstable_uv_lock_file).unwrap_or(false),
             overrides_from_workspace,
 
             // Shared settings.
@@ -336,15 +427,15 @@ impl PipCompileSettings {
                     python,
                     system: flag(system, no_system),
 
-                    index_url: index_url.and_then(Maybe::into_option),
-                    extra_index_url: extra_index_url.map(|extra_index_urls| {
+                    index_url: index_args.index_url.and_then(Maybe::into_option),
+                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
                             .filter_map(Maybe::into_option)
                             .collect()
                     }),
-                    no_index: Some(no_index),
-                    find_links,
+                    no_index: Some(index_args.no_index),
+                    find_links: index_args.find_links,
                     index_strategy,
                     keyring_provider,
                     no_build: flag(no_build, build),
@@ -418,10 +509,7 @@ impl PipSyncSettings {
             no_refresh,
             refresh_package,
             link_mode,
-            index_url,
-            extra_index_url,
-            find_links,
-            no_index,
+            index_args,
             index_strategy,
             require_hashes,
             no_require_hashes,
@@ -470,16 +558,15 @@ impl PipSyncSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-
-                    index_url: index_url.and_then(Maybe::into_option),
-                    extra_index_url: extra_index_url.map(|extra_index_urls| {
+                    index_url: index_args.index_url.and_then(Maybe::into_option),
+                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
                             .filter_map(Maybe::into_option)
                             .collect()
                     }),
-                    no_index: Some(no_index),
-                    find_links,
+                    no_index: Some(index_args.no_index),
+                    find_links: index_args.find_links,
                     index_strategy,
                     keyring_provider,
                     no_build: flag(no_build, build),
@@ -522,7 +609,6 @@ pub(crate) struct PipInstallSettings {
     pub(crate) reinstall: Reinstall,
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
-    pub(crate) uv_lock: Option<String>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
 
     // Shared settings.
@@ -556,10 +642,7 @@ impl PipInstallSettings {
             resolution,
             prerelease,
             pre,
-            index_url,
-            extra_index_url,
-            find_links,
-            no_index,
+            index_args,
             index_strategy,
             require_hashes,
             no_require_hashes,
@@ -587,25 +670,23 @@ impl PipInstallSettings {
             no_strict,
             exclude_newer,
             dry_run,
-            unstable_uv_lock_file,
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace: Vec<pypi_types::Requirement> =
-            if let Some(workspace) = &workspace {
-                workspace
-                    .options
-                    .override_dependencies
-                    .clone()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|requirement| {
-                        Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
+        let overrides_from_workspace: Vec<Requirement> = if let Some(workspace) = &workspace {
+            workspace
+                .options
+                .override_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         Self {
             // CLI-only settings.
@@ -621,7 +702,6 @@ impl PipInstallSettings {
             reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
-            uv_lock: unstable_uv_lock_file,
             overrides_from_workspace,
 
             // Shared settings.
@@ -631,16 +711,15 @@ impl PipInstallSettings {
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
-
-                    index_url: index_url.and_then(Maybe::into_option),
-                    extra_index_url: extra_index_url.map(|extra_index_urls| {
+                    index_url: index_args.index_url.and_then(Maybe::into_option),
+                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
                             .into_iter()
                             .filter_map(Maybe::into_option)
                             .collect()
                     }),
-                    no_index: Some(no_index),
-                    find_links,
+                    no_index: Some(index_args.no_index),
+                    find_links: index_args.find_links,
                     index_strategy,
                     keyring_provider,
                     no_build: flag(no_build, build),

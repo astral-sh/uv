@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.6
+
+### Enhancements
+
+- Support PEP 508 requirements for editables ([#3946](https://github.com/astral-sh/uv/pull/3946))
+- Discard fragments when parsing unnamed URLs ([#3940](https://github.com/astral-sh/uv/pull/3940))
+- Port all Git functionality to use Git CLI ([#3833](https://github.com/astral-sh/uv/pull/3833))
+- Use statically linked C runtime on Windows ([#3966](https://github.com/astral-sh/uv/pull/3966))
+
+### Bug fixes
+
+- Disable concurrent progress bars in Jupyter Notebooks ([#3890](https://github.com/astral-sh/uv/pull/3890))
+- Initialize multi-progress state before individual bars ([#3901](https://github.com/astral-sh/uv/pull/3901))
+- Add missing `i686` alias for `x86` ([#3899](https://github.com/astral-sh/uv/pull/3899))
+- Add missing `ppc64le` alias for `powerpc64le` ([#3963](https://github.com/astral-sh/uv/pull/3963))
+- Fix reference to `--python-version` patch behavior ([#3989](https://github.com/astral-sh/uv/pull/3989))
+- Avoid race condition in `OnceMap` ([#3987](https://github.com/astral-sh/uv/pull/3987))
+
 ## 0.2.5
 
 ### Enhancements

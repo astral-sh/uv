@@ -146,7 +146,7 @@ async fn resolve(
         .expect("Python should be installed")
         .into_interpreter();
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
-    let python_requirement = PythonRequirement::from_marker_environment(&interpreter, markers);
+    let python_requirement = PythonRequirement::from_interpreter(&interpreter);
     let cache = Cache::temp().unwrap().init().unwrap();
     let build_context = DummyContext::new(cache, interpreter.clone());
     let hashes = HashStrategy::None;

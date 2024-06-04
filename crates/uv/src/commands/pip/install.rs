@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
-use fs_err as fs;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
@@ -24,10 +23,9 @@ use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
-use uv_normalize::PackageName;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode,
+    DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
     ResolutionMode,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -71,7 +69,6 @@ pub(crate) async fn pip_install(
     break_system_packages: bool,
     target: Option<Target>,
     concurrency: Concurrency,
-    uv_lock: Option<String>,
     native_tls: bool,
     preview: PreviewMode,
     cache: Cache,
@@ -172,12 +169,7 @@ pub(crate) async fn pip_install(
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
-    if reinstall.is_none()
-        && upgrade.is_none()
-        && source_trees.is_empty()
-        && overrides.is_empty()
-        && uv_lock.is_none()
-    {
+    if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
         match site_packages.satisfies(&requirements, &constraints)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
@@ -215,7 +207,7 @@ pub(crate) async fn pip_install(
         }
     }
 
-    let interpreter = venv.interpreter().clone();
+    let interpreter = venv.interpreter();
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = match (python_platform, python_version.as_ref()) {
@@ -318,7 +310,7 @@ pub(crate) async fn pip_install(
     let resolve_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        &interpreter,
+        interpreter,
         &index_locations,
         &flat_index,
         &index,
@@ -335,56 +327,49 @@ pub(crate) async fn pip_install(
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
-    // Resolve the requirements.
-    let resolution = if let Some(ref root) = uv_lock {
-        let root = PackageName::new(root.to_string())?;
-        let encoded = fs::tokio::read_to_string("uv.lock").await?;
-        let lock: Lock = toml::from_str(&encoded)?;
-        lock.to_resolution(&markers, &tags, &root, &[])
-    } else {
-        let options = OptionsBuilder::new()
-            .resolution_mode(resolution_mode)
-            .prerelease_mode(prerelease_mode)
-            .dependency_mode(dependency_mode)
-            .exclude_newer(exclude_newer)
-            .index_strategy(index_strategy)
-            .build();
+    let options = OptionsBuilder::new()
+        .resolution_mode(resolution_mode)
+        .prerelease_mode(prerelease_mode)
+        .dependency_mode(dependency_mode)
+        .exclude_newer(exclude_newer)
+        .index_strategy(index_strategy)
+        .build();
 
-        match operations::resolve(
-            requirements,
-            constraints,
-            overrides,
-            source_trees,
-            project,
-            extras,
-            preferences,
-            site_packages.clone(),
-            &hasher,
-            &reinstall,
-            &upgrade,
-            &interpreter,
-            &tags,
-            Some(&markers),
-            &client,
-            &flat_index,
-            &index,
-            &resolve_dispatch,
-            concurrency,
-            options,
-            printer,
-            preview,
-        )
-        .await
-        {
-            Ok(resolution) => Resolution::from(resolution),
-            Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-                let report = miette::Report::msg(format!("{err}"))
-                    .context("No solution found when resolving dependencies:");
-                eprint!("{report:?}");
-                return Ok(ExitStatus::Failure);
-            }
-            Err(err) => return Err(err.into()),
+    // Resolve the requirements.
+    let resolution = match operations::resolve(
+        requirements,
+        constraints,
+        overrides,
+        source_trees,
+        project,
+        extras,
+        preferences,
+        site_packages.clone(),
+        &hasher,
+        &reinstall,
+        &upgrade,
+        interpreter,
+        &tags,
+        Some(&markers),
+        &client,
+        &flat_index,
+        &index,
+        &resolve_dispatch,
+        concurrency,
+        options,
+        printer,
+        preview,
+    )
+    .await
+    {
+        Ok(resolution) => Resolution::from(resolution),
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
+            let report = miette::Report::msg(format!("{err}"))
+                .context("No solution found when resolving dependencies:");
+            eprint!("{report:?}");
+            return Ok(ExitStatus::Failure);
         }
+        Err(err) => return Err(err.into()),
     };
 
     // Re-initialize the in-flight map.
@@ -398,7 +383,7 @@ pub(crate) async fn pip_install(
         BuildDispatch::new(
             &client,
             &cache,
-            &interpreter,
+            interpreter,
             &index_locations,
             &flat_index,
             &index,

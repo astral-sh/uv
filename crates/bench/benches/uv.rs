@@ -135,13 +135,13 @@ mod resolver {
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
-        let interpreter = venv.interpreter().clone();
-        let python_requirement = PythonRequirement::from_marker_environment(&interpreter, &MARKERS);
+        let interpreter = venv.interpreter();
+        let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
         let build_context = BuildDispatch::new(
             client,
             &cache,
-            &interpreter,
+            interpreter,
             &index_locations,
             &flat_index,
             &index,

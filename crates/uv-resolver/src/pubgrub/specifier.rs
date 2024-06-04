@@ -1,6 +1,7 @@
+use itertools::Itertools;
 use pubgrub::range::Range;
 
-use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier};
+use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier, VersionSpecifiers};
 
 use crate::ResolveError;
 
@@ -15,10 +16,25 @@ impl From<PubGrubSpecifier> for Range<Version> {
     }
 }
 
+impl TryFrom<&VersionSpecifiers> for PubGrubSpecifier {
+    type Error = ResolveError;
+
+    /// Convert a PEP 440 specifier to a PubGrub-compatible version range.
+    fn try_from(specifiers: &VersionSpecifiers) -> Result<Self, ResolveError> {
+        let range = specifiers
+            .iter()
+            .map(crate::pubgrub::PubGrubSpecifier::try_from)
+            .fold_ok(Range::full(), |range, specifier| {
+                range.intersection(&specifier.into())
+            })?;
+        Ok(Self(range))
+    }
+}
+
 impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
     type Error = ResolveError;
 
-    /// Convert a PEP 508 specifier to a PubGrub-compatible version range.
+    /// Convert a PEP 440 specifier to a PubGrub-compatible version range.
     fn try_from(specifier: &VersionSpecifier) -> Result<Self, ResolveError> {
         let ranges = match specifier.operator() {
             Operator::Equal => {

@@ -182,11 +182,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
-    let python_requirement = if let Some(markers) = markers {
-        PythonRequirement::from_marker_environment(interpreter, markers)
-    } else {
-        PythonRequirement::from_interpreter(interpreter)
-    };
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -205,6 +200,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         }
         DependencyMode::Direct => Vec::new(),
     };
+
+    let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // TODO(zanieb): Consider consuming these instead of cloning
     let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
