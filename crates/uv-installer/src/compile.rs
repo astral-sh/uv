@@ -1,15 +1,16 @@
-use std::io;
 use std::num::NonZeroUsize;
+use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use std::{io, panic};
 
 use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tokio::task::JoinError;
+use tokio::sync::oneshot;
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
 
@@ -27,7 +28,7 @@ pub enum CompileError {
     #[error("Failed to send task to worker")]
     WorkerDisappeared(SendError<PathBuf>),
     #[error("The task executor is broken, did some other task panic?")]
-    Join(#[from] JoinError),
+    Join,
     #[error("Failed to start Python interpreter to run compile script")]
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
@@ -50,8 +51,8 @@ pub enum CompileError {
     Timeout(Duration),
 }
 
-/// Bytecode compile all file in `dir` using a pool of work-stealing Python interpreters running a
-/// Python script that calls `compileall.compile_file`.
+/// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
+/// that calls `compileall.compile_file`.
 ///
 /// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
 /// a broken `python`.
@@ -85,12 +86,34 @@ pub async fn compile_tree(
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::new();
     for _ in 0..worker_count.get() {
-        worker_handles.push(tokio::task::spawn(worker(
+        let (tx, rx) = oneshot::channel();
+
+        let worker = worker(
             dir.to_path_buf(),
             python_executable.to_path_buf(),
             pip_compileall_py.clone(),
             receiver.clone(),
-        )));
+        );
+
+        // Spawn each worker on a dedicated thread.
+        std::thread::Builder::new()
+            .name("uv-compile".to_owned())
+            .spawn(move || {
+                // Report panics back to the main thread.
+                let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("Failed to build runtime")
+                        .block_on(worker)
+                }));
+
+                // This may fail if the main thread returned early due to an error.
+                let _ = tx.send(result);
+            })
+            .expect("Failed to start compilation worker");
+
+        worker_handles.push(async { rx.await.unwrap() });
     }
     // Make sure the channel gets closed when all workers exit.
     drop(receiver);
@@ -126,7 +149,7 @@ pub async fn compile_tree(
     for result in futures::future::join_all(worker_handles).await {
         match result {
             // There spawning earlier errored due to a panic in a task.
-            Err(join_err) => return Err(CompileError::Join(join_err)),
+            Err(_) => return Err(CompileError::Join),
             // The worker reports an error.
             Ok(Err(compile_error)) => return Err(compile_error),
             Ok(Ok(())) => {}
@@ -188,7 +211,8 @@ async fn worker(
     // If there was something printed to stderr (which shouldn't happen, we muted all errors), tell
     // the user, otherwise only forward the result.
     let child_stderr_collected = stderr_reader
-        .await?
+        .await
+        .map_err(|_| CompileError::Join)?
         .map_err(|err| CompileError::ChildStdio {
             device: "stderr",
             err,
