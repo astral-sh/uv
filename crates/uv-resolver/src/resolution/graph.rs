@@ -263,6 +263,7 @@ impl ResolutionGraph {
         // Add every edge to the graph.
         for (names, version_set) in resolution.dependencies {
             for versions in version_set {
+                dbg!(&(&names.from, &versions.from_version, &versions.from_extra));
                 let from_index =
                     inverse[&(&names.from, &versions.from_version, &versions.from_extra)];
                 let to_index = inverse[&(&names.to, &versions.to_version, &versions.to_extra)];

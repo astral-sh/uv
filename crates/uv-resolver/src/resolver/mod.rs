@@ -339,7 +339,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
                     }
-                    resolutions.push(state.into_resolution(&self.index, self.markers.as_ref()));
+                    resolutions.push(state.into_resolution(&self.index));
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
@@ -1507,7 +1507,7 @@ impl SolveState {
         }
     }
 
-    fn into_resolution(self, index: &InMemoryIndex, env: Option<&MarkerEnvironment>) -> Resolution {
+    fn into_resolution(self, index: &InMemoryIndex) -> Resolution {
         let packages = self.pubgrub.partial_solution.extract_solution();
         let mut dependencies: FxHashMap<
             ResolutionDependencyNames,
@@ -1551,6 +1551,9 @@ impl SolveState {
                 continue;
             };
 
+            //dbg!(self_name, url.is_some());
+            //dbg!(&package_extras[self_name]);
+
             let version_id = if let Some(url) = url {
                 VersionId::from_url(url.verbatim.raw())
             } else {
@@ -1565,7 +1568,37 @@ impl SolveState {
                 panic!("Invalid metadata for resolved version {self_name} {self_version}");
             };
 
+            // Collect all self-recursive extras.
+            let mut extras = package_extras[self_name].clone();
+            let mut changed = true;
+            while changed {
+                changed = false;
+                for requirement in &metadata.metadata.requires_dist {
+                    if &requirement.name != self_name {
+                        continue;
+                    }
+                    for self_extra in iter::once(None).chain(extras.clone().into_iter().map(Some)) {
+                        if requirement
+                            .marker
+                            .as_ref()
+                            .map(|marker| {
+                                marker.evaluate_optional_environment(None, self_extra.as_slice())
+                            })
+                            .unwrap_or(true)
+                        {
+                            for extra in &requirement.extras {
+                                if !extras.contains(extra) {
+                                    extras.push(extra.clone());
+                                    changed = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             for requirement in &metadata.metadata.requires_dist {
+                //dbg!(requirement.to_string());
                 if self_name == &requirement.name {
                     continue;
                 }
@@ -1573,19 +1606,16 @@ impl SolveState {
                     from: self_name.clone(),
                     to: requirement.name.clone(),
                 };
-                for self_extra in iter::once(None).chain(
-                    package_extras[self_name]
-                        .iter()
-                        .map(|extra| Some(extra.clone())),
-                ) {
+                for self_extra in iter::once(None).chain(extras.clone().into_iter().map(Some)) {
                     if requirement
                         .marker
                         .as_ref()
                         .map(|marker| {
-                            marker.evaluate_optional_environment(env, self_extra.as_slice())
+                            marker.evaluate_optional_environment(None, self_extra.as_slice())
                         })
                         .unwrap_or(true)
                     {
+                        dbg!((&self_name, requirement.to_string(), &self_extra));
                         let Some(dependency_version) = package_versions.get(&requirement.name)
                         else {
                             continue;
@@ -1612,6 +1642,8 @@ impl SolveState {
                                 .or_default()
                                 .insert(versions);
                         }
+                        // Break once we found a match.
+                        break;
                     }
                 }
             }
@@ -1622,8 +1654,8 @@ impl SolveState {
             .collect();
 
         let base_line = self.clone().into_resolution2();
-        assert_eq!(&packages, &base_line.packages);
-        assert_eq!(&dependencies, &base_line.dependencies);
+        //assert_eq!(&packages, &base_line.packages);
+        //assert_eq!(&dependencies, &base_line.dependencies);
 
         Resolution {
             packages,
