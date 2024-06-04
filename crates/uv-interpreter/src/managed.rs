@@ -8,7 +8,8 @@ use std::str::FromStr;
 
 use uv_state::{StateBucket, StateStore};
 
-use crate::managed::downloads::Error;
+// TODO(zanieb): Separate download and managed error types
+pub use crate::downloads::Error;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 
@@ -27,8 +28,8 @@ impl InstalledToolchains {
 
     /// Prefer, in order:
     /// 1. The specific toolchain directory specified by the user, i.e., `UV_TOOLCHAIN_DIR`
-    /// 2. A bucket in the system-appropriate user-level data directory, e.g., `~/.local/uv/toolchains`
-    /// 3. A bucket in the local data directory, e.g., `./.uv/toolchains`
+    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/toolchains`
+    /// 3. A directory in the local data directory, e.g., `./.uv/toolchains`
     pub fn from_settings() -> Result<Self, io::Error> {
         if let Some(toolchain_dir) = std::env::var_os("UV_TOOLCHAIN_DIR") {
             Self::from_path(toolchain_dir)

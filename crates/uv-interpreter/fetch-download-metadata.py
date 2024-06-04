@@ -1,12 +1,12 @@
 #!/usr/bin/env python3.12
 """
-Fetch Python version metadata.
+Fetch Python version download metadata.
 
-Generates the `python-version-metadata.json` file.
+Generates the `download-metadata.json` file.
 
 Usage:
 
-    python fetch-version-metadata.py
+    python fetch-download-metadata.py
 
 Acknowledgements:
 
@@ -30,7 +30,7 @@ RELEASE_URL = "https://api.github.com/repos/indygreg/python-build-standalone/rel
 HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28",
 }
-VERSIONS_FILE = SELF_DIR / "python-version-metadata.json"
+VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 FLAVOR_PREFERENCES = [
     "shared-pgo",
     "shared-noopt",

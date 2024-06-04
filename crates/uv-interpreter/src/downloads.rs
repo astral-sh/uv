@@ -143,7 +143,7 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-include!("python_versions.inc");
+include!("downloads.inc");
 
 pub enum DownloadResult {
     AlreadyAvailable(PathBuf),
