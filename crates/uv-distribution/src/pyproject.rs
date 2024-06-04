@@ -18,7 +18,7 @@ use pypi_types::VerbatimParsedUrl;
 use uv_normalize::{ExtraName, PackageName};
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     /// PEP 621-compliant project metadata.
@@ -63,7 +63,7 @@ pub struct ToolUv {
     pub dev_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvWorkspace {
     pub members: Option<Vec<SerdePattern>>,

@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
+use url::Url;
 
 use crate::common::{copy_dir_ignore, get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
@@ -42,6 +44,28 @@ fn run_workspace(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
     command
         .arg("run")
+        .arg("--preview")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--python")
+        .arg(context.interpreter())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("UV_NO_WRAP", "1");
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+    }
+    command
+}
+
+/// A `uv lock` command.
+fn lock_workspace(context: &TestContext) -> Command {
+    let mut command = Command::new(get_bin());
+    command
+        .arg("lock")
         .arg("--preview")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
@@ -405,7 +429,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -473,7 +497,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -503,5 +527,64 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     "###
     );
 
+    Ok(())
+}
+
+/// Check that the resolution is the same no matter where in the workspace we are.
+fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Result<()> {
+    let mut shared_lock = None;
+    for dir in subdirectories {
+        let context = TestContext::new("3.12");
+        let work_dir = context.temp_dir.join(workspace);
+
+        copy_dir_ignore(workspaces_dir().join(workspace), &work_dir)?;
+
+        lock_workspace(&context)
+            .current_dir(&work_dir.join(dir))
+            .assert()
+            .success();
+
+        let raw_lock = fs_err::read_to_string(work_dir.join("uv.lock"))?;
+        // Remove temp paths from lock.
+        // TODO(konsti): There shouldn't be absolute paths in the lock to begin with.
+        let redacted_lock = raw_lock.replace(
+            Url::from_directory_path(&context.temp_dir)
+                .unwrap()
+                .as_str(),
+            "file:///tmp",
+        );
+        // Check the lockfile is the same for all resolutions.
+        if let Some(shared_lock) = &shared_lock {
+            assert_eq!(shared_lock, &redacted_lock);
+        } else {
+            shared_lock = Some(redacted_lock);
+        }
+    }
+    Ok(())
+}
+
+/// Check that the resolution is the same no matter where in the workspace we are.
+#[test]
+fn workspace_lock_idempotence_root_workspace() -> Result<()> {
+    workspace_lock_idempotence(
+        "albatross-root-workspace",
+        &[".", "packages/bird-feeder", "packages/seeds"],
+    )?;
+    Ok(())
+}
+
+/// Check that the resolution is the same no matter where in the workspace we are, and that locking
+/// works even if there is no root project.
+#[test]
+fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
+    workspace_lock_idempotence(
+        "albatross-virtual-workspace",
+        &[
+            ".",
+            "packages/albatross",
+            "packages/bird-feeder",
+            "packages/seeds",
+        ],
+    )?;
     Ok(())
 }

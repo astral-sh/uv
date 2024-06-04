@@ -105,7 +105,11 @@ impl Workspace {
             {
                 workspace
             } else {
-                return Err(WorkspaceError::MissingWorkspace(project_path));
+                (
+                    project_path.clone(),
+                    ToolUvWorkspace::default(),
+                    PyProjectToml::default(),
+                )
             };
 
         debug!(
@@ -143,6 +147,44 @@ impl Workspace {
             project_name: package_name,
             workspace: self,
         })
+    }
+
+    /// Returns the set of requirements that include all packages in the workspace.
+    pub fn members_as_requirements(&self) -> Vec<Requirement> {
+        self.packages
+            .values()
+            .filter_map(|member| {
+                let project = member.pyproject_toml.project.as_ref()?;
+                // Extract the extras available in the project.
+                let extras = project
+                    .optional_dependencies
+                    .as_ref()
+                    .map(|optional_dependencies| {
+                        // It's a `BTreeMap` so the keys are sorted.
+                        optional_dependencies.keys().cloned().collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+
+                Some(Requirement {
+                    name: project.name.clone(),
+                    extras,
+                    marker: None,
+                    source: RequirementSource::Path {
+                        path: member.root.clone(),
+                        editable: true,
+                        url: VerbatimUrl::from_path(&member.root).expect("path is valid URL"),
+                    },
+                    origin: None,
+                })
+            })
+            .collect()
+    }
+
+    /// If there is a package at the workspace root, return it.
+    pub fn root_member(&self) -> Option<&WorkspaceMember> {
+        self.packages
+            .values()
+            .find(|package| package.root == self.root)
     }
 
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with

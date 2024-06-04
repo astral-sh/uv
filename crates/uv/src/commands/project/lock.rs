@@ -12,9 +12,10 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
+use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_interpreter::PythonEnvironment;
+use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
@@ -39,14 +40,22 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
+    let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(&project, preview, cache, printer)?;
+    let venv = project::init_environment(&workspace, preview, cache, printer)?;
 
     // Perform the lock operation.
+    let root_project_name = workspace.root_member().and_then(|member| {
+        member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .map(|project| project.name.clone())
+    });
     match do_lock(
-        &project,
+        root_project_name,
+        &workspace,
         &venv,
         &index_locations,
         upgrade,
@@ -73,7 +82,8 @@ pub(crate) async fn lock(
 /// Lock the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn do_lock(
-    project: &ProjectWorkspace,
+    root_project_name: Option<PackageName>,
+    workspace: &Workspace,
     venv: &PythonEnvironment,
     index_locations: &IndexLocations,
     upgrade: Upgrade,
@@ -83,17 +93,16 @@ pub(super) async fn do_lock(
     printer: Printer,
 ) -> Result<Lock, ProjectError> {
     // When locking, include the project itself (as editable).
-    let requirements = project
-        .requirements()
+    let requirements = workspace
+        .members_as_requirements()
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
-        .collect::<Vec<_>>();
+        .collect();
     let constraints = vec![];
     let overrides = vec![];
     let dev = vec![DEV_DEPENDENCIES.clone()];
 
     let source_trees = vec![];
-    let project_name = project.project_name().clone();
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
@@ -143,7 +152,7 @@ pub(super) async fn do_lock(
     let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = read_lockfile(project, &upgrade).await?;
+    let LockedRequirements { preferences, git } = read_lockfile(workspace, &upgrade).await?;
 
     // Create the Git resolver.
     let git = GitResolver::from_refs(git);
@@ -175,7 +184,7 @@ pub(super) async fn do_lock(
         overrides,
         dev,
         source_trees,
-        Some(project_name),
+        root_project_name,
         &extras,
         preferences,
         EmptyInstalledPackages,
@@ -203,11 +212,7 @@ pub(super) async fn do_lock(
     // Write the lockfile to disk.
     let lock = Lock::from_resolution_graph(&resolution)?;
     let encoded = lock.to_toml()?;
-    fs_err::tokio::write(
-        project.workspace().root().join("uv.lock"),
-        encoded.as_bytes(),
-    )
-    .await?;
+    fs_err::tokio::write(workspace.root().join("uv.lock"), encoded.as_bytes()).await?;
 
     Ok(lock)
 }
