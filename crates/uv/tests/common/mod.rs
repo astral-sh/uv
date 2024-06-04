@@ -416,7 +416,7 @@ pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path
                 .expect("Tests are run on a supported platform")
                 .next()
                 .as_ref()
-                .map(uv_toolchain::managed::Toolchain::executable)
+                .map(uv_toolchain::managed::InstalledToolchain::executable)
         })
         // We'll search for the request Python on the PATH if not found in the toolchain versions
         // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
