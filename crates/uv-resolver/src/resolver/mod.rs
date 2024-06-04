@@ -955,7 +955,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
                     ) && *version == (Range::full())
                     {
-                        warn_user_once!("new_warning_match: direct {package}{version}");
+                        warn_user_once!("The direct dependency `{package}` is unpinned. Consider setting a lower bound.");
                     }
                     // Update the package priorities.
                     priorities.insert(package, version);
@@ -1098,7 +1098,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
                     ) && *dep_version == (Range::full())
                     {
-                        warn_user_once!("new_warning_match: transitive {package}{dep_version}");
+                        warn_user_once!("The transitive dependency `{dep_package}` is unpinned. Consider setting a lower bound.");
                     }
                     // Update the package priorities.
                     priorities.insert(dep_package, dep_version);
