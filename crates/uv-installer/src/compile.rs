@@ -111,7 +111,7 @@ pub async fn compile_tree(
                 // This may fail if the main thread returned early due to an error.
                 let _ = tx.send(result);
             })
-            .unwrap();
+            .expect("Failed to start compilation worker");
 
         worker_handles.push(async { rx.await.unwrap() });
     }
