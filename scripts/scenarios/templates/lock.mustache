@@ -1,0 +1,74 @@
+//! DO NOT EDIT
+//!
+//! Generated with `{{generated_with}}`
+//! Scenarios from <{{generated_from}}>
+//!
+#![cfg(all(feature = "python", feature = "pypi"))]
+#![allow(clippy::needless_raw_string_hashes)]
+
+use anyhow::Result;
+use assert_fs::prelude::*;
+use insta::assert_snapshot;
+
+use common::{uv_snapshot, TestContext};
+
+mod common;
+
+{{#scenarios}}
+
+{{#description_lines}}
+/// {{.}}
+{{/description_lines}}
+///
+/// ```text
+/// {{name}}
+{{#tree}}
+/// {{.}}
+{{/tree}}
+/// ```
+#[test]
+fn {{module_name}}() -> Result<()> {
+    let context = TestContext::new("{{environment.python}}");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"{{name}}-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          {{#root.requires}}
+          '''{{requirement}}''',
+          {{/root.requires}}
+        ]
+        "###
+    )?;
+
+    let mut cmd = context.lock_without_exclude_newer();
+    cmd.arg("--index-url").arg("{{index_url}}");
+    {{#expected.explanation_lines}}
+    // {{.}}
+    {{/expected.explanation_lines}}
+    uv_snapshot!(filters, cmd, @r###"<snapshot>
+    "###
+    );
+
+    {{#expected.satisfiable}}
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"<snapshot>
+            "###
+        );
+    });
+    {{/expected.satisfiable}}
+
+    Ok(())
+}
+{{/scenarios}}
