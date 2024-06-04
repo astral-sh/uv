@@ -47,6 +47,7 @@ use crate::pubgrub::{
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
+use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
@@ -855,7 +856,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<Vec<Dependencies>, ResolveError> {
         type Dep = (PubGrubPackage, Range<Version>);
 
-        let result = self.get_dependencies(package, version, priorities, request_sink);
+        let result = self.get_dependencies(
+            package,
+            version,
+            priorities,
+            request_sink,
+            self.selector.resolution_strategy(),
+        );
         if self.markers.is_some() {
             return result.map(|deps| vec![deps]);
         }
@@ -913,6 +920,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
+        resolution_strategy: &ResolutionStrategy,
     ) -> Result<Dependencies, ResolveError> {
         match &**package {
             PubGrubPackageInner::Root(_) => {
@@ -1594,7 +1602,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
         // N.B. This is almost identical to `ResolvedDistRef::to_owned`, but
         // creates a `Request` instead of a `ResolvedDist`. There's probably
         // some room for DRYing this up a bit. The obvious way would be to
-        // add a method to create a `Dist`, but a `Dist` cannot reprented an
+        // add a method to create a `Dist`, but a `Dist` cannot represented an
         // installed dist.
         match dist {
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized } => {
