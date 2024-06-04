@@ -46,8 +46,20 @@ impl GlobalSettings {
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
-            color: if args.no_color {
+            color: if args.no_color
+                || std::env::var_os("NO_COLOR")
+                    .filter(|v| !v.is_empty())
+                    .is_some()
+            {
                 ColorChoice::Never
+            } else if std::env::var_os("FORCE_COLOR")
+                .filter(|v| !v.is_empty())
+                .is_some()
+                || std::env::var_os("CLICOLOR_FORCE")
+                    .filter(|v| !v.is_empty())
+                    .is_some()
+            {
+                ColorChoice::Always
             } else {
                 args.color
             },
