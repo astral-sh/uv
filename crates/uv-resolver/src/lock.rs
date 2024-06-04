@@ -356,7 +356,12 @@ pub struct Distribution {
 impl Distribution {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Self, LockError> {
         let id = DistributionId::from_annotated_dist(annotated_dist);
-        let marker = annotated_dist.marker.clone();
+        let mut marker = annotated_dist.marker.clone();
+        // Markers can be combined in an unpredictable order, so normalize them
+        // such that the lock file output is consistent and deterministic.
+        if let Some(ref mut marker) = marker {
+            marker.normalize();
+        }
         let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
         Ok(Distribution {
