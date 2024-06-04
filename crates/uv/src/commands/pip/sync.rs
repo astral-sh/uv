@@ -256,6 +256,9 @@ pub(crate) async fn pip_sync(
     let preferences = Vec::default();
     let git = GitResolver::default();
 
+    // Ignore dependency groups.
+    let groups = vec![];
+
     // Create a build dispatch for resolution.
     let resolve_dispatch = BuildDispatch::new(
         &client,
@@ -292,6 +295,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        groups,
         source_trees,
         project,
         &extras,

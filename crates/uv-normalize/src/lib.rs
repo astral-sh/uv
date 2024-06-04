@@ -2,9 +2,11 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 pub use extra_name::ExtraName;
+pub use group_name::GroupName;
 pub use package_name::PackageName;
 
 mod extra_name;
+mod group_name;
 mod package_name;
 
 /// Validate and normalize an owned package or extra name.

@@ -1,6 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::thread;
@@ -30,7 +31,7 @@ pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_git::GitResolver;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
@@ -80,6 +81,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
+    groups: Vec<GroupName>,
     preferences: Preferences,
     git: GitResolver,
     exclusions: Exclusions,
@@ -190,6 +192,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
+            groups: manifest.groups,
             preferences: Preferences::from_iter(manifest.preferences, markers),
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -577,6 +580,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             PubGrubPackageInner::Root(_) => {}
             PubGrubPackageInner::Python(_) => {}
             PubGrubPackageInner::Extra { .. } => {}
+            PubGrubPackageInner::Group { .. } => {}
             PubGrubPackageInner::Package {
                 name, url: None, ..
             } => {
@@ -622,6 +626,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let PubGrubPackageInner::Package {
                 name,
                 extra: None,
+                group: None,
                 marker: _marker,
                 url: None,
             } = &**package
@@ -658,6 +663,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             PubGrubPackageInner::Extra {
+                name,
+                url: Some(url),
+                ..
+            }
+            | PubGrubPackageInner::Group {
                 name,
                 url: Some(url),
                 ..
@@ -749,6 +759,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             PubGrubPackageInner::Extra {
+                name, url: None, ..
+            }
+            | PubGrubPackageInner::Group {
                 name, url: None, ..
             }
             | PubGrubPackageInner::Package {
@@ -870,9 +883,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let name = match &**pkg {
                 // A root can never be a dependency of another package, and a `Python` pubgrub
                 // package is never returned by `get_dependencies`. So these cases never occur.
+                // TODO(charlie): This might be overly conservative for `Extra` and `Group`. If
+                // multiple groups are enabled, we shouldn't need to fork. Similarly, if multiple
+                // extras are enabled, we shouldn't need to fork.
                 PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => unreachable!(),
                 PubGrubPackageInner::Package { ref name, .. }
-                | PubGrubPackageInner::Extra { ref name, .. } => name,
+                | PubGrubPackageInner::Extra { ref name, .. }
+                | PubGrubPackageInner::Group { ref name, .. } => name,
             };
             by_grouping
                 .entry(name)
@@ -918,8 +935,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Add the root requirements.
                 let dependencies = PubGrubDependencies::from_requirements(
                     &self.requirements,
+                    &BTreeMap::default(),
                     &self.constraints,
                     &self.overrides,
+                    None,
                     None,
                     None,
                     &self.urls,
@@ -955,6 +974,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             PubGrubPackageInner::Package {
                 name,
                 extra,
+                group,
                 marker,
                 url,
             } => {
@@ -967,6 +987,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             PubGrubPackage::from(PubGrubPackageInner::Package {
                                 name: name.clone(),
                                 extra: extra.clone(),
+                                group: group.clone(),
                                 marker: None,
                                 url: url.clone(),
                             }),
@@ -1070,10 +1091,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 let mut dependencies = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
+                    &metadata.dependency_groups,
                     &self.constraints,
                     &self.overrides,
                     Some(name),
                     extra.as_ref(),
+                    group.as_ref(),
                     &self.urls,
                     &self.locals,
                     &self.git,
@@ -1088,6 +1111,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     // Emit a request to fetch the metadata for this package.
                     self.visit_package(dep_package, request_sink)?;
+                }
+
+                // If a package has metadata for an enabled dependency group,
+                // add a dependency from it to the same package with the group
+                // enabled.
+                if extra.is_none() && group.is_none() {
+                    for group in &self.groups {
+                        if metadata.dependency_groups.contains_key(group) {
+                            dependencies.push(
+                                PubGrubPackage::from(PubGrubPackageInner::Group {
+                                    name: name.clone(),
+                                    group: group.clone(),
+                                    marker: marker.clone(),
+                                    url: url.clone(),
+                                }),
+                                Range::singleton(version.clone()),
+                            );
+                        }
+                    }
                 }
 
                 // If a package has a marker, add a dependency from it to the
@@ -1106,6 +1148,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         PubGrubPackage::from(PubGrubPackageInner::Package {
                             name: name.clone(),
                             extra: extra.clone(),
+                            group: group.clone(),
                             marker: None,
                             url: url.clone(),
                         }),
@@ -1127,6 +1170,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: name.clone(),
                         extra: None,
+                        group: None,
                         marker: marker.clone(),
                         url: url.clone(),
                     }),
@@ -1136,6 +1180,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: name.clone(),
                         extra: Some(extra.clone()),
+                        group: None,
+                        marker: marker.clone(),
+                        url: url.clone(),
+                    }),
+                    Range::singleton(version.clone()),
+                ),
+            ])),
+
+            // Add a dependency on both the group and base package.
+            PubGrubPackageInner::Group {
+                name,
+                group,
+                marker,
+                url,
+            } => Ok(Dependencies::Available(vec![
+                (
+                    PubGrubPackage::from(PubGrubPackageInner::Package {
+                        name: name.clone(),
+                        extra: None,
+                        group: None,
+                        marker: marker.clone(),
+                        url: url.clone(),
+                    }),
+                    Range::singleton(version.clone()),
+                ),
+                (
+                    PubGrubPackage::from(PubGrubPackageInner::Package {
+                        name: name.clone(),
+                        extra: None,
+                        group: Some(group.clone()),
                         marker: marker.clone(),
                         url: url.clone(),
                     }),
@@ -1371,6 +1445,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 PubGrubPackageInner::Root(_) => {}
                 PubGrubPackageInner::Python(_) => {}
                 PubGrubPackageInner::Extra { .. } => {}
+                PubGrubPackageInner::Group { .. } => {}
                 PubGrubPackageInner::Package {
                     name,
                     url: Some(url),
@@ -1462,6 +1537,7 @@ impl SolveState {
                 let PubGrubPackageInner::Package {
                     name: ref self_name,
                     extra: ref self_extra,
+                    group: ref self_group,
                     ..
                 } = &**self_package
                 else {
@@ -1472,6 +1548,7 @@ impl SolveState {
                     PubGrubPackageInner::Package {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
+                        group: ref dependency_group,
                         ..
                     } => {
                         if self_name == dependency_name {
@@ -1484,8 +1561,10 @@ impl SolveState {
                         let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
                             from_extra: self_extra.clone(),
+                            from_group: self_group.clone(),
                             to_version: dependency_version.clone(),
                             to_extra: dependency_extra.clone(),
+                            to_group: dependency_group.clone(),
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
@@ -1505,8 +1584,33 @@ impl SolveState {
                         let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
                             from_extra: self_extra.clone(),
+                            from_group: self_group.clone(),
                             to_version: dependency_version.clone(),
                             to_extra: Some(dependency_extra.clone()),
+                            to_group: None,
+                        };
+                        dependencies.entry(names).or_default().insert(versions);
+                    }
+
+                    PubGrubPackageInner::Group {
+                        name: ref dependency_name,
+                        group: ref dependency_group,
+                        ..
+                    } => {
+                        if self_name == dependency_name {
+                            continue;
+                        }
+                        let names = ResolutionDependencyNames {
+                            from: self_name.clone(),
+                            to: dependency_name.clone(),
+                        };
+                        let versions = ResolutionDependencyVersions {
+                            from_version: self_version.clone(),
+                            from_extra: self_extra.clone(),
+                            from_group: self_group.clone(),
+                            to_version: dependency_version.clone(),
+                            to_extra: None,
+                            to_group: Some(dependency_group.clone()),
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
@@ -1545,8 +1649,10 @@ pub(crate) struct ResolutionDependencyNames {
 pub(crate) struct ResolutionDependencyVersions {
     pub(crate) from_version: Version,
     pub(crate) from_extra: Option<ExtraName>,
+    pub(crate) from_group: Option<GroupName>,
     pub(crate) to_version: Version,
     pub(crate) to_extra: Option<ExtraName>,
+    pub(crate) to_group: Option<GroupName>,
 }
 
 impl Resolution {

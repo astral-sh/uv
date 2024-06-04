@@ -30,7 +30,7 @@ use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
@@ -79,6 +79,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<Requirement>,
     overrides: Vec<UnresolvedRequirementSpecification>,
+    groups: Vec<GroupName>,
     source_trees: Vec<PathBuf>,
     mut project: Option<PackageName>,
     extras: &ExtrasSpecification,
@@ -216,6 +217,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements,
         constraints,
         overrides,
+        groups,
         preferences,
         project,
         exclusions,

@@ -1665,6 +1665,13 @@ pub(crate) struct RunArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub(crate) no_all_extras: bool,
 
+    /// Include development dependencies.
+    #[arg(long, overrides_with("no_dev"))]
+    pub(crate) dev: bool,
+
+    #[arg(long, conflicts_with("offline"), overrides_with("dev"), hide = true)]
+    pub(crate) no_dev: bool,
+
     /// The command to run.
     pub(crate) target: Option<String>,
 
@@ -1745,6 +1752,13 @@ pub(crate) struct SyncArgs {
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub(crate) no_all_extras: bool,
+
+    /// Include development dependencies.
+    #[arg(long, overrides_with("no_dev"))]
+    pub(crate) dev: bool,
+
+    #[arg(long, conflicts_with("offline"), overrides_with("dev"), hide = true)]
+    pub(crate) no_dev: bool,
 
     /// Refresh all cached data.
     #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]

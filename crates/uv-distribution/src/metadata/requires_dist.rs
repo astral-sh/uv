@@ -1,18 +1,27 @@
+use once_cell::sync::Lazy;
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use uv_configuration::PreviewMode;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::metadata::lowering::lower_requirement;
-use crate::metadata::MetadataLoweringError;
+use crate::metadata::MetadataError;
 use crate::{Metadata, ProjectWorkspace};
+
+/// The `dev-dependencies` dependency group.
+///
+/// Internally, we model dependency groups as a generic concept; but externally, we only expose the
+/// `dev-dependencies` group.
+pub static DEV_DEPENDENCIES: Lazy<GroupName> =
+    Lazy::new(|| GroupName::new("dev".to_string()).unwrap());
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Vec<pypi_types::Requirement>,
     pub provides_extras: Vec<ExtraName>,
+    pub dependency_groups: BTreeMap<GroupName, Vec<pypi_types::Requirement>>,
 }
 
 impl RequiresDist {
@@ -27,6 +36,7 @@ impl RequiresDist {
                 .map(pypi_types::Requirement::from)
                 .collect(),
             provides_extras: metadata.provides_extras,
+            dependency_groups: BTreeMap::default(),
         }
     }
 
@@ -36,7 +46,7 @@ impl RequiresDist {
         metadata: pypi_types::RequiresDist,
         project_root: &Path,
         preview_mode: PreviewMode,
-    ) -> Result<Self, MetadataLoweringError> {
+    ) -> Result<Self, MetadataError> {
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =
@@ -52,7 +62,8 @@ impl RequiresDist {
         metadata: pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
         preview_mode: PreviewMode,
-    ) -> Result<Self, MetadataLoweringError> {
+    ) -> Result<Self, MetadataError> {
+        // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
         let sources = project_workspace
             .current_project()
@@ -62,6 +73,37 @@ impl RequiresDist {
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.sources.as_ref())
             .unwrap_or(&empty);
+
+        let dependency_groups = {
+            let dev_dependencies = project_workspace
+                .current_project()
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.dev_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .map(|requirement| {
+                    let requirement_name = requirement.name.clone();
+                    lower_requirement(
+                        requirement,
+                        &metadata.name,
+                        project_workspace.project_root(),
+                        sources,
+                        project_workspace.workspace(),
+                        preview_mode,
+                    )
+                    .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            if dev_dependencies.is_empty() {
+                BTreeMap::default()
+            } else {
+                BTreeMap::from([(DEV_DEPENDENCIES.clone(), dev_dependencies)])
+            }
+        };
 
         let requires_dist = metadata
             .requires_dist
@@ -76,13 +118,14 @@ impl RequiresDist {
                     project_workspace.workspace(),
                     preview_mode,
                 )
-                .map_err(|err| MetadataLoweringError::LoweringError(requirement_name.clone(), err))
+                .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
             })
             .collect::<Result<_, _>>()?;
 
         Ok(Self {
             name: metadata.name,
             requires_dist,
+            dependency_groups,
             provides_extras: metadata.provides_extras,
         })
     }
@@ -94,6 +137,7 @@ impl From<Metadata> for RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
+            dependency_groups: metadata.dependency_groups,
         }
     }
 }

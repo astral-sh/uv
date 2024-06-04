@@ -8,7 +8,7 @@ use distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, Ver
 use pep508_rs::{split_scheme, MarkerTree, Scheme};
 use pypi_types::HashDigest;
 use uv_distribution::Metadata;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
 pub use crate::resolution::graph::ResolutionGraph;
@@ -23,9 +23,18 @@ mod graph;
 pub(crate) struct AnnotatedDist {
     pub(crate) dist: ResolvedDist,
     pub(crate) extra: Option<ExtraName>,
+    pub(crate) group: Option<GroupName>,
     pub(crate) marker: Option<MarkerTree>,
     pub(crate) hashes: Vec<HashDigest>,
     pub(crate) metadata: Metadata,
+}
+
+impl AnnotatedDist {
+    /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
+    /// dependency group).
+    pub(crate) fn is_base(&self) -> bool {
+        self.extra.is_none() && self.group.is_none()
+    }
 }
 
 impl Name for AnnotatedDist {

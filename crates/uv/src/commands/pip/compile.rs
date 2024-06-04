@@ -462,6 +462,7 @@ pub(crate) async fn pip_compile(
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
+    let groups = vec![];
 
     // Determine any lookahead requirements.
     let lookaheads = match dependency_mode {
@@ -486,6 +487,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        groups,
         preferences,
         project,
         // Do not consider any installed packages during resolution.

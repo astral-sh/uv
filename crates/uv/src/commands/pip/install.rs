@@ -262,6 +262,9 @@ pub(crate) async fn pip_install(
     let preferences = Vec::default();
     let git = GitResolver::default();
 
+    // Ignore dependency groups.
+    let groups = vec![];
+
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
@@ -340,6 +343,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        groups,
         source_trees,
         project,
         extras,

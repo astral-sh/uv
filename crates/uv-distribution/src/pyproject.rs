@@ -10,10 +10,11 @@ use std::collections::BTreeMap;
 use std::ops::Deref;
 
 use glob::Pattern;
-use pep440_rs::VersionSpecifiers;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use pep440_rs::VersionSpecifiers;
+use pypi_types::VerbatimParsedUrl;
 use uv_normalize::{ExtraName, PackageName};
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -47,10 +48,19 @@ pub struct Tool {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
     pub sources: Option<BTreeMap<PackageName, Source>>,
     pub workspace: Option<ToolUvWorkspace>,
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "PEP 508-style requirements, e.g., `flask==3.0.0`, or `black @ https://...`."
+        )
+    )]
+    pub dev_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -151,6 +161,7 @@ pub enum Source {
         workspace: bool,
     },
 }
+
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 mod serde_from_and_to_string {
     use std::fmt::Display;

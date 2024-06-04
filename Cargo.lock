@@ -4664,6 +4664,7 @@ dependencies = [
  "insta",
  "install-wheel-rs",
  "nanoid",
+ "once_cell",
  "path-absolutize",
  "pep440_rs",
  "pep508_rs",

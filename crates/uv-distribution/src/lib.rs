@@ -2,7 +2,7 @@ pub use distribution_database::{DistributionDatabase, HttpArchivePointer, LocalA
 pub use download::LocalWheel;
 pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
-pub use metadata::{ArchiveMetadata, Metadata, RequiresDist};
+pub use metadata::{ArchiveMetadata, Metadata, RequiresDist, DEV_DEPENDENCIES};
 pub use reporter::Reporter;
 pub use workspace::{ProjectWorkspace, Workspace, WorkspaceError, WorkspaceMember};
 

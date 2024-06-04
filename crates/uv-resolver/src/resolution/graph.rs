@@ -13,7 +13,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::{ParsedUrlError, Yanked};
 use uv_git::GitResolver;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
@@ -36,6 +36,13 @@ pub struct ResolutionGraph {
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
 }
+
+type NodeKey<'a> = (
+    &'a PackageName,
+    &'a Version,
+    Option<&'a ExtraName>,
+    Option<&'a GroupName>,
+);
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
@@ -70,11 +77,10 @@ impl ResolutionGraph {
         // Add every package to the graph.
         let mut petgraph: Graph<AnnotatedDist, Version, Directed> =
             Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
-        let mut inverse: FxHashMap<(&PackageName, &Version, &Option<ExtraName>), NodeIndex<u32>> =
-            FxHashMap::with_capacity_and_hasher(
-                resolution.packages.len(),
-                BuildHasherDefault::default(),
-            );
+        let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> = FxHashMap::with_capacity_and_hasher(
+            resolution.packages.len(),
+            BuildHasherDefault::default(),
+        );
         let mut diagnostics = Vec::new();
 
         for (package, versions) in &resolution.packages {
@@ -83,6 +89,7 @@ impl ResolutionGraph {
                     PubGrubPackageInner::Package {
                         name,
                         extra,
+                        group,
                         marker: None,
                         url: None,
                     } => {
@@ -167,6 +174,17 @@ impl ResolutionGraph {
                                 });
                             }
                         }
+
+                        // Validate the group.
+                        if let Some(group) = group {
+                            if !metadata.dependency_groups.contains_key(group) {
+                                diagnostics.push(ResolutionDiagnostic::MissingGroup {
+                                    dist: dist.clone(),
+                                    group: group.clone(),
+                                });
+                            }
+                        }
+
                         // Extract the markers.
                         let marker = markers.get(&(name, version, extra)).cloned();
 
@@ -174,16 +192,18 @@ impl ResolutionGraph {
                         let index = petgraph.add_node(AnnotatedDist {
                             dist,
                             extra: extra.clone(),
+                            group: group.clone(),
                             marker,
                             hashes,
                             metadata,
                         });
-                        inverse.insert((name, version, extra), index);
+                        inverse.insert((name, version, extra.as_ref(), group.as_ref()), index);
                     }
 
                     PubGrubPackageInner::Package {
                         name,
                         extra,
+                        group,
                         marker: None,
                         url: Some(url),
                     } => {
@@ -244,6 +264,17 @@ impl ResolutionGraph {
                                 });
                             }
                         }
+
+                        // Validate the group.
+                        if let Some(group) = group {
+                            if !metadata.dependency_groups.contains_key(group) {
+                                diagnostics.push(ResolutionDiagnostic::MissingGroup {
+                                    dist: dist.clone().into(),
+                                    group: group.clone(),
+                                });
+                            }
+                        }
+
                         // Extract the markers.
                         let marker = markers.get(&(name, version, extra)).cloned();
 
@@ -251,11 +282,12 @@ impl ResolutionGraph {
                         let index = petgraph.add_node(AnnotatedDist {
                             dist: dist.into(),
                             extra: extra.clone(),
+                            group: group.clone(),
                             marker,
                             hashes,
                             metadata,
                         });
-                        inverse.insert((name, version, extra), index);
+                        inverse.insert((name, version, extra.as_ref(), group.as_ref()), index);
                     }
 
                     _ => {}
@@ -266,9 +298,18 @@ impl ResolutionGraph {
         // Add every edge to the graph.
         for (names, version_set) in resolution.dependencies {
             for versions in version_set {
-                let from_index =
-                    inverse[&(&names.from, &versions.from_version, &versions.from_extra)];
-                let to_index = inverse[&(&names.to, &versions.to_version, &versions.to_extra)];
+                let from_index = inverse[&(
+                    &names.from,
+                    &versions.from_version,
+                    versions.from_extra.as_ref(),
+                    versions.from_group.as_ref(),
+                )];
+                let to_index = inverse[&(
+                    &names.to,
+                    &versions.to_version,
+                    versions.to_extra.as_ref(),
+                    versions.to_group.as_ref(),
+                )];
                 petgraph.update_edge(from_index, to_index, versions.to_version.clone());
             }
         }
@@ -293,7 +334,7 @@ impl ResolutionGraph {
         self.petgraph
             .node_indices()
             .map(|index| &self.petgraph[index])
-            .filter(|dist| dist.extra.is_none())
+            .filter(|dist| dist.is_base())
             .count()
     }
 

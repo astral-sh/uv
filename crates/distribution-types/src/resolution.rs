@@ -1,7 +1,7 @@
-use pypi_types::{Requirement, RequirementSource};
 use std::collections::BTreeMap;
 
-use uv_normalize::{ExtraName, PackageName};
+use pypi_types::{Requirement, RequirementSource};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
 
@@ -75,6 +75,12 @@ pub enum ResolutionDiagnostic {
         /// The extra that was requested. For example, `colorama` in `black[colorama]`.
         extra: ExtraName,
     },
+    MissingGroup {
+        /// The distribution that was requested with a non-existent group.
+        dist: ResolvedDist,
+        /// The group that was requested.
+        group: GroupName,
+    },
     YankedVersion {
         /// The package that was requested with a yanked version. For example, `black==23.10.0`.
         dist: ResolvedDist,
@@ -90,6 +96,9 @@ impl Diagnostic for ResolutionDiagnostic {
             Self::MissingExtra { dist, extra } => {
                 format!("The package `{dist}` does not have an extra named `{extra}`.")
             }
+            Self::MissingGroup { dist, group } => {
+                format!("The package `{dist}` does not have a group named `{group}`.")
+            }
             Self::YankedVersion { dist, reason } => {
                 if let Some(reason) = reason {
                     format!("`{dist}` is yanked (reason: \"{reason}\").")
@@ -104,6 +113,7 @@ impl Diagnostic for ResolutionDiagnostic {
     fn includes(&self, name: &PackageName) -> bool {
         match self {
             Self::MissingExtra { dist, .. } => name == dist.name(),
+            Self::MissingGroup { dist, .. } => name == dist.name(),
             Self::YankedVersion { dist, .. } => name == dist.name(),
         }
     }
