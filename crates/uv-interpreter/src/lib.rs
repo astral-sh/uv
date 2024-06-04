@@ -297,7 +297,7 @@ mod tests {
         /// Create fake Python interpreters the given Python versions.
         ///
         /// Adds them to the test context search path.
-        fn add_python_versions(&mut self, versions: &[&'static str]) -> Result<()> {
+        fn add_python_versions(&mut self, versions: &[&'static str]) -> Result<Vec<ChildPath>> {
             let interpreters: Vec<_> = versions
                 .iter()
                 .map(|version| (true, ImplementationName::default(), "python", *version))
@@ -311,7 +311,7 @@ mod tests {
         fn add_python_interpreters(
             &mut self,
             kinds: &[(bool, ImplementationName, &'static str, &'static str)],
-        ) -> Result<()> {
+        ) -> Result<Vec<ChildPath>> {
             // Generate a "unique" folder name for each interpreter
             let names: Vec<OsString> = kinds
                 .iter()
@@ -332,7 +332,7 @@ mod tests {
                     *system,
                 )?;
             }
-            Ok(())
+            Ok(paths)
         }
 
         /// Create a mock virtual environment at the given directory
@@ -1168,6 +1168,79 @@ mod tests {
             environment.interpreter().python_full_version().to_string(),
             "3.12.2",
             "We find the virtual environment Python because a system is explicitly not allowed"
+        );
+
+        Ok(())
+    }
+    #[test]
+    fn find_environment_active_environment_is_not_a_virtualenv() -> Result<()> {
+        let mut context = TestContext::new()?;
+
+        let root = context.workdir.child("root");
+        let python = virtualenv_python_executable(&root);
+        TestContext::create_mock_interpreter(
+            &python,
+            &PythonVersion::from_str("3.10.0").unwrap(),
+            ImplementationName::default(),
+            true,
+        )?;
+        context.add_python_versions(&["3.11.1"])?;
+
+        // Assert it is not treated as a virtualenv
+        assert!(!PythonEnvironment::from_root(&root, &context.cache)?
+            .interpreter()
+            .is_virtualenv());
+
+        // With `SystemPython::Allowed`
+        let environment =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(root.as_os_str()))], || {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should prefer the active environment"
+        );
+
+        // With `SystemPython::Explicit`
+        let environment =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(root.as_os_str()))], || {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Explicit,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should treat the active environment as explicit opt-in"
+        );
+
+        // With `SystemPython::Disallowed`
+        let result = context.run_with_vars(&[("VIRTUAL_ENV", Some(root.as_os_str()))], || {
+            PythonEnvironment::find(
+                None,
+                SystemPython::Disallowed,
+                PreviewMode::Disabled,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(
+                result,
+                Err(Error::NotFound(InterpreterNotFound::NoPythonInstallation(
+                    SourceSelector::VirtualEnv,
+                    None
+                )))
+            ),
+            "Expected no Python interpreter to be found; got {result:?}"
         );
 
         Ok(())

@@ -5,7 +5,7 @@ use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, C
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_interpreter::PythonEnvironment;
+use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_resolver::Manifest;
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
@@ -15,7 +15,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     let cache = &Cache::from_path("../../.cache").init().unwrap();
-    let venv = PythonEnvironment::from_virtualenv(cache).unwrap();
+    let venv = PythonEnvironment::from_virtualenv(SystemPython::Disallowed, cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("jupyter").unwrap(),
@@ -44,7 +44,7 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
         .unwrap();
 
     let cache = &Cache::from_path("../../.cache").init().unwrap();
-    let venv = PythonEnvironment::from_virtualenv(cache).unwrap();
+    let venv = PythonEnvironment::from_virtualenv(SystemPython::Disallowed, cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
         Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]").unwrap()),

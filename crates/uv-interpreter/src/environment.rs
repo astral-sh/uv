@@ -50,7 +50,7 @@ impl PythonEnvironment {
             }
 
             // Then a virtual environment
-            match Self::from_virtualenv(cache) {
+            match Self::from_virtualenv(system, cache) {
                 Ok(venv) => Ok(venv),
                 Err(Error::NotFound(_)) if system.is_allowed() => {
                     Self::from_default_python(preview, cache)
@@ -63,15 +63,20 @@ impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
     ///
     /// Allows Conda environments (via `CONDA_PREFIX`) though they are not technically virtual environments.
-    pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
+    /// Allows active virtual environments (via `VIRTUAL_ENV`) that are not conformant with PEP 405 if
+    /// [`SystemPython::Explicit`] is passed.
+    pub fn from_virtualenv(system: SystemPython, cache: &Cache) -> Result<Self, Error> {
         let sources = SourceSelector::VirtualEnv;
         let request = InterpreterRequest::Any;
-        let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
+        let found = find_interpreter(&request, system, &sources, cache)??;
 
         debug_assert!(
             found.interpreter().is_virtualenv()
-                || matches!(found.source(), InterpreterSource::CondaPrefix),
-            "Not a virtualenv (source: {}, prefix: {})",
+                || matches!(
+                    found.source(),
+                    InterpreterSource::CondaPrefix | InterpreterSource::ActiveEnvironment
+                ),
+            "Not a PEP 405 compliant virtual environment (source: {}, prefix: {})",
             found.source(),
             found.interpreter().base_prefix().display()
         );

@@ -15,7 +15,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
-use uv_interpreter::PythonEnvironment;
+use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_resolver::{FlatIndex, InMemoryIndex};
 use uv_types::{BuildContext, BuildIsolation, InFlight};
 
@@ -65,7 +65,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let index = InMemoryIndex::default();
     let index_urls = IndexLocations::default();
     let setup_py = SetupPyStrategy::default();
-    let venv = PythonEnvironment::from_virtualenv(&cache)?;
+    let venv = PythonEnvironment::from_virtualenv(SystemPython::Disallowed, &cache)?;
 
     let build_dispatch = BuildDispatch::new(
         &client,

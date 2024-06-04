@@ -396,9 +396,15 @@ fn python_interpreters<'a>(
                             interpreter.sys_executable().display()
                         );
                         true
+                    } else if matches!(source, InterpreterSource::ActiveEnvironment) {
+                        debug!(
+                            "Allowing Python interpreter from active virtual environment that does not conform to PEP 405 at `{}`",
+                            interpreter.sys_executable().display()
+                        );
+                        true
                     } else {
                         debug!(
-                            "Ignoring Python interpreter at `{}`: system interpreter not explicit",
+                            "Ignoring Python interpreter at `{}`: system interpreter not explicitly requested",
                             interpreter.sys_executable().display()
                         );
                         false
