@@ -350,6 +350,7 @@ pub(crate) async fn update_environment(
         pip::operations::Modifications::Sufficient,
         &reinstall,
         &no_binary,
+        &no_build,
         link_mode,
         compile,
         index_locations,

@@ -391,6 +391,7 @@ pub(crate) async fn pip_install(
         Modifications::Sufficient,
         &reinstall,
         &no_binary,
+        &no_build,
         link_mode,
         compile,
         &index_locations,

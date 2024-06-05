@@ -147,7 +147,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<LocalWheel, Error> {
         let no_binary = match self.build_context.no_binary() {
             NoBinary::None => false,
-            NoBinary::All => true,
+            NoBinary::All => match self.build_context.no_build() {
+                // Allow `all` to be overridden by specific build exclusions
+                NoBuild::Packages(packages) => !packages.contains(dist.name()),
+                _ => true,
+            },
             NoBinary::Packages(packages) => packages.contains(dist.name()),
         };
 
@@ -415,7 +419,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let no_build = match self.build_context.no_build() {
-            NoBuild::All => true,
+            NoBuild::All => match self.build_context.no_binary() {
+                // Allow `all` to be overridden by specific binary exclusions
+                NoBinary::Packages(packages) => {
+                    !source.name().is_some_and(|name| packages.contains(name))
+                }
+                _ => true,
+            },
             NoBuild::None => false,
             NoBuild::Packages(packages) => {
                 source.name().is_some_and(|name| packages.contains(name))
