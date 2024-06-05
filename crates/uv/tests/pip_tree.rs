@@ -48,6 +48,7 @@ fn no_package() {
     exit_code: 0
     ----- stdout -----
 
+
     ----- stderr -----
     "###
     );
@@ -151,6 +152,67 @@ fn nested_dependencies() {
     └── threadpoolctl v3.4.0
 
     ----- stderr -----
+    "###
+    );
+}
+
+// Ensure `pip tree` behaves correctly with a package that has a cyclic dependency.
+// package `uv-cyclic-dependencies-a` and `uv-cyclic-dependencies-b` depend on each other,
+// which creates a dependency cycle.
+// Additionally, package `uv-cyclic-dependencies-c` is included (depends on `uv-cyclic-dependencies-a`)
+// to make this test case more realistic and meaningful.
+#[test]
+fn cyclic_dependency() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("uv-cyclic-dependencies-c")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), Command::new(get_bin())
+        .arg("pip")
+        .arg("install")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + uv-cyclic-dependencies-a==0.1.0
+     + uv-cyclic-dependencies-b==0.1.0
+     + uv-cyclic-dependencies-c==0.1.0
+    "###
+    );
+
+    uv_snapshot!(context.filters(), Command::new(get_bin())
+    .arg("pip")
+    .arg("tree")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
+    .current_dir(&context.temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    
+    ----- stderr -----
+    Unable to display the dependency tree; Cyclic dependency detected: [
+        "uv-cyclic-dependencies-a",
+        "uv-cyclic-dependencies-b",
+    ]
     "###
     );
 }
