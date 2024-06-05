@@ -1,8 +1,10 @@
 use anstream::eprint;
 use anyhow::Result;
+use std::borrow::Cow;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
+use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
@@ -91,11 +93,27 @@ pub(super) async fn do_lock(
     let source_trees = vec![];
     let project_name = project.project_name().clone();
 
+    // Determine the supported Python range. If no range is defined, and warn and default to the
+    // current minor version.
+    let requires_python = if let Some(requires_python) =
+        project.current_project().project().requires_python.as_ref()
+    {
+        Cow::Borrowed(requires_python)
+    } else {
+        let requires_python = VersionSpecifiers::from(
+            VersionSpecifier::greater_than_equal_version(venv.interpreter().python_minor_version()),
+        );
+        warn_user!(
+            "No `requires-python` field found in `{}`. Defaulting to `{requires_python}`.",
+            project.current_project().project().name,
+        );
+        Cow::Owned(requires_python)
+    };
+
     // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
-    let requires_python = project.current_project().project().requires_python.as_ref();
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
@@ -164,7 +182,7 @@ pub(super) async fn do_lock(
         interpreter,
         tags,
         None,
-        requires_python,
+        Some(&requires_python),
         &client,
         &flat_index,
         &index,

@@ -19,6 +19,7 @@ fn lock_wheel_registry() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
         "#,
     )?;
@@ -41,6 +42,7 @@ fn lock_wheel_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "anyio"
@@ -143,6 +145,7 @@ fn lock_sdist_registry() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["source-distribution==0.0.1"]
         "#,
     )?;
@@ -165,6 +168,7 @@ fn lock_sdist_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"
@@ -200,6 +204,7 @@ fn lock_sdist_git() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]
         "#,
     )?;
@@ -222,6 +227,7 @@ fn lock_sdist_git() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"
@@ -271,6 +277,7 @@ fn lock_wheel_url() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["anyio @ https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"]
         "#,
     )?;
@@ -293,6 +300,7 @@ fn lock_wheel_url() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "anyio"
@@ -394,6 +402,7 @@ fn lock_sdist_url() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz"]
         "#,
     )?;
@@ -416,6 +425,7 @@ fn lock_sdist_url() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "anyio"
@@ -517,6 +527,7 @@ fn lock_extra() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
 
         [project.optional-dependencies]
@@ -542,6 +553,7 @@ fn lock_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "anyio"
@@ -671,6 +683,7 @@ fn lock_preference() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["iniconfig<2"]
         "#,
     )?;
@@ -693,6 +706,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "iniconfig"
@@ -721,6 +735,7 @@ fn lock_preference() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["iniconfig"]
         "#,
     )?;
@@ -744,6 +759,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "iniconfig"
@@ -785,6 +801,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "iniconfig"
@@ -822,6 +839,7 @@ fn lock_git_sha() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979"]
         "#,
     )?;
@@ -844,6 +862,7 @@ fn lock_git_sha() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"
@@ -876,6 +895,7 @@ fn lock_git_sha() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@main"]
         "#,
     )?;
@@ -900,6 +920,7 @@ fn lock_git_sha() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"
@@ -942,6 +963,7 @@ fn lock_git_sha() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"

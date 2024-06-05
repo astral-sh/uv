@@ -209,16 +209,22 @@ impl Interpreter {
         Some(ExternallyManaged { error })
     }
 
-    /// Returns the Python version.
+    /// Returns the `python_full_version` marker corresponding to this Python version.
+    #[inline]
+    pub fn python_full_version(&self) -> &StringVersion {
+        self.markers.python_full_version()
+    }
+
+    /// Returns the full Python version.
     #[inline]
     pub fn python_version(&self) -> &Version {
         &self.markers.python_full_version().version
     }
 
-    /// Returns the `python_full_version` marker corresponding to this Python version.
+    /// Returns the full minor Python version.
     #[inline]
-    pub fn python_full_version(&self) -> &StringVersion {
-        self.markers.python_full_version()
+    pub fn python_minor_version(&self) -> Version {
+        Version::new(self.python_version().release().iter().take(2).copied())
     }
 
     /// Return the major version of this Python version.
