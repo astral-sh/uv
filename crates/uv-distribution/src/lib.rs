@@ -4,7 +4,6 @@ pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use metadata::{ArchiveMetadata, Metadata};
 pub use reporter::Reporter;
-use requirement_lowering::LoweringError;
 pub use workspace::{ProjectWorkspace, Workspace, WorkspaceError, WorkspaceMember};
 
 mod archive;
@@ -16,6 +15,5 @@ mod locks;
 mod metadata;
 pub mod pyproject;
 mod reporter;
-mod requirement_lowering;
 mod source;
 mod workspace;
