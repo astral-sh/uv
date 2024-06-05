@@ -1048,14 +1048,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                let requirements: Vec<_> = metadata
-                    .requires_dist
-                    .iter()
-                    .cloned()
-                    .map(Requirement::from)
-                    .collect();
                 let mut dependencies = PubGrubDependencies::from_requirements(
-                    &requirements,
+                    &metadata.requires_dist,
                     &self.constraints,
                     &self.overrides,
                     Some(name),

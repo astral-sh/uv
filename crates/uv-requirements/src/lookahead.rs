@@ -192,13 +192,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     })
             {
                 // If the metadata is already in the index, return it.
-                archive
-                    .metadata
-                    .requires_dist
-                    .iter()
-                    .cloned()
-                    .map(Requirement::from)
-                    .collect()
+                archive.metadata.requires_dist.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
@@ -219,7 +213,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .distributions()
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                requires_dist.into_iter().map(Requirement::from).collect()
+                requires_dist
             }
         };
 

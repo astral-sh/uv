@@ -11,7 +11,7 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
-use pypi_types::{ParsedUrlError, Requirement, Yanked};
+use pypi_types::{ParsedUrlError, Yanked};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -390,14 +390,7 @@ impl ResolutionGraph {
                     dist.version_id()
                 )
             };
-            let requirements: Vec<_> = archive
-                .metadata
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(Requirement::from)
-                .collect();
-            for req in manifest.apply(requirements.iter()) {
+            for req in manifest.apply(archive.metadata.requires_dist.iter()) {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
                 };
