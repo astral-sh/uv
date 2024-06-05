@@ -137,6 +137,8 @@ jobs:
         run: |
           cargo run -p uv-dev -- fetch-python
 
+      - run: git config --global uploadpack.allowFilter true
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
         with:
