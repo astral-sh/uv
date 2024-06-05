@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.7
+
+### CLI
+
+- Support `NO_COLOR` and `FORCE_COLOR` environment variables ([#3979](https://github.com/astral-sh/uv/pull/3979))
+
+### Performance
+
+- Avoid building packages with dynamic versions ([#4058](https://github.com/astral-sh/uv/pull/4058))
+- Avoid work-stealing in bytecode compilation ([#4004](https://github.com/astral-sh/uv/pull/4004))
+
+### Bug fixes
+
+- Avoid dropping `pip sync` requirements with markers ([#4051](https://github.com/astral-sh/uv/pull/4051))
+- Bias towards local directories for bare editable requirements ([#3995](https://github.com/astral-sh/uv/pull/3995))
+- Preserve fragments when applying verbatim redirects ([#4038](https://github.com/astral-sh/uv/pull/4038))
+- Avoid 'are incompatible' for singular bounded versions ([#4003](https://github.com/astral-sh/uv/pull/4003))
+
 ## 0.2.6
 
 ### Enhancements
