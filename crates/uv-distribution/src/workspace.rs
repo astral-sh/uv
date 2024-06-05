@@ -108,7 +108,7 @@ impl Workspace {
                 (
                     project_path.clone(),
                     ToolUvWorkspace::default(),
-                    PyProjectToml::default(),
+                    pyproject_toml.clone(),
                 )
             };
 
