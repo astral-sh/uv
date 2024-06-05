@@ -13,7 +13,7 @@ use uv_fs::{absolutize_path, Simplified};
 use uv_normalize::PackageName;
 use uv_warnings::warn_user;
 
-use crate::pyproject::{PyProjectToml, Source, ToolUvWorkspace};
+use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -118,7 +118,11 @@ impl Workspace {
         let current_project = pyproject_toml
             .project
             .clone()
-            .map(|project| (project.name.clone(), project_path, pyproject_toml));
+            .map(|project| WorkspaceMember {
+                root: project_path,
+                project,
+                pyproject_toml,
+            });
         Self::collect_members(
             workspace_root,
             workspace_definition,
@@ -162,7 +166,7 @@ impl Workspace {
         workspace_root: PathBuf,
         workspace_definition: ToolUvWorkspace,
         workspace_pyproject_toml: PyProjectToml,
-        current_project: Option<(PackageName, PathBuf, PyProjectToml)>,
+        current_project: Option<WorkspaceMember>,
         stop_discovery_at: Option<&Path>,
     ) -> Result<Workspace, WorkspaceError> {
         let mut workspace_members = BTreeMap::new();
@@ -173,7 +177,7 @@ impl Workspace {
         // project.
         if current_project
             .as_ref()
-            .map(|(_, path, _)| path != &workspace_root)
+            .map(|root_member| root_member.root != workspace_root)
             .unwrap_or(true)
         {
             if let Some(project) = &workspace_pyproject_toml.project {
@@ -192,6 +196,7 @@ impl Workspace {
                     project.name.clone(),
                     WorkspaceMember {
                         root: workspace_root.clone(),
+                        project: project.clone(),
                         pyproject_toml,
                     },
                 );
@@ -199,20 +204,14 @@ impl Workspace {
         }
 
         // The current project is a workspace member, especially in a single project workspace.
-        if let Some((project_name, project_path, project)) = current_project {
+        if let Some(root_member) = current_project {
             debug!(
                 "Adding current workspace member: {}",
-                project_path.simplified_display()
+                root_member.root.simplified_display()
             );
 
-            seen.insert(project_path.clone());
-            workspace_members.insert(
-                project_name,
-                WorkspaceMember {
-                    root: project_path.clone(),
-                    pyproject_toml: project.clone(),
-                },
-            );
+            seen.insert(root_member.root.clone());
+            workspace_members.insert(root_member.project.name.clone(), root_member);
         }
 
         // Add all other workspace members.
@@ -247,16 +246,18 @@ impl Workspace {
                     return Err(WorkspaceError::MissingProject(member_root));
                 };
 
-                let member = WorkspaceMember {
-                    root: member_root.clone(),
-                    pyproject_toml,
-                };
-
                 debug!(
                     "Adding discovered workspace member: {}",
                     member_root.simplified_display()
                 );
-                workspace_members.insert(project.name, member);
+                workspace_members.insert(
+                    project.name.clone(),
+                    WorkspaceMember {
+                        root: member_root.clone(),
+                        project,
+                        pyproject_toml,
+                    },
+                );
             }
         }
         let workspace_sources = workspace_pyproject_toml
@@ -281,6 +282,9 @@ impl Workspace {
 pub struct WorkspaceMember {
     /// The path to the project root.
     root: PathBuf,
+    /// The `[project]` table, from the `pyproject.toml` of the project found at
+    /// `<root>/pyproject.toml`.
+    project: Project,
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pyproject_toml: PyProjectToml,
 }
@@ -289,6 +293,12 @@ impl WorkspaceMember {
     /// The path to the project root.
     pub fn root(&self) -> &PathBuf {
         &self.root
+    }
+
+    /// The `[project]` table, from the `pyproject.toml` of the project found at
+    /// `<root>/pyproject.toml`.
+    pub fn project(&self) -> &Project {
+        &self.project
     }
 
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
@@ -430,13 +440,7 @@ impl ProjectWorkspace {
             .clone()
             .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path.clone()))?;
 
-        Self::from_project(
-            project_root,
-            &pyproject_toml,
-            project.name,
-            stop_discovery_at,
-        )
-        .await
+        Self::from_project(project_root, &project, &pyproject_toml, stop_discovery_at).await
     }
 
     /// If the current directory contains a `pyproject.toml` with a `project` table, discover the
@@ -461,13 +465,7 @@ impl ProjectWorkspace {
         };
 
         Ok(Some(
-            Self::from_project(
-                project_root,
-                &pyproject_toml,
-                project.name,
-                stop_discovery_at,
-            )
-            .await?,
+            Self::from_project(project_root, &project, &pyproject_toml, stop_discovery_at).await?,
         ))
     }
 
@@ -519,8 +517,8 @@ impl ProjectWorkspace {
     /// Find the workspace for a project.
     pub async fn from_project(
         project_path: &Path,
-        project: &PyProjectToml,
-        project_name: PackageName,
+        project: &Project,
+        project_pyproject_toml: &PyProjectToml,
         stop_discovery_at: Option<&Path>,
     ) -> Result<Self, WorkspaceError> {
         let project_path = absolutize_path(project_path)
@@ -528,12 +526,18 @@ impl ProjectWorkspace {
             .to_path_buf();
 
         // Check if the current project is also an explicit workspace root.
-        let mut workspace = project
+        let mut workspace = project_pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
-            .map(|workspace| (project_path.clone(), workspace.clone(), project.clone()));
+            .map(|workspace| {
+                (
+                    project_path.clone(),
+                    workspace.clone(),
+                    project_pyproject_toml.clone(),
+                )
+            });
 
         if workspace.is_none() {
             // The project isn't an explicit workspace root, check if we're a regular workspace
@@ -541,21 +545,23 @@ impl ProjectWorkspace {
             workspace = find_workspace(&project_path, stop_discovery_at).await?;
         }
 
+        let current_project = WorkspaceMember {
+            root: project_path.clone(),
+            project: project.clone(),
+            pyproject_toml: project_pyproject_toml.clone(),
+        };
+
         let Some((workspace_root, workspace_definition, workspace_pyproject_toml)) = workspace
         else {
             // The project isn't an explicit workspace root, but there's also no workspace root
             // above it, so the project is an implicit workspace root identical to the project root.
             debug!("No workspace root found, using project root");
-            let current_project_as_members = BTreeMap::from_iter([(
-                project_name.clone(),
-                WorkspaceMember {
-                    root: project_path.clone(),
-                    pyproject_toml: project.clone(),
-                },
-            )]);
+
+            let current_project_as_members =
+                BTreeMap::from_iter([(project.name.clone(), current_project)]);
             return Ok(Self {
                 project_root: project_path.clone(),
-                project_name: project_name.clone(),
+                project_name: project.name.clone(),
                 workspace: Workspace {
                     root: project_path.clone(),
                     packages: current_project_as_members,
@@ -575,14 +581,14 @@ impl ProjectWorkspace {
             workspace_root,
             workspace_definition,
             workspace_pyproject_toml,
-            Some((project_name.clone(), project_path.clone(), project.clone())),
+            Some(current_project),
             stop_discovery_at,
         )
         .await?;
 
         Ok(Self {
             project_root: project_path,
-            project_name,
+            project_name: project.name.clone(),
             workspace,
         })
     }
@@ -818,6 +824,11 @@ mod tests {
             "packages": {
               "bird-feeder": {
                 "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
+                "project": {
+                  "name": "bird-feeder",
+                  "requires-python": null,
+                  "optional-dependencies": null
+                },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
             },
@@ -848,6 +859,11 @@ mod tests {
                 "packages": {
                   "bird-feeder": {
                     "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
+                    "project": {
+                      "name": "bird-feeder",
+                      "requires-python": null,
+                      "optional-dependencies": null
+                    },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
@@ -877,14 +893,29 @@ mod tests {
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-root-workspace",
+                    "project": {
+                      "name": "albatross",
+                      "requires-python": null,
+                      "optional-dependencies": null
+                    },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   },
                   "bird-feeder": {
                     "root": "[ROOT]/albatross-root-workspace/packages/bird-feeder",
+                    "project": {
+                      "name": "bird-feeder",
+                      "requires-python": null,
+                      "optional-dependencies": null
+                    },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   },
                   "seeds": {
                     "root": "[ROOT]/albatross-root-workspace/packages/seeds",
+                    "project": {
+                      "name": "seeds",
+                      "requires-python": null,
+                      "optional-dependencies": null
+                    },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
@@ -920,14 +951,29 @@ mod tests {
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
+                    "project": {
+                      "name": "albatross",
+                      "requires-python": null,
+                      "optional-dependencies": null
+                    },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   },
                   "bird-feeder": {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/bird-feeder",
+                    "project": {
+                      "name": "bird-feeder",
+                      "requires-python": null,
+                      "optional-dependencies": null
+                    },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   },
                   "seeds": {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/seeds",
+                    "project": {
+                      "name": "seeds",
+                      "requires-python": null,
+                      "optional-dependencies": null
+                    },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
@@ -957,6 +1003,11 @@ mod tests {
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-just-project",
+                    "project": {
+                      "name": "albatross",
+                      "requires-python": null,
+                      "optional-dependencies": null
+                    },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },

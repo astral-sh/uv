@@ -95,12 +95,7 @@ pub(super) async fn do_lock(
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
-    let requires_python = project
-        .current_project()
-        .pyproject_toml()
-        .project
-        .as_ref()
-        .and_then(|project| project.requires_python.as_ref());
+    let requires_python = project.current_project().project().requires_python.as_ref();
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.

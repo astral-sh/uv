@@ -242,15 +242,14 @@ fn path_source(
 
 #[cfg(test)]
 mod test {
+    use anyhow::Context;
     use std::path::Path;
-    use std::str::FromStr;
 
     use indoc::indoc;
     use insta::assert_snapshot;
 
     use pypi_types::Metadata23;
     use uv_configuration::PreviewMode;
-    use uv_normalize::PackageName;
 
     use crate::metadata::Metadata;
     use crate::pyproject::PyProjectToml;
@@ -259,9 +258,16 @@ mod test {
     async fn metadata_from_pyproject_toml(contents: &str) -> anyhow::Result<Metadata> {
         let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
         let path = Path::new("pyproject.toml");
-        let project_name = PackageName::from_str("foo").unwrap();
-        let project_workspace =
-            ProjectWorkspace::from_project(path, &pyproject_toml, project_name, Some(path)).await?;
+        let project_workspace = ProjectWorkspace::from_project(
+            path,
+            pyproject_toml
+                .project
+                .as_ref()
+                .context("metadata field project not found")?,
+            &pyproject_toml,
+            Some(path),
+        )
+        .await?;
         let metadata = Metadata23::parse_pyproject_toml(contents)?;
         Ok(Metadata::from_project_workspace(
             metadata,
