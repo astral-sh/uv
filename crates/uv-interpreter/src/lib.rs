@@ -1421,7 +1421,11 @@ mod tests {
             matches!(
                 result,
                 Err(Error::Discovery(
-                    crate::discovery::Error::SourceNotSelected(_, InterpreterSource::ProvidedPath)
+                    crate::discovery::Error::SourceNotSelected(
+                        _,
+                        InterpreterSource::ProvidedPath,
+                        _
+                    )
                 ))
             ),
             // TODO(zanieb): We should allow this, just enforce it's a virtualenv

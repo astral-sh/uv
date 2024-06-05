@@ -165,8 +165,8 @@ pub enum Error {
     #[error(transparent)]
     PyLauncher(#[from] crate::py_launcher::Error),
 
-    #[error("Interpreter discovery for `{0}` requires `{1}` but it is not selected")]
-    SourceNotSelected(InterpreterRequest, InterpreterSource),
+    #[error("Interpreter discovery for `{0}` requires `{1}` but it is not selected; the following are selected: {2}")]
+    SourceNotSelected(InterpreterRequest, InterpreterSource, SourceSelector),
 }
 
 /// Lazily iterate over all discoverable Python executables.
@@ -466,6 +466,7 @@ pub fn find_interpreter(
                 return Err(Error::SourceNotSelected(
                     request.clone(),
                     InterpreterSource::ProvidedPath,
+                    sources.clone(),
                 ));
             }
             if !path.try_exists()? {
@@ -484,6 +485,7 @@ pub fn find_interpreter(
                 return Err(Error::SourceNotSelected(
                     request.clone(),
                     InterpreterSource::ProvidedPath,
+                    sources.clone(),
                 ));
             }
             if !path.try_exists()? {
@@ -508,6 +510,7 @@ pub fn find_interpreter(
                 return Err(Error::SourceNotSelected(
                     request.clone(),
                     InterpreterSource::SearchPath,
+                    sources.clone(),
                 ));
             }
             let Some(executable) = which(name).ok() else {
