@@ -155,7 +155,8 @@ pep508_rs = { path = "crates/pep508-rs" }
 [workspace.lints.rust]
 unsafe_code = "warn"
 unreachable_pub = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(codspeed)'] }
+# TODO(konsti): Reactivate when check-cfg hits stable rust
+# unexpected_cfgs = { level = "warn", check-cfg = ['cfg(codspeed)'] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -2 }
