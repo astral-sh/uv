@@ -365,21 +365,12 @@ impl GitCheckout {
             .arg("clone")
             .arg("--local")
             // Propagate the treeless clone.
-            .arg("--filter=tree:0")
+            .arg("--filter=blob:none")
             // Make sure to pass the local file path and not a file://... url. If given a url,
             // Git treats the repository as a remote origin and gets confused because we don't
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
             .arg(into.simplified_display().to_string())
-            .exec_with_output()?;
-
-        // Fetch the revision from the database to the local clone.
-        // Otherise, `git reset` will fail to find the revision.
-        ProcessBuilder::new("git")
-            .arg("fetch")
-            .arg(database.repo.path.simplified_display().to_string())
-            .arg(revision.as_str())
-            .cwd(&into)
             .exec_with_output()?;
 
         let repo = GitRepository::open(into)?;
