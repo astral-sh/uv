@@ -137,6 +137,13 @@ jobs:
         run: |
           cargo run -p uv-dev -- fetch-python
 
+      - if: ${{ matrix.os == 'ubuntu' }}
+        run: |
+          sudo add-apt-repository ppa:git-core/ppa
+          sudo apt-get update
+          sudo apt-get upgrade
+          sudo apt-get install git -y
+
       - run: git config --global uploadpack.allowFilter true
       - run: git -v
 
