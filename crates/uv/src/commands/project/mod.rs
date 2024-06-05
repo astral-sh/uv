@@ -7,6 +7,7 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
+use pep440_rs::{Version, VersionSpecifiers};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{
@@ -32,6 +33,9 @@ pub(crate) mod sync;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
+    #[error("The current Python version ({0}) is not compatible with the locked Python requirement ({1})")]
+    RequiresPython(Version, VersionSpecifiers),
+
     #[error(transparent)]
     Interpreter(#[from] uv_interpreter::Error),
 

@@ -113,6 +113,11 @@ impl Lock {
         &self.distributions
     }
 
+    /// Returns the supported Python version range for the lockfile, if present.
+    pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
+        self.requires_python.as_ref()
+    }
+
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub fn to_resolution(
         &self,
