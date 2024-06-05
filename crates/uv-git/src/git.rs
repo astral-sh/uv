@@ -414,6 +414,8 @@ impl GitCheckout {
             .arg("--hard")
             .arg(self.revision.as_str())
             .cwd(&self.repo.path)
+            .env("GIT_TRACE", "1")
+            .env("GIT_TRACE2", "1")
             .exec_with_output()?;
 
         paths::create(ok_file)?;
