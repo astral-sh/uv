@@ -106,11 +106,8 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
 
                 // Extract expressions we may be able to simplify more.
                 if let MarkerTree::Expression(ref expr) = tree {
-                    if let Ok(Some((key, specifier, range))) = keyed_range(expr) {
-                        versions
-                            .entry(key.clone())
-                            .or_default()
-                            .push((specifier, range));
+                    if let Some((key, range)) = keyed_range(expr) {
+                        versions.entry(key.clone()).or_default().push(range);
 
                         continue;
                     }
@@ -121,33 +118,11 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
 
             match tree {
                 MarkerTree::And(_) => {
-                    for (key, ranges) in versions {
-                        let simplified =
-                            ranges.iter().fold(PubGrubRange::full(), |acc, (_, range)| {
-                                acc.intersection(range)
-                            });
-
-                        // If this is a meaningless expressions with no valid intersection, add back
-                        // the original ranges.
-                        if simplified.is_empty() {
-                            for (specifier, _) in ranges {
-                                reduced.push(MarkerTree::Expression(MarkerExpression::Version {
-                                    specifier,
-                                    key: key.clone(),
-                                }));
-                            }
-                        }
-
-                        // Add back the simplified segments.
-                        for segment in simplified.iter() {
-                            for specifier in VersionSpecifier::from_bounds(segment) {
-                                reduced.push(MarkerTree::Expression(MarkerExpression::Version {
-                                    key: key.clone(),
-                                    specifier,
-                                }));
-                            }
-                        }
-                    }
+                    simplify_ranges(&mut reduced, versions, |ranges| {
+                        ranges
+                            .iter()
+                            .fold(PubGrubRange::full(), |acc, range| acc.intersection(range))
+                    });
 
                     // Remove duplicates and sort.
                     reduced.dedup();
@@ -159,21 +134,11 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
                     };
                 }
                 MarkerTree::Or(_) => {
-                    for (key, ranges) in versions {
-                        let simplified = ranges
+                    simplify_ranges(&mut reduced, versions, |ranges| {
+                        ranges
                             .iter()
-                            .fold(PubGrubRange::empty(), |acc, (_, range)| acc.union(range));
-
-                        // Add back the simplified segments.
-                        for segment in simplified.iter() {
-                            for specifier in VersionSpecifier::from_bounds(segment) {
-                                reduced.push(MarkerTree::Expression(MarkerExpression::Version {
-                                    key: key.clone(),
-                                    specifier,
-                                }));
-                            }
-                        }
-                    }
+                            .fold(PubGrubRange::empty(), |acc, range| acc.union(range))
+                    });
 
                     // Remove duplicates and sort.
                     reduced.dedup();
@@ -184,10 +149,44 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
                         _ => MarkerTree::Or(reduced),
                     };
                 }
-                _ => unreachable!(),
+                MarkerTree::Expression(_) => unreachable!(),
             }
         }
         MarkerTree::Expression(_) => {}
+    }
+}
+
+// Simplify version expressions.
+fn simplify_ranges(
+    reduced: &mut Vec<MarkerTree>,
+    versions: HashMap<MarkerValueVersion, Vec<PubGrubRange<Version>>>,
+    combine: impl Fn(&Vec<PubGrubRange<Version>>) -> PubGrubRange<Version>,
+) {
+    for (key, ranges) in versions {
+        let simplified = combine(&ranges);
+
+        // If this is a meaningless expressions with no valid intersection, add back
+        // the original ranges.
+        if simplified.is_empty() {
+            for specifier in ranges
+                .iter()
+                .flat_map(PubGrubRange::iter)
+                .flat_map(VersionSpecifier::from_bounds)
+            {
+                reduced.push(MarkerTree::Expression(MarkerExpression::Version {
+                    specifier,
+                    key: key.clone(),
+                }));
+            }
+        }
+
+        // Add back the simplified segments.
+        for specifier in simplified.iter().flat_map(VersionSpecifier::from_bounds) {
+            reduced.push(MarkerTree::Expression(MarkerExpression::Version {
+                key: key.clone(),
+                specifier,
+            }));
+        }
     }
 }
 
@@ -257,12 +256,12 @@ fn extra_is_disjoint(operator: &ExtraOperator, name: &ExtraName, other: &MarkerE
 
 /// Returns `true` if this version expression does not intersect with the given expression.
 fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool {
-    let Some((key, _, range)) = keyed_range(this).unwrap() else {
+    let Some((key, range)) = keyed_range(this) else {
         return false;
     };
 
     // if this is not a version expression it may intersect
-    let Ok(Some((key2, _, range2))) = keyed_range(other) else {
+    let Some((key2, range2)) = keyed_range(other) else {
         return false;
     };
 
@@ -276,9 +275,7 @@ fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> boo
 }
 
 /// Returns the key and version range for a version expression.
-fn keyed_range(
-    expr: &MarkerExpression,
-) -> Result<Option<(&MarkerValueVersion, VersionSpecifier, PubGrubRange<Version>)>, ()> {
+fn keyed_range(expr: &MarkerExpression) -> Option<(&MarkerValueVersion, PubGrubRange<Version>)> {
     let (key, specifier) = match expr {
         MarkerExpression::Version { key, specifier } => (key, specifier.clone()),
         MarkerExpression::VersionInverted {
@@ -290,19 +287,19 @@ fn keyed_range(
             // a version specifier
             let operator = reverse_operator(*operator);
             let Ok(specifier) = VersionSpecifier::from_version(operator, version.clone()) else {
-                return Ok(None);
+                return None;
             };
 
             (key, specifier)
         }
-        _ => return Err(()),
+        _ => return None,
     };
 
     let Ok(pubgrub_specifier) = PubGrubSpecifier::try_from(&specifier) else {
-        return Ok(None);
+        return None;
     };
 
-    Ok(Some((key, specifier, pubgrub_specifier.into())))
+    Some((key, pubgrub_specifier.into()))
 }
 
 /// Reverses a binary operator.
