@@ -19,18 +19,10 @@ use pep508_rs::Pep508Error;
 use pypi_types::VerbatimParsedUrl;
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::LoweringError;
-
 #[derive(Debug, Error)]
 pub enum Pep621Error {
     #[error(transparent)]
     Pep508(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
-    #[error("Must specify a `[project]` section alongside `[tool.uv.sources]`")]
-    MissingProjectSection,
-    #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
-    DynamicNotAllowed(&'static str),
-    #[error("Failed to parse entry for: `{0}`")]
-    LoweringError(PackageName, #[source] LoweringError),
 }
 
 impl From<Pep508Error<VerbatimParsedUrl>> for Pep621Error {
