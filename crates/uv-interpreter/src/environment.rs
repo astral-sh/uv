@@ -26,7 +26,9 @@ struct PythonEnvironmentShared {
 }
 
 impl PythonEnvironment {
-    /// Create a [`PythonEnvironment`] from a user request.
+    /// Find a [`PythonEnvironment`].
+    ///
+    /// This is the standard interface for discovering a Python environment for use with uv.
     pub fn find(
         python: Option<&str>,
         system: SystemPython,
