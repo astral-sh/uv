@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
-use indexmap::IndexMap;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
@@ -10,13 +9,6 @@ use uv_git::{GitReference, GitSha};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::{ParsedUrl, VerbatimParsedUrl};
-
-/// The requirements of a distribution, an extension over PEP 508's requirements.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Requirements {
-    pub dependencies: Vec<Requirement>,
-    pub optional_dependencies: IndexMap<ExtraName, Vec<Requirement>>,
-}
 
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.
 ///
