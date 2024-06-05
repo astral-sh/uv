@@ -15,9 +15,14 @@ pub enum HashStrategy {
     None,
     /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
     Generate,
-    /// Hashes should be validated against a pre-defined list of hashes. If necessary, hashes should
-    /// be generated so as to ensure that the archive is valid.
-    Validate(FxHashMap<PackageId, Vec<HashDigest>>),
+    /// Hashes should be validated, if present, but ignored if absent.
+    ///
+    /// If necessary, hashes should be generated to ensure that the archive is valid.
+    Verify(FxHashMap<PackageId, Vec<HashDigest>>),
+    /// Hashes should be validated against a pre-defined list of hashes.
+    ///
+    /// If necessary, hashes should be generated to ensure that the archive is valid.
+    Require(FxHashMap<PackageId, Vec<HashDigest>>),
 }
 
 impl HashStrategy {
@@ -26,7 +31,14 @@ impl HashStrategy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
-            Self::Validate(hashes) => HashPolicy::Validate(
+            Self::Verify(hashes) => {
+                if let Some(hashes) = hashes.get(&distribution.package_id()) {
+                    HashPolicy::Validate(hashes.as_slice())
+                } else {
+                    HashPolicy::None
+                }
+            }
+            Self::Require(hashes) => HashPolicy::Validate(
                 hashes
                     .get(&distribution.package_id())
                     .map(Vec::as_slice)
@@ -40,7 +52,14 @@ impl HashStrategy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
-            Self::Validate(hashes) => HashPolicy::Validate(
+            Self::Verify(hashes) => {
+                if let Some(hashes) = hashes.get(&PackageId::from_registry(name.clone())) {
+                    HashPolicy::Validate(hashes.as_slice())
+                } else {
+                    HashPolicy::None
+                }
+            }
+            Self::Require(hashes) => HashPolicy::Validate(
                 hashes
                     .get(&PackageId::from_registry(name.clone()))
                     .map(Vec::as_slice)
@@ -54,7 +73,14 @@ impl HashStrategy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
-            Self::Validate(hashes) => HashPolicy::Validate(
+            Self::Verify(hashes) => {
+                if let Some(hashes) = hashes.get(&PackageId::from_url(url)) {
+                    HashPolicy::Validate(hashes.as_slice())
+                } else {
+                    HashPolicy::None
+                }
+            }
+            Self::Require(hashes) => HashPolicy::Validate(
                 hashes
                     .get(&PackageId::from_url(url))
                     .map(Vec::as_slice)
@@ -68,7 +94,8 @@ impl HashStrategy {
         match self {
             Self::None => true,
             Self::Generate => true,
-            Self::Validate(hashes) => hashes.contains_key(&PackageId::from_registry(name.clone())),
+            Self::Verify(_) => true,
+            Self::Require(hashes) => hashes.contains_key(&PackageId::from_registry(name.clone())),
         }
     }
 
@@ -77,7 +104,8 @@ impl HashStrategy {
         match self {
             Self::None => true,
             Self::Generate => true,
-            Self::Validate(hashes) => hashes.contains_key(&PackageId::from_url(url)),
+            Self::Verify(_) => true,
+            Self::Require(hashes) => hashes.contains_key(&PackageId::from_url(url)),
         }
     }
 
@@ -87,7 +115,7 @@ impl HashStrategy {
     /// that reference the environment as true. In other words, it does
     /// environment independent expression evaluation. (Which in turn devolves
     /// to "only evaluate marker expressions that reference an extra name.")
-    pub fn from_requirements<'a>(
+    pub fn require<'a>(
         requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
         markers: Option<&MarkerEnvironment>,
     ) -> Result<Self, HashStrategyError> {
@@ -103,7 +131,12 @@ impl HashStrategy {
             // Every requirement must be either a pinned version or a direct URL.
             let id = match &requirement {
                 UnresolvedRequirement::Named(requirement) => {
-                    uv_requirement_to_package_id(requirement)?
+                    Self::pin(requirement).ok_or_else(|| {
+                        HashStrategyError::UnpinnedRequirement(
+                            requirement.to_string(),
+                            HashCheckingMode::Require,
+                        )
+                    })?
                 }
                 UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
@@ -113,7 +146,10 @@ impl HashStrategy {
 
             // Every requirement must include a hash.
             if digests.is_empty() {
-                return Err(HashStrategyError::MissingHashes(requirement.to_string()));
+                return Err(HashStrategyError::MissingHashes(
+                    requirement.to_string(),
+                    HashCheckingMode::Require,
+                ));
             }
 
             // Parse the hashes.
@@ -125,41 +161,102 @@ impl HashStrategy {
             hashes.insert(id, digests);
         }
 
-        Ok(Self::Validate(hashes))
+        Ok(Self::Require(hashes))
+    }
+
+    /// Generate the hashes to verify from a set of [`UnresolvedRequirement`] entries.
+    pub fn verify<'a>(
+        requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
+        markers: Option<&MarkerEnvironment>,
+    ) -> Result<Self, HashStrategyError> {
+        let mut hashes = FxHashMap::<PackageId, Vec<HashDigest>>::default();
+
+        // For each requirement, map from name to allowed hashes. We use the last entry for each
+        // package.
+        for (requirement, digests) in requirements {
+            if !requirement.evaluate_markers(markers, &[]) {
+                continue;
+            }
+
+            // Hashes are optional in this mode.
+            if digests.is_empty() {
+                continue;
+            }
+
+            // Parse the hashes.
+            let digests = digests
+                .iter()
+                .map(|digest| HashDigest::from_str(digest))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            // Every requirement must be either a pinned version or a direct URL.
+            let id = match &requirement {
+                UnresolvedRequirement::Named(requirement) => {
+                    Self::pin(requirement).ok_or_else(|| {
+                        HashStrategyError::UnpinnedRequirement(
+                            requirement.to_string(),
+                            HashCheckingMode::Verify,
+                        )
+                    })?
+                }
+                UnresolvedRequirement::Unnamed(requirement) => {
+                    // Direct URLs are always allowed.
+                    PackageId::from_url(&requirement.url.verbatim)
+                }
+            };
+
+            hashes.insert(id, digests);
+        }
+
+        Ok(Self::Verify(hashes))
+    }
+
+    /// Pin a [`Requirement`] to a [`PackageId`], if possible.
+    fn pin(requirement: &Requirement) -> Option<PackageId> {
+        match &requirement.source {
+            RequirementSource::Registry { specifier, .. } => {
+                // Must be a single specifier.
+                let [specifier] = specifier.as_ref() else {
+                    return None;
+                };
+
+                // Must be pinned to a specific version.
+                if *specifier.operator() != pep440_rs::Operator::Equal {
+                    return None;
+                }
+
+                Some(PackageId::from_registry(requirement.name.clone()))
+            }
+            RequirementSource::Url { url, .. }
+            | RequirementSource::Git { url, .. }
+            | RequirementSource::Path { url, .. } => Some(PackageId::from_url(url)),
+        }
     }
 }
 
-fn uv_requirement_to_package_id(requirement: &Requirement) -> Result<PackageId, HashStrategyError> {
-    Ok(match &requirement.source {
-        RequirementSource::Registry { specifier, .. } => {
-            // Must be a single specifier.
-            let [specifier] = specifier.as_ref() else {
-                return Err(HashStrategyError::UnpinnedRequirement(
-                    requirement.to_string(),
-                ));
-            };
+#[derive(Debug, Copy, Clone)]
+pub enum HashCheckingMode {
+    Require,
+    Verify,
+}
 
-            // Must be pinned to a specific version.
-            if *specifier.operator() != pep440_rs::Operator::Equal {
-                return Err(HashStrategyError::UnpinnedRequirement(
-                    requirement.to_string(),
-                ));
-            }
-
-            PackageId::from_registry(requirement.name.clone())
+impl std::fmt::Display for HashCheckingMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Require => write!(f, "--require-hashes"),
+            Self::Verify => write!(f, "--verify-hashes"),
         }
-        RequirementSource::Url { url, .. }
-        | RequirementSource::Git { url, .. }
-        | RequirementSource::Path { url, .. } => PackageId::from_url(url),
-    })
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum HashStrategyError {
     #[error(transparent)]
     Hash(#[from] HashError),
-    #[error("In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: {0}")]
-    UnpinnedRequirement(String),
-    #[error("In `--require-hashes` mode, all requirement must have a hash, but none were provided for: {0}")]
-    MissingHashes(String),
+    #[error(
+        "In `{1}` mode, all requirement must have their versions pinned with `==`, but found: {0}"
+    )]
+    UnpinnedRequirement(String, HashCheckingMode),
+    #[error("In `{1}` mode, all requirement must have a hash, but none were provided for: {0}")]
+    MissingHashes(String, HashCheckingMode),
 }

@@ -525,6 +525,8 @@ impl PipSyncSettings {
             index_strategy,
             require_hashes,
             no_require_hashes,
+            verify_hashes,
+            no_verify_hashes,
             keyring_provider,
             python,
             system,
@@ -596,6 +598,7 @@ impl PipSyncSettings {
                     link_mode,
                     compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
@@ -658,6 +661,8 @@ impl PipInstallSettings {
             index_strategy,
             require_hashes,
             no_require_hashes,
+            verify_hashes,
+            no_verify_hashes,
             keyring_provider,
             python,
             system,
@@ -758,6 +763,7 @@ impl PipInstallSettings {
                     link_mode,
                     compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
@@ -1095,6 +1101,7 @@ pub(crate) struct PipSharedSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) require_hashes: bool,
+    pub(crate) verify_hashes: bool,
     pub(crate) concurrency: Concurrency,
 }
 
@@ -1142,6 +1149,7 @@ impl PipSharedSettings {
             link_mode,
             compile_bytecode,
             require_hashes,
+            verify_hashes,
             concurrent_builds,
             concurrent_downloads,
             concurrent_installs,
@@ -1241,6 +1249,10 @@ impl PipSharedSettings {
             require_hashes: args
                 .require_hashes
                 .combine(require_hashes)
+                .unwrap_or_default(),
+            verify_hashes: args
+                .verify_hashes
+                .combine(verify_hashes)
                 .unwrap_or_default(),
             python: args.python.combine(python),
             system: args.system.combine(system).unwrap_or_default(),

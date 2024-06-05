@@ -663,12 +663,32 @@ pub(crate) struct PipSyncArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long,         env = "UV_REQUIRE_HASHES",
-        value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_require_hashes"))]
+    #[arg(
+        long,
+        env = "UV_REQUIRE_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_require_hashes"),
+    )]
     pub(crate) require_hashes: bool,
 
     #[arg(long, overrides_with("require_hashes"), hide = true)]
     pub(crate) no_require_hashes: bool,
+
+    /// Validate any hashes provided in the requirements file.
+    ///
+    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
+    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
+    /// include them.
+    #[arg(
+        long,
+        env = "UV_VERIFY_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_verify_hashes"),
+    )]
+    pub(crate) verify_hashes: bool,
+
+    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    pub(crate) no_verify_hashes: bool,
 
     /// Attempt to use `keyring` for authentication for index URLs.
     ///
@@ -1025,6 +1045,22 @@ pub(crate) struct PipInstallArgs {
 
     #[arg(long, overrides_with("require_hashes"), hide = true)]
     pub(crate) no_require_hashes: bool,
+
+    /// Validate any hashes provided in the requirements file.
+    ///
+    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
+    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
+    /// include them.
+    #[arg(
+        long,
+        env = "UV_VERIFY_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_verify_hashes"),
+    )]
+    pub(crate) verify_hashes: bool,
+
+    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    pub(crate) no_verify_hashes: bool,
 
     /// Attempt to use `keyring` for authentication for index URLs.
     ///

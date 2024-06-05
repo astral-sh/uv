@@ -114,6 +114,7 @@ impl Combine for PipOptions {
             link_mode: self.link_mode.combine(other.link_mode),
             compile_bytecode: self.compile_bytecode.combine(other.compile_bytecode),
             require_hashes: self.require_hashes.combine(other.require_hashes),
+            verify_hashes: self.verify_hashes.combine(other.verify_hashes),
             concurrent_downloads: self
                 .concurrent_downloads
                 .combine(other.concurrent_downloads),

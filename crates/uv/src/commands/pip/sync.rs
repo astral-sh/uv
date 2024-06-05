@@ -43,6 +43,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     compile: bool,
     require_hashes: bool,
+    verify_hashes: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
@@ -198,9 +199,18 @@ pub(crate) async fn pip_sync(
 
     // Collect the set of required hashes.
     let hasher = if require_hashes {
-        HashStrategy::from_requirements(
+        HashStrategy::require(
             requirements
                 .iter()
+                .chain(overrides.iter())
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            Some(&markers),
+        )?
+    } else if verify_hashes {
+        HashStrategy::verify(
+            requirements
+                .iter()
+                .chain(overrides.iter())
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&markers),
         )?

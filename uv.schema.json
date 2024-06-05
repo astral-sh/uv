@@ -560,6 +560,12 @@
             "string",
             "null"
           ]
+        },
+        "verify-hashes": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
