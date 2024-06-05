@@ -142,7 +142,7 @@ jobs:
           sudo add-apt-repository ppa:git-core/ppa
           sudo apt-get update
           sudo apt-get upgrade
-          sudo apt-get install git -y
+          sudo apt-get install git=2.39.3 -y
 
       - run: git config --global uploadpack.allowFilter true
       - run: git -v
