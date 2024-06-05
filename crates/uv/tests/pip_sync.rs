@@ -5164,3 +5164,28 @@ fn target_no_build_isolation() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that we install packages with markers on them.
+#[test]
+fn preserve_markers() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio ; python_version > '3.7'")?;
+
+    uv_snapshot!(sync_without_exclude_newer(&context)
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.4.0
+    "###
+    );
+
+    Ok(())
+}
