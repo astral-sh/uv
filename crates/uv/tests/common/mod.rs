@@ -313,7 +313,7 @@ impl TestContext {
     }
 
     /// Generate various escaped regex patterns for the given path.
-    fn path_patterns(path: impl AsRef<Path>) -> Vec<String> {
+    pub(crate) fn path_patterns(path: impl AsRef<Path>) -> Vec<String> {
         let mut patterns = Vec::new();
 
         // We can only canonicalize paths that exist already
