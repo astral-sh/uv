@@ -12,24 +12,9 @@ use std::ops::Deref;
 use glob::Pattern;
 use pep440_rs::VersionSpecifiers;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use url::Url;
 
-use pep508_rs::Pep508Error;
-use pypi_types::VerbatimParsedUrl;
 use uv_normalize::{ExtraName, PackageName};
-
-#[derive(Debug, Error)]
-pub enum Pep621Error {
-    #[error(transparent)]
-    Pep508(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
-}
-
-impl From<Pep508Error<VerbatimParsedUrl>> for Pep621Error {
-    fn from(error: Pep508Error<VerbatimParsedUrl>) -> Self {
-        Self::Pep508(Box::new(error))
-    }
-}
 
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
