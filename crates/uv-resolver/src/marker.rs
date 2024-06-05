@@ -108,7 +108,6 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
                 if let MarkerTree::Expression(ref expr) = tree {
                     if let Some((key, range)) = keyed_range(expr) {
                         versions.entry(key.clone()).or_default().push(range);
-
                         continue;
                     }
                 }
@@ -124,7 +123,6 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
                             .fold(PubGrubRange::full(), |acc, range| acc.intersection(range))
                     });
 
-                    // Remove duplicates and sort.
                     reduced.dedup();
                     reduced.sort();
 
@@ -140,7 +138,6 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
                             .fold(PubGrubRange::empty(), |acc, range| acc.union(range))
                     });
 
-                    // Remove duplicates and sort.
                     reduced.dedup();
                     reduced.sort();
 
