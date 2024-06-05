@@ -928,6 +928,29 @@ mod tests {
     }
 
     #[test]
+    fn find_environment_from_virtual_environment_with_python_executable_on_path() -> Result<()> {
+        let context = TestContext::new()?;
+        let venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&venv, "3.12.0")?;
+
+        let environment =
+            context.run_with_vars(&[("PATH", Some(venv.child("bin").as_os_str()))], || {
+                PythonEnvironment::find(
+                    None,
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })?;
+        assert_eq!(
+            environment.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should find the active environment via the path"
+        );
+
+        Ok(())
+    }
+    #[test]
     fn find_environment_from_conda_prefix() -> Result<()> {
         let context = TestContext::new()?;
         let condaenv = context.tempdir.child("condaenv");

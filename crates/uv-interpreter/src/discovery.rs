@@ -131,6 +131,8 @@ pub enum InterpreterSource {
     ActiveEnvironment,
     /// A conda environment was active e.g. via `CONDA_PREFIX`
     CondaPrefix,
+    /// A shim `python` executable that invokes in a PEP 405 compliant virtual environment
+    ShimEnvironment,
     /// An environment was discovered e.g. via `.venv`
     DiscoveredEnvironment,
     /// An executable was found in the search path i.e. `PATH`
@@ -175,6 +177,7 @@ pub enum Error {
 ///
 /// - The spawning interpreter
 /// - The active environment
+/// - A shim executable that invokes a virtual environment
 /// - A discovered environment (e.g. `.venv`)
 /// - Installed managed toolchains
 /// - The search path (i.e. PATH)
@@ -182,6 +185,8 @@ pub enum Error {
 ///
 /// Each location is only queried if the previous location is exhausted.
 /// Locations may be omitted using `sources`, sources that are not selected will not be queried.
+///
+/// Executables from `InterpreterSource::ShimExecutable` **must** be checked to ensure they are virtual environments.
 ///
 /// If a [`VersionRequest`] is provided, we will skip executables that we know do not satisfy the request
 /// and (as discussed in [`python_executables_from_search_path`]) additional version specific executables may
@@ -219,7 +224,15 @@ fn python_executables<'a>(
             .map(|path| Ok((InterpreterSource::CondaPrefix, path)))
         ).into_iter().flatten()
     )
-    // (4) A discovered environment
+    // (4) The first `python` executable on the `PATH`
+    // N.B. We must filter this interpreter later to ensure it is a virtual environment
+    .chain(
+        sources.contains(InterpreterSource::ShimEnvironment).then(||
+            python_executables_from_search_path(version, implementation).next()
+            .map(|path| Ok((InterpreterSource::ShimEnvironment, path)))
+        ).into_iter().flatten()
+    )
+    // (5) A discovered environment
     .chain(
         sources.contains(InterpreterSource::DiscoveredEnvironment).then(||
             std::iter::once(
@@ -234,7 +247,7 @@ fn python_executables<'a>(
             ).flatten_ok()
         ).into_iter().flatten()
     )
-    // (5) Managed toolchains
+    // (6) Managed toolchains
     .chain(
         sources.contains(InterpreterSource::ManagedToolchain).then(move ||
             std::iter::once(
@@ -255,14 +268,14 @@ fn python_executables<'a>(
             ).flatten_ok()
         ).into_iter().flatten()
     )
-    // (6) The search path
+    // (7) The search path
     .chain(
         sources.contains(InterpreterSource::SearchPath).then(move ||
             python_executables_from_search_path(version, implementation)
             .map(|path| Ok((InterpreterSource::SearchPath, path))),
         ).into_iter().flatten()
     )
-    // (7) The `py` launcher (windows only)
+    // (8) The `py` launcher (windows only)
     // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
     .chain(
         (sources.contains(InterpreterSource::PyLauncher) && cfg!(windows)).then(||
@@ -378,52 +391,61 @@ fn python_interpreters<'a>(
                 .inspect_err(|err| debug!("{err}")),
             Err(err) => Err(err),
         })
-        .filter(move |result| match result {
+        .filter(move |result| {
+            // Always skip shim environments that are not virtual environments; this filter is deferred
+            // from `python_executables` to avoid querying the interpreter there
+            if let Ok((InterpreterSource::ShimEnvironment, interpreter)) = result {
+                if !interpreter.is_virtualenv() {
+                    return false;
+                }
+            };
             // Filter the returned interpreters to conform to the system request
-            Ok((source, interpreter)) => match (
-                system,
-                // Conda environments are not conformant virtual environments but we should not treat them as system interpreters
-                interpreter.is_virtualenv() || matches!(source, InterpreterSource::CondaPrefix),
-            ) {
-                (SystemPython::Allowed, _) => true,
-                (SystemPython::Explicit, false) => {
-                    if matches!(
-                        source,
-                        InterpreterSource::ProvidedPath | InterpreterSource::ParentInterpreter
-                    ) {
-                        debug!(
-                            "Allowing system Python interpreter at `{}`",
+            match result {
+                Ok((source, interpreter)) => match (
+                    system,
+                    // Conda environments are not conformant virtual environments but we should not treat them as system interpreters
+                    interpreter.is_virtualenv() || matches!(source, InterpreterSource::CondaPrefix),
+                ) {
+                    (SystemPython::Allowed, _) => true,
+                    (SystemPython::Explicit, false) => {
+                        if matches!(
+                            source,
+                            InterpreterSource::ProvidedPath | InterpreterSource::ParentInterpreter
+                        ) {
+                            debug!(
+                                "Allowing system Python interpreter at `{}`",
+                                interpreter.sys_executable().display()
+                            );
+                            true
+                        } else {
+                            debug!(
+                            "Ignoring Python interpreter at `{}`: system interpreter not explicit",
                             interpreter.sys_executable().display()
                         );
-                        true
-                    } else {
+                            false
+                        }
+                    }
+                    (SystemPython::Explicit, true) => true,
+                    (SystemPython::Disallowed, false) => {
                         debug!(
-                            "Ignoring Python interpreter at `{}`: system interpreter not explicit",
+                            "Ignoring Python interpreter at `{}`: system interpreter not allowed",
                             interpreter.sys_executable().display()
                         );
                         false
                     }
-                }
-                (SystemPython::Explicit, true) => true,
-                (SystemPython::Disallowed, false) => {
-                    debug!(
-                        "Ignoring Python interpreter at `{}`: system interpreter not allowed",
-                        interpreter.sys_executable().display()
-                    );
-                    false
-                }
-                (SystemPython::Disallowed, true) => true,
-                (SystemPython::Required, true) => {
-                    debug!(
-                        "Ignoring Python interpreter at `{}`: system interpreter required",
-                        interpreter.sys_executable().display()
-                    );
-                    false
-                }
-                (SystemPython::Required, false) => true,
-            },
-            // Do not drop any errors
-            Err(_) => true,
+                    (SystemPython::Disallowed, true) => true,
+                    (SystemPython::Required, true) => {
+                        debug!(
+                            "Ignoring Python interpreter at `{}`: system interpreter required",
+                            interpreter.sys_executable().display()
+                        );
+                        false
+                    }
+                    (SystemPython::Required, false) => true,
+                },
+                // Do not drop any errors
+                Err(_) => true,
+            }
         })
 }
 
@@ -1161,6 +1183,7 @@ impl SourceSelector {
                 InterpreterSource::DiscoveredEnvironment,
                 InterpreterSource::ActiveEnvironment,
                 InterpreterSource::CondaPrefix,
+                InterpreterSource::ShimEnvironment,
             ]
             .contains(&source),
             Self::Custom(sources) => sources.contains(&source),
@@ -1231,6 +1254,7 @@ impl fmt::Display for InterpreterSource {
             Self::PyLauncher => f.write_str("`py` launcher output"),
             Self::ManagedToolchain => f.write_str("managed toolchains"),
             Self::ParentInterpreter => f.write_str("parent interpreter"),
+            Self::ShimEnvironment => f.write_str("shim virtual environment"),
         }
     }
 }
