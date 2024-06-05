@@ -22,6 +22,12 @@ impl PubGrubSpecifier {
     }
 }
 
+impl From<Range<Version>> for PubGrubSpecifier {
+    fn from(range: Range<Version>) -> Self {
+        PubGrubSpecifier(range)
+    }
+}
+
 impl From<PubGrubSpecifier> for Range<Version> {
     /// Convert a PubGrub specifier to a range of versions.
     fn from(specifier: PubGrubSpecifier) -> Self {

@@ -511,7 +511,7 @@ impl Distribution {
         // Markers can be combined in an unpredictable order, so normalize them
         // such that the lock file output is consistent and deterministic.
         if let Some(ref mut marker) = marker {
-            marker.normalize();
+            crate::marker::normalize(marker);
         }
         let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;

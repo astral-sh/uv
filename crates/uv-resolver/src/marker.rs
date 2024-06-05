@@ -1,5 +1,7 @@
 #![allow(clippy::enum_glob_use)]
 
+use std::collections::HashMap;
+use std::mem;
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
 
@@ -10,6 +12,7 @@ use pep508_rs::{
 };
 
 use crate::pubgrub::PubGrubSpecifier;
+use pubgrub::range::Range as PubGrubRange;
 
 /// Returns `true` if there is no environment in which both marker trees can both apply, i.e.
 /// the expression `first and second` is always false.
@@ -79,6 +82,113 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
     true
 }
 
+/// Normalizes this marker tree.
+///
+/// This function does a number of operations to normalize a marker tree recursively:
+/// - Sort all nested expressions.
+/// - Simplify expressions. This includes combining overlapping version ranges and removing duplicate
+///   expressions at the same level of precedence. For example, `(a == 'a' and a == 'a') or b == 'b'` can
+///   be reduced, but `a == 'a' and (a == 'a' or b == 'b')` cannot.
+///
+/// This is useful in cases where creating conjunctions or disjunctions might occur in a non-deterministic
+/// order. This routine will attempt to erase the distinction created by such a construction.
+pub(crate) fn normalize(tree: &mut MarkerTree) {
+    match tree {
+        MarkerTree::And(trees) | MarkerTree::Or(trees) => {
+            let mut reduced = Vec::new();
+            let mut versions: HashMap<_, Vec<_>> = HashMap::new();
+
+            for mut tree in mem::take(trees) {
+                // Simplify nested expressions as much as possible first.
+                normalize(&mut tree);
+
+                // Extract expressions we may be able to simplify more.
+                if let MarkerTree::Expression(ref expr) = tree {
+                    if let Ok(Some((key, specifier, range))) = keyed_range(expr) {
+                        versions
+                            .entry(key.clone())
+                            .or_default()
+                            .push((specifier, range));
+
+                        continue;
+                    }
+                }
+
+                reduced.push(tree);
+            }
+
+            match tree {
+                MarkerTree::And(_) => {
+                    for (key, ranges) in versions {
+                        let simplified =
+                            ranges.iter().fold(PubGrubRange::full(), |acc, (_, range)| {
+                                acc.intersection(range)
+                            });
+
+                        // If this is a meaningless expressions with no valid intersection, add back
+                        // the original ranges.
+                        if simplified.is_empty() {
+                            for (specifier, _) in ranges {
+                                reduced.push(MarkerTree::Expression(MarkerExpression::Version {
+                                    specifier,
+                                    key: key.clone(),
+                                }));
+                            }
+                        }
+
+                        // Add back the simplified segments.
+                        for segment in simplified.iter() {
+                            for specifier in VersionSpecifier::from_bounds(segment) {
+                                reduced.push(MarkerTree::Expression(MarkerExpression::Version {
+                                    key: key.clone(),
+                                    specifier,
+                                }));
+                            }
+                        }
+                    }
+
+                    // Remove duplicates and sort.
+                    reduced.dedup();
+                    reduced.sort();
+
+                    *tree = match reduced.len() {
+                        1 => reduced.remove(0),
+                        _ => MarkerTree::And(reduced),
+                    };
+                }
+                MarkerTree::Or(_) => {
+                    for (key, ranges) in versions {
+                        let simplified = ranges
+                            .iter()
+                            .fold(PubGrubRange::empty(), |acc, (_, range)| acc.union(range));
+
+                        // Add back the simplified segments.
+                        for segment in simplified.iter() {
+                            for specifier in VersionSpecifier::from_bounds(segment) {
+                                reduced.push(MarkerTree::Expression(MarkerExpression::Version {
+                                    key: key.clone(),
+                                    specifier,
+                                }));
+                            }
+                        }
+                    }
+
+                    // Remove duplicates and sort.
+                    reduced.dedup();
+                    reduced.sort();
+
+                    *tree = match reduced.len() {
+                        1 => reduced.remove(0),
+                        _ => MarkerTree::Or(reduced),
+                    };
+                }
+                _ => unreachable!(),
+            }
+        }
+        MarkerTree::Expression(_) => {}
+    }
+}
+
 /// Extracts the key, value, and string from a string expression, reversing the operator if necessary.
 fn extract_string_expression(
     expr: &MarkerExpression,
@@ -145,12 +255,12 @@ fn extra_is_disjoint(operator: &ExtraOperator, name: &ExtraName, other: &MarkerE
 
 /// Returns `true` if this version expression does not intersect with the given expression.
 fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool {
-    let Some((key, range)) = keyed_range(this).unwrap() else {
+    let Some((key, _, range)) = keyed_range(this).unwrap() else {
         return false;
     };
 
     // if this is not a version expression it may intersect
-    let Ok(Some((key2, range2))) = keyed_range(other) else {
+    let Ok(Some((key2, _, range2))) = keyed_range(other) else {
         return false;
     };
 
@@ -166,7 +276,7 @@ fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> boo
 /// Returns the key and version range for a version expression.
 fn keyed_range(
     expr: &MarkerExpression,
-) -> Result<Option<(&MarkerValueVersion, pubgrub::range::Range<Version>)>, ()> {
+) -> Result<Option<(&MarkerValueVersion, VersionSpecifier, PubGrubRange<Version>)>, ()> {
     let (key, specifier) = match expr {
         MarkerExpression::Version { key, specifier } => (key, specifier.clone()),
         MarkerExpression::VersionInverted {
@@ -190,7 +300,7 @@ fn keyed_range(
         return Ok(None);
     };
 
-    Ok(Some((key, pubgrub_specifier.into())))
+    Ok(Some((key, specifier, pubgrub_specifier.into())))
 }
 
 /// Reverses a binary operator.
@@ -223,14 +333,84 @@ mod tests {
 
     use super::*;
 
-    fn is_disjoint(one: impl AsRef<str>, two: impl AsRef<str>) -> bool {
-        let one = MarkerTree::parse_reporter(one.as_ref(), &mut TracingReporter).unwrap();
-        let two = MarkerTree::parse_reporter(two.as_ref(), &mut TracingReporter).unwrap();
-        super::is_disjoint(&one, &two) && super::is_disjoint(&two, &one)
+    #[test]
+    fn simplify() {
+        assert_marker_equal(
+            "python_version == '3.1' or python_version == '3.1'",
+            "python_version == '3.1'",
+        );
+
+        assert_marker_equal(
+            "python_version < '3.17' or python_version < '3.18'",
+            "python_version < '3.18'",
+        );
+
+        assert_marker_equal(
+            "python_version > '3.17' or python_version > '3.18' or python_version > '3.12'",
+            "python_version > '3.12'",
+        );
+
+        assert_marker_equal(
+            "python_version > '3.17.post4' or python_version > '3.18.post4'",
+            "python_version >= '3.17.post5'",
+        );
+
+        assert_marker_equal(
+            "python_version < '3.17' and python_version < '3.18'",
+            "python_version < '3.17'",
+        );
+
+        assert_marker_equal(
+            "python_version <= '3.18' and python_version == '3.18'",
+            "python_version == '3.18'",
+        );
+
+        assert_marker_equal(
+            "python_version <= '3.18' or python_version == '3.18'",
+            "python_version <= '3.18'",
+        );
+
+        assert_marker_equal(
+            "python_version <= '3.15' or (python_version <= '3.17' and python_version < '3.16')",
+            "python_version < '3.16'",
+        );
+
+        assert_marker_equal(
+            "(python_version > '3.17' or python_version > '3.16') and python_version > '3.15'",
+            "python_version > '3.16'",
+        );
+
+        assert_marker_equal(
+            "(python_version > '3.17' or python_version > '3.16') and python_version > '3.15' and implementation_version == '1'",
+            "implementation_version == '1' and python_version > '3.16'",
+        );
+
+        assert_marker_equal(
+            "('3.17' < python_version or '3.16' < python_version) and '3.15' < python_version and implementation_version == '1'",
+            "implementation_version == '1' and python_version > '3.16'",
+        );
+
+        assert_marker_equal("extra == 'a' or extra == 'a'", "extra == 'a'");
+        assert_marker_equal(
+            "extra == 'a' and extra == 'a' or extra == 'b'",
+            "extra == 'a' or extra == 'b'",
+        );
+
+        // bogus expressions are retained but still normalized
+        assert_marker_equal(
+            "python_version < '3.17' and '3.18' == python_version",
+            "python_version == '3.18' and python_version < '3.17'",
+        );
+
+        // cannot simplify nested complex expressions
+        assert_marker_equal(
+            "extra == 'a' and (extra == 'a' or extra == 'b')",
+            "extra == 'a' and (extra == 'a' or extra == 'b')",
+        );
     }
 
     #[test]
-    fn extra() {
+    fn extra_disjointness() {
         assert!(!is_disjoint("extra == 'a'", "python_version == '1'"));
 
         assert!(!is_disjoint("extra == 'a'", "extra == 'a'"));
@@ -243,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn arbitrary() {
+    fn arbitrary_disjointness() {
         assert!(is_disjoint(
             "python_version == 'Linux'",
             "python_version == '3.7.1'"
@@ -251,13 +431,13 @@ mod tests {
     }
 
     #[test]
-    fn version() {
+    fn version_disjointness() {
         assert!(!is_disjoint(
             "os_name == 'Linux'",
             "python_version == '3.7.1'"
         ));
 
-        test_version_bounds("python_version");
+        test_version_bounds_disjointness("python_version");
 
         assert!(!is_disjoint(
             "python_version == '3.7.*'",
@@ -266,7 +446,7 @@ mod tests {
     }
 
     #[test]
-    fn string() {
+    fn string_disjointness() {
         assert!(!is_disjoint(
             "os_name == 'Linux'",
             "platform_version == '3.7.1'"
@@ -277,7 +457,7 @@ mod tests {
         ));
 
         // basic version bounds checking should still work with lexicographical comparisons
-        test_version_bounds("platform_version");
+        test_version_bounds_disjointness("platform_version");
 
         assert!(is_disjoint("os_name == 'Linux'", "os_name == 'OSX'"));
         assert!(is_disjoint("os_name <= 'Linux'", "os_name == 'OSX'"));
@@ -303,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn combined() {
+    fn combined_disjointness() {
         assert!(!is_disjoint(
             "os_name == 'a' and platform_version == '1'",
             "os_name == 'a'"
@@ -327,7 +507,7 @@ mod tests {
         ));
     }
 
-    fn test_version_bounds(version: &str) {
+    fn test_version_bounds_disjointness(version: &str) {
         assert!(!is_disjoint(
             format!("{version} > '2.7.0'"),
             format!("{version} == '3.6.0'")
@@ -371,5 +551,18 @@ mod tests {
             format!("{version} == '3.7.0'"),
             format!("{version} != '3.7.0'")
         ));
+    }
+
+    fn is_disjoint(one: impl AsRef<str>, two: impl AsRef<str>) -> bool {
+        let one = MarkerTree::parse_reporter(one.as_ref(), &mut TracingReporter).unwrap();
+        let two = MarkerTree::parse_reporter(two.as_ref(), &mut TracingReporter).unwrap();
+        super::is_disjoint(&one, &two) && super::is_disjoint(&two, &one)
+    }
+
+    fn assert_marker_equal(one: impl AsRef<str>, two: impl AsRef<str>) {
+        let mut tree1 = MarkerTree::parse_reporter(one.as_ref(), &mut TracingReporter).unwrap();
+        super::normalize(&mut tree1);
+        let tree2 = MarkerTree::parse_reporter(two.as_ref(), &mut TracingReporter).unwrap();
+        assert_eq!(tree1.to_string(), tree2.to_string());
     }
 }

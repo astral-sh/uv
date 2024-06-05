@@ -1,7 +1,9 @@
 #[cfg(feature = "pyo3")]
 use std::hash::{Hash, Hasher};
+
+use std::cmp::Ordering;
 use std::ops::Bound;
-use std::{cmp::Ordering, str::FromStr};
+use std::str::FromStr;
 
 #[cfg(feature = "pyo3")]
 use pyo3::{
