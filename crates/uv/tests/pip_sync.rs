@@ -16,7 +16,7 @@ use url::Url;
 use common::{create_venv, uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
-use crate::common::{copy_dir_all, get_bin, TestContext, EXCLUDE_NEWER};
+use crate::common::{copy_dir_all, get_bin, run_and_format, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
@@ -3192,10 +3192,6 @@ fn compile() -> Result<()> {
 
 /// Test that the `PYC_INVALIDATION_MODE` option is recognized and that the error handling works.
 #[test]
-#[cfg_attr(
-    target_os = "macos",
-    ignore = "The bytecode trace is spuriously different on macOS"
-)]
 fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3214,11 +3210,24 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
         ])
         .collect();
 
-    uv_snapshot!(filters, sync_without_exclude_newer(&context)
-        .arg("requirements.txt")
-        .arg("--compile")
-        .arg("--strict")
-        .env("PYC_INVALIDATION_MODE", "bogus"), @r###"
+    // Retry test if we run into a broken pipe (https://github.com/astral-sh/uv/issues/2672).
+    // TODO(konsti): Why is this happening in the first place?
+    let run_test = || {
+        let mut command = sync_without_exclude_newer(&context);
+        command
+            .arg("requirements.txt")
+            .arg("--compile")
+            .arg("--strict")
+            .env("PYC_INVALIDATION_MODE", "bogus");
+        let (snapshot, _output) = run_and_format(command, filters.clone(), function_name!(), None);
+        snapshot
+    };
+    let mut snapshot = run_test();
+    if snapshot.contains("Failed to write to Python stdin") {
+        snapshot = run_test();
+    }
+
+    ::insta::assert_snapshot!(snapshot, @r###"
     success: false
     exit_code: 2
     ----- stdout -----
