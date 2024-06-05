@@ -954,6 +954,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             } => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
+                    // If a package has a marker, add a dependency from it to the
+                    // same package without markers.
+                    if marker.is_some() {
+                        return Ok(Dependencies::Available(vec![(
+                            PubGrubPackage::from(PubGrubPackageInner::Package {
+                                name: name.clone(),
+                                extra: extra.clone(),
+                                marker: None,
+                                url: url.clone(),
+                            }),
+                            Range::singleton(version.clone()),
+                        )]));
+                    }
+
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for generating the lock file.
                     let dist = match url {
