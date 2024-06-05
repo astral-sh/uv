@@ -60,13 +60,14 @@ impl PythonRequirement {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum RequiresPython {
-    /// The `RequiresPython` specifier is a single version specifier, as provided via
+    /// The [`RequiresPython`] specifier is a single version specifier, as provided via
     /// `--python-version` on the command line.
     ///
     /// The use of a separate enum variant allows us to use a verbatim representation when reporting
     /// back to the user.
     Specifier(StringVersion),
-    /// The `RequiresPython` specifier is a set of version specifiers.
+    /// The [`RequiresPython`] specifier is a set of version specifiers, as extracted from the
+    /// `Requires-Python` field in a `pyproject.toml` or `METADATA` file.
     Specifiers(VersionSpecifiers),
 }
 
@@ -91,6 +92,14 @@ impl RequiresPython {
 
                 target.subset_of(&requires_python)
             }
+        }
+    }
+
+    /// Returns the [`VersionSpecifiers`] for the [`RequiresPython`] specifier.
+    pub fn as_specifiers(&self) -> Option<&VersionSpecifiers> {
+        match self {
+            RequiresPython::Specifier(_) => None,
+            RequiresPython::Specifiers(specifiers) => Some(specifiers),
         }
     }
 }

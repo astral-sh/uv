@@ -557,7 +557,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for resolution in resolutions {
             combined.union(resolution);
         }
-        ResolutionGraph::from_state(&self.index, &self.preferences, &self.git, combined)
+        ResolutionGraph::from_state(
+            &self.index,
+            &self.preferences,
+            &self.git,
+            &self.python_requirement,
+            combined,
+        )
     }
 
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]

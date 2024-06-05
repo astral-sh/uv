@@ -1038,6 +1038,7 @@ fn lock_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.7"
 
         [[distribution]]
         name = "dataclasses"
@@ -1163,6 +1164,7 @@ fn lock_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.7.9, <4"
 
         [[distribution]]
         name = "attrs"

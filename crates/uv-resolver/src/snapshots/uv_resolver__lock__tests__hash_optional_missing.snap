@@ -73,6 +73,7 @@ Ok(
                 optional_dependencies: {},
             },
         ],
+        requires_python: None,
         by_id: {
             DistributionId {
                 name: PackageName(

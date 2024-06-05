@@ -20,7 +20,7 @@ use distribution_types::{
     GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
 };
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
@@ -36,6 +36,8 @@ use crate::{lock, ResolutionGraph};
 pub struct Lock {
     version: u32,
     distributions: Vec<Distribution>,
+    /// The range of supported Python versions.
+    requires_python: Option<VersionSpecifiers>,
     /// A map from distribution ID to index in `distributions`.
     ///
     /// This can be used to quickly lookup the full distribution for any ID
@@ -87,15 +89,21 @@ impl Lock {
             }
         }
 
-        let lock = Self::new(locked_dists.into_values().collect())?;
+        let distributions = locked_dists.into_values().collect();
+        let requires_python = graph.requires_python.clone();
+        let lock = Self::new(distributions, requires_python)?;
         Ok(lock)
     }
 
     /// Initialize a [`Lock`] from a list of [`Distribution`] entries.
-    fn new(distributions: Vec<Distribution>) -> Result<Self, LockError> {
+    fn new(
+        distributions: Vec<Distribution>,
+        requires_python: Option<VersionSpecifiers>,
+    ) -> Result<Self, LockError> {
         let wire = LockWire {
             version: 1,
             distributions,
+            requires_python,
         };
         Self::try_from(wire)
     }
@@ -196,6 +204,8 @@ struct LockWire {
     version: u32,
     #[serde(rename = "distribution")]
     distributions: Vec<Distribution>,
+    #[serde(rename = "requires-python")]
+    requires_python: Option<VersionSpecifiers>,
 }
 
 impl From<Lock> for LockWire {
@@ -203,6 +213,7 @@ impl From<Lock> for LockWire {
         LockWire {
             version: lock.version,
             distributions: lock.distributions,
+            requires_python: lock.requires_python,
         }
     }
 }
@@ -214,6 +225,10 @@ impl Lock {
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
         doc.insert("version", value(i64::from(self.version)));
+
+        if let Some(ref requires_python) = self.requires_python {
+            doc.insert("requires-python", value(requires_python.to_string()));
+        }
 
         let mut distributions = ArrayOfTables::new();
         for dist in &self.distributions {
@@ -344,6 +359,7 @@ impl TryFrom<LockWire> for Lock {
         Ok(Lock {
             version: wire.version,
             distributions: wire.distributions,
+            requires_python: wire.requires_python,
             by_id,
         })
     }
