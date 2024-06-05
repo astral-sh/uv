@@ -89,6 +89,8 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
 /// - Simplify expressions. This includes combining overlapping version ranges and removing duplicate
 ///   expressions at the same level of precedence. For example, `(a == 'a' and a == 'a') or b == 'b'` can
 ///   be reduced, but `a == 'a' and (a == 'a' or b == 'b')` cannot.
+/// - Normalize the order of version expressions to the form `<version key> <version op> <version>`
+///  (i.e. not the reverse).
 ///
 /// This is useful in cases where creating conjunctions or disjunctions might occur in a non-deterministic
 /// order. This routine will attempt to erase the distinction created by such a construction.
@@ -350,6 +352,7 @@ mod tests {
             "python_version > '3.12'",
         );
 
+        // a quirk of how pubgrub works, but this is considered part of normalization
         assert_marker_equal(
             "python_version > '3.17.post4' or python_version > '3.18.post4'",
             "python_version >= '3.17.post5'",
