@@ -34,7 +34,7 @@ use crate::archive::Archive;
 use crate::locks::Locks;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
-use crate::{Error, LocalWheel, Reporter};
+use crate::{Error, LocalWheel, Reporter, RequiresDist};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -432,6 +432,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await?;
 
         Ok(metadata)
+    }
+
+    /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
+    pub async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
+        self.builder.requires_dist(project_root).await
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

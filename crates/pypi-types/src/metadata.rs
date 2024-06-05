@@ -327,6 +327,73 @@ fn parse_version(metadata_version: &str) -> Result<(u8, u8), MetadataError> {
     Ok((major, minor))
 }
 
+/// Python Package Metadata 2.3 as specified in
+/// <https://packaging.python.org/specifications/core-metadata/>.
+///
+/// This is a subset of [`Metadata23`]; specifically, it omits the `version` and `requires-python`
+/// fields, which aren't necessary when extracting the requirements of a package without installing
+/// the package itself.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct RequiresDist {
+    pub name: PackageName,
+    pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
+    pub provides_extras: Vec<ExtraName>,
+}
+
+impl RequiresDist {
+    /// Extract the [`RequiresDist`] from a `pyproject.toml` file, as specified in PEP 621.
+    pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
+        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+
+        let project = pyproject_toml
+            .project
+            .ok_or(MetadataError::FieldNotFound("project"))?;
+
+        // If any of the fields we need were declared as dynamic, we can't use the `pyproject.toml`
+        // file.
+        let dynamic = project.dynamic.unwrap_or_default();
+        for field in dynamic {
+            match field.as_str() {
+                "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
+                "optional-dependencies" => {
+                    return Err(MetadataError::DynamicField("optional-dependencies"))
+                }
+                _ => (),
+            }
+        }
+
+        let name = project.name;
+
+        // Extract the requirements.
+        let mut requires_dist = project
+            .dependencies
+            .unwrap_or_default()
+            .into_iter()
+            .map(Requirement::from)
+            .collect::<Vec<_>>();
+
+        // Extract the optional dependencies.
+        let mut provides_extras: Vec<ExtraName> = Vec::new();
+        for (extra, requirements) in project.optional_dependencies.unwrap_or_default() {
+            requires_dist.extend(
+                requirements
+                    .into_iter()
+                    .map(Requirement::from)
+                    .map(|requirement| requirement.with_extra_marker(&extra))
+                    .collect::<Vec<_>>(),
+            );
+            provides_extras.push(extra);
+        }
+
+        Ok(Self {
+            name,
+            requires_dist,
+            provides_extras,
+        })
+    }
+}
+
 /// The headers of a distribution metadata file.
 #[derive(Debug)]
 struct Headers<'a>(Vec<mailparse::MailHeader<'a>>);

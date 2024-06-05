@@ -39,7 +39,7 @@ use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
-use crate::Reporter;
+use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
@@ -383,6 +383,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         Ok(metadata)
+    }
+
+    /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
+    pub(crate) async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
+        let requires_dist = read_requires_dist(project_root).await?;
+        let requires_dist =
+            RequiresDist::from_workspace(requires_dist, project_root, self.preview_mode).await?;
+        Ok(requires_dist)
     }
 
     /// Build a source distribution from a remote URL.
@@ -1623,6 +1631,25 @@ async fn read_pyproject_toml(
         Metadata23::parse_pyproject_toml(&content).map_err(Error::DynamicPyprojectToml)?;
 
     Ok(metadata)
+}
+
+/// Return the [`pypi_types::RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
+async fn read_requires_dist(project_root: &Path) -> Result<pypi_types::RequiresDist, Error> {
+    // Read the `pyproject.toml` file.
+    let pyproject_toml = project_root.join("pyproject.toml");
+    let content = match fs::read_to_string(pyproject_toml).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingPyprojectToml);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the metadata.
+    let requires_dist = pypi_types::RequiresDist::parse_pyproject_toml(&content)
+        .map_err(Error::DynamicPyprojectToml)?;
+
+    Ok(requires_dist)
 }
 
 /// Read an existing cached [`Metadata23`], if it exists.

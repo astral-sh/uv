@@ -11,7 +11,7 @@ use distribution_types::{BuildableSource, DirectorySourceUrl, HashPolicy, Source
 use pep508_rs::RequirementOrigin;
 use pypi_types::Requirement;
 use uv_configuration::ExtrasSpecification;
-use uv_distribution::{DistributionDatabase, Reporter};
+use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
@@ -85,73 +85,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
     /// Infer the dependencies for a directory dependency.
     async fn resolve_source_tree(&self, path: &Path) -> Result<SourceTreeResolution> {
-        // Convert to a buildable source.
-        let source_tree = fs_err::canonicalize(path).with_context(|| {
-            format!(
-                "Failed to canonicalize path to source tree: {}",
-                path.user_display()
-            )
-        })?;
-        let source_tree = source_tree.parent().ok_or_else(|| {
-            anyhow::anyhow!(
-                "The file `{}` appears to be a `setup.py` or `setup.cfg` file, which must be in a directory",
-                path.user_display()
-            )
-        })?;
-
-        let Ok(url) = Url::from_directory_path(source_tree) else {
-            return Err(anyhow::anyhow!("Failed to convert path to URL"));
-        };
-        let source = SourceUrl::Directory(DirectorySourceUrl {
-            url: &url,
-            path: Cow::Borrowed(source_tree),
-            editable: false,
-        });
-
-        // Determine the hash policy. Since we don't have a package name, we perform a
-        // manual match.
-        let hashes = match self.hasher {
-            HashStrategy::None => HashPolicy::None,
-            HashStrategy::Generate => HashPolicy::Generate,
-            HashStrategy::Validate { .. } => {
-                return Err(anyhow::anyhow!(
-                    "Hash-checking is not supported for local directories: {}",
-                    path.user_display()
-                ));
-            }
-        };
-
-        // Fetch the metadata for the distribution.
-        let metadata = {
-            let id = VersionId::from_url(source.url());
-            if let Some(archive) =
-                self.index
-                    .distributions()
-                    .get(&id)
-                    .as_deref()
-                    .and_then(|response| {
-                        if let MetadataResponse::Found(archive) = response {
-                            Some(archive)
-                        } else {
-                            None
-                        }
-                    })
-            {
-                // If the metadata is already in the index, return it.
-                archive.metadata.clone()
-            } else {
-                // Run the PEP 517 build process to extract metadata from the source distribution.
-                let source = BuildableSource::Url(source);
-                let archive = self.database.build_wheel_metadata(&source, hashes).await?;
-
-                // Insert the metadata into the index.
-                self.index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
-
-                archive.metadata
-            }
-        };
+        let metadata = self.resolve_requires_dist(path).await?;
 
         let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
@@ -207,5 +141,86 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             project,
             extras,
         })
+    }
+
+    /// Resolve the [`RequiresDist`] metadata for a given source tree. Attempts to resolve the
+    /// requirements without building the distribution, even if the project contains (e.g.) a
+    /// dynamic version since, critically, we don't need to install the package itself; only its
+    /// dependencies.
+    async fn resolve_requires_dist(&self, path: &Path) -> Result<RequiresDist> {
+        // Convert to a buildable source.
+        let source_tree = fs_err::canonicalize(path).with_context(|| {
+            format!(
+                "Failed to canonicalize path to source tree: {}",
+                path.user_display()
+            )
+        })?;
+        let source_tree = source_tree.parent().ok_or_else(|| {
+            anyhow::anyhow!(
+                "The file `{}` appears to be a `pyproject.toml`, `setup.py`, or `setup.cfg` file, which must be in a directory",
+                path.user_display()
+            )
+        })?;
+
+        // If the path is a `pyproject.toml`, attempt to extract the requirements statically.
+        if let Ok(metadata) = self.database.requires_dist(source_tree).await {
+            return Ok(metadata);
+        }
+
+        let Ok(url) = Url::from_directory_path(source_tree) else {
+            return Err(anyhow::anyhow!("Failed to convert path to URL"));
+        };
+        let source = SourceUrl::Directory(DirectorySourceUrl {
+            url: &url,
+            path: Cow::Borrowed(source_tree),
+            editable: false,
+        });
+
+        // Determine the hash policy. Since we don't have a package name, we perform a
+        // manual match.
+        let hashes = match self.hasher {
+            HashStrategy::None => HashPolicy::None,
+            HashStrategy::Generate => HashPolicy::Generate,
+            HashStrategy::Validate { .. } => {
+                return Err(anyhow::anyhow!(
+                    "Hash-checking is not supported for local directories: {}",
+                    path.user_display()
+                ));
+            }
+        };
+
+        // Fetch the metadata for the distribution.
+        let metadata = {
+            let id = VersionId::from_url(source.url());
+            if let Some(archive) =
+                self.index
+                    .distributions()
+                    .get(&id)
+                    .as_deref()
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive) = response {
+                            Some(archive)
+                        } else {
+                            None
+                        }
+                    })
+            {
+                // If the metadata is already in the index, return it.
+                archive.metadata.clone()
+            } else {
+                // Run the PEP 517 build process to extract metadata from the source distribution.
+                let source = BuildableSource::Url(source);
+                let archive = self.database.build_wheel_metadata(&source, hashes).await?;
+
+                // Insert the metadata into the index.
+                self.index
+                    .distributions()
+                    .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
+
+                archive.metadata
+            }
+        };
+
+        Ok(RequiresDist::from(metadata))
     }
 }
