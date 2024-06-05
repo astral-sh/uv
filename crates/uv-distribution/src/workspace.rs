@@ -10,7 +10,7 @@ use tracing::{debug, trace};
 use pep508_rs::VerbatimUrl;
 use pypi_types::{Requirement, RequirementSource};
 use uv_fs::{absolutize_path, Simplified};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::PackageName;
 use uv_warnings::warn_user;
 
 use crate::pyproject::{PyProjectToml, Source, ToolUvWorkspace};
@@ -134,21 +134,9 @@ impl Workspace {
     /// Returns `None` if the package is not part of the workspace.
     pub fn with_current_project(self, package_name: PackageName) -> Option<ProjectWorkspace> {
         let member = self.packages.get(&package_name)?;
-        let extras = member
-            .pyproject_toml
-            .project
-            .as_ref()
-            .and_then(|project| project.optional_dependencies.as_ref())
-            .map(|optional_dependencies| {
-                let mut extras = optional_dependencies.keys().cloned().collect::<Vec<_>>();
-                extras.sort_unstable();
-                extras
-            })
-            .unwrap_or_default();
         Some(ProjectWorkspace {
             project_root: member.root().clone(),
             project_name: package_name,
-            extras,
             workspace: self,
         })
     }
@@ -393,8 +381,6 @@ pub struct ProjectWorkspace {
     project_root: PathBuf,
     /// The name of the package.
     project_name: PackageName,
-    /// The extras available in the project.
-    extras: Vec<ExtraName>,
     /// The workspace the project is part of.
     workspace: Workspace,
 }
@@ -496,11 +482,6 @@ impl ProjectWorkspace {
         &self.project_name
     }
 
-    /// Returns the extras available in the project.
-    pub fn project_extras(&self) -> &[ExtraName] {
-        &self.extras
-    }
-
     /// Returns the [`Workspace`] containing the current project.
     pub fn workspace(&self) -> &Workspace {
         &self.workspace
@@ -516,7 +497,15 @@ impl ProjectWorkspace {
     pub fn requirements(&self) -> Vec<Requirement> {
         vec![Requirement {
             name: self.project_name.clone(),
-            extras: self.extras.clone(),
+            extras: self.workspace().packages[&self.project_name]
+                .pyproject_toml
+                .project
+                .as_ref()
+                .and_then(|project| project.optional_dependencies.as_ref())
+                .map(|optional_dependencies| {
+                    optional_dependencies.keys().cloned().collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
             marker: None,
             source: RequirementSource::Path {
                 path: self.project_root.clone(),
@@ -537,18 +526,6 @@ impl ProjectWorkspace {
         let project_path = absolutize_path(project_path)
             .map_err(WorkspaceError::Normalize)?
             .to_path_buf();
-
-        // Extract the extras available in the project.
-        let extras = project
-            .project
-            .as_ref()
-            .and_then(|project| project.optional_dependencies.as_ref())
-            .map(|optional_dependencies| {
-                let mut extras = optional_dependencies.keys().cloned().collect::<Vec<_>>();
-                extras.sort_unstable();
-                extras
-            })
-            .unwrap_or_default();
 
         // Check if the current project is also an explicit workspace root.
         let mut workspace = project
@@ -579,7 +556,6 @@ impl ProjectWorkspace {
             return Ok(Self {
                 project_root: project_path.clone(),
                 project_name: project_name.clone(),
-                extras,
                 workspace: Workspace {
                     root: project_path.clone(),
                     packages: current_project_as_members,
@@ -607,7 +583,6 @@ impl ProjectWorkspace {
         Ok(Self {
             project_root: project_path,
             project_name,
-            extras,
             workspace,
         })
     }
@@ -838,7 +813,6 @@ mod tests {
         {
           "project_root": "[ROOT]/albatross-in-example/examples/bird-feeder",
           "project_name": "bird-feeder",
-          "extras": [],
           "workspace": {
             "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
             "packages": {
@@ -869,7 +843,6 @@ mod tests {
             {
               "project_root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
               "project_name": "bird-feeder",
-              "extras": [],
               "workspace": {
                 "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
                 "packages": {
@@ -899,7 +872,6 @@ mod tests {
             {
               "project_root": "[ROOT]/albatross-root-workspace",
               "project_name": "albatross",
-              "extras": [],
               "workspace": {
                 "root": "[ROOT]/albatross-root-workspace",
                 "packages": {
@@ -943,7 +915,6 @@ mod tests {
             {
               "project_root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
               "project_name": "albatross",
-              "extras": [],
               "workspace": {
                 "root": "[ROOT]/albatross-virtual-workspace",
                 "packages": {
@@ -981,7 +952,6 @@ mod tests {
             {
               "project_root": "[ROOT]/albatross-just-project",
               "project_name": "albatross",
-              "extras": [],
               "workspace": {
                 "root": "[ROOT]/albatross-just-project",
                 "packages": {

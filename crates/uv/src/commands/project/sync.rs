@@ -80,11 +80,6 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let extras = match extras {
-        ExtrasSpecification::None => vec![],
-        ExtrasSpecification::All => project.project_extras().to_vec(),
-        ExtrasSpecification::Some(extras) => extras,
-    };
     let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras);
 
     // Initialize the registry client.

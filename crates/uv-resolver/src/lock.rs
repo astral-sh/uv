@@ -24,6 +24,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
+use uv_configuration::ExtrasSpecification;
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -110,7 +111,7 @@ impl Lock {
         marker_env: &MarkerEnvironment,
         tags: &Tags,
         root_name: &PackageName,
-        extras: &[ExtraName],
+        extras: &ExtrasSpecification,
     ) -> Resolution {
         let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
 
@@ -119,8 +120,23 @@ impl Lock {
             .find_by_name(root_name)
             .expect("found too many distributions matching root")
             .expect("could not find root");
-        for extra in std::iter::once(None).chain(extras.iter().map(Some)) {
-            queue.push_back((root, extra));
+
+        // Add the base package.
+        queue.push_back((root, None));
+
+        // Add any extras.
+        match extras {
+            ExtrasSpecification::None => {}
+            ExtrasSpecification::All => {
+                for extra in root.optional_dependencies.keys() {
+                    queue.push_back((root, Some(extra)));
+                }
+            }
+            ExtrasSpecification::Some(extras) => {
+                for extra in extras {
+                    queue.push_back((root, Some(extra)));
+                }
+            }
         }
 
         let mut map = BTreeMap::default();
