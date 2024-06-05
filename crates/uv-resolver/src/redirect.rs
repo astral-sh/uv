@@ -44,6 +44,9 @@ fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
     // The redirect should be the "same" URL, but with a specific commit hash added after the `@`.
     // We take advantage of this to preserve as much of the verbatim representation as possible.
     if let Some(given) = url.given() {
+        let (given, fragment) = given
+            .split_once('#')
+            .map_or((given, None), |(prefix, suffix)| (prefix, Some(suffix)));
         if let Some(precise_suffix) = redirect
             .raw()
             .path()
@@ -56,13 +59,25 @@ fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
                     // And the portion after the `@` is stable between the parsed and given representations...
                     if given_suffix == parsed_suffix {
                         // Preserve everything that precedes the `@` in the precise representation.
-                        return redirect.with_given(format!("{given_prefix}@{precise_suffix}"));
+                        let given = format!("{given_prefix}@{precise_suffix}");
+                        let given = if let Some(fragment) = fragment {
+                            format!("{given}#{fragment}")
+                        } else {
+                            given
+                        };
+                        return redirect.with_given(given);
                     }
                 }
             } else {
                 // If there was no `@` in the original representation, we can just append the
                 // precise suffix to the given representation.
-                return redirect.with_given(format!("{given}@{precise_suffix}"));
+                let given = format!("{given}@{precise_suffix}");
+                let given = if let Some(fragment) = fragment {
+                    format!("{given}#{fragment}")
+                } else {
+                    given
+                };
+                return redirect.with_given(given);
             }
         }
     }
@@ -116,6 +131,18 @@ mod tests {
         let expected = VerbatimUrl::parse_url(
             "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
         )?;
+        assert_eq!(apply_redirect(&verbatim, redirect), expected);
+
+        // We should preserve subdirectory fragments.
+        let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git#subdirectory=src")?
+            .with_given("git+https://github.com/flask.git#subdirectory=src");
+        let redirect =
+            Url::parse("https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src")?;
+
+        let expected = VerbatimUrl::parse_url(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src",
+        )?.with_given("git+https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src");
+
         assert_eq!(apply_redirect(&verbatim, redirect), expected);
 
         Ok(())
