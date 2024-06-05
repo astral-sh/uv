@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.8
+
+### Bug fixes
+
+- Fix `uv venv` handling when `VIRTUAL_ENV` refers to an non-existant environment ([#4073](https://github.com/astral-sh/uv/pull/4073))
+
 ## 0.2.7
 
 ### CLI
@@ -121,7 +127,7 @@ requested version, skipping interpreters that are broken or do not satisfy the r
 
 Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
 the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
-also include a version, e.g., `--python pypy@3.10`. By default, uv will accept *any* interpreter implementation.
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
 
 In summary, the following Python interpreter requests are now allowed:
 
@@ -139,7 +145,7 @@ To align the user expecations, uv now respects the interpreter that starts it. F
 now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
 
 We now check if discovered intepreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
-installation directory that is *not* a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
+installation directory that is _not_ a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
 to request the interpreter.
 
 ### Enhancements
