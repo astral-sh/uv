@@ -38,7 +38,7 @@ impl DependencyProvider for UvDependencyProvider {
         &self,
         _package: &Self::P,
         _version: &Self::V,
-    ) -> Result<Dependencies<Vec<(Self::P, Self::VS)>, Self::M>, Self::Err> {
+    ) -> Result<Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
         unimplemented!()
     }
 }
