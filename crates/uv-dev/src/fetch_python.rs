@@ -13,9 +13,8 @@ use tokio::time::Instant;
 use tracing::{info, info_span, Instrument};
 
 use uv_fs::Simplified;
-use uv_interpreter::managed::{
-    DownloadResult, Error, InstalledToolchains, PythonDownload, PythonDownloadRequest,
-};
+use uv_interpreter::downloads::{DownloadResult, Error, PythonDownload, PythonDownloadRequest};
+use uv_interpreter::managed::InstalledToolchains;
 
 #[derive(Parser, Debug)]
 pub(crate) struct FetchPythonArgs {

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3.12
 """
-Generate static Rust code from Python version metadata.
+Generate static Rust code from Python version download metadata.
 
-Generates the `python_versions.rs` file from the `python_versions.rs.mustache` template.
+Generates the `downloads.inc` file from the `downloads.inc.mustache` template.
 
 Usage:
 
-    python template-version-metadata.py
+    python template-download-metadata.py
 """
 
 import sys
@@ -18,8 +18,8 @@ from pathlib import Path
 
 CRATE_ROOT = Path(__file__).parent
 WORKSPACE_ROOT = CRATE_ROOT.parent.parent
-VERSION_METADATA = CRATE_ROOT / "python-version-metadata.json"
-TEMPLATE = CRATE_ROOT / "src" / "managed" / "python_versions.inc.mustache"
+VERSION_METADATA = CRATE_ROOT / "download-metadata.json"
+TEMPLATE = CRATE_ROOT / "src" / "downloads.inc.mustache"
 TARGET = TEMPLATE.with_suffix("")
 
 

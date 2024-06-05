@@ -14,6 +14,7 @@ pub use crate::target::Target;
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
 mod discovery;
+pub mod downloads;
 mod environment;
 mod implementation;
 mod interpreter;
