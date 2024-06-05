@@ -76,6 +76,16 @@ pub(super) async fn do_sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
+    // Validate that the Python version is supported by the lockfile.
+    if let Some(requires_python) = lock.requires_python() {
+        if !requires_python.contains(venv.interpreter().python_version()) {
+            return Err(ProjectError::RequiresPython(
+                venv.interpreter().python_version().clone(),
+                requires_python.clone(),
+            ));
+        }
+    }
+
     let markers = venv.interpreter().markers();
     let tags = venv.interpreter().tags()?;
 

@@ -971,7 +971,9 @@ fn lock_git_sha() -> Result<()> {
 fn lock_requires_python() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Require >=3.7, which is incompatible with newer versions of `pygls`.
+    let lockfile = context.temp_dir.join("uv.lock");
+
+    // Require >=3.7, which is incompatible with newer versions of `pygls` (>=1.1.0).
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -1009,7 +1011,6 @@ fn lock_requires_python() -> Result<()> {
     "###);
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible.
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
         [project]
@@ -1030,7 +1031,7 @@ fn lock_requires_python() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = fs_err::read_to_string(&lockfile)?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1133,7 +1134,7 @@ fn lock_requires_python() -> Result<()> {
     });
 
     // Remove the lockfile.
-    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    fs_err::remove_file(&lockfile)?;
 
     // Bump the Python requirement, which should allow a newer version of `pygls`.
     pyproject_toml.write_str(
@@ -1156,7 +1157,7 @@ fn lock_requires_python() -> Result<()> {
     Resolved 9 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = fs_err::read_to_string(&lockfile)?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1283,6 +1284,180 @@ fn lock_requires_python() -> Result<()> {
         "###
         );
     });
+
+    // Remove the lockfile.
+    fs_err::remove_file(&lockfile)?;
+
+    // Bump the Python requirement even further.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pygls"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 9 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(&lockfile)?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[distribution]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 }]
+
+        [[distribution.dependencies]]
+        name = "importlib-metadata"
+        version = "7.1.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "cattrs"
+        version = "23.2.3"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/b3/0d/cd4a4071c7f38385dc5ba91286723b4d1090b87815db48216212c6c6c30e/cattrs-23.2.3-py3-none-any.whl", hash = "sha256:0341994d94971052e9ee70662542699a3162ea1e0c62f7ce1b4a57f563685108", size = 57474 }]
+
+        [[distribution.dependencies]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "exceptiongroup"
+        version = "1.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "exceptiongroup"
+        version = "1.2.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
+        sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
+
+        [[distribution]]
+        name = "importlib-metadata"
+        version = "7.1.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
+        sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409 }]
+
+        [[distribution.dependencies]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "zipp"
+        version = "3.18.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "lsprotocol"
+        version = "2023.0.1"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/9d/f6/6e80484ec078d0b50699ceb1833597b792a6c695f90c645fbaf54b947e6f/lsprotocol-2023.0.1.tar.gz", hash = "sha256:cc5c15130d2403c18b734304339e51242d3018a05c4f7d0f198ad6e0cd21861d", size = 69434 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/8d/37/2351e48cb3309673492d3a8c59d407b75fb6630e560eb27ecd4da03adc9a/lsprotocol-2023.0.1-py3-none-any.whl", hash = "sha256:c75223c9e4af2f24272b14c6375787438279369236cd568f596d4951052a60f2", size = 70826 }]
+
+        [[distribution.dependencies]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "cattrs"
+        version = "23.2.3"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+file://[TEMP_DIR]/"
+        sdist = { url = "file://[TEMP_DIR]/" }
+
+        [[distribution.dependencies]]
+        name = "pygls"
+        version = "1.3.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "pygls"
+        version = "1.3.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/e9/8d/31b50ac0879464049d744a1ddf00dc6474433eb55d40fa0c8e8510591ad2/pygls-1.3.0.tar.gz", hash = "sha256:1b44ace89c9382437a717534f490eadc6fda7c0c6c16ac1eaaf5568e345e4fb8", size = 45539 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/4e/1e/643070d8f5c851958662e7e5df16d9c3a068a598a7ee7bb2eb8d95b4e5d7/pygls-1.3.0-py3-none-any.whl", hash = "sha256:d4a01414b6ed4e34e7e8fd29b77d3e88c29615df7d0bbff49bf019e15ec04b8f", size = 56031 }]
+
+        [[distribution.dependencies]]
+        name = "cattrs"
+        version = "23.2.3"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "lsprotocol"
+        version = "2023.0.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8' or python_version < '3.11'"
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
+
+        [[distribution]]
+        name = "zipp"
+        version = "3.18.1"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/3e/ef/65da662da6f9991e87f058bc90b91a935ae655a16ae5514660d6460d1298/zipp-3.18.1.tar.gz", hash = "sha256:2884ed22e7d8961de1c9a05142eb69a247f120291bc0206a00a7642f09b5b715", size = 21220 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/c2/0a/ba9d0ee9536d3ef73a3448e931776e658b36f128d344e175bc32b092a8bf/zipp-3.18.1-py3-none-any.whl", hash = "sha256:206f5a15f2af3dbaee80769fb7dc6f249695e940acca08dfb2a4769fe61e538b", size = 8247 }]
+        "###
+        );
+    });
+
+    // Validate that attempting to install with an unsupported Python version raises an error.
+    let context = TestContext::new("3.8");
+
+    fs_err::copy(pyproject_toml, context.temp_dir.join("pyproject.toml"))?;
+    fs_err::copy(&lockfile, context.temp_dir.join("uv.lock"))?;
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    error: The current Python version (3.8.[X]) is not compatible with the locked Python requirement (>=3.12)
+    "###);
 
     Ok(())
 }
