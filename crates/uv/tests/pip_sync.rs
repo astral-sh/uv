@@ -3038,8 +3038,14 @@ fn set_read_permissions() -> Result<()> {
 fn pip_entrypoints() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // TODO(konstin): Remove git dep when the next pip version is released.
-    for pip_requirement in ["pip==24.0", "pip @ git+https://github.com/pypa/pip"] {
+    for pip_requirement in [
+        // Test compatibility with launchers in 24.0
+        // https://inspector.pypi.io/project/pip/24.0/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/pip-24.0-py3-none-any.whl/pip-24.0.dist-info/entry_points.txt
+        "pip==24.0",
+        // Test compatibility with launcher changes from https://github.com/pypa/pip/pull/12536 released in 24.1b1
+        // See https://github.com/astral-sh/uv/pull/1982
+        "pip==24.1b1",
+    ] {
         let requirements_txt = context.temp_dir.child("requirements.txt");
         requirements_txt.write_str(pip_requirement)?;
 
@@ -3056,8 +3062,6 @@ fn pip_entrypoints() -> Result<()> {
         } else {
             unimplemented!("Only Windows and Unix are supported")
         });
-        // Pip 24.0 contains a pip3.10 launcher.
-        // https://inspector.pypi.io/project/pip/24.0/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/pip-24.0-py3-none-any.whl/pip-24.0.dist-info/entry_points.txt
         ChildPath::new(bin_dir.join(format!("pip3.10{EXE_SUFFIX}")))
             .assert(predicates::path::missing());
         ChildPath::new(bin_dir.join(format!("pip3.12{EXE_SUFFIX}")))
