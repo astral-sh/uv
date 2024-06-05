@@ -42,6 +42,7 @@ fn lock_wheel_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "anyio"
@@ -167,6 +168,7 @@ fn lock_sdist_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"
@@ -225,6 +227,7 @@ fn lock_sdist_git() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"
@@ -297,6 +300,7 @@ fn lock_wheel_url() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "anyio"
@@ -421,6 +425,7 @@ fn lock_sdist_url() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "anyio"
@@ -548,6 +553,7 @@ fn lock_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "anyio"
@@ -700,6 +706,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "iniconfig"
@@ -752,6 +759,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "iniconfig"
@@ -793,6 +801,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "iniconfig"
@@ -853,6 +862,7 @@ fn lock_git_sha() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"
@@ -910,6 +920,7 @@ fn lock_git_sha() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"
@@ -952,6 +963,7 @@ fn lock_git_sha() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.12"
 
         [[distribution]]
         name = "project"

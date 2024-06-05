@@ -44,6 +44,7 @@ fn fork_basic() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.8"
         dependencies = [
           '''fork-basic-a>=2; sys_platform == "linux"''',
           '''fork-basic-a<2; sys_platform == "darwin"''',
@@ -72,6 +73,7 @@ fn fork_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.8"
 
         [[distribution]]
         name = "package-a"
@@ -151,6 +153,7 @@ fn fork_marker_accrue() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.8"
         dependencies = [
           '''fork-marker-accrue-a==1.0.0; implementation_name == "cpython"''',
           '''fork-marker-accrue-b==1.0.0; implementation_name == "pypy"''',
@@ -179,6 +182,7 @@ fn fork_marker_accrue() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.8"
 
         [[distribution]]
         name = "package-a"
@@ -277,6 +281,7 @@ fn fork_marker_selection() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.8"
         dependencies = [
           '''fork-marker-selection-a''',
           '''fork-marker-selection-b>=2; sys_platform == "linux"''',
@@ -306,6 +311,7 @@ fn fork_marker_selection() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.8"
 
         [[distribution]]
         name = "package-a"
@@ -426,6 +432,7 @@ fn fork_marker_track() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.8"
         dependencies = [
           '''fork-marker-track-a''',
           '''fork-marker-track-b>=2.8; sys_platform == "linux"''',
@@ -455,6 +462,7 @@ fn fork_marker_track() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.8"
 
         [[distribution]]
         name = "package-a"
@@ -575,6 +583,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.8"
         dependencies = [
           '''fork-non-fork-marker-transitive-a==1.0.0''',
           '''fork-non-fork-marker-transitive-b==1.0.0''',
@@ -603,6 +612,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        requires-python = ">=3.8"
 
         [[distribution]]
         name = "package-a"
@@ -698,6 +708,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.8"
         dependencies = [
           '''fork-non-local-fork-marker-direct-a==1.0.0; sys_platform == "linux"''',
           '''fork-non-local-fork-marker-direct-b==1.0.0; sys_platform == "darwin"''',
@@ -771,6 +782,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
+        requires-python = ">=3.8"
         dependencies = [
           '''fork-non-local-fork-marker-transitive-a==1.0.0''',
           '''fork-non-local-fork-marker-transitive-b==1.0.0''',

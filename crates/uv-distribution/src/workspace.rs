@@ -826,7 +826,7 @@ mod tests {
                 "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
                 "project": {
                   "name": "bird-feeder",
-                  "requires-python": null,
+                  "requires-python": ">=3.12",
                   "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
@@ -861,7 +861,7 @@ mod tests {
                     "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
                     "project": {
                       "name": "bird-feeder",
-                      "requires-python": null,
+                      "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -895,7 +895,7 @@ mod tests {
                     "root": "[ROOT]/albatross-root-workspace",
                     "project": {
                       "name": "albatross",
-                      "requires-python": null,
+                      "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -904,7 +904,7 @@ mod tests {
                     "root": "[ROOT]/albatross-root-workspace/packages/bird-feeder",
                     "project": {
                       "name": "bird-feeder",
-                      "requires-python": null,
+                      "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -913,7 +913,7 @@ mod tests {
                     "root": "[ROOT]/albatross-root-workspace/packages/seeds",
                     "project": {
                       "name": "seeds",
-                      "requires-python": null,
+                      "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -953,7 +953,7 @@ mod tests {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
                     "project": {
                       "name": "albatross",
-                      "requires-python": null,
+                      "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -962,7 +962,7 @@ mod tests {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/bird-feeder",
                     "project": {
                       "name": "bird-feeder",
-                      "requires-python": null,
+                      "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -971,7 +971,7 @@ mod tests {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/seeds",
                     "project": {
                       "name": "seeds",
-                      "requires-python": null,
+                      "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1005,7 +1005,7 @@ mod tests {
                     "root": "[ROOT]/albatross-just-project",
                     "project": {
                       "name": "albatross",
-                      "requires-python": null,
+                      "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
