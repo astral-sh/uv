@@ -7,7 +7,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use fs_err::PathExt;
+#[cfg(windows)]
 use uv_fs::Simplified;
 use uv_interpreter::PythonVersion;
 
@@ -28,7 +28,10 @@ impl VenvTestContext {
         let temp_dir = assert_fs::TempDir::new().unwrap();
         let python_path = python_path_with_versions(&temp_dir, python_versions)
             .expect("Failed to create Python test path");
-        let venv = temp_dir.child(".venv");
+
+        // Canonicalize the virtual environment path for consistent snapshots across platforms
+        let venv = ChildPath::new(temp_dir.canonicalize().unwrap().join(".venv"));
+
         let python_versions = python_versions
             .iter()
             .map(|version| {
@@ -55,22 +58,17 @@ impl VenvTestContext {
             .env("UV_TEST_PYTHON_PATH", self.python_path.clone())
             .env("UV_NO_WRAP", "1")
             .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
-            .current_dir(self.temp_dir.path());
+            .current_dir(self.temp_dir.as_os_str());
         command
     }
 
     fn filters(&self) -> Vec<(String, String)> {
-        // On windows, a directory can have multiple names (https://superuser.com/a/1666770), e.g.
-        // `C:\Users\KONSTA~1` and `C:\Users\Konstantin` are the same.
-        let venv_full = regex::escape(&self.venv.display().to_string());
-        let mut filters = vec![(venv_full, ".venv".to_string())];
-
-        // For mac, otherwise it shows some /var/folders/ path.
-        if let Ok(canonicalized) = self.venv.path().fs_err_canonicalize() {
-            let venv_full = regex::escape(&canonicalized.simplified_display().to_string());
-            filters.push((venv_full, ".venv".to_string()));
-        }
-
+        let mut filters = Vec::new();
+        filters.extend(
+            TestContext::path_patterns(&self.temp_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
+        );
         filters.push((
             r"interpreter at: .+".to_string(),
             "interpreter at: [PATH]".to_string(),
