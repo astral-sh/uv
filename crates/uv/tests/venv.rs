@@ -9,7 +9,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 #[cfg(windows)]
 use uv_fs::Simplified;
-use uv_interpreter::PythonVersion;
+use uv_interpreter::{virtualenv_python_executable, PythonVersion};
 
 use crate::common::{get_bin, python_path_with_versions, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
@@ -620,6 +620,100 @@ fn path_with_trailing_space_gives_proper_error() {
     ----- stderr -----
     error: failed to open file `C:\Path\to\Cache\dir \CACHEDIR.TAG`
       Caused by: The system cannot find the path specified. (os error 3)
+    "###
+    );
+}
+
+#[test]
+fn create_venv_from_venv() {
+    let context = VenvTestContext::new(&["3.11", "3.12"]);
+
+    // Create a virtual environment at `.venv`.
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+
+    // Activate the environment, then create a new virtual environment
+    // We don't use the virtual environment's Python interpreter
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.temp_dir.child("bar").as_os_str())
+        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PATH]
+    Creating virtualenv at: [TEMP_DIR]/bar
+    Activate with: source bar/bin/activate
+    "###
+    );
+
+    // Add the environment executable to the PATH, then create a new virtual environment
+    // We still don't use the virtual environment's Python interpreter
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.temp_dir.child("bar").as_os_str())
+        .env("PATH", virtualenv_python_executable(&context.venv).parent().unwrap().as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PATH]
+    Creating virtualenv at: [TEMP_DIR]/bar
+    Activate with: source bar/bin/activate
+    "###
+    );
+
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicates::path::is_dir());
+
+    // Create a new context without Python 3.12
+    // We should still ignore the Python interpreter in the active environment
+    let context2 = VenvTestContext::new(&["3.11"]);
+    uv_snapshot!(context2.filters(), context2.venv_command()
+        .arg(context2.temp_dir.child("bar").as_os_str())
+        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PATH]
+    Creating virtualenv at: [TEMP_DIR]/bar
+    Activate with: source bar/bin/activate
+    "###
+    );
+
+    // Request Python 3.12 specifically
+    // We should still ignore the Python interpreter in the active environment
+    let context2 = VenvTestContext::new(&["3.11"]);
+    uv_snapshot!(context2.filters(), context2.venv_command()
+        .arg(context2.temp_dir.child("bar").as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No interpreter found for Python 3.12 in provided path, active virtual environment, or search path
     "###
     );
 }

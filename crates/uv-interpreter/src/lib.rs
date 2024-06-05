@@ -11,7 +11,9 @@ pub use crate::interpreter::Interpreter;
 pub use crate::pointer_size::PointerSize;
 pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
-pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
+pub use crate::virtualenv::{
+    virtualenv_python_executable, Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment,
+};
 
 mod discovery;
 pub mod downloads;
