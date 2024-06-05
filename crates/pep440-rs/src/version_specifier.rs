@@ -392,6 +392,14 @@ impl VersionSpecifier {
         }
     }
 
+    /// `>=<version>`
+    pub fn greater_than_equal_version(version: Version) -> Self {
+        Self {
+            operator: Operator::GreaterThanEqual,
+            version,
+        }
+    }
+
     /// Get the operator, e.g. `>=` in `>= 2.0.0`
     pub fn operator(&self) -> &Operator {
         &self.operator
