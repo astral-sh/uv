@@ -120,16 +120,10 @@ async fn venv_impl(
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter to use in the environment
-    // If a specific interpreter is requested, it is required to come from the system.
-    // Otherwise, we'll allow the interpeter from a virtual environment to be used.
-    let system = if python_request.is_some() {
-        SystemPython::Required
-    } else {
-        SystemPython::Allowed
-    };
-    let interpreter = PythonEnvironment::find(python_request, system, preview, cache)
-        .into_diagnostic()?
-        .into_interpreter();
+    let interpreter =
+        PythonEnvironment::find(python_request, SystemPython::Required, preview, cache)
+            .into_diagnostic()?
+            .into_interpreter();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
