@@ -9,7 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
 };
-use pep440_rs::{Version, VersionSpecifier};
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::{ParsedUrlError, Yanked};
 use uv_git::GitResolver;
@@ -17,10 +17,13 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
+use crate::python_requirement::RequiresPython;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::Resolution;
-use crate::{InMemoryIndex, Manifest, MetadataResponse, ResolveError, VersionsResponse};
+use crate::{
+    InMemoryIndex, Manifest, MetadataResponse, PythonRequirement, ResolveError, VersionsResponse,
+};
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
@@ -28,6 +31,8 @@ use crate::{InMemoryIndex, Manifest, MetadataResponse, ResolveError, VersionsRes
 pub struct ResolutionGraph {
     /// The underlying graph.
     pub(crate) petgraph: Graph<AnnotatedDist, Version, Directed>,
+    /// The range of supported Python versions.
+    pub(crate) requires_python: Option<VersionSpecifiers>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
 }
@@ -39,9 +44,10 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         preferences: &Preferences,
         git: &GitResolver,
+        python: &PythonRequirement,
         resolution: Resolution,
     ) -> anyhow::Result<Self, ResolveError> {
-        // Collect all marker expressions from relevant pubgrub packages.
+        // Collect all marker expressions from relevant PubGrub packages.
         let mut markers: FxHashMap<(&PackageName, &Version, &Option<ExtraName>), MarkerTree> =
             FxHashMap::default();
         for (package, versions) in &resolution.packages {
@@ -267,8 +273,17 @@ impl ResolutionGraph {
             }
         }
 
+        // Extract the `Requires-Python` range, if provided.
+        // TODO(charlie): Infer the supported Python range from the `Requires-Python` of the
+        // included packages.
+        let requires_python = python
+            .target()
+            .and_then(RequiresPython::as_specifiers)
+            .cloned();
+
         Ok(Self {
             petgraph,
+            requires_python,
             diagnostics,
         })
     }
