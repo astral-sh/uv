@@ -730,7 +730,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // The version is incompatible due to its Python requirement.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
                     if let Some(target) = self.python_requirement.target() {
-                        if !target.subset_of(requires_python) {
+                        if !target.contains(requires_python) {
                             return Ok(Some(ResolverVersion::Unavailable(
                                 version.clone(),
                                 UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(

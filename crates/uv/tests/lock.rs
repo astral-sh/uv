@@ -1326,7 +1326,7 @@ fn lock_requires_python() -> Result<()> {
           hint: The `Requires-Python` requirement (>=3.7) defined in your `pyproject.toml` includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `Requires-Python` requirement (like >=3.7.9, <4).
     "###);
 
-    // Require >=3.7, and allow locking to a version of `pygls` that is compatible.
+    // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
     pyproject_toml.write_str(
         r#"
         [project]
@@ -1344,7 +1344,7 @@ fn lock_requires_python() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
+    Resolved 10 packages in [TIME]
     "###);
 
     let lock = fs_err::read_to_string(&lockfile)?;
@@ -1358,12 +1358,81 @@ fn lock_requires_python() -> Result<()> {
         requires-python = ">=3.7"
 
         [[distribution]]
-        name = "dataclasses"
-        version = "0.6"
+        name = "attrs"
+        version = "23.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.7'"
-        sdist = { url = "https://files.pythonhosted.org/packages/59/e4/2f921edfdf1493bdc07b914cbea43bc334996df4841a34523baf73d1fb4f/dataclasses-0.6.tar.gz", hash = "sha256:6988bd2b895eef432d562370bb707d540f32f7360ab13da45340101bc2307d84", size = 36819 }
-        wheels = [{ url = "https://files.pythonhosted.org/packages/26/2f/1095cdc2868052dd1e64520f7c0d5c8c550ad297e944e641dbf1ffbb9a5d/dataclasses-0.6-py3-none-any.whl", hash = "sha256:454a69d788c7fda44efd71e259be79577822f5e3f53f029a22d08004e951dc9f", size = 14757 }]
+        sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 }]
+
+        [[distribution.dependencies]]
+        name = "importlib-metadata"
+        version = "6.7.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "cattrs"
+        version = "23.1.2"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/68/d4/27f9fd840e74d51b6d6a024d39ff495b56ffde71d28eb82758b7b85d0617/cattrs-23.1.2.tar.gz", hash = "sha256:db1c821b8c537382b2c7c66678c3790091ca0275ac486c76f3c8f3920e83c657", size = 39998 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/3a/ba/05df14efaa0624fac6b1510e87f5ce446208d2f6ce50270a89b6268aebfe/cattrs-23.1.2-py3-none-any.whl", hash = "sha256:b2bb14311ac17bed0d58785e5a60f022e5431aca3932e3fc5cc8ed8639de50a4", size = 50845 }]
+
+        [[distribution.dependencies]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "exceptiongroup"
+        version = "1.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "typing-extensions"
+        version = "4.7.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "exceptiongroup"
+        version = "1.2.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
+        sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
+
+        [[distribution]]
+        name = "importlib-metadata"
+        version = "6.7.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
+        sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/ff/94/64287b38c7de4c90683630338cf28f129decbba0a44f0c6db35a873c73c4/importlib_metadata-6.7.0-py3-none-any.whl", hash = "sha256:cb52082e659e97afc5dac71e79de97d8681de3aa07ff18578330904a9d18e5b5", size = 22934 }]
+
+        [[distribution.dependencies]]
+        name = "typing-extensions"
+        version = "4.7.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "zipp"
+        version = "3.15.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "lsprotocol"
+        version = "2023.0.1"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/9d/f6/6e80484ec078d0b50699ceb1833597b792a6c695f90c645fbaf54b947e6f/lsprotocol-2023.0.1.tar.gz", hash = "sha256:cc5c15130d2403c18b734304339e51242d3018a05c4f7d0f198ad6e0cd21861d", size = 69434 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/8d/37/2351e48cb3309673492d3a8c59d407b75fb6630e560eb27ecd4da03adc9a/lsprotocol-2023.0.1-py3-none-any.whl", hash = "sha256:c75223c9e4af2f24272b14c6375787438279369236cd568f596d4951052a60f2", size = 70826 }]
+
+        [[distribution.dependencies]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "cattrs"
+        version = "23.1.2"
+        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "project"
@@ -1373,58 +1442,19 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "pygls"
-        version = "0.11.3"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution]]
-        name = "pydantic"
-        version = "1.8.2"
-        source = "registry+https://pypi.org/simple"
-        sdist = { url = "https://files.pythonhosted.org/packages/b9/d2/12a808613937a6b98cd50d6467352f01322dc0d8ca9fb5b94441625d6684/pydantic-1.8.2.tar.gz", hash = "sha256:26464e57ccaafe72b7ad156fdaa4e9b9ef051f69e175dbbb463283000c05ab7b", size = 263751 }
-        wheels = [
-        	{ url = "https://files.pythonhosted.org/packages/b8/87/7149712e2f37570498eb8a86aa2c6e95109c4dd217d03d7045fa89193eb0/pydantic-1.8.2-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:05ddfd37c1720c392f4e0d43c484217b7521558302e7069ce8d318438d297739", size = 2582318 },
-        	{ url = "https://files.pythonhosted.org/packages/e6/ca/b4d6cead9a6abaade586ce735646dfb5aef08ab03bfb07246af24867b5a5/pydantic-1.8.2-cp36-cp36m-manylinux1_i686.whl", hash = "sha256:a7c6002203fe2c5a1b5cbb141bb85060cbff88c2d78eccbc72d97eb7022c43e4", size = 9718327 },
-        	{ url = "https://files.pythonhosted.org/packages/d3/3a/b86f7a34d2edf22ca2682649bf381b88011597f136fc4a28c5d3d38743bf/pydantic-1.8.2-cp36-cp36m-manylinux2014_i686.whl", hash = "sha256:589eb6cd6361e8ac341db97602eb7f354551482368a37f4fd086c0733548308e", size = 9718331 },
-        	{ url = "https://files.pythonhosted.org/packages/2b/7c/7d0b3f2d7959b7193018896db236ded165f9bca1bb75f46f4c32fa6f4f9d/pydantic-1.8.2-cp36-cp36m-manylinux2014_x86_64.whl", hash = "sha256:10e5622224245941efc193ad1d159887872776df7a8fd592ed746aa25d071840", size = 10156056 },
-        	{ url = "https://files.pythonhosted.org/packages/38/26/36c97b707300787e8d51b607fc6e94c334f473fcc7519e92e2ec4234b006/pydantic-1.8.2-cp36-cp36m-win_amd64.whl", hash = "sha256:99a9fc39470010c45c161a1dc584997f1feb13f689ecf645f59bb4ba623e586b", size = 1887510 },
-        	{ url = "https://files.pythonhosted.org/packages/12/b7/825bf1578e5bd4e70813f40f8e10c11c7ddcf0e0a59faefa79c65b37a139/pydantic-1.8.2-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:a83db7205f60c6a86f2c44a61791d993dff4b73135df1973ecd9eed5ea0bda20", size = 2588937 },
-        	{ url = "https://files.pythonhosted.org/packages/fb/50/139033721aa3196f07e67138266fb414de0bb29b43957d39c13a743f11cc/pydantic-1.8.2-cp37-cp37m-manylinux1_i686.whl", hash = "sha256:41b542c0b3c42dc17da70554bc6f38cbc30d7066d2c2815a94499b5684582ecb", size = 9669437 },
-        	{ url = "https://files.pythonhosted.org/packages/45/22/87a4fe7ed5dd82d8058734dd2b6d15ccaa4a1703ca10618c87f936e1209b/pydantic-1.8.2-cp37-cp37m-manylinux2014_i686.whl", hash = "sha256:ea5cb40a3b23b3265f6325727ddfc45141b08ed665458be8c6285e7b85bd73a1", size = 9669440 },
-        	{ url = "https://files.pythonhosted.org/packages/9f/f2/2d5425efe57f6c4e06cbe5e587c1fd16929dcf0eb90bd4d3d1e1c97d1151/pydantic-1.8.2-cp37-cp37m-manylinux2014_x86_64.whl", hash = "sha256:18b5ea242dd3e62dbf89b2b0ec9ba6c7b5abaf6af85b95a97b00279f65845a23", size = 10100738 },
-        	{ url = "https://files.pythonhosted.org/packages/84/6a/3b9902f79b81b4f67b6e7497f3d9c9f1e6bd7a7f4e93ccd6bc0aa8f81282/pydantic-1.8.2-cp37-cp37m-win_amd64.whl", hash = "sha256:234a6c19f1c14e25e362cb05c68afb7f183eb931dd3cd4605eafff055ebbf287", size = 1887369 },
-        	{ url = "https://files.pythonhosted.org/packages/69/56/46fdbd9165ab0e29408afc2940d045397677a9d0b06d7bd15a781edd7da0/pydantic-1.8.2-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:021ea0e4133e8c824775a0cfe098677acf6fa5a3cbf9206a376eed3fc09302cd", size = 2640055 },
-        	{ url = "https://files.pythonhosted.org/packages/8f/27/11476d8d9fc95e511befc116849333421c199d01b235ede09a20870c64b2/pydantic-1.8.2-cp38-cp38-manylinux1_i686.whl", hash = "sha256:e710876437bc07bd414ff453ac8ec63d219e7690128d925c6e82889d674bb505", size = 12634763 },
-        	{ url = "https://files.pythonhosted.org/packages/2a/50/37bfbc8facf3f98f7439df08b8bcbeb495760d799a5f67ac84d855455eb7/pydantic-1.8.2-cp38-cp38-manylinux2014_i686.whl", hash = "sha256:ac8eed4ca3bd3aadc58a13c2aa93cd8a884bcf21cb019f8cfecaae3b6ce3746e", size = 12634765 },
-        	{ url = "https://files.pythonhosted.org/packages/34/f8/438aa7b258607ea875ca71b9f549748e75eca0f4f42a4447112c7074cca3/pydantic-1.8.2-cp38-cp38-manylinux2014_x86_64.whl", hash = "sha256:4a03cbbe743e9c7247ceae6f0d8898f7a64bb65800a45cbdc52d65e370570820", size = 13702235 },
-        	{ url = "https://files.pythonhosted.org/packages/51/68/6579cb896863715b6a5c63e4983b1c0ab7693685a7c2ded469ef37eb3539/pydantic-1.8.2-cp38-cp38-win_amd64.whl", hash = "sha256:8621559dcf5afacf0069ed194278f35c255dc1a1385c28b32dd6c110fd6531b3", size = 1984584 },
-        	{ url = "https://files.pythonhosted.org/packages/98/5e/30b8c83596af6f28f8e8fd9c136ff867ae1075a11baabbc87aaf274fb98f/pydantic-1.8.2-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:8b223557f9510cf0bfd8b01316bf6dd281cf41826607eada99662f5e4963f316", size = 2697981 },
-        	{ url = "https://files.pythonhosted.org/packages/0c/f1/003464c232cbd415f48074e349a27ee1a746641ce2594da9ad8f656b0238/pydantic-1.8.2-cp39-cp39-manylinux1_i686.whl", hash = "sha256:244ad78eeb388a43b0c927e74d3af78008e944074b7d0f4f696ddd5b2af43c62", size = 10839963 },
-        	{ url = "https://files.pythonhosted.org/packages/16/c9/ac98688c9083c54fd5cdbb3179f33c4ebcdc081bc94441ae41c8fb35782f/pydantic-1.8.2-cp39-cp39-manylinux2014_i686.whl", hash = "sha256:05ef5246a7ffd2ce12a619cbb29f3307b7c4509307b1b49f456657b43529dc6f", size = 10839966 },
-        	{ url = "https://files.pythonhosted.org/packages/d8/a3/b03397aca3de5aa7e1353c2bd2c9753c7a7ce5e001b3a5b2da98c6bdde13/pydantic-1.8.2-cp39-cp39-manylinux2014_x86_64.whl", hash = "sha256:54cd5121383f4a461ff7644c7ca20c0419d58052db70d8791eacbbe31528916b", size = 11343585 },
-        	{ url = "https://files.pythonhosted.org/packages/5a/8c/5eb271ba26497e9bff1a1aa6d3d35a1f1c7e73f28012ad7c0e93d376ffcb/pydantic-1.8.2-cp39-cp39-win_amd64.whl", hash = "sha256:4be75bebf676a5f0f87937c6ddb061fa39cbea067240d98e298508c1bda6f3f3", size = 1949575 },
-        	{ url = "https://files.pythonhosted.org/packages/ff/74/54e030641601112309f6d2af620774e9080f99c7a15742fc6a0b170c4076/pydantic-1.8.2-py3-none-any.whl", hash = "sha256:fec866a0b59f372b7e776f2d7308511784dace622e0992a0b59ea3ccee0ae833", size = 126035 }
-        ]
-
-        [[distribution.dependencies]]
-        name = "dataclasses"
-        version = "0.6"
-        source = "registry+https://pypi.org/simple"
-
-        [[distribution.dependencies]]
-        name = "typing-extensions"
-        version = "4.7.1"
+        version = "1.0.1"
         source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "pygls"
-        version = "0.11.3"
+        version = "1.0.1"
         source = "registry+https://pypi.org/simple"
-        sdist = { url = "https://files.pythonhosted.org/packages/f9/de/760ead0c7169391720fbb8fbc2c64ca32af8af559a10377f06739408c2ce/pygls-0.11.3.tar.gz", hash = "sha256:4d86fc854e6d6613cd42bf7511e9c6aac947fc8d62ff973a705570b036d969f2", size = 139426 }
-        wheels = [{ url = "https://files.pythonhosted.org/packages/fc/df/3ec0e1a9e3945545339cf95b8fe5445150d37addf26f49734fa481f5eedc/pygls-0.11.3-py3-none-any.whl", hash = "sha256:5c925b182f2b0aa38d0ce83a9829ca5aed8eb9c7079cffc5bddff2da1033b58f", size = 86726 }]
+        sdist = { url = "https://files.pythonhosted.org/packages/8e/27/58ff0f76b379fc11a1d03e8d4b4e96fd0abb463d27709a7fb4193bcdbbc4/pygls-1.0.1.tar.gz", hash = "sha256:f3ee98ddbb4690eb5c755bc32ba7e129607f14cbd313575f33d0cea443b78cb2", size = 674546 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/da/9b/4fd77a060068f2f3f46f97ed6ba8762c5a73f11ef0c196cfd34f3a9be878/pygls-1.0.1-py3-none-any.whl", hash = "sha256:adacc96da77598c70f46acfdfd1481d3da90cd54f639f7eee52eb6e4dbd57b55", size = 40367 }]
 
         [[distribution.dependencies]]
-        name = "pydantic"
-        version = "1.8.2"
+        name = "lsprotocol"
+        version = "2023.0.1"
         source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
@@ -1443,8 +1473,16 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8' or python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 }]
+
+        [[distribution]]
+        name = "zipp"
+        version = "3.15.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/00/27/f0ac6b846684cecce1ee93d32450c45ab607f65c2e0255f0092032d91f07/zipp-3.15.0.tar.gz", hash = "sha256:112929ad649da941c23de50f356a2b5570c954b65150642bccdd66bf194d224b", size = 18454 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/5b/fa/c9e82bbe1af6266adf08afb563905eb87cab83fde00a0a08963510621047/zipp-3.15.0-py3-none-any.whl", hash = "sha256:48904fc76a60e542af151aded95726c1a5c34ed43ab4134b597665c86d7ad556", size = 6758 }]
         "###
         );
     });
@@ -1458,7 +1496,7 @@ fn lock_requires_python() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.7.9,<4"
+        requires-python = ">=3.7.9"
         dependencies = ["pygls"]
         "#,
     )?;
@@ -1481,7 +1519,7 @@ fn lock_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        requires-python = ">=3.7.9, <4"
+        requires-python = ">=3.7.9"
 
         [[distribution]]
         name = "attrs"

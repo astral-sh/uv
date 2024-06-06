@@ -467,7 +467,7 @@ impl VersionMapLazy {
         // _installed_ Python version (to build successfully)
         if let Some(requires_python) = requires_python {
             if let Some(target) = self.python_requirement.target() {
-                if !target.subset_of(&requires_python) {
+                if !target.contains(&requires_python) {
                     return SourceDistCompatibility::Incompatible(
                         IncompatibleSource::RequiresPython(
                             requires_python,
@@ -534,7 +534,7 @@ impl VersionMapLazy {
         // Check for a Python version incompatibility
         if let Some(requires_python) = requires_python {
             if let Some(target) = self.python_requirement.target() {
-                if !target.subset_of(&requires_python) {
+                if !target.contains(&requires_python) {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
                         requires_python,
                         PythonRequirementKind::Target,
