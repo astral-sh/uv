@@ -106,8 +106,11 @@ pub(super) async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
+    let project = root_project_name
+        .as_ref()
+        .and_then(|name| workspace.packages().get(name));
     let requires_python = if let Some(requires_python) =
-        project.current_project().project().requires_python.as_ref()
+        project.and_then(|root_project| root_project.project().requires_python.as_ref())
     {
         Cow::Borrowed(requires_python)
     } else {
@@ -116,7 +119,10 @@ pub(super) async fn do_lock(
         );
         warn_user!(
             "No `requires-python` field found in `{}`. Defaulting to `{requires_python}`.",
-            project.current_project().project().name,
+            root_project_name
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or("workspace".to_string()),
         );
         Cow::Owned(requires_python)
     };
