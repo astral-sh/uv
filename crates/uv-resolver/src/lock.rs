@@ -176,7 +176,7 @@ impl Lock {
                 };
 
             for dep in deps {
-                let dep_dist = self.find_by_id(&dep.id);
+                let dep_dist = self.find_by_id(&dep.distribution_id);
                 if dep_dist
                     .marker
                     .as_ref()
@@ -343,7 +343,7 @@ impl TryFrom<LockWire> for Lock {
                 if dep1 == dep2 {
                     return Err(LockError::duplicate_dependency(
                         dist.id.clone(),
-                        dep1.id.clone(),
+                        dep1.clone(),
                     ));
                 }
             }
@@ -356,7 +356,7 @@ impl TryFrom<LockWire> for Lock {
                     if dep1 == dep2 {
                         return Err(LockError::duplicate_dependency(
                             dist.id.clone(),
-                            dep1.id.clone(),
+                            dep1.clone(),
                         ));
                     }
                 }
@@ -370,7 +370,7 @@ impl TryFrom<LockWire> for Lock {
                     if dep1 == dep2 {
                         return Err(LockError::duplicate_dependency(
                             dist.id.clone(),
-                            dep1.id.clone(),
+                            dep1.clone(),
                         ));
                     }
                 }
@@ -393,13 +393,13 @@ impl TryFrom<LockWire> for Lock {
         // distribution.
         for dist in &wire.distributions {
             for dep in &dist.dependencies {
-                if let Some(index) = by_id.get(&dep.id) {
+                if let Some(index) = by_id.get(&dep.distribution_id) {
                     let dep_dist = &wire.distributions[*index];
                     if let Some(extra) = &dep.extra {
                         if !dep_dist.optional_dependencies.contains_key(extra) {
                             return Err(LockError::unrecognized_extra(
                                 dist.id.clone(),
-                                dep.id.clone(),
+                                dep.clone(),
                                 extra.clone(),
                             ));
                         }
@@ -407,7 +407,7 @@ impl TryFrom<LockWire> for Lock {
                 } else {
                     return Err(LockError::unrecognized_dependency(
                         dist.id.clone(),
-                        dep.id.clone(),
+                        dep.clone(),
                     ));
                 }
             }
@@ -415,13 +415,13 @@ impl TryFrom<LockWire> for Lock {
             // Perform the same validation for optional dependencies.
             for (extra, dependencies) in &dist.optional_dependencies {
                 for dep in dependencies {
-                    if let Some(index) = by_id.get(&dep.id) {
+                    if let Some(index) = by_id.get(&dep.distribution_id) {
                         let dep_dist = &wire.distributions[*index];
                         if let Some(extra) = &dep.extra {
                             if !dep_dist.optional_dependencies.contains_key(extra) {
                                 return Err(LockError::unrecognized_extra(
                                     dist.id.clone(),
-                                    dep.id.clone(),
+                                    dep.clone(),
                                     extra.clone(),
                                 ));
                             }
@@ -429,7 +429,7 @@ impl TryFrom<LockWire> for Lock {
                     } else {
                         return Err(LockError::unrecognized_dependency(
                             dist.id.clone(),
-                            dep.id.clone(),
+                            dep.clone(),
                         ));
                     }
                 }
@@ -438,13 +438,13 @@ impl TryFrom<LockWire> for Lock {
             // Perform the same validation for dev dependencies.
             for (group, dependencies) in &dist.dev_dependencies {
                 for dep in dependencies {
-                    if let Some(index) = by_id.get(&dep.id) {
+                    if let Some(index) = by_id.get(&dep.distribution_id) {
                         let dep_dist = &wire.distributions[*index];
                         if let Some(extra) = &dep.extra {
                             if !dep_dist.optional_dependencies.contains_key(extra) {
                                 return Err(LockError::unrecognized_extra(
                                     dist.id.clone(),
-                                    dep.id.clone(),
+                                    dep.clone(),
                                     extra.clone(),
                                 ));
                             }
@@ -452,7 +452,7 @@ impl TryFrom<LockWire> for Lock {
                     } else {
                         return Err(LockError::unrecognized_dependency(
                             dist.id.clone(),
-                            dep.id.clone(),
+                            dep.clone(),
                         ));
                     }
                 }
@@ -759,7 +759,7 @@ impl DistributionId {
 
 impl std::fmt::Display for DistributionId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{} {} {}", self.name, self.version, self.source)
+        write!(f, "{}=={} @ {}", self.name, self.version, self.source)
     }
 }
 
@@ -1466,29 +1466,55 @@ impl TryFrom<WheelWire> for Wheel {
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct Dependency {
     #[serde(flatten)]
-    id: DistributionId,
+    distribution_id: DistributionId,
     #[serde(skip_serializing_if = "Option::is_none")]
     extra: Option<ExtraName>,
 }
 
 impl Dependency {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Dependency {
-        let id = DistributionId::from_annotated_dist(annotated_dist);
+        let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.clone();
-        Dependency { id, extra }
+        Dependency {
+            distribution_id,
+            extra,
+        }
     }
 
     /// Returns the TOML representation of this dependency.
     fn to_toml(&self) -> Table {
         let mut table = Table::new();
-        table.insert("name", value(self.id.name.to_string()));
-        table.insert("version", value(self.id.version.to_string()));
-        table.insert("source", value(self.id.source.to_string()));
+        table.insert("name", value(self.distribution_id.name.to_string()));
+        table.insert("version", value(self.distribution_id.version.to_string()));
+        table.insert("source", value(self.distribution_id.source.to_string()));
         if let Some(ref extra) = self.extra {
             table.insert("extra", value(extra.to_string()));
         }
 
         table
+    }
+}
+
+impl std::fmt::Display for Dependency {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(ref extra) = self.extra {
+            write!(
+                f,
+                "{}[{}]=={} @ {}",
+                self.distribution_id.name,
+                extra,
+                self.distribution_id.version,
+                self.distribution_id.source
+            )
+        } else {
+            write!(
+                f,
+                "{}=={} @ {}",
+                self.distribution_id.name,
+                self.distribution_id.version,
+                self.distribution_id.source
+            )
+        }
     }
 }
 
@@ -1557,8 +1583,8 @@ impl LockError {
         }
     }
 
-    fn duplicate_dependency(id: DistributionId, dependency_id: DistributionId) -> LockError {
-        let kind = LockErrorKind::DuplicateDependency { id, dependency_id };
+    fn duplicate_dependency(id: DistributionId, dependency: Dependency) -> LockError {
+        let kind = LockErrorKind::DuplicateDependency { id, dependency };
         LockError {
             kind: Box::new(kind),
         }
@@ -1567,12 +1593,12 @@ impl LockError {
     fn duplicate_optional_dependency(
         id: DistributionId,
         extra: ExtraName,
-        dependency_id: DistributionId,
+        dependency: Dependency,
     ) -> LockError {
         let kind = LockErrorKind::DuplicateOptionalDependency {
             id,
             extra,
-            dependency_id,
+            dependency,
         };
         LockError {
             kind: Box::new(kind),
@@ -1582,12 +1608,12 @@ impl LockError {
     fn duplicate_dev_dependency(
         id: DistributionId,
         group: GroupName,
-        dependency_id: DistributionId,
+        dependency: Dependency,
     ) -> LockError {
         let kind = LockErrorKind::DuplicateDevDependency {
             id,
             group,
-            dependency_id,
+            dependency,
         };
         LockError {
             kind: Box::new(kind),
@@ -1601,8 +1627,8 @@ impl LockError {
         }
     }
 
-    fn unrecognized_dependency(id: DistributionId, dependency_id: DistributionId) -> LockError {
-        let err = UnrecognizedDependencyError { id, dependency_id };
+    fn unrecognized_dependency(id: DistributionId, dependency: Dependency) -> LockError {
+        let err = UnrecognizedDependencyError { id, dependency };
         let kind = LockErrorKind::UnrecognizedDependency { err };
         LockError {
             kind: Box::new(kind),
@@ -1611,12 +1637,12 @@ impl LockError {
 
     fn unrecognized_extra(
         id: DistributionId,
-        dependency_id: DistributionId,
+        dependency: Dependency,
         extra: ExtraName,
     ) -> LockError {
         let kind = LockErrorKind::UnrecognizedExtra {
             id,
-            dependency_id,
+            dependency,
             extra,
         };
         LockError {
@@ -1675,31 +1701,31 @@ impl std::fmt::Display for LockError {
             }
             LockErrorKind::DuplicateDependency {
                 ref id,
-                ref dependency_id,
+                ref dependency,
             } => {
                 write!(
                     f,
-                    "for distribution `{id}`, found duplicate dependency `{dependency_id}`"
+                    "for distribution `{id}`, found duplicate dependency `{dependency}`"
                 )
             }
             LockErrorKind::DuplicateOptionalDependency {
                 ref id,
                 ref extra,
-                ref dependency_id,
+                ref dependency,
             } => {
                 write!(
                     f,
-                    "for distribution `{id}[{extra}]`, found duplicate dependency `{dependency_id}`"
+                    "for distribution `{id}[{extra}]`, found duplicate dependency `{dependency}`"
                 )
             }
             LockErrorKind::DuplicateDevDependency {
                 ref id,
                 ref group,
-                ref dependency_id,
+                ref dependency,
             } => {
                 write!(
                     f,
-                    "for distribution `{id}:{group}`, found duplicate dependency `{dependency_id}`"
+                    "for distribution `{id}:{group}`, found duplicate dependency `{dependency}`"
                 )
             }
             LockErrorKind::InvalidFileUrl { .. } => {
@@ -1710,12 +1736,12 @@ impl std::fmt::Display for LockError {
             }
             LockErrorKind::UnrecognizedExtra {
                 ref id,
-                ref dependency_id,
+                ref dependency,
                 ref extra,
             } => {
                 write!(
                     f,
-                    "for distribution `{id}`, found dependency `{dependency_id}` with unrecognized extra `{extra}`"
+                    "for distribution `{id}`, found dependency `{dependency}` with unrecognized extra `{extra}`"
                 )
             }
             LockErrorKind::Hash {
@@ -1773,7 +1799,7 @@ enum LockErrorKind {
         /// found.
         id: DistributionId,
         /// The ID of the conflicting dependency.
-        dependency_id: DistributionId,
+        dependency: Dependency,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same distribution that have identical identifiers, as part of the
@@ -1785,7 +1811,7 @@ enum LockErrorKind {
         /// The name of the optional dependency group.
         extra: ExtraName,
         /// The ID of the conflicting dependency.
-        dependency_id: DistributionId,
+        dependency: Dependency,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same distribution that have identical identifiers, as part of the
@@ -1797,7 +1823,7 @@ enum LockErrorKind {
         /// The name of the dev dependency group.
         group: GroupName,
         /// The ID of the conflicting dependency.
-        dependency_id: DistributionId,
+        dependency: Dependency,
     },
     /// An error that occurs when the URL to a file for a wheel or
     /// source dist could not be converted to a structured `url::Url`.
@@ -1820,7 +1846,7 @@ enum LockErrorKind {
         id: DistributionId,
         /// The ID of the dependency that doesn't have a corresponding distribution
         /// entry.
-        dependency_id: DistributionId,
+        dependency: Dependency,
         /// The extra name that requested.
         extra: ExtraName,
     },
@@ -1863,7 +1889,7 @@ struct UnrecognizedDependencyError {
     id: DistributionId,
     /// The ID of the dependency that doesn't have a corresponding distribution
     /// entry.
-    dependency_id: DistributionId,
+    dependency: Dependency,
 }
 
 impl std::error::Error for UnrecognizedDependencyError {}
@@ -1872,11 +1898,11 @@ impl std::fmt::Display for UnrecognizedDependencyError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let UnrecognizedDependencyError {
             ref id,
-            ref dependency_id,
+            ref dependency,
         } = *self;
         write!(
             f,
-            "found dependency `{dependency_id}` for `{id}` with no locked distribution"
+            "found dependency `{dependency}` for `{id}` with no locked distribution"
         )
     }
 }

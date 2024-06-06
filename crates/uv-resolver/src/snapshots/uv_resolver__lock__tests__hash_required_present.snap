@@ -6,7 +6,7 @@ Err(
     Error {
         inner: Error {
             inner: TomlError {
-                message: "since the distribution `anyio 4.3.0 registry+https://pypi.org/simple` comes from a registry dependency, a hash was expected but one was not found for wheel",
+                message: "since the distribution `anyio==4.3.0 @ registry+https://pypi.org/simple` comes from a registry dependency, a hash was expected but one was not found for wheel",
                 raw: None,
                 keys: [],
                 span: None,
