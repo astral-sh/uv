@@ -62,6 +62,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Operation(#[from] pip::operations::Error),
+
+    #[error(transparent)]
+    PubGrubSpecifier(#[from] uv_resolver::PubGrubSpecifierError),
 }
 
 /// Initialize a virtual environment for the current project.

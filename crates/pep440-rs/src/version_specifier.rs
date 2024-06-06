@@ -1,5 +1,6 @@
 #[cfg(feature = "pyo3")]
 use std::hash::{Hash, Hasher};
+use std::ops::Bound;
 use std::{cmp::Ordering, str::FromStr};
 
 #[cfg(feature = "pyo3")]
@@ -413,6 +414,50 @@ impl VersionSpecifier {
     /// Whether the version marker includes a prerelease.
     pub fn any_prerelease(&self) -> bool {
         self.version.any_prerelease()
+    }
+
+    /// Returns the version specifiers whose union represents the given range.
+    pub fn from_bounds(
+        bounds: (&Bound<Version>, &Bound<Version>),
+    ) -> impl Iterator<Item = VersionSpecifier> {
+        let (b1, b2) = match bounds {
+            (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
+                (Some(VersionSpecifier::equals_version(v1.clone())), None)
+            }
+            (lower, upper) => (
+                VersionSpecifier::from_lower_bound(lower),
+                VersionSpecifier::from_upper_bound(upper),
+            ),
+        };
+
+        b1.into_iter().chain(b2)
+    }
+
+    /// Returns a version specifier representing the given lower bound.
+    fn from_lower_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
+        match bound {
+            Bound::Included(version) => Some(
+                VersionSpecifier::from_version(Operator::GreaterThanEqual, version.clone())
+                    .unwrap(),
+            ),
+            Bound::Excluded(version) => Some(
+                VersionSpecifier::from_version(Operator::GreaterThan, version.clone()).unwrap(),
+            ),
+            Bound::Unbounded => None,
+        }
+    }
+
+    /// Returns a version specifier representing the given upper bound.
+    fn from_upper_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
+        match bound {
+            Bound::Included(version) => Some(
+                VersionSpecifier::from_version(Operator::LessThanEqual, version.clone()).unwrap(),
+            ),
+            Bound::Excluded(version) => {
+                Some(VersionSpecifier::from_version(Operator::LessThan, version.clone()).unwrap())
+            }
+            Bound::Unbounded => None,
+        }
     }
 
     /// Whether the given version satisfies the version range
