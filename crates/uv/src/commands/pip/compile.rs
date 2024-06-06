@@ -31,11 +31,10 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
+use uv_interpreter::PythonVersion;
 use uv_interpreter::{
-    find_best_interpreter, find_interpreter, InterpreterRequest, PythonEnvironment, SystemPython,
-    VersionRequest,
+    find_best_interpreter, InterpreterRequest, PythonEnvironment, SystemPython, VersionRequest,
 };
-use uv_interpreter::{PythonVersion, SourceSelector};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::read_requirements_txt, LookaheadResolver, NamedRequirementsResolver,
@@ -163,9 +162,8 @@ pub(crate) async fn pip_compile(
         SystemPython::Allowed
     };
     let interpreter = if let Some(python) = python.as_ref() {
-        let request = InterpreterRequest::parse(python);
-        let sources = SourceSelector::from_settings(system, preview);
-        find_interpreter(&request, system, &sources, &cache)??
+        PythonEnvironment::from_requested_python(python, system, preview, &cache)?
+            .into_interpreter()
     } else {
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
@@ -173,9 +171,8 @@ pub(crate) async fn pip_compile(
         } else {
             InterpreterRequest::default()
         };
-        find_best_interpreter(&request, system, preview, &cache)??
-    }
-    .into_interpreter();
+        find_best_interpreter(&request, system, preview, &cache)??.into_interpreter()
+    };
 
     debug!(
         "Using Python {} interpreter at {} for builds",
