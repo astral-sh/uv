@@ -1891,7 +1891,7 @@ fn lock_dev() -> Result<()> {
     });
 
     // Install from the lockfile, excluding development dependencies.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1904,8 +1904,8 @@ fn lock_dev() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    // Install from the lockfile, including development dependencies.
-    uv_snapshot!(context.filters(), context.sync().arg("--dev"), @r###"
+    // Install from the lockfile, including development dependencies (the default).
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
