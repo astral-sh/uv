@@ -4885,7 +4885,6 @@ dependencies = [
 name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
- "anstream",
  "anyhow",
  "cache-key",
  "chrono",
@@ -4901,7 +4900,6 @@ dependencies = [
  "install-wheel-rs",
  "itertools 0.13.0",
  "once-map",
- "once_cell",
  "owo-colors",
  "pep440_rs",
  "pep508_rs",
@@ -4922,7 +4920,6 @@ dependencies = [
  "toml_edit",
  "tracing",
  "url",
- "uv-cache",
  "uv-client",
  "uv-configuration",
  "uv-distribution",

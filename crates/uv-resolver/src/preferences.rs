@@ -27,16 +27,6 @@ pub struct Preference {
 }
 
 impl Preference {
-    /// Create a simple [`Preference`] with no hashes.
-    pub fn simple(name: PackageName, version: Version) -> Self {
-        Self {
-            name,
-            version,
-            marker: None,
-            hashes: Vec::new(),
-        }
-    }
-
     /// Create a [`Preference`] from a [`RequirementEntry`].
     pub fn from_entry(entry: RequirementEntry) -> Result<Option<Self>, PreferenceError> {
         let RequirementsTxtRequirement::Named(requirement) = entry.requirement else {

@@ -23,7 +23,6 @@ pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 requirements-txt = { workspace = true }
-uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
@@ -33,7 +32,6 @@ uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 
-anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
@@ -43,7 +41,6 @@ either = { workspace = true }
 futures = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
-once_cell = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
@@ -60,13 +57,5 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-uv-interpreter = { workspace = true }
-
-once_cell = { version = "1.19.0" }
 insta = { version = "1.36.1" }
 toml = { workspace = true }
-
-[features]
-default = ["pypi"]
-# Introduces a dependency on PyPI.
-pypi = []
