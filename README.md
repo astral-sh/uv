@@ -176,25 +176,31 @@ search for a Python interpreter matching that version in the following order:
 
 ### Installing into arbitrary Python environments
 
-Since uv has no dependency on Python, it can even install into virtual environments other than
+Since uv has no dependency on Python, it can install into virtual environments other than
 its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to install into
-`/path/to/venv`, no matter where uv is installed.
+`/path/to/venv`, regardless of where uv is installed.
 
-uv can also install into arbitrary, even non-virtual environments by providing a `--python` argument
-to `uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python` will
-install into the environment linked to the `/path/to/python` interpreter.
+uv can also install into arbitrary, even non-virtual environments, with the `--python` argument
+provided to `uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python`
+will install into the environment linked to the `/path/to/python` interpreter, and
+`uv pip install --python=$(which python)` will install into the environment linked to the
+current interpreter on the `PATH`. Another way to install into the environment linked to the
+current interpeter is to invoke `uv` as a module (e.g., `python -m uv pip install`),
+but this is slower than using uv directly, so we don't recommend it.
 
-For convenience, `uv pip install --system` will install into the system Python environment, as an
-approximate shorthand for, e.g., `uv pip install --python=$(which python3)`. Though we generally
-recommend the use of virtual environments for dependency management, `--system` is intended to
-enable the use of uv in continuous integration and containerized environments.
+For convenience, `uv pip install --system` will install into the system Python environment.
+Although we generally recommend using virtual environments for dependency management,
+`--system` is appropriate in continuous integration and containerized environments.
 
-The `--system` flag is also used to opt-in to mutation of system environments. For example, when
-the `--python` argument is used to implicitly request a system interpreter, e.g., if `--python 3.12`
-finds `/usr/lib/python3.12`, then the `--system` flag is required to allow modification of this non-virtual
-Python environment. When the `--system` flag is not provided, uv will ignore any interpreters that are not in
-[PEP 405 compliant](https://peps.python.org/pep-0405/#specification) virtual environments. Similarly, if
-the `--system` flag is provided, uv will ignore any interpreters that are in virtual environments.
+The `--system` flag is also used to opt in to mutating system environments. For example, when
+the `--python` argument is used to implicitly request a system interpreter (e.g., if `--python 3.12`
+finds `/usr/lib/python3.12`), then the `--system` flag is required to allow modification of this
+non-virtual Python environment.
+
+When the `--system` flag is not provided, uv will ignore any interpreters that are not in
+[PEP 405 compliant](https://peps.python.org/pep-0405/#specification) virtual environments.
+Conversely, when the `--system` flag is provided, uv will ignore any interpreters that *are*
+in virtual environments.
 
 Installing into system Python across platforms and distributions is notoriously difficult. uv
 supports the common cases, but will not work in all cases. For example, installing into system
