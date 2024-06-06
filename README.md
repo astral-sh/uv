@@ -62,6 +62,8 @@ pipx install uv
 brew install uv
 ```
 
+See the [advanced installation](#advanced-installation) documentation for more details.
+
 To create a virtual environment:
 
 ```shell
@@ -139,20 +141,6 @@ involved in building such a tool (like package installation) while shipping some
 useful with a minimal barrier to adoption.
 
 ## Advanced Usage
-
-### Installing specific versions of uv
-
-uv's standalone installer can also be pinned to a specific version, for example, to install version `0.2.6`:
-
-```shell
-# On macOS and Linux.
-curl -LsSf https://astral.sh/uv/0.2.6/install.sh | sh
-
-# On Windows.
-powershell -c "irm https://astral.sh/uv/0.2.6/install.ps1 | iex"
-```
-
-When using other package managers for installation of uv, such as `pip`, consult their documentation for requesting specific versions.
 
 ### Python discovery
 
@@ -494,6 +482,34 @@ system's certificate store. To instruct uv to use the system's trust store, run 
 If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
 variable to the path of the certificate bundle, to instruct uv to use that file instead of the
 system's trust store.
+
+## Advanced installation
+
+### Installing a specific version
+
+uv's standalone installer can also be pinned to a specific version. For example, to install version `0.2.6`:
+
+```shell
+# On macOS and Linux.
+curl -LsSf https://astral.sh/uv/0.2.6/install.sh | sh
+
+# On Windows.
+powershell -c "irm https://astral.sh/uv/0.2.6/install.ps1 | iex"
+```
+
+When installed with `pip`, you can pin the version:
+
+```shell
+pip install 'uv==0.2.6'
+```
+
+Or, specifiy a constraint range to allow upgrades without breaking changes:
+
+```shell
+pip install 'uv>=0.2,<0.3'
+```
+
+Note the standalone installer does not support version ranges.
 
 ## Platform support
 
