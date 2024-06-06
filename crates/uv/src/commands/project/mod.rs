@@ -15,7 +15,7 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::ProjectWorkspace;
+use uv_distribution::Workspace;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -66,12 +66,12 @@ pub(crate) enum ProjectError {
 
 /// Initialize a virtual environment for the current project.
 pub(crate) fn init_environment(
-    project: &ProjectWorkspace,
+    workspace: &Workspace,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
-    let venv = project.workspace().root().join(".venv");
+    let venv = workspace.root().join(".venv");
 
     // Discover or create the virtual environment.
     // TODO(charlie): If the environment isn't compatible with `--python`, recreate it.

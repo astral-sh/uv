@@ -63,7 +63,7 @@ pub struct ToolUv {
     pub dev_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvWorkspace {
     pub members: Option<Vec<SerdePattern>>,

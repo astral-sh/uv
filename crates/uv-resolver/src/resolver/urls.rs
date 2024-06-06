@@ -1,4 +1,5 @@
 use rustc_hash::FxHashMap;
+use same_file::is_same_file;
 use tracing::debug;
 use url::Url;
 
@@ -66,6 +67,18 @@ impl Urls {
                         verbatim: url.clone(),
                     };
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
+                        if let VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::Path(previous_path),
+                            ..
+                        } = &previous
+                        {
+                            // On Windows, we can have two versions of the same path, e.g.
+                            // `C:\Users\KONSTA~1` and `C:\Users\Konstantin`.
+                            if is_same_file(path, &previous_path.path).unwrap_or(false) {
+                                continue;
+                            }
+                        }
+
                         if !is_equal(&previous.verbatim, &url.verbatim) {
                             return Err(ResolveError::ConflictingUrlsDirect(
                                 requirement.name.clone(),

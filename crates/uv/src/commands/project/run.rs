@@ -61,11 +61,18 @@ pub(crate) async fn run(
         } else {
             ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
         };
-        let venv = project::init_environment(&project, preview, cache, printer)?;
+        let venv = project::init_environment(project.workspace(), preview, cache, printer)?;
 
         // Lock and sync the environment.
+        let root_project_name = project
+            .current_project()
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .map(|project| project.name.clone());
         let lock = project::lock::do_lock(
-            &project,
+            root_project_name,
+            project.workspace(),
             &venv,
             &index_locations,
             upgrade,

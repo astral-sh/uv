@@ -222,17 +222,12 @@ fn path_source(
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let url = VerbatimUrl::parse_path(path.as_ref(), project_dir)?
-        .with_given(path.as_ref().to_string_lossy().to_string());
+        .with_given(path.as_ref().to_string_lossy());
     let path_buf = path.as_ref().to_path_buf();
     let path_buf = path_buf
         .absolutize_from(project_dir)
         .map_err(|err| LoweringError::Absolutize(path.as_ref().to_path_buf(), err))?
         .to_path_buf();
-    //if !editable {
-    //    // TODO(konsti): Support this. Currently we support `{ workspace = true }`, but we don't
-    //    //  support `{ workspace = true, editable = false }` since we only collect editables.
-    //    return Err(LoweringError::NonEditableWorkspaceDependency);
-    //}
     Ok(RequirementSource::Path {
         path: path_buf,
         url,

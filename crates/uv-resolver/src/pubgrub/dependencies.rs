@@ -4,12 +4,13 @@ use either::Either;
 use itertools::Itertools;
 use pubgrub::range::Range;
 use rustc_hash::FxHashSet;
+use same_file::is_same_file;
 use tracing::warn;
 
 use distribution_types::Verbatim;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use pypi_types::{Requirement, RequirementSource};
+use pypi_types::{ParsedUrl, Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_configuration::{Constraints, Overrides};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -308,7 +309,7 @@ impl PubGrubRequirement {
                     version: Range::full(),
                 })
             }
-            RequirementSource::Path { url, .. } => {
+            RequirementSource::Path { url, path, .. } => {
                 let Some(expected) = urls.get(&requirement.name) else {
                     return Err(ResolveError::DisallowedUrl(
                         requirement.name.clone(),
@@ -316,7 +317,22 @@ impl PubGrubRequirement {
                     ));
                 };
 
-                if !Urls::is_allowed(&expected.verbatim, url, git) {
+                let mut is_allowed = Urls::is_allowed(&expected.verbatim, url, git);
+                if !is_allowed {
+                    if let VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::Path(previous_path),
+                        ..
+                    } = &expected
+                    {
+                        // On Windows, we can have two versions of the same path, e.g.
+                        // `C:\Users\KONSTA~1` and `C:\Users\Konstantin`.
+                        if is_same_file(path, &previous_path.path).unwrap_or(false) {
+                            is_allowed = true;
+                        }
+                    }
+                }
+
+                if !is_allowed {
                     return Err(ResolveError::ConflictingUrlsTransitive(
                         requirement.name.clone(),
                         expected.verbatim.verbatim().to_string(),

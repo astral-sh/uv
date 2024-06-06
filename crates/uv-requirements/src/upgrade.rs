@@ -6,7 +6,7 @@ use anyhow::Result;
 use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
-use uv_distribution::ProjectWorkspace;
+use uv_distribution::Workspace;
 use uv_git::ResolvedRepositoryReference;
 use uv_resolver::{Lock, Preference, PreferenceError};
 
@@ -64,17 +64,14 @@ pub async fn read_requirements_txt(
 }
 
 /// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.
-pub async fn read_lockfile(
-    project: &ProjectWorkspace,
-    upgrade: &Upgrade,
-) -> Result<LockedRequirements> {
+pub async fn read_lockfile(workspace: &Workspace, upgrade: &Upgrade) -> Result<LockedRequirements> {
     // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
     if upgrade.is_all() {
         return Ok(LockedRequirements::default());
     }
 
     // If an existing lockfile exists, build up a set of preferences.
-    let lockfile = project.workspace().root().join("uv.lock");
+    let lockfile = workspace.root().join("uv.lock");
     let lock = match fs_err::tokio::read_to_string(&lockfile).await {
         Ok(encoded) => match toml::from_str::<Lock>(&encoded) {
             Ok(lock) => lock,

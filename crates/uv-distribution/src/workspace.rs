@@ -98,14 +98,22 @@ impl Workspace {
 
         let (workspace_root, workspace_definition, workspace_pyproject_toml) =
             if let Some(workspace) = explicit_root {
+                // We have found the explicit root immediately.
                 workspace
             } else if pyproject_toml.project.is_none() {
+                // Without a project, it can't be an implicit root
                 return Err(WorkspaceError::MissingProject(project_path));
             } else if let Some(workspace) = find_workspace(&project_path, stop_discovery_at).await?
             {
+                // We have found an explicit root above.
                 workspace
             } else {
-                return Err(WorkspaceError::MissingWorkspace(project_path));
+                // Support implicit single project workspaces.
+                (
+                    project_path.clone(),
+                    ToolUvWorkspace::default(),
+                    pyproject_toml.clone(),
+                )
             };
 
         debug!(
@@ -143,6 +151,47 @@ impl Workspace {
             project_name: package_name,
             workspace: self,
         })
+    }
+
+    /// Returns the set of requirements that include all packages in the workspace.
+    pub fn members_as_requirements(&self) -> Vec<Requirement> {
+        self.packages
+            .values()
+            .filter_map(|member| {
+                let project = member.pyproject_toml.project.as_ref()?;
+                // Extract the extras available in the project.
+                let extras = project
+                    .optional_dependencies
+                    .as_ref()
+                    .map(|optional_dependencies| {
+                        // It's a `BTreeMap` so the keys are sorted.
+                        optional_dependencies.keys().cloned().collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+
+                let url = VerbatimUrl::from_path(&member.root)
+                    .expect("path is valid URL")
+                    .with_given(member.root.to_string_lossy());
+                Some(Requirement {
+                    name: project.name.clone(),
+                    extras,
+                    marker: None,
+                    source: RequirementSource::Path {
+                        path: member.root.clone(),
+                        editable: true,
+                        url,
+                    },
+                    origin: None,
+                })
+            })
+            .collect()
+    }
+
+    /// If there is a package at the workspace root, return it.
+    pub fn root_member(&self) -> Option<&WorkspaceMember> {
+        self.packages
+            .values()
+            .find(|package| package.root == self.root)
     }
 
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
@@ -488,30 +537,6 @@ impl ProjectWorkspace {
     /// Returns the current project as a [`WorkspaceMember`].
     pub fn current_project(&self) -> &WorkspaceMember {
         &self.workspace().packages[&self.project_name]
-    }
-
-    /// Return the [`Requirement`] entries for the project, which is the current project as
-    /// editable.
-    pub fn requirements(&self) -> Vec<Requirement> {
-        vec![Requirement {
-            name: self.project_name.clone(),
-            extras: self.workspace().packages[&self.project_name]
-                .pyproject_toml
-                .project
-                .as_ref()
-                .and_then(|project| project.optional_dependencies.as_ref())
-                .map(|optional_dependencies| {
-                    optional_dependencies.keys().cloned().collect::<Vec<_>>()
-                })
-                .unwrap_or_default(),
-            marker: None,
-            source: RequirementSource::Path {
-                path: self.project_root.clone(),
-                editable: true,
-                url: VerbatimUrl::from_path(&self.project_root).expect("path is valid URL"),
-            },
-            origin: None,
-        }]
     }
 
     /// Find the workspace for a project.
