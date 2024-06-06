@@ -16,6 +16,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+chrono = { workspace = true }
 distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true }

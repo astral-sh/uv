@@ -4586,6 +4586,7 @@ version = "0.0.1"
 dependencies = [
  "anstream",
  "anyhow",
+ "chrono",
  "clap",
  "distribution-filename",
  "distribution-types",
