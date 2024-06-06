@@ -7,7 +7,7 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{
@@ -21,7 +21,7 @@ use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_interpreter::{find_default_interpreter, PythonEnvironment};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, Options};
+use uv_resolver::{FlatIndex, InMemoryIndex, Options, RequiresPython};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip;
@@ -34,7 +34,7 @@ pub(crate) mod sync;
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error("The current Python version ({0}) is not compatible with the locked Python requirement ({1})")]
-    RequiresPython(Version, VersionSpecifiers),
+    PythonIncompatibility(Version, RequiresPython),
 
     #[error(transparent)]
     Interpreter(#[from] uv_interpreter::Error),
@@ -64,7 +64,7 @@ pub(crate) enum ProjectError {
     Operation(#[from] pip::operations::Error),
 
     #[error(transparent)]
-    PubGrubSpecifier(#[from] uv_resolver::PubGrubSpecifierError),
+    RequiresPython(#[from] uv_resolver::RequiresPythonError),
 }
 
 /// Initialize a virtual environment for the current project.

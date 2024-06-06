@@ -9,7 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
 };
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::{ParsedUrlError, Yanked};
 use uv_git::GitResolver;
@@ -17,12 +17,13 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
-use crate::python_requirement::RequiresPython;
+use crate::python_requirement::PythonTarget;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::Resolution;
 use crate::{
-    InMemoryIndex, Manifest, MetadataResponse, PythonRequirement, ResolveError, VersionsResponse,
+    InMemoryIndex, Manifest, MetadataResponse, PythonRequirement, RequiresPython, ResolveError,
+    VersionsResponse,
 };
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
@@ -32,7 +33,7 @@ pub struct ResolutionGraph {
     /// The underlying graph.
     pub(crate) petgraph: Graph<AnnotatedDist, Version, Directed>,
     /// The range of supported Python versions.
-    pub(crate) requires_python: Option<VersionSpecifiers>,
+    pub(crate) requires_python: Option<RequiresPython>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
 }
@@ -319,7 +320,7 @@ impl ResolutionGraph {
         // included packages.
         let requires_python = python
             .target()
-            .and_then(RequiresPython::as_specifiers)
+            .and_then(PythonTarget::as_requires_python)
             .cloned();
 
         Ok(Self {

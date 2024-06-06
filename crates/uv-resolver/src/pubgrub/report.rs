@@ -13,12 +13,13 @@ use pubgrub::type_aliases::Map;
 use rustc_hash::FxHashMap;
 
 use distribution_types::IndexLocations;
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::Version;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::python_requirement::{PythonRequirement, RequiresPython};
+use crate::python_requirement::{PythonRequirement, PythonTarget};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
+use crate::RequiresPython;
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 
@@ -534,9 +535,11 @@ impl PubGrubReportFormatter<'_> {
                         PubGrubPackageInner::Python(PubGrubPython::Target)
                     ) {
                         if let Some(python) = self.python_requirement {
-                            if let Some(RequiresPython::Specifiers(specifiers)) = python.target() {
+                            if let Some(PythonTarget::RequiresPython(requires_python)) =
+                                python.target()
+                            {
                                 hints.insert(PubGrubHint::RequiresPython {
-                                    requires_python: specifiers.clone(),
+                                    requires_python: requires_python.clone(),
                                     package: package.clone(),
                                     package_set: self
                                         .simplify_set(package_set, package)
@@ -632,7 +635,7 @@ pub(crate) enum PubGrubHint {
     },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
-        requires_python: VersionSpecifiers,
+        requires_python: RequiresPython,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         package: PubGrubPackage,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]

@@ -1,10 +1,7 @@
 use anstream::eprint;
-use itertools::Itertools;
-use pubgrub::range::Range;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
@@ -17,7 +14,7 @@ use uv_git::GitResolver;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PubGrubSpecifier};
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -109,38 +106,20 @@ pub(super) async fn do_lock(
     //
     // For a workspace, we compute the union of all workspace requires-python values, ensuring we
     // keep track of `None` vs. a full range.
-    let requires_python_workspace = workspace
-        .packages()
-        .values()
-        .filter_map(|member| {
+    let requires_python_workspace =
+        RequiresPython::union(workspace.packages().values().filter_map(|member| {
             member
                 .pyproject_toml()
                 .project
                 .as_ref()
                 .and_then(|project| project.requires_python.as_ref())
-        })
-        // Convert to pubgrub range, perform the union, convert back to pep440_rs.
-        .map(PubGrubSpecifier::try_from)
-        .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
-            if let Some(range) = range {
-                Some(range.union(&requires_python.into()))
-            } else {
-                Some(requires_python.into())
-            }
-        })?
-        .map(|range| {
-            range
-                .iter()
-                .flat_map(VersionSpecifier::from_bounds)
-                .collect()
-        });
+        }))?;
 
     let requires_python = if let Some(requires_python) = requires_python_workspace {
         requires_python
     } else {
-        let requires_python = VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(venv.interpreter().python_minor_version()),
-        );
+        let requires_python =
+            RequiresPython::greater_than_equal_version(venv.interpreter().python_minor_version());
         if let Some(root_project_name) = root_project_name.as_ref() {
             warn_user!(
                 "No `requires-python` field found in `{root_project_name}`. Defaulting to `{requires_python}`.",

@@ -15,7 +15,6 @@ use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
-use pep440_rs::VersionSpecifiers;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::Requirement;
@@ -37,7 +36,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    PythonRequirement, ResolutionGraph, Resolver,
+    PythonRequirement, RequiresPython, ResolutionGraph, Resolver,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -91,7 +90,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     interpreter: &Interpreter,
     tags: &Tags,
     markers: Option<&MarkerEnvironment>,
-    requires_python: Option<&VersionSpecifiers>,
+    requires_python: Option<&RequiresPython>,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,

@@ -20,7 +20,7 @@ use distribution_types::{
     GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
 };
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
@@ -29,7 +29,7 @@ use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryRefere
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::resolution::AnnotatedDist;
-use crate::ResolutionGraph;
+use crate::{RequiresPython, ResolutionGraph};
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -37,7 +37,7 @@ pub struct Lock {
     version: u32,
     distributions: Vec<Distribution>,
     /// The range of supported Python versions.
-    requires_python: Option<VersionSpecifiers>,
+    requires_python: Option<RequiresPython>,
     /// A map from distribution ID to index in `distributions`.
     ///
     /// This can be used to quickly lookup the full distribution for any ID
@@ -107,7 +107,7 @@ impl Lock {
     /// Initialize a [`Lock`] from a list of [`Distribution`] entries.
     fn new(
         distributions: Vec<Distribution>,
-        requires_python: Option<VersionSpecifiers>,
+        requires_python: Option<RequiresPython>,
     ) -> Result<Self, LockError> {
         let wire = LockWire {
             version: 1,
@@ -123,7 +123,7 @@ impl Lock {
     }
 
     /// Returns the supported Python version range for the lockfile, if present.
-    pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
+    pub fn requires_python(&self) -> Option<&RequiresPython> {
         self.requires_python.as_ref()
     }
 
@@ -226,7 +226,7 @@ struct LockWire {
     #[serde(rename = "distribution")]
     distributions: Vec<Distribution>,
     #[serde(rename = "requires-python")]
-    requires_python: Option<VersionSpecifiers>,
+    requires_python: Option<RequiresPython>,
 }
 
 impl From<Lock> for LockWire {
