@@ -98,13 +98,17 @@ impl Workspace {
 
         let (workspace_root, workspace_definition, workspace_pyproject_toml) =
             if let Some(workspace) = explicit_root {
+                // We have found the explicit root immediately.
                 workspace
             } else if pyproject_toml.project.is_none() {
+                // Without a project, it can't be an implicit root
                 return Err(WorkspaceError::MissingProject(project_path));
             } else if let Some(workspace) = find_workspace(&project_path, stop_discovery_at).await?
             {
+                // We have found an explicit root above.
                 workspace
             } else {
+                // Support implicit single project workspaces.
                 (
                     project_path.clone(),
                     ToolUvWorkspace::default(),
