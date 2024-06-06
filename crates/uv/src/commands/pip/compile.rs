@@ -463,6 +463,9 @@ pub(crate) async fn pip_compile(
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
 
+    // Ignore development dependencies.
+    let dev = Vec::default();
+
     // Determine any lookahead requirements.
     let lookaheads = match dependency_mode {
         DependencyMode::Transitive => {
@@ -486,6 +489,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        dev,
         preferences,
         project,
         // Do not consider any installed packages during resolution.

@@ -113,6 +113,7 @@ impl CacheSettings {
 pub(crate) struct RunSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) extras: ExtrasSpecification,
+    pub(crate) dev: bool,
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
@@ -131,6 +132,8 @@ impl RunSettings {
             extra,
             all_extras,
             no_all_extras,
+            dev,
+            no_dev,
             target,
             args,
             with,
@@ -140,7 +143,6 @@ impl RunSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
-
             index_args,
             python,
             exclude_newer,
@@ -168,6 +170,7 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
+            dev: flag(dev, no_dev).unwrap_or(false),
             target,
             args,
             with,
@@ -234,6 +237,7 @@ pub(crate) struct SyncSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) refresh: Refresh,
     pub(crate) extras: ExtrasSpecification,
+    pub(crate) dev: bool,
     pub(crate) python: Option<String>,
 }
 
@@ -245,6 +249,8 @@ impl SyncSettings {
             extra,
             all_extras,
             no_all_extras,
+            dev,
+            no_dev,
             refresh,
             no_refresh,
             refresh_package,
@@ -272,6 +278,7 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
+            dev: flag(dev, no_dev).unwrap_or(false),
             python,
         }
     }

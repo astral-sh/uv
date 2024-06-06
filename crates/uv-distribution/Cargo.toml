@@ -35,6 +35,7 @@ fs-err = { workspace = true }
 futures = { workspace = true }
 glob = { workspace = true }
 nanoid = { workspace = true }
+once_cell = { workspace = true }
 path-absolutize = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }

@@ -436,7 +436,7 @@ fn compile_constraint_extra() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a package from an optional dependency group in a `pyproject.toml` file.
+/// Resolve a package from an optional extra in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_extra() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -522,7 +522,7 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
     Ok(())
 }
 
-/// Request an extra that does not exist as a dependency group in a `pyproject.toml` file.
+/// Request an extra that does not exist in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_extra_missing() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -823,7 +823,7 @@ dependencies = [
     Ok(())
 }
 
-/// Request multiple extras that do not exist as a dependency group in a `pyproject.toml` file.
+/// Request multiple extras that do not exist in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_extras_missing() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2200,7 +2200,7 @@ fn requirement_override_prerelease() -> Result<()> {
     Ok(())
 }
 
-/// Resolve packages from all optional dependency groups in a `pyproject.toml` file.
+/// Resolve packages from all extras in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_all_extras() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2303,7 +2303,7 @@ optional-dependencies.bar = [
     Ok(())
 }
 
-/// Resolve packages from all optional dependency groups in a `pyproject.toml` file.
+/// Resolve packages from all extras in a `pyproject.toml` file.
 #[test]
 fn compile_does_not_allow_both_extra_and_all_extras() -> Result<()> {
     let context = TestContext::new("3.12");

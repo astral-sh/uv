@@ -1,21 +1,22 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use thiserror::Error;
 
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{HashDigest, Metadata23};
-pub use requires_dist::RequiresDist;
 use uv_configuration::PreviewMode;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::metadata::lowering::LoweringError;
+pub use crate::metadata::requires_dist::{RequiresDist, DEV_DEPENDENCIES};
 use crate::WorkspaceError;
 
 mod lowering;
 mod requires_dist;
 
 #[derive(Debug, Error)]
-pub enum MetadataLoweringError {
+pub enum MetadataError {
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
     #[error("Failed to parse entry for: `{0}`")]
@@ -31,6 +32,7 @@ pub struct Metadata {
     pub requires_dist: Vec<pypi_types::Requirement>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
+    pub dev_dependencies: BTreeMap<GroupName, Vec<pypi_types::Requirement>>,
 }
 
 impl Metadata {
@@ -47,6 +49,7 @@ impl Metadata {
                 .collect(),
             requires_python: metadata.requires_python,
             provides_extras: metadata.provides_extras,
+            dev_dependencies: BTreeMap::default(),
         }
     }
 
@@ -56,12 +59,13 @@ impl Metadata {
         metadata: Metadata23,
         project_root: &Path,
         preview_mode: PreviewMode,
-    ) -> Result<Self, MetadataLoweringError> {
+    ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let RequiresDist {
             name,
             requires_dist,
             provides_extras,
+            dev_dependencies,
         } = RequiresDist::from_workspace(
             pypi_types::RequiresDist {
                 name: metadata.name,
@@ -80,6 +84,7 @@ impl Metadata {
             requires_dist,
             requires_python: metadata.requires_python,
             provides_extras,
+            dev_dependencies,
         })
     }
 }

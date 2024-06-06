@@ -1,9 +1,10 @@
-use pep508_rs::MarkerTree;
-use pypi_types::VerbatimParsedUrl;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
-use uv_normalize::{ExtraName, PackageName};
+
+use pep508_rs::MarkerTree;
+use pypi_types::VerbatimParsedUrl;
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::resolver::Urls;
 
@@ -48,6 +49,7 @@ pub enum PubGrubPackageInner {
     Package {
         name: PackageName,
         extra: Option<ExtraName>,
+        dev: Option<GroupName>,
         marker: Option<MarkerTree>,
         /// The URL of the package, if it was specified in the requirement.
         ///
@@ -106,6 +108,17 @@ pub enum PubGrubPackageInner {
         marker: Option<MarkerTree>,
         url: Option<VerbatimParsedUrl>,
     },
+    /// A proxy package to represent an enabled "dependency group" (e.g., development dependencies).
+    ///
+    /// This is similar in spirit to [PEP 735](https://peps.python.org/pep-0735/) and similar in
+    /// implementation to the `Extra` variant. The main difference is that we treat groups as
+    /// enabled globally, rather than on a per-requirement basis.
+    Dev {
+        name: PackageName,
+        dev: GroupName,
+        marker: Option<MarkerTree>,
+        url: Option<VerbatimParsedUrl>,
+    },
 }
 
 impl PubGrubPackage {
@@ -134,6 +147,7 @@ impl PubGrubPackage {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
                 extra,
+                dev: None,
                 marker,
                 url,
             }))
@@ -189,6 +203,7 @@ impl std::fmt::Display for PubGrubPackageInner {
                 write!(f, "{name}[{extra}]{{{marker}}}")
             }
             Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
+            Self::Dev { name, dev, .. } => write!(f, "{name}:{dev}"),
         }
     }
 }

@@ -582,6 +582,7 @@ async fn run() -> Result<ExitStatus> {
             commands::run(
                 args.index_locations,
                 args.extras,
+                args.dev,
                 args.target,
                 args.args,
                 requirements,
@@ -607,6 +608,7 @@ async fn run() -> Result<ExitStatus> {
             commands::sync(
                 args.index_locations,
                 args.extras,
+                args.dev,
                 globals.preview,
                 &cache,
                 printer,

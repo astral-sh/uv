@@ -26,10 +26,10 @@ use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
 use uv_configuration::ExtrasSpecification;
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::resolution::AnnotatedDist;
-use crate::{lock, ResolutionGraph};
+use crate::ResolutionGraph;
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -60,31 +60,40 @@ impl Lock {
         // Lock all base packages.
         for node_index in graph.petgraph.node_indices() {
             let dist = &graph.petgraph[node_index];
-            if dist.extra.is_some() {
-                continue;
-            }
-
-            let mut locked_dist = lock::Distribution::from_annotated_dist(dist)?;
-            for neighbor in graph.petgraph.neighbors(node_index) {
-                let dependency_dist = &graph.petgraph[neighbor];
-                locked_dist.add_dependency(dependency_dist);
-            }
-            if let Some(locked_dist) = locked_dists.insert(locked_dist.id.clone(), locked_dist) {
-                return Err(LockError::duplicate_distribution(locked_dist.id));
+            if dist.is_base() {
+                let mut locked_dist = Distribution::from_annotated_dist(dist)?;
+                for neighbor in graph.petgraph.neighbors(node_index) {
+                    let dependency_dist = &graph.petgraph[neighbor];
+                    locked_dist.add_dependency(dependency_dist);
+                }
+                let id = locked_dist.id.clone();
+                if let Some(locked_dist) = locked_dists.insert(id, locked_dist) {
+                    return Err(LockError::duplicate_distribution(locked_dist.id));
+                }
             }
         }
 
-        // Lock all extras.
+        // Lock all extras and development dependencies.
         for node_index in graph.petgraph.node_indices() {
             let dist = &graph.petgraph[node_index];
             if let Some(extra) = dist.extra.as_ref() {
-                let id = lock::DistributionId::from_annotated_dist(dist);
+                let id = DistributionId::from_annotated_dist(dist);
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
-                    return Err(LockError::missing_base(id, extra.clone()));
+                    return Err(LockError::missing_extra_base(id, extra.clone()));
                 };
                 for neighbor in graph.petgraph.neighbors(node_index) {
                     let dependency_dist = &graph.petgraph[neighbor];
                     locked_dist.add_optional_dependency(extra.clone(), dependency_dist);
+                }
+            }
+            if let Some(group) = dist.dev.as_ref() {
+                let id = DistributionId::from_annotated_dist(dist);
+                let Some(locked_dist) = locked_dists.get_mut(&id) else {
+                    return Err(LockError::missing_dev_base(id, group.clone()));
+                };
+                for neighbor in graph.petgraph.neighbors(node_index) {
+                    let dependency_dist = &graph.petgraph[neighbor];
+                    locked_dist.add_dev_dependency(group.clone(), dependency_dist);
                 }
             }
         }
@@ -125,6 +134,7 @@ impl Lock {
         tags: &Tags,
         root_name: &PackageName,
         extras: &ExtrasSpecification,
+        dev: &[GroupName],
     ) -> Resolution {
         let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
 
@@ -154,11 +164,17 @@ impl Lock {
 
         let mut map = BTreeMap::default();
         while let Some((dist, extra)) = queue.pop_front() {
-            let deps = if let Some(extra) = extra {
-                Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
-            } else {
-                Either::Right(dist.dependencies.iter())
-            };
+            let deps =
+                if let Some(extra) = extra {
+                    Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
+                } else {
+                    Either::Right(dist.dependencies.iter().chain(
+                        dev.iter().flat_map(|group| {
+                            dist.dev_dependencies.get(group).into_iter().flatten()
+                        }),
+                    ))
+                };
+
             for dep in deps {
                 let dep_dist = self.find_by_id(&dep.id);
                 if dep_dist
@@ -272,6 +288,18 @@ impl Lock {
                 table.insert("optional-dependencies", Item::Table(optional_deps));
             }
 
+            if !dist.dev_dependencies.is_empty() {
+                let mut dev_dependencies = Table::new();
+                for (extra, deps) in &dist.dev_dependencies {
+                    let deps = deps
+                        .iter()
+                        .map(Dependency::to_toml)
+                        .collect::<ArrayOfTables>();
+                    dev_dependencies.insert(extra.as_ref(), Item::ArrayOfTables(deps));
+                }
+                table.insert("dev-dependencies", Item::Table(dev_dependencies));
+            }
+
             if !dist.wheels.is_empty() {
                 let wheels = dist
                     .wheels
@@ -371,6 +399,7 @@ impl TryFrom<LockWire> for Lock {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Distribution {
     #[serde(flatten)]
     pub(crate) id: DistributionId,
@@ -382,12 +411,10 @@ pub struct Distribution {
     wheels: Vec<Wheel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     dependencies: Vec<Dependency>,
-    #[serde(
-        default,
-        skip_serializing_if = "IndexMap::is_empty",
-        rename = "optional-dependencies"
-    )]
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     optional_dependencies: IndexMap<ExtraName, Vec<Dependency>>,
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    dev_dependencies: IndexMap<GroupName, Vec<Dependency>>,
 }
 
 impl Distribution {
@@ -408,6 +435,7 @@ impl Distribution {
             wheels,
             dependencies: vec![],
             optional_dependencies: IndexMap::default(),
+            dev_dependencies: IndexMap::default(),
         })
     }
 
@@ -424,6 +452,12 @@ impl Distribution {
             .entry(extra)
             .or_default()
             .push(dep);
+    }
+
+    /// Add the [`AnnotatedDist`] as a development dependency of the [`Distribution`].
+    fn add_dev_dependency(&mut self, dev: GroupName, annotated_dist: &AnnotatedDist) {
+        let dep = Dependency::from_annotated_dist(annotated_dist);
+        self.dev_dependencies.entry(dev).or_default().push(dep);
     }
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
@@ -1469,8 +1503,15 @@ impl LockError {
         }
     }
 
-    fn missing_base(id: DistributionId, extra: ExtraName) -> LockError {
-        let kind = LockErrorKind::MissingBase { id, extra };
+    fn missing_extra_base(id: DistributionId, extra: ExtraName) -> LockError {
+        let kind = LockErrorKind::MissingExtraBase { id, extra };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
+
+    fn missing_dev_base(id: DistributionId, group: GroupName) -> LockError {
+        let kind = LockErrorKind::MissingDevBase { id, group };
         LockError {
             kind: Box::new(kind),
         }
@@ -1485,7 +1526,8 @@ impl std::error::Error for LockError {
             LockErrorKind::InvalidFileUrl { ref err } => Some(err),
             LockErrorKind::UnrecognizedDependency { ref err } => Some(err),
             LockErrorKind::Hash { .. } => None,
-            LockErrorKind::MissingBase { .. } => None,
+            LockErrorKind::MissingExtraBase { .. } => None,
+            LockErrorKind::MissingDevBase { .. } => None,
         }
     }
 }
@@ -1535,10 +1577,16 @@ impl std::fmt::Display for LockError {
                     source = id.source.kind.name(),
                 )
             }
-            LockErrorKind::MissingBase { ref id, ref extra } => {
+            LockErrorKind::MissingExtraBase { ref id, ref extra } => {
                 write!(
                     f,
                     "found distribution `{id}` with extra `{extra}` but no base distribution",
+                )
+            }
+            LockErrorKind::MissingDevBase { ref id, ref group } => {
+                write!(
+                    f,
+                    "found distribution `{id}` with development dependency group `{group}` but no base distribution",
                 )
             }
         }
@@ -1589,11 +1637,20 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution is included with an extra name,
     /// but no corresponding base distribution (i.e., without the extra) exists.
-    MissingBase {
+    MissingExtraBase {
         /// The ID of the distribution that has a missing base.
         id: DistributionId,
         /// The extra name that was found.
         extra: ExtraName,
+    },
+    /// An error that occurs when a distribution is included with a development
+    /// dependency group, but no corresponding base distribution (i.e., without
+    /// the group) exists.
+    MissingDevBase {
+        /// The ID of the distribution that has a missing base.
+        id: DistributionId,
+        /// The development dependency group that was found.
+        group: GroupName,
     },
 }
 

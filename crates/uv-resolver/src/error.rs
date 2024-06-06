@@ -233,6 +233,7 @@ impl NoSolutionError {
                 PubGrubPackageInner::Root(_) => {}
                 PubGrubPackageInner::Python(_) => {}
                 PubGrubPackageInner::Extra { .. } => {}
+                PubGrubPackageInner::Dev { .. } => {}
                 PubGrubPackageInner::Package { name, .. } => {
                     // Avoid including available versions for packages that exist in the derivation
                     // tree, but were never visited during resolution. We _may_ have metadata for

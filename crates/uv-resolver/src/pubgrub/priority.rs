@@ -32,6 +32,9 @@ impl PubGrubPriorities {
             PubGrubPackageInner::Extra {
                 name, url: None, ..
             }
+            | PubGrubPackageInner::Dev {
+                name, url: None, ..
+            }
             | PubGrubPackageInner::Package {
                 name, url: None, ..
             } => {
@@ -70,6 +73,9 @@ impl PubGrubPriorities {
             PubGrubPackageInner::Extra {
                 name, url: Some(_), ..
             }
+            | PubGrubPackageInner::Dev {
+                name, url: Some(_), ..
+            }
             | PubGrubPackageInner::Package {
                 name, url: Some(_), ..
             } => {
@@ -106,6 +112,7 @@ impl PubGrubPriorities {
             PubGrubPackageInner::Root(_) => Some(PubGrubPriority::Root),
             PubGrubPackageInner::Python(_) => Some(PubGrubPriority::Root),
             PubGrubPackageInner::Extra { name, .. } => self.0.get(name).copied(),
+            PubGrubPackageInner::Dev { name, .. } => self.0.get(name).copied(),
             PubGrubPackageInner::Package { name, .. } => self.0.get(name).copied(),
         }
     }

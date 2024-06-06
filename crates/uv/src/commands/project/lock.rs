@@ -12,7 +12,7 @@ use uv_configuration::{
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::ProjectWorkspace;
+use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_interpreter::PythonEnvironment;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
@@ -90,6 +90,8 @@ pub(super) async fn do_lock(
         .collect::<Vec<_>>();
     let constraints = vec![];
     let overrides = vec![];
+    let dev = vec![DEV_DEPENDENCIES.clone()];
+
     let source_trees = vec![];
     let project_name = project.project_name().clone();
 
@@ -171,6 +173,7 @@ pub(super) async fn do_lock(
         requirements,
         constraints,
         overrides,
+        dev,
         source_trees,
         Some(project_name),
         &extras,

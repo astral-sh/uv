@@ -9,7 +9,7 @@ use uv_configuration::{
     SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::ProjectWorkspace;
+use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
@@ -27,6 +27,7 @@ use crate::printer::Printer;
 pub(crate) async fn sync(
     index_locations: IndexLocations,
     extras: ExtrasSpecification,
+    dev: bool,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -55,6 +56,7 @@ pub(crate) async fn sync(
         &lock,
         &index_locations,
         extras,
+        dev,
         preview,
         cache,
         printer,
@@ -72,6 +74,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     index_locations: &IndexLocations,
     extras: ExtrasSpecification,
+    dev: bool,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -86,11 +89,18 @@ pub(super) async fn do_sync(
         }
     }
 
+    // Include development dependencies, if requested.
+    let dev = if dev {
+        vec![DEV_DEPENDENCIES.clone()]
+    } else {
+        vec![]
+    };
+
     let markers = venv.interpreter().markers();
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras);
+    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras, &dev);
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.

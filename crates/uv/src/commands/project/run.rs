@@ -26,6 +26,7 @@ use crate::printer::Printer;
 pub(crate) async fn run(
     index_locations: IndexLocations,
     extras: ExtrasSpecification,
+    dev: bool,
     target: Option<String>,
     mut args: Vec<OsString>,
     requirements: Vec<RequirementsSource>,
@@ -80,6 +81,7 @@ pub(crate) async fn run(
             &lock,
             &index_locations,
             extras,
+            dev,
             preview,
             cache,
             printer,

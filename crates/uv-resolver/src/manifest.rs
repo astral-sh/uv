@@ -3,7 +3,7 @@ use either::Either;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::Requirement;
 use uv_configuration::{Constraints, Overrides};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_types::RequestedRequirements;
 
 use crate::{preferences::Preference, DependencyMode, Exclusions};
@@ -19,6 +19,10 @@ pub struct Manifest {
 
     /// The overrides for the project.
     pub(crate) overrides: Overrides,
+
+    /// The enabled development dependency groups for the project. Dependency groups are global,
+    /// such that any provided groups will be enabled for all requirements.
+    pub(crate) dev: Vec<GroupName>,
 
     /// The preferences for the project.
     ///
@@ -50,6 +54,7 @@ impl Manifest {
         requirements: Vec<Requirement>,
         constraints: Constraints,
         overrides: Overrides,
+        dev: Vec<GroupName>,
         preferences: Vec<Preference>,
         project: Option<PackageName>,
         exclusions: Exclusions,
@@ -59,6 +64,7 @@ impl Manifest {
             requirements,
             constraints,
             overrides,
+            dev,
             preferences,
             project,
             exclusions,
@@ -71,6 +77,7 @@ impl Manifest {
             requirements,
             constraints: Constraints::default(),
             overrides: Overrides::default(),
+            dev: Vec::new(),
             preferences: Vec::new(),
             project: None,
             exclusions: Exclusions::default(),
