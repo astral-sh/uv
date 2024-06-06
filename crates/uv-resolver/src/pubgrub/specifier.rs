@@ -1,14 +1,20 @@
+use std::ops::Bound;
+
 use itertools::Itertools;
 use pubgrub::range::Range;
-use std::ops::Bound;
+use thiserror::Error;
 
 use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier, VersionSpecifiers};
 
-use crate::ResolveError;
+#[derive(Debug, Error)]
+pub enum PubGrubSpecifierError {
+    #[error("~= operator requires at least two release segments: `{0}`")]
+    InvalidTildeEquals(VersionSpecifier),
+}
 
 /// A range of versions that can be used to satisfy a requirement.
 #[derive(Debug)]
-pub(crate) struct PubGrubSpecifier(Range<Version>);
+pub struct PubGrubSpecifier(Range<Version>);
 
 impl PubGrubSpecifier {
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
@@ -24,10 +30,10 @@ impl From<PubGrubSpecifier> for Range<Version> {
 }
 
 impl TryFrom<&VersionSpecifiers> for PubGrubSpecifier {
-    type Error = ResolveError;
+    type Error = PubGrubSpecifierError;
 
     /// Convert a PEP 440 specifier to a PubGrub-compatible version range.
-    fn try_from(specifiers: &VersionSpecifiers) -> Result<Self, ResolveError> {
+    fn try_from(specifiers: &VersionSpecifiers) -> Result<Self, PubGrubSpecifierError> {
         let range = specifiers
             .iter()
             .map(crate::pubgrub::PubGrubSpecifier::try_from)
@@ -39,10 +45,10 @@ impl TryFrom<&VersionSpecifiers> for PubGrubSpecifier {
 }
 
 impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
-    type Error = ResolveError;
+    type Error = PubGrubSpecifierError;
 
     /// Convert a PEP 440 specifier to a PubGrub-compatible version range.
-    fn try_from(specifier: &VersionSpecifier) -> Result<Self, ResolveError> {
+    fn try_from(specifier: &VersionSpecifier) -> Result<Self, PubGrubSpecifierError> {
         let ranges = match specifier.operator() {
             Operator::Equal => {
                 let version = specifier.version().clone();
@@ -58,7 +64,7 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
             }
             Operator::TildeEqual => {
                 let [rest @ .., last, _] = specifier.version().release() else {
-                    return Err(ResolveError::InvalidTildeEquals(specifier.clone()));
+                    return Err(PubGrubSpecifierError::InvalidTildeEquals(specifier.clone()));
                 };
                 let upper = Version::new(rest.iter().chain([&(last + 1)]))
                     .with_epoch(specifier.version().epoch())

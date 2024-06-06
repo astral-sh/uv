@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
 use std::sync::Arc;
 
+use dashmap::DashMap;
 use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use dashmap::DashMap;
 use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
 use pep440_rs::Version;
 use pep508_rs::Requirement;
@@ -15,7 +15,9 @@ use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
+use crate::pubgrub::{
+    PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
+};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{
     FxOnceMap, IncompletePackage, UnavailablePackage, UnavailableReason, VersionsResponse,
@@ -44,8 +46,8 @@ pub enum ResolveError {
         metadata: PackageName,
     },
 
-    #[error("~= operator requires at least two release segments: `{0}`")]
-    InvalidTildeEquals(pep440_rs::VersionSpecifier),
+    #[error(transparent)]
+    PubGrubSpecifier(#[from] PubGrubSpecifierError),
 
     #[error("Requirements contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
     ConflictingUrlsDirect(PackageName, String, String),

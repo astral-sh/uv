@@ -8,6 +8,7 @@ pub use manifest::Manifest;
 pub use options::{Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError};
 pub use prerelease_mode::PreReleaseMode;
+pub use pubgrub::{PubGrubSpecifier, PubGrubSpecifierError};
 pub use python_requirement::PythonRequirement;
 pub use resolution::{AnnotationStyle, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;

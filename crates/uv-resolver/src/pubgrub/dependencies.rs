@@ -236,7 +236,7 @@ impl PubGrubRequirement {
                         .map(|specifier| {
                             Locals::map(expected, specifier)
                                 .map_err(ResolveError::InvalidVersion)
-                                .and_then(|specifier| PubGrubSpecifier::try_from(&specifier))
+                                .and_then(|specifier| Ok(PubGrubSpecifier::try_from(&specifier)?))
                         })
                         .fold_ok(Range::full(), |range, specifier| {
                             range.intersection(&specifier.into())
