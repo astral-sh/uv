@@ -33,7 +33,6 @@ impl PythonEnvironment {
         preview: PreviewMode,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        // Detect the current Python interpreter.
         if let Some(python) = python {
             Self::from_requested_python(python, system, preview, cache)
         } else if system.is_preferred() {
