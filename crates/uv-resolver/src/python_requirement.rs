@@ -1,3 +1,5 @@
+use std::collections::Bound;
+
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::StringVersion;
 use uv_interpreter::{Interpreter, PythonVersion};
@@ -76,7 +78,15 @@ impl RequiresPython {
     ///
     /// For example, if the target Python is `>=3.8`, then `>=3.7` would cover it. However, `>=3.9`
     /// would not.
-    pub fn subset_of(&self, requires_python: &VersionSpecifiers) -> bool {
+    ///
+    /// We treat `Requires-Python` as a lower bound. For example, if the requirement expresses
+    /// `>=3.8, <4`, we treat it as `>=3.8`. `Requires-Python` itself was intended to enable
+    /// packages to drop support for older versions of Python without breaking installations on
+    /// those versions, and packages cannot know whether they are compatible with future, unreleased
+    /// versions of Python.
+    ///
+    /// See: <https://packaging.python.org/en/latest/guides/dropping-older-python-versions/>
+    pub fn contains(&self, requires_python: &VersionSpecifiers) -> bool {
         match self {
             RequiresPython::Specifier(specifier) => requires_python.contains(specifier),
             RequiresPython::Specifiers(specifiers) => {
@@ -90,7 +100,40 @@ impl RequiresPython {
                     return false;
                 };
 
-                target.subset_of(&requires_python)
+                // If the dependency has no lower bound, then it supports all versions.
+                let Some((requires_python_lower, _)) = requires_python.iter().next() else {
+                    return true;
+                };
+
+                // If we have no lower bound, then there must be versions we support that the
+                // dependency does not.
+                let Some((target_lower, _)) = target.iter().next() else {
+                    return false;
+                };
+
+                // We want, e.g., `target_lower` to be `>=3.8` and `requires_python_lower` to be
+                // `>=3.7`.
+                //
+                // That is: `requires_python_lower` should be less than or equal to `target_lower`.
+                match (requires_python_lower, target_lower) {
+                    (Bound::Included(requires_python_lower), Bound::Included(target_lower)) => {
+                        requires_python_lower <= target_lower
+                    }
+                    (Bound::Excluded(requires_python_lower), Bound::Included(target_lower)) => {
+                        requires_python_lower < target_lower
+                    }
+                    (Bound::Included(requires_python_lower), Bound::Excluded(target_lower)) => {
+                        requires_python_lower <= target_lower
+                    }
+                    (Bound::Excluded(requires_python_lower), Bound::Excluded(target_lower)) => {
+                        requires_python_lower < target_lower
+                    }
+                    // If the dependency has no lower bound, then it supports all versions.
+                    (Bound::Unbounded, _) => true,
+                    // If we have no lower bound, then there must be versions we support that the
+                    // dependency does not.
+                    (_, Bound::Unbounded) => false,
+                }
             }
         }
     }

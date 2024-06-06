@@ -340,7 +340,7 @@ impl TryFrom<LockWire> for Lock {
             dist.dependencies.sort();
             for windows in dist.dependencies.windows(2) {
                 let (dep1, dep2) = (&windows[0], &windows[1]);
-                if dep1.id == dep2.id {
+                if dep1 == dep2 {
                     return Err(LockError::duplicate_dependency(
                         dist.id.clone(),
                         dep1.id.clone(),
