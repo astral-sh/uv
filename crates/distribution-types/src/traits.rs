@@ -7,9 +7,9 @@ use crate::error::Error;
 use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
     DirectUrlSourceDist, Dist, DistributionId, GitSourceDist, InstalledDirectUrlDist,
-    InstalledDist, InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist,
-    PathSourceDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId,
-    VersionOrUrlRef,
+    InstalledDist, InstalledEggInfoDirectory, InstalledEggInfoFile, InstalledLegacyEditable,
+    InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist, PathSourceDist,
+    RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
 };
 
 pub trait Name {
@@ -184,6 +184,24 @@ impl std::fmt::Display for InstalledDirectUrlDist {
 }
 
 impl std::fmt::Display for InstalledRegistryDist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.installed_version())
+    }
+}
+
+impl std::fmt::Display for InstalledEggInfoFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.installed_version())
+    }
+}
+
+impl std::fmt::Display for InstalledEggInfoDirectory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.installed_version())
+    }
+}
+
+impl std::fmt::Display for InstalledLegacyEditable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.installed_version())
     }
