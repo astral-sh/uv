@@ -8,7 +8,7 @@ use pypi_types::Scheme;
 pub struct Prefix(PathBuf);
 
 impl Prefix {
-    /// Return the [`Scheme`] for the `--target` directory.
+    /// Return the [`Scheme`] for the `--prefix` directory.
     pub fn scheme(&self, virtualenv: &Scheme) -> Scheme {
         Scheme {
             purelib: self.0.join(&virtualenv.purelib),
