@@ -547,12 +547,19 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
         let raw_lock = fs_err::read_to_string(work_dir.join("uv.lock"))?;
         // Remove temp paths from lock.
         // TODO(konsti): There shouldn't be absolute paths in the lock to begin with.
-        let redacted_lock = raw_lock.replace(
-            Url::from_directory_path(&context.temp_dir)
-                .unwrap()
-                .as_str(),
-            "file:///tmp",
-        );
+        let redacted_lock = raw_lock
+            .replace(
+                Url::from_directory_path(&context.temp_dir)
+                    .unwrap()
+                    .as_str(),
+                "file:///tmp",
+            )
+            .replace(
+                Url::from_directory_path(fs_err::canonicalize(&context.temp_dir)?)
+                    .unwrap()
+                    .as_str(),
+                "file:///tmp",
+            );
         // Check the lockfile is the same for all resolutions.
         if let Some(shared_lock) = &shared_lock {
             assert_eq!(shared_lock, &redacted_lock);

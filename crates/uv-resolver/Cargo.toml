@@ -46,6 +46,7 @@ petgraph = { workspace = true }
 pubgrub = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 textwrap = { workspace = true }

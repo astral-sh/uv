@@ -165,6 +165,9 @@ impl Workspace {
                     })
                     .unwrap_or_default();
 
+                let url = VerbatimUrl::from_path(&member.root)
+                    .expect("path is valid URL")
+                    .with_given(member.root.to_string_lossy());
                 Some(Requirement {
                     name: project.name.clone(),
                     extras,
@@ -172,7 +175,7 @@ impl Workspace {
                     source: RequirementSource::Path {
                         path: member.root.clone(),
                         editable: true,
-                        url: VerbatimUrl::from_path(&member.root).expect("path is valid URL"),
+                        url,
                     },
                     origin: None,
                 })
@@ -530,30 +533,6 @@ impl ProjectWorkspace {
     /// Returns the current project as a [`WorkspaceMember`].
     pub fn current_project(&self) -> &WorkspaceMember {
         &self.workspace().packages[&self.project_name]
-    }
-
-    /// Return the [`Requirement`] entries for the project, which is the current project as
-    /// editable.
-    pub fn requirements(&self) -> Vec<Requirement> {
-        vec![Requirement {
-            name: self.project_name.clone(),
-            extras: self.workspace().packages[&self.project_name]
-                .pyproject_toml
-                .project
-                .as_ref()
-                .and_then(|project| project.optional_dependencies.as_ref())
-                .map(|optional_dependencies| {
-                    optional_dependencies.keys().cloned().collect::<Vec<_>>()
-                })
-                .unwrap_or_default(),
-            marker: None,
-            source: RequirementSource::Path {
-                path: self.project_root.clone(),
-                editable: true,
-                url: VerbatimUrl::from_path(&self.project_root).expect("path is valid URL"),
-            },
-            origin: None,
-        }]
     }
 
     /// Find the workspace for a project.
