@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.9
+
+### Enhancements
+
+- Respect existing `.egg-link` files in site packages ([#4082](https://github.com/astral-sh/uv/pull/4082))
+
+### Bug fixes
+
+- Avoid extra-only filtering for constraints ([#4095](https://github.com/astral-sh/uv/pull/4095))
+
+### Documentation
+
+- Add install link for specific version to README ([#4105](https://github.com/astral-sh/uv/pull/4105))
+
 ## 0.2.8
 
 ### Bug fixes
@@ -141,10 +155,10 @@ In summary, the following Python interpreter requests are now allowed:
 Previously, interpreter requests that were not versions or paths were always treated as executable
 names.
 
-To align the user expecations, uv now respects the interpreter that starts it. For example, `python -m uv ...` will
+To align the user expectations, uv now respects the interpreter that starts it. For example, `python -m uv ...` will
 now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
 
-We now check if discovered intepreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
+We now check if discovered interpreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
 installation directory that is _not_ a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
 to request the interpreter.
 
