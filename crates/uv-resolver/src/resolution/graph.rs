@@ -89,7 +89,7 @@ impl ResolutionGraph {
                     PubGrubPackageInner::Package {
                         name,
                         extra,
-                        group,
+                        dev,
                         marker: None,
                         url: None,
                     } => {
@@ -175,12 +175,12 @@ impl ResolutionGraph {
                             }
                         }
 
-                        // Validate the group.
-                        if let Some(group) = group {
-                            if !metadata.dependency_groups.contains_key(group) {
-                                diagnostics.push(ResolutionDiagnostic::MissingGroup {
+                        // Validate the development dependency group.
+                        if let Some(dev) = dev {
+                            if !metadata.dev_dependencies.contains_key(dev) {
+                                diagnostics.push(ResolutionDiagnostic::MissingDev {
                                     dist: dist.clone(),
-                                    group: group.clone(),
+                                    dev: dev.clone(),
                                 });
                             }
                         }
@@ -192,18 +192,18 @@ impl ResolutionGraph {
                         let index = petgraph.add_node(AnnotatedDist {
                             dist,
                             extra: extra.clone(),
-                            group: group.clone(),
+                            dev: dev.clone(),
                             marker,
                             hashes,
                             metadata,
                         });
-                        inverse.insert((name, version, extra.as_ref(), group.as_ref()), index);
+                        inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
                     }
 
                     PubGrubPackageInner::Package {
                         name,
                         extra,
-                        group,
+                        dev,
                         marker: None,
                         url: Some(url),
                     } => {
@@ -265,12 +265,12 @@ impl ResolutionGraph {
                             }
                         }
 
-                        // Validate the group.
-                        if let Some(group) = group {
-                            if !metadata.dependency_groups.contains_key(group) {
-                                diagnostics.push(ResolutionDiagnostic::MissingGroup {
+                        // Validate the development dependency group.
+                        if let Some(dev) = dev {
+                            if !metadata.dev_dependencies.contains_key(dev) {
+                                diagnostics.push(ResolutionDiagnostic::MissingDev {
                                     dist: dist.clone().into(),
-                                    group: group.clone(),
+                                    dev: dev.clone(),
                                 });
                             }
                         }
@@ -282,12 +282,12 @@ impl ResolutionGraph {
                         let index = petgraph.add_node(AnnotatedDist {
                             dist: dist.into(),
                             extra: extra.clone(),
-                            group: group.clone(),
+                            dev: dev.clone(),
                             marker,
                             hashes,
                             metadata,
                         });
-                        inverse.insert((name, version, extra.as_ref(), group.as_ref()), index);
+                        inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
                     }
 
                     _ => {}
@@ -302,13 +302,13 @@ impl ResolutionGraph {
                     &names.from,
                     &versions.from_version,
                     versions.from_extra.as_ref(),
-                    versions.from_group.as_ref(),
+                    versions.from_dev.as_ref(),
                 )];
                 let to_index = inverse[&(
                     &names.to,
                     &versions.to_version,
                     versions.to_extra.as_ref(),
-                    versions.to_group.as_ref(),
+                    versions.to_dev.as_ref(),
                 )];
                 petgraph.update_edge(from_index, to_index, versions.to_version.clone());
             }

@@ -75,11 +75,11 @@ pub enum ResolutionDiagnostic {
         /// The extra that was requested. For example, `colorama` in `black[colorama]`.
         extra: ExtraName,
     },
-    MissingGroup {
-        /// The distribution that was requested with a non-existent group.
+    MissingDev {
+        /// The distribution that was requested with a non-existent development dependency group.
         dist: ResolvedDist,
-        /// The group that was requested.
-        group: GroupName,
+        /// The development dependency group that was requested.
+        dev: GroupName,
     },
     YankedVersion {
         /// The package that was requested with a yanked version. For example, `black==23.10.0`.
@@ -96,8 +96,8 @@ impl Diagnostic for ResolutionDiagnostic {
             Self::MissingExtra { dist, extra } => {
                 format!("The package `{dist}` does not have an extra named `{extra}`.")
             }
-            Self::MissingGroup { dist, group } => {
-                format!("The package `{dist}` does not have a group named `{group}`.")
+            Self::MissingDev { dist, dev } => {
+                format!("The package `{dist}` does not have a development dependency group named `{dev}`.")
             }
             Self::YankedVersion { dist, reason } => {
                 if let Some(reason) = reason {
@@ -113,7 +113,7 @@ impl Diagnostic for ResolutionDiagnostic {
     fn includes(&self, name: &PackageName) -> bool {
         match self {
             Self::MissingExtra { dist, .. } => name == dist.name(),
-            Self::MissingGroup { dist, .. } => name == dist.name(),
+            Self::MissingDev { dist, .. } => name == dist.name(),
             Self::YankedVersion { dist, .. } => name == dist.name(),
         }
     }

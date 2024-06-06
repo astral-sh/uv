@@ -27,12 +27,12 @@ impl PubGrubDependencies {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_requirements(
         requirements: &[Requirement],
-        dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
+        dev_dependencies: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &Constraints,
         overrides: &Overrides,
         source_name: Option<&PackageName>,
         source_extra: Option<&ExtraName>,
-        source_group: Option<&GroupName>,
+        source_dev: Option<&GroupName>,
         urls: &Urls,
         locals: &Locals,
         git: &GitResolver,
@@ -43,12 +43,12 @@ impl PubGrubDependencies {
 
         add_requirements(
             requirements,
-            dependency_groups,
+            dev_dependencies,
             constraints,
             overrides,
             source_name,
             source_extra,
-            source_group,
+            source_dev,
             urls,
             locals,
             git,
@@ -75,12 +75,12 @@ impl PubGrubDependencies {
 #[allow(clippy::too_many_arguments)]
 fn add_requirements(
     requirements: &[Requirement],
-    dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
+    dev_dependencies: &BTreeMap<GroupName, Vec<Requirement>>,
     constraints: &Constraints,
     overrides: &Overrides,
     source_name: Option<&PackageName>,
     source_extra: Option<&ExtraName>,
-    source_group: Option<&GroupName>,
+    source_dev: Option<&GroupName>,
     urls: &Urls,
     locals: &Locals,
     git: &GitResolver,
@@ -89,8 +89,8 @@ fn add_requirements(
     seen: &mut FxHashSet<ExtraName>,
 ) -> Result<(), ResolveError> {
     // Iterate over all declared requirements.
-    for requirement in overrides.apply(if let Some(source_group) = source_group {
-        Either::Left(dependency_groups.get(source_group).into_iter().flatten())
+    for requirement in overrides.apply(if let Some(source_dev) = source_dev {
+        Either::Left(dev_dependencies.get(source_dev).into_iter().flatten())
     } else {
         Either::Right(requirements.iter())
     }) {
@@ -141,7 +141,7 @@ fn add_requirements(
                         if seen.insert(extra.clone()) {
                             add_requirements(
                                 requirements,
-                                dependency_groups,
+                                dev_dependencies,
                                 constraints,
                                 overrides,
                                 source_name,
@@ -276,7 +276,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        group: None,
+                        dev: None,
                         marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
@@ -303,7 +303,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        group: None,
+                        dev: None,
                         marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),
@@ -330,7 +330,7 @@ impl PubGrubRequirement {
                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                         name: requirement.name.clone(),
                         extra,
-                        group: None,
+                        dev: None,
                         marker: requirement.marker.clone(),
                         url: Some(expected.clone()),
                     }),

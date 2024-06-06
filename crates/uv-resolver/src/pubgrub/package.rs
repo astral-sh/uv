@@ -49,7 +49,7 @@ pub enum PubGrubPackageInner {
     Package {
         name: PackageName,
         extra: Option<ExtraName>,
-        group: Option<GroupName>,
+        dev: Option<GroupName>,
         marker: Option<MarkerTree>,
         /// The URL of the package, if it was specified in the requirement.
         ///
@@ -113,9 +113,9 @@ pub enum PubGrubPackageInner {
     /// This is similar in spirit to [PEP 735](https://peps.python.org/pep-0735/) and similar in
     /// implementation to the `Extra` variant. The main difference is that we treat groups as
     /// enabled globally, rather than on a per-requirement basis.
-    Group {
+    Dev {
         name: PackageName,
-        group: GroupName,
+        dev: GroupName,
         marker: Option<MarkerTree>,
         url: Option<VerbatimParsedUrl>,
     },
@@ -147,7 +147,7 @@ impl PubGrubPackage {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
                 extra,
-                group: None,
+                dev: None,
                 marker,
                 url,
             }))
@@ -203,7 +203,7 @@ impl std::fmt::Display for PubGrubPackageInner {
                 write!(f, "{name}[{extra}]{{{marker}}}")
             }
             Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
-            Self::Group { name, group, .. } => write!(f, "{name}:{group}"),
+            Self::Dev { name, dev, .. } => write!(f, "{name}:{dev}"),
         }
     }
 }

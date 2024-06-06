@@ -1541,9 +1541,9 @@ fn lock_dev() -> Result<()> {
         version = "2.0.0"
         source = "registry+https://pypi.org/simple"
 
-        [distribution.dependency-groups]
+        [distribution.dev-dependencies]
 
-        [[distribution.dependency-groups.dev]]
+        [[distribution.dev-dependencies.dev]]
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"

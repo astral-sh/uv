@@ -9,7 +9,7 @@ use crate::metadata::lowering::lower_requirement;
 use crate::metadata::MetadataError;
 use crate::{Metadata, ProjectWorkspace};
 
-/// The `dev-dependencies` dependency group.
+/// The name of the global `dev-dependencies` group.
 ///
 /// Internally, we model dependency groups as a generic concept; but externally, we only expose the
 /// `dev-dependencies` group.
@@ -21,7 +21,7 @@ pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Vec<pypi_types::Requirement>,
     pub provides_extras: Vec<ExtraName>,
-    pub dependency_groups: BTreeMap<GroupName, Vec<pypi_types::Requirement>>,
+    pub dev_dependencies: BTreeMap<GroupName, Vec<pypi_types::Requirement>>,
 }
 
 impl RequiresDist {
@@ -36,7 +36,7 @@ impl RequiresDist {
                 .map(pypi_types::Requirement::from)
                 .collect(),
             provides_extras: metadata.provides_extras,
-            dependency_groups: BTreeMap::default(),
+            dev_dependencies: BTreeMap::default(),
         }
     }
 
@@ -74,7 +74,7 @@ impl RequiresDist {
             .and_then(|uv| uv.sources.as_ref())
             .unwrap_or(&empty);
 
-        let dependency_groups = {
+        let dev_dependencies = {
             let dev_dependencies = project_workspace
                 .current_project()
                 .pyproject_toml()
@@ -125,7 +125,7 @@ impl RequiresDist {
         Ok(Self {
             name: metadata.name,
             requires_dist,
-            dependency_groups,
+            dev_dependencies,
             provides_extras: metadata.provides_extras,
         })
     }
@@ -137,7 +137,7 @@ impl From<Metadata> for RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
-            dependency_groups: metadata.dependency_groups,
+            dev_dependencies: metadata.dev_dependencies,
         }
     }
 }

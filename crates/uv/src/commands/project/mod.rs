@@ -175,7 +175,7 @@ pub(crate) async fn update_environment(
     let extras = ExtrasSpecification::default();
     let flat_index = FlatIndex::default();
     let git = GitResolver::default();
-    let groups = Vec::default();
+    let dev = Vec::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
@@ -213,7 +213,7 @@ pub(crate) async fn update_environment(
         spec.requirements,
         spec.constraints,
         spec.overrides,
-        groups,
+        dev,
         spec.source_trees,
         spec.project,
         &extras,

@@ -23,7 +23,7 @@ mod graph;
 pub(crate) struct AnnotatedDist {
     pub(crate) dist: ResolvedDist,
     pub(crate) extra: Option<ExtraName>,
-    pub(crate) group: Option<GroupName>,
+    pub(crate) dev: Option<GroupName>,
     pub(crate) marker: Option<MarkerTree>,
     pub(crate) hashes: Vec<HashDigest>,
     pub(crate) metadata: Metadata,
@@ -33,7 +33,7 @@ impl AnnotatedDist {
     /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
     /// dependency group).
     pub(crate) fn is_base(&self) -> bool {
-        self.extra.is_none() && self.group.is_none()
+        self.extra.is_none() && self.dev.is_none()
     }
 }
 

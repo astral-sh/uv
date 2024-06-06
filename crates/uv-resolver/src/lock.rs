@@ -73,7 +73,7 @@ impl Lock {
             }
         }
 
-        // Lock all extras and dependency groups.
+        // Lock all extras and development dependencies.
         for node_index in graph.petgraph.node_indices() {
             let dist = &graph.petgraph[node_index];
             if let Some(extra) = dist.extra.as_ref() {
@@ -86,14 +86,14 @@ impl Lock {
                     locked_dist.add_optional_dependency(extra.clone(), dependency_dist);
                 }
             }
-            if let Some(group) = dist.group.as_ref() {
+            if let Some(group) = dist.dev.as_ref() {
                 let id = DistributionId::from_annotated_dist(dist);
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
-                    return Err(LockError::missing_group_base(id, group.clone()));
+                    return Err(LockError::missing_dev_base(id, group.clone()));
                 };
                 for neighbor in graph.petgraph.neighbors(node_index) {
                     let dependency_dist = &graph.petgraph[neighbor];
-                    locked_dist.add_group_dependency(group.clone(), dependency_dist);
+                    locked_dist.add_dev_dependency(group.clone(), dependency_dist);
                 }
             }
         }
@@ -134,7 +134,7 @@ impl Lock {
         tags: &Tags,
         root_name: &PackageName,
         extras: &ExtrasSpecification,
-        groups: &[GroupName],
+        dev: &[GroupName],
     ) -> Resolution {
         let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
 
@@ -169,8 +169,8 @@ impl Lock {
                     Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
                 } else {
                     Either::Right(dist.dependencies.iter().chain(
-                        groups.iter().flat_map(|group| {
-                            dist.dependency_groups.get(group).into_iter().flatten()
+                        dev.iter().flat_map(|group| {
+                            dist.dev_dependencies.get(group).into_iter().flatten()
                         }),
                     ))
                 };
@@ -288,16 +288,16 @@ impl Lock {
                 table.insert("optional-dependencies", Item::Table(optional_deps));
             }
 
-            if !dist.dependency_groups.is_empty() {
-                let mut dependency_groups = Table::new();
-                for (extra, deps) in &dist.dependency_groups {
+            if !dist.dev_dependencies.is_empty() {
+                let mut dev_dependencies = Table::new();
+                for (extra, deps) in &dist.dev_dependencies {
                     let deps = deps
                         .iter()
                         .map(Dependency::to_toml)
                         .collect::<ArrayOfTables>();
-                    dependency_groups.insert(extra.as_ref(), Item::ArrayOfTables(deps));
+                    dev_dependencies.insert(extra.as_ref(), Item::ArrayOfTables(deps));
                 }
-                table.insert("dependency-groups", Item::Table(dependency_groups));
+                table.insert("dev-dependencies", Item::Table(dev_dependencies));
             }
 
             if !dist.wheels.is_empty() {
@@ -414,7 +414,7 @@ pub struct Distribution {
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     optional_dependencies: IndexMap<ExtraName, Vec<Dependency>>,
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    dependency_groups: IndexMap<GroupName, Vec<Dependency>>,
+    dev_dependencies: IndexMap<GroupName, Vec<Dependency>>,
 }
 
 impl Distribution {
@@ -435,7 +435,7 @@ impl Distribution {
             wheels,
             dependencies: vec![],
             optional_dependencies: IndexMap::default(),
-            dependency_groups: IndexMap::default(),
+            dev_dependencies: IndexMap::default(),
         })
     }
 
@@ -454,10 +454,10 @@ impl Distribution {
             .push(dep);
     }
 
-    /// Add the [`AnnotatedDist`] as an optional dependency of the [`Distribution`].
-    fn add_group_dependency(&mut self, group: GroupName, annotated_dist: &AnnotatedDist) {
+    /// Add the [`AnnotatedDist`] as a development dependency of the [`Distribution`].
+    fn add_dev_dependency(&mut self, dev: GroupName, annotated_dist: &AnnotatedDist) {
         let dep = Dependency::from_annotated_dist(annotated_dist);
-        self.dependency_groups.entry(group).or_default().push(dep);
+        self.dev_dependencies.entry(dev).or_default().push(dep);
     }
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
@@ -1510,8 +1510,8 @@ impl LockError {
         }
     }
 
-    fn missing_group_base(id: DistributionId, group: GroupName) -> LockError {
-        let kind = LockErrorKind::MissingGroupBase { id, group };
+    fn missing_dev_base(id: DistributionId, group: GroupName) -> LockError {
+        let kind = LockErrorKind::MissingDevBase { id, group };
         LockError {
             kind: Box::new(kind),
         }
@@ -1527,7 +1527,7 @@ impl std::error::Error for LockError {
             LockErrorKind::UnrecognizedDependency { ref err } => Some(err),
             LockErrorKind::Hash { .. } => None,
             LockErrorKind::MissingExtraBase { .. } => None,
-            LockErrorKind::MissingGroupBase { .. } => None,
+            LockErrorKind::MissingDevBase { .. } => None,
         }
     }
 }
@@ -1583,10 +1583,10 @@ impl std::fmt::Display for LockError {
                     "found distribution `{id}` with extra `{extra}` but no base distribution",
                 )
             }
-            LockErrorKind::MissingGroupBase { ref id, ref group } => {
+            LockErrorKind::MissingDevBase { ref id, ref group } => {
                 write!(
                     f,
-                    "found distribution `{id}` with group `{group}` but no base distribution",
+                    "found distribution `{id}` with development dependency group `{group}` but no base distribution",
                 )
             }
         }
@@ -1643,12 +1643,13 @@ enum LockErrorKind {
         /// The extra name that was found.
         extra: ExtraName,
     },
-    /// An error that occurs when a distribution is included with a dependency group,
-    /// but no corresponding base distribution (i.e., without the group) exists.
-    MissingGroupBase {
+    /// An error that occurs when a distribution is included with a development
+    /// dependency group, but no corresponding base distribution (i.e., without
+    /// the group) exists.
+    MissingDevBase {
         /// The ID of the distribution that has a missing base.
         id: DistributionId,
-        /// The group name that was found.
+        /// The development dependency group that was found.
         group: GroupName,
     },
 }

@@ -71,7 +71,7 @@ Ok(
                 ],
                 dependencies: [],
                 optional_dependencies: {},
-                dependency_groups: {},
+                dev_dependencies: {},
             },
         ],
         requires_python: None,

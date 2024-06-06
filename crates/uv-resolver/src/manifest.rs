@@ -20,9 +20,9 @@ pub struct Manifest {
     /// The overrides for the project.
     pub(crate) overrides: Overrides,
 
-    /// The enabled dependency groups for the project. Dependency groups are global, such that any
-    /// provided groups will be enabled for all requirements.
-    pub(crate) groups: Vec<GroupName>,
+    /// The enabled development dependency groups for the project. Dependency groups are global,
+    /// such that any provided groups will be enabled for all requirements.
+    pub(crate) dev: Vec<GroupName>,
 
     /// The preferences for the project.
     ///
@@ -54,7 +54,7 @@ impl Manifest {
         requirements: Vec<Requirement>,
         constraints: Constraints,
         overrides: Overrides,
-        groups: Vec<GroupName>,
+        dev: Vec<GroupName>,
         preferences: Vec<Preference>,
         project: Option<PackageName>,
         exclusions: Exclusions,
@@ -64,7 +64,7 @@ impl Manifest {
             requirements,
             constraints,
             overrides,
-            groups,
+            dev,
             preferences,
             project,
             exclusions,
@@ -77,7 +77,7 @@ impl Manifest {
             requirements,
             constraints: Constraints::default(),
             overrides: Overrides::default(),
-            groups: Vec::new(),
+            dev: Vec::new(),
             preferences: Vec::new(),
             project: None,
             exclusions: Exclusions::default(),
