@@ -4396,7 +4396,6 @@ dependencies = [
  "pep508_rs",
  "platform-tags",
  "predicates",
- "pubgrub",
  "pypi-types",
  "rayon",
  "regex",

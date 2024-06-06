@@ -82,7 +82,7 @@ pub(super) async fn do_sync(
     // Validate that the Python version is supported by the lockfile.
     if let Some(requires_python) = lock.requires_python() {
         if !requires_python.contains(venv.interpreter().python_version()) {
-            return Err(ProjectError::RequiresPython(
+            return Err(ProjectError::PythonIncompatibility(
                 venv.interpreter().python_version().clone(),
                 requires_python.clone(),
             ));

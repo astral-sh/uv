@@ -1,8 +1,8 @@
-use std::collections::Bound;
-
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::StringVersion;
 use uv_interpreter::{Interpreter, PythonVersion};
+
+use crate::RequiresPython;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {
@@ -13,7 +13,7 @@ pub struct PythonRequirement {
     /// when specifying an alternate Python version for the resolution.
     ///
     /// If `None`, the target version is the same as the installed version.
-    target: Option<RequiresPython>,
+    target: Option<PythonTarget>,
 }
 
 impl PythonRequirement {
@@ -22,7 +22,7 @@ impl PythonRequirement {
     pub fn from_python_version(interpreter: &Interpreter, python_version: &PythonVersion) -> Self {
         Self {
             installed: interpreter.python_full_version().clone(),
-            target: Some(RequiresPython::Specifier(StringVersion {
+            target: Some(PythonTarget::Version(StringVersion {
                 string: python_version.to_string(),
                 version: python_version.python_full_version(),
             })),
@@ -33,11 +33,11 @@ impl PythonRequirement {
     /// [`MarkerEnvironment`].
     pub fn from_requires_python(
         interpreter: &Interpreter,
-        requires_python: &VersionSpecifiers,
+        requires_python: &RequiresPython,
     ) -> Self {
         Self {
             installed: interpreter.python_full_version().clone(),
-            target: Some(RequiresPython::Specifiers(requires_python.clone())),
+            target: Some(PythonTarget::RequiresPython(requires_python.clone())),
         }
     }
 
@@ -55,103 +55,49 @@ impl PythonRequirement {
     }
 
     /// Return the target version of Python.
-    pub fn target(&self) -> Option<&RequiresPython> {
+    pub fn target(&self) -> Option<&PythonTarget> {
         self.target.as_ref()
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum RequiresPython {
-    /// The [`RequiresPython`] specifier is a single version specifier, as provided via
+pub enum PythonTarget {
+    /// The [`PythonTarget`] specifier is a single version specifier, as provided via
     /// `--python-version` on the command line.
     ///
     /// The use of a separate enum variant allows us to use a verbatim representation when reporting
     /// back to the user.
-    Specifier(StringVersion),
-    /// The [`RequiresPython`] specifier is a set of version specifiers, as extracted from the
+    Version(StringVersion),
+    /// The [`PythonTarget`] specifier is a set of version specifiers, as extracted from the
     /// `Requires-Python` field in a `pyproject.toml` or `METADATA` file.
-    Specifiers(VersionSpecifiers),
+    RequiresPython(RequiresPython),
 }
 
-impl RequiresPython {
-    /// Returns `true` if the target Python is covered by the [`VersionSpecifiers`].
-    ///
-    /// For example, if the target Python is `>=3.8`, then `>=3.7` would cover it. However, `>=3.9`
-    /// would not.
-    ///
-    /// We treat `Requires-Python` as a lower bound. For example, if the requirement expresses
-    /// `>=3.8, <4`, we treat it as `>=3.8`. `Requires-Python` itself was intended to enable
-    /// packages to drop support for older versions of Python without breaking installations on
-    /// those versions, and packages cannot know whether they are compatible with future, unreleased
-    /// versions of Python.
-    ///
-    /// See: <https://packaging.python.org/en/latest/guides/dropping-older-python-versions/>
-    pub fn contains(&self, requires_python: &VersionSpecifiers) -> bool {
+impl PythonTarget {
+    /// Returns `true` if the target Python is compatible with the [`VersionSpecifiers`].
+    pub fn is_compatible_with(&self, target: &VersionSpecifiers) -> bool {
         match self {
-            RequiresPython::Specifier(specifier) => requires_python.contains(specifier),
-            RequiresPython::Specifiers(specifiers) => {
-                let Ok(target) = crate::pubgrub::PubGrubSpecifier::try_from(specifiers) else {
-                    return false;
-                };
-
-                let Ok(requires_python) =
-                    crate::pubgrub::PubGrubSpecifier::try_from(requires_python)
-                else {
-                    return false;
-                };
-
-                // If the dependency has no lower bound, then it supports all versions.
-                let Some((requires_python_lower, _)) = requires_python.iter().next() else {
-                    return true;
-                };
-
-                // If we have no lower bound, then there must be versions we support that the
-                // dependency does not.
-                let Some((target_lower, _)) = target.iter().next() else {
-                    return false;
-                };
-
-                // We want, e.g., `target_lower` to be `>=3.8` and `requires_python_lower` to be
-                // `>=3.7`.
-                //
-                // That is: `requires_python_lower` should be less than or equal to `target_lower`.
-                match (requires_python_lower, target_lower) {
-                    (Bound::Included(requires_python_lower), Bound::Included(target_lower)) => {
-                        requires_python_lower <= target_lower
-                    }
-                    (Bound::Excluded(requires_python_lower), Bound::Included(target_lower)) => {
-                        requires_python_lower < target_lower
-                    }
-                    (Bound::Included(requires_python_lower), Bound::Excluded(target_lower)) => {
-                        requires_python_lower <= target_lower
-                    }
-                    (Bound::Excluded(requires_python_lower), Bound::Excluded(target_lower)) => {
-                        requires_python_lower < target_lower
-                    }
-                    // If the dependency has no lower bound, then it supports all versions.
-                    (Bound::Unbounded, _) => true,
-                    // If we have no lower bound, then there must be versions we support that the
-                    // dependency does not.
-                    (_, Bound::Unbounded) => false,
-                }
+            PythonTarget::Version(version) => target.contains(version),
+            PythonTarget::RequiresPython(requires_python) => {
+                requires_python.is_contained_by(target)
             }
         }
     }
 
-    /// Returns the [`VersionSpecifiers`] for the [`RequiresPython`] specifier.
-    pub fn as_specifiers(&self) -> Option<&VersionSpecifiers> {
+    /// Returns the [`RequiresPython`] for the [`PythonTarget`] specifier.
+    pub fn as_requires_python(&self) -> Option<&RequiresPython> {
         match self {
-            RequiresPython::Specifier(_) => None,
-            RequiresPython::Specifiers(specifiers) => Some(specifiers),
+            PythonTarget::Version(_) => None,
+            PythonTarget::RequiresPython(requires_python) => Some(requires_python),
         }
     }
 }
 
-impl std::fmt::Display for RequiresPython {
+impl std::fmt::Display for PythonTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequiresPython::Specifier(specifier) => std::fmt::Display::fmt(specifier, f),
-            RequiresPython::Specifiers(specifiers) => std::fmt::Display::fmt(specifiers, f),
+            PythonTarget::Version(specifier) => std::fmt::Display::fmt(specifier, f),
+            PythonTarget::RequiresPython(specifiers) => std::fmt::Display::fmt(specifiers, f),
         }
     }
 }
