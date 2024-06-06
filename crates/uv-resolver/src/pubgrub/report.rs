@@ -407,67 +407,59 @@ impl PubGrubReportFormatter<'_> {
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     ) -> IndexSet<PubGrubHint> {
-        /// Returns `true` if pre-releases were allowed for a package.
-        fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
-            let PubGrubPackageInner::Package { name, .. } = &**package else {
-                return false;
-            };
-            selector.prerelease_strategy().allows(name)
-        }
-
         let mut hints = IndexSet::default();
         match derivation_tree {
             DerivationTree::External(external) => match external {
                 External::Custom(package, set, _) | External::NoVersions(package, set) => {
-                    // Check for no versions due to pre-release options
-                    if let Some(selector) = selector {
-                        let any_prerelease = set.iter().any(|(start, end)| {
-                            let is_pre1 = match start {
-                                Bound::Included(version) => version.any_prerelease(),
-                                Bound::Excluded(version) => version.any_prerelease(),
-                                Bound::Unbounded => false,
-                            };
-                            let is_pre2 = match end {
-                                Bound::Included(version) => version.any_prerelease(),
-                                Bound::Excluded(version) => version.any_prerelease(),
-                                Bound::Unbounded => false,
-                            };
-                            is_pre1 || is_pre2
-                        });
+                    if let PubGrubPackageInner::Package { name, .. } = &**package {
+                        // Check for no versions due to pre-release options
+                        if let Some(selector) = selector {
+                            let any_prerelease = set.iter().any(|(start, end)| {
+                                let is_pre1 = match start {
+                                    Bound::Included(version) => version.any_prerelease(),
+                                    Bound::Excluded(version) => version.any_prerelease(),
+                                    Bound::Unbounded => false,
+                                };
+                                let is_pre2 = match end {
+                                    Bound::Included(version) => version.any_prerelease(),
+                                    Bound::Excluded(version) => version.any_prerelease(),
+                                    Bound::Unbounded => false,
+                                };
+                                is_pre1 || is_pre2
+                            });
 
-                        if any_prerelease {
-                            // A pre-release marker appeared in the version requirements.
-                            if !allowed_prerelease(package, selector) {
-                                hints.insert(PubGrubHint::PreReleaseRequested {
-                                    package: package.clone(),
-                                    range: self.simplify_set(set, package).into_owned(),
-                                });
-                            }
-                        } else if let Some(version) =
-                            self.available_versions.get(package).and_then(|versions| {
-                                versions
-                                    .iter()
-                                    .rev()
-                                    .filter(|version| version.any_prerelease())
-                                    .find(|version| set.contains(version))
-                            })
-                        {
-                            // There are pre-release versions available for the package.
-                            if !allowed_prerelease(package, selector) {
-                                hints.insert(PubGrubHint::PreReleaseAvailable {
-                                    package: package.clone(),
-                                    version: version.clone(),
-                                });
+                            if any_prerelease {
+                                // A pre-release marker appeared in the version requirements.
+                                if !selector.prerelease_strategy().allows(name) {
+                                    hints.insert(PubGrubHint::PreReleaseRequested {
+                                        package: package.clone(),
+                                        range: self.simplify_set(set, package).into_owned(),
+                                    });
+                                }
+                            } else if let Some(version) =
+                                self.available_versions.get(package).and_then(|versions| {
+                                    versions
+                                        .iter()
+                                        .rev()
+                                        .filter(|version| version.any_prerelease())
+                                        .find(|version| set.contains(version))
+                                })
+                            {
+                                // There are pre-release versions available for the package.
+                                if !selector.prerelease_strategy().allows(name) {
+                                    hints.insert(PubGrubHint::PreReleaseAvailable {
+                                        package: package.clone(),
+                                        version: version.clone(),
+                                    });
+                                }
                             }
                         }
-                    }
 
-                    // Check for no versions due to no `--find-links` flat index
-                    if let Some(index_locations) = index_locations {
-                        let no_find_links =
-                            index_locations.flat_index().peekable().peek().is_none();
+                        // Check for no versions due to no `--find-links` flat index
+                        if let Some(index_locations) = index_locations {
+                            let no_find_links =
+                                index_locations.flat_index().peekable().peek().is_none();
 
-                        if let PubGrubPackageInner::Package { name, .. } = &**package {
                             // Add hints due to the package being entirely unavailable.
                             match unavailable_packages.get(name) {
                                 Some(UnavailablePackage::NoIndex) => {
