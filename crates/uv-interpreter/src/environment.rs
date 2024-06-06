@@ -75,11 +75,11 @@ impl PythonEnvironment {
                 || matches!(found.source(), InterpreterSource::CondaPrefix),
             "Not a virtualenv (source: {}, prefix: {})",
             found.source(),
-            found.interpreter().base_prefix().display()
+            found.interpreter().sys_base_prefix().display()
         );
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: found.interpreter().prefix().to_path_buf(),
+            root: found.interpreter().sys_prefix().to_path_buf(),
             interpreter: found.into_interpreter(),
         })))
     }
@@ -91,7 +91,7 @@ impl PythonEnvironment {
         let found = find_interpreter(&request, system, &sources, cache)??;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: found.interpreter().prefix().to_path_buf(),
+            root: found.interpreter().sys_prefix().to_path_buf(),
             interpreter: found.into_interpreter(),
         })))
     }
@@ -111,7 +111,7 @@ impl PythonEnvironment {
         let interpreter = Interpreter::query(executable, cache)?;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: interpreter.prefix().to_path_buf(),
+            root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
         })))
     }
@@ -127,7 +127,7 @@ impl PythonEnvironment {
         let request = InterpreterRequest::parse(request);
         let interpreter = find_interpreter(&request, system, &sources, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: interpreter.prefix().to_path_buf(),
+            root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
         })))
     }
@@ -136,7 +136,7 @@ impl PythonEnvironment {
     pub fn from_default_python(preview: PreviewMode, cache: &Cache) -> Result<Self, Error> {
         let interpreter = find_default_interpreter(preview, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: interpreter.prefix().to_path_buf(),
+            root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
         })))
     }
@@ -144,7 +144,7 @@ impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`].
     pub fn from_interpreter(interpreter: Interpreter) -> Self {
         Self(Arc::new(PythonEnvironmentShared {
-            root: interpreter.prefix().to_path_buf(),
+            root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
         }))
     }

@@ -68,12 +68,12 @@ pub fn create_bare_venv(
         // already a "system Python". We canonicalize the path to ensure that it's real and
         // consistent, though we don't expect any symlinks on Windows.
         if interpreter.is_virtualenv() {
-            if let Some(base_executable) = interpreter.base_executable() {
+            if let Some(base_executable) = interpreter.sys_base_executable() {
                 base_executable.to_path_buf()
             } else {
                 // Assume `python.exe`, though the exact executable name is never used (below) on
                 // Windows, only its parent directory.
-                interpreter.base_prefix().join("python.exe")
+                interpreter.sys_base_prefix().join("python.exe")
             }
         } else {
             uv_fs::canonicalize_executable(interpreter.sys_executable())?
@@ -395,7 +395,7 @@ fn copy_launcher_windows(
             // `DLLs` subdirectory (if it exists).
             for directory in [
                 python_home,
-                interpreter.base_prefix().join("DLLs").as_path(),
+                interpreter.sys_base_prefix().join("DLLs").as_path(),
             ] {
                 let entries = match fs_err::read_dir(directory) {
                     Ok(read_dir) => read_dir,

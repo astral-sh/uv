@@ -192,9 +192,9 @@ mod tests {
                             "python_version": "{VERSION}",
                             "sys_platform": "linux"
                         },
-                        "base_exec_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                        "base_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                        "prefix": "{PREFIX}",
+                        "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
+                        "sys_base_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
+                        "sys_prefix": "{PREFIX}",
                         "sys_executable": "{PATH}",
                         "sys_path": [
                             "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/lib/python{VERSION}",
