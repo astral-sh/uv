@@ -533,11 +533,22 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 /// Check that the resolution is the same no matter where in the workspace we are.
 fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Result<()> {
     let mut shared_lock = None;
+
     for dir in subdirectories {
         let context = TestContext::new("3.12");
         let work_dir = context.temp_dir.join(workspace);
 
         copy_dir_ignore(workspaces_dir().join(workspace), &work_dir)?;
+
+        // TODO(konsti): `--python` is being ignored atm, so we need to create the correct venv
+        // ourselves and add the output filters.
+        let venv = work_dir.join(".venv");
+        assert_cmd::Command::new(get_bin())
+            .arg("venv")
+            .arg("-p")
+            .arg(context.interpreter())
+            .arg(&venv)
+            .assert();
 
         lock_workspace(&context)
             .current_dir(&work_dir.join(dir))
