@@ -347,6 +347,34 @@ impl TryFrom<LockWire> for Lock {
                     ));
                 }
             }
+
+            // Perform the same validation for optional dependencies.
+            for (extra, dependencies) in &mut dist.optional_dependencies {
+                dependencies.sort();
+                for windows in dependencies.windows(2) {
+                    let (dep1, dep2) = (&windows[0], &windows[1]);
+                    if dep1 == dep2 {
+                        return Err(LockError::duplicate_dependency(
+                            dist.id.clone(),
+                            dep1.id.clone(),
+                        ));
+                    }
+                }
+            }
+
+            // Perform the same validation for dev dependencies.
+            for (group, dependencies) in &mut dist.dev_dependencies {
+                dependencies.sort();
+                for windows in dependencies.windows(2) {
+                    let (dep1, dep2) = (&windows[0], &windows[1]);
+                    if dep1 == dep2 {
+                        return Err(LockError::duplicate_dependency(
+                            dist.id.clone(),
+                            dep1.id.clone(),
+                        ));
+                    }
+                }
+            }
         }
         wire.distributions
             .sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
@@ -359,18 +387,77 @@ impl TryFrom<LockWire> for Lock {
                 return Err(LockError::duplicate_distribution(dist.id.clone()));
             }
         }
+
         // Check that every dependency has an entry in `by_id`. If any don't,
         // it implies we somehow have a dependency with no corresponding locked
         // distribution.
         for dist in &wire.distributions {
             for dep in &dist.dependencies {
-                if !by_id.contains_key(&dep.id) {
+                if let Some(index) = by_id.get(&dep.id) {
+                    let dep_dist = &wire.distributions[*index];
+                    if let Some(extra) = &dep.extra {
+                        if !dep_dist.optional_dependencies.contains_key(extra) {
+                            return Err(LockError::unrecognized_extra(
+                                dist.id.clone(),
+                                dep.id.clone(),
+                                extra.clone(),
+                            ));
+                        }
+                    }
+                } else {
                     return Err(LockError::unrecognized_dependency(
                         dist.id.clone(),
                         dep.id.clone(),
                     ));
                 }
             }
+
+            // Perform the same validation for optional dependencies.
+            for (extra, dependencies) in &dist.optional_dependencies {
+                for dep in dependencies {
+                    if let Some(index) = by_id.get(&dep.id) {
+                        let dep_dist = &wire.distributions[*index];
+                        if let Some(extra) = &dep.extra {
+                            if !dep_dist.optional_dependencies.contains_key(extra) {
+                                return Err(LockError::unrecognized_extra(
+                                    dist.id.clone(),
+                                    dep.id.clone(),
+                                    extra.clone(),
+                                ));
+                            }
+                        }
+                    } else {
+                        return Err(LockError::unrecognized_dependency(
+                            dist.id.clone(),
+                            dep.id.clone(),
+                        ));
+                    }
+                }
+            }
+
+            // Perform the same validation for dev dependencies.
+            for (group, dependencies) in &dist.dev_dependencies {
+                for dep in dependencies {
+                    if let Some(index) = by_id.get(&dep.id) {
+                        let dep_dist = &wire.distributions[*index];
+                        if let Some(extra) = &dep.extra {
+                            if !dep_dist.optional_dependencies.contains_key(extra) {
+                                return Err(LockError::unrecognized_extra(
+                                    dist.id.clone(),
+                                    dep.id.clone(),
+                                    extra.clone(),
+                                ));
+                            }
+                        }
+                    } else {
+                        return Err(LockError::unrecognized_dependency(
+                            dist.id.clone(),
+                            dep.id.clone(),
+                        ));
+                    }
+                }
+            }
+
             // Also check that our sources are consistent with whether we have
             // hashes or not.
             let requires_hash = dist.id.source.kind.requires_hash();
@@ -1477,6 +1564,36 @@ impl LockError {
         }
     }
 
+    fn duplicate_optional_dependency(
+        id: DistributionId,
+        extra: ExtraName,
+        dependency_id: DistributionId,
+    ) -> LockError {
+        let kind = LockErrorKind::DuplicateOptionalDependency {
+            id,
+            extra,
+            dependency_id,
+        };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
+
+    fn duplicate_dev_dependency(
+        id: DistributionId,
+        group: GroupName,
+        dependency_id: DistributionId,
+    ) -> LockError {
+        let kind = LockErrorKind::DuplicateDevDependency {
+            id,
+            group,
+            dependency_id,
+        };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
+
     fn invalid_file_url(err: ToUrlError) -> LockError {
         let kind = LockErrorKind::InvalidFileUrl { err };
         LockError {
@@ -1487,6 +1604,21 @@ impl LockError {
     fn unrecognized_dependency(id: DistributionId, dependency_id: DistributionId) -> LockError {
         let err = UnrecognizedDependencyError { id, dependency_id };
         let kind = LockErrorKind::UnrecognizedDependency { err };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
+
+    fn unrecognized_extra(
+        id: DistributionId,
+        dependency_id: DistributionId,
+        extra: ExtraName,
+    ) -> LockError {
+        let kind = LockErrorKind::UnrecognizedExtra {
+            id,
+            dependency_id,
+            extra,
+        };
         LockError {
             kind: Box::new(kind),
         }
@@ -1523,8 +1655,11 @@ impl std::error::Error for LockError {
         match *self.kind {
             LockErrorKind::DuplicateDistribution { .. } => None,
             LockErrorKind::DuplicateDependency { .. } => None,
+            LockErrorKind::DuplicateOptionalDependency { .. } => None,
+            LockErrorKind::DuplicateDevDependency { .. } => None,
             LockErrorKind::InvalidFileUrl { ref err } => Some(err),
             LockErrorKind::UnrecognizedDependency { ref err } => Some(err),
+            LockErrorKind::UnrecognizedExtra { .. } => None,
             LockErrorKind::Hash { .. } => None,
             LockErrorKind::MissingExtraBase { .. } => None,
             LockErrorKind::MissingDevBase { .. } => None,
@@ -1547,11 +1682,41 @@ impl std::fmt::Display for LockError {
                     "for distribution `{id}`, found duplicate dependency `{dependency_id}`"
                 )
             }
+            LockErrorKind::DuplicateOptionalDependency {
+                ref id,
+                ref extra,
+                ref dependency_id,
+            } => {
+                write!(
+                    f,
+                    "for distribution `{id}[{extra}]`, found duplicate dependency `{dependency_id}`"
+                )
+            }
+            LockErrorKind::DuplicateDevDependency {
+                ref id,
+                ref group,
+                ref dependency_id,
+            } => {
+                write!(
+                    f,
+                    "for distribution `{id}:{group}`, found duplicate dependency `{dependency_id}`"
+                )
+            }
             LockErrorKind::InvalidFileUrl { .. } => {
                 write!(f, "failed to parse wheel or source dist URL")
             }
             LockErrorKind::UnrecognizedDependency { .. } => {
                 write!(f, "found unrecognized dependency")
+            }
+            LockErrorKind::UnrecognizedExtra {
+                ref id,
+                ref dependency_id,
+                ref extra,
+            } => {
+                write!(
+                    f,
+                    "for distribution `{id}`, found dependency `{dependency_id}` with unrecognized extra `{extra}`"
+                )
             }
             LockErrorKind::Hash {
                 ref id,
@@ -1610,6 +1775,30 @@ enum LockErrorKind {
         /// The ID of the conflicting dependency.
         dependency_id: DistributionId,
     },
+    /// An error that occurs when there are multiple dependencies for the
+    /// same distribution that have identical identifiers, as part of the
+    /// that distribution's optional dependencies.
+    DuplicateOptionalDependency {
+        /// The ID of the distribution for which a duplicate dependency was
+        /// found.
+        id: DistributionId,
+        /// The name of the optional dependency group.
+        extra: ExtraName,
+        /// The ID of the conflicting dependency.
+        dependency_id: DistributionId,
+    },
+    /// An error that occurs when there are multiple dependencies for the
+    /// same distribution that have identical identifiers, as part of the
+    /// that distribution's development dependencies.
+    DuplicateDevDependency {
+        /// The ID of the distribution for which a duplicate dependency was
+        /// found.
+        id: DistributionId,
+        /// The name of the dev dependency group.
+        group: GroupName,
+        /// The ID of the conflicting dependency.
+        dependency_id: DistributionId,
+    },
     /// An error that occurs when the URL to a file for a wheel or
     /// source dist could not be converted to a structured `url::Url`.
     InvalidFileUrl {
@@ -1623,6 +1812,17 @@ enum LockErrorKind {
     UnrecognizedDependency {
         /// The actual error.
         err: UnrecognizedDependencyError,
+    },
+    /// An error that occurs when the caller provides a distribution with
+    /// an extra that doesn't exist for the dependency.
+    UnrecognizedExtra {
+        /// The ID of the distribution that has an unrecognized dependency.
+        id: DistributionId,
+        /// The ID of the dependency that doesn't have a corresponding distribution
+        /// entry.
+        dependency_id: DistributionId,
+        /// The extra name that requested.
+        extra: ExtraName,
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
