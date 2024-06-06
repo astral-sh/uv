@@ -2315,6 +2315,44 @@ fn install_constraints_inline_remote() -> Result<()> {
     Ok(())
 }
 
+/// Constrain a package that's included via an extra.
+#[test]
+fn install_constraints_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("flask[dotenv]")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("python-dotenv==1.0.0")?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("-c")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Downloaded 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.0
+     + werkzeug==3.0.1
+    "###
+    );
+
+    Ok(())
+}
+
 #[test]
 fn install_constraints_respects_offline_mode() {
     let context = TestContext::new("3.12");
