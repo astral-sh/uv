@@ -29,10 +29,10 @@ pub struct Interpreter {
     markers: Box<MarkerEnvironment>,
     scheme: Scheme,
     virtualenv: Scheme,
-    prefix: PathBuf,
-    base_exec_prefix: PathBuf,
-    base_prefix: PathBuf,
-    base_executable: Option<PathBuf>,
+    sys_prefix: PathBuf,
+    sys_base_exec_prefix: PathBuf,
+    sys_base_prefix: PathBuf,
+    sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
@@ -58,12 +58,12 @@ impl Interpreter {
             markers: Box::new(info.markers),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
-            prefix: info.prefix,
-            base_exec_prefix: info.base_exec_prefix,
+            sys_prefix: info.sys_prefix,
+            sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
-            base_prefix: info.base_prefix,
-            base_executable: info.base_executable,
+            sys_base_prefix: info.sys_base_prefix,
+            sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
             stdlib: info.stdlib,
@@ -91,10 +91,10 @@ impl Interpreter {
                 scripts: PathBuf::from("/dev/null"),
                 data: PathBuf::from("/dev/null"),
             },
-            prefix: PathBuf::from("/dev/null"),
-            base_exec_prefix: PathBuf::from("/dev/null"),
-            base_prefix: PathBuf::from("/dev/null"),
-            base_executable: None,
+            sys_prefix: PathBuf::from("/dev/null"),
+            sys_base_exec_prefix: PathBuf::from("/dev/null"),
+            sys_base_prefix: PathBuf::from("/dev/null"),
+            sys_base_executable: None,
             sys_executable: PathBuf::from("/dev/null"),
             sys_path: vec![],
             stdlib: PathBuf::from("/dev/null"),
@@ -111,7 +111,7 @@ impl Interpreter {
         Self {
             scheme: virtualenv.scheme,
             sys_executable: virtualenv.executable,
-            prefix: virtualenv.root,
+            sys_prefix: virtualenv.root,
             target: None,
             ..self
         }
@@ -158,7 +158,7 @@ impl Interpreter {
     /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14>
     pub fn is_virtualenv(&self) -> bool {
         // Maybe this should return `false` if it's a target?
-        self.prefix != self.base_prefix
+        self.sys_prefix != self.sys_base_prefix
     }
 
     /// Returns `true` if the environment is a `--target` environment.
@@ -273,24 +273,24 @@ impl Interpreter {
     }
 
     /// Return the `sys.base_exec_prefix` path for this Python interpreter.
-    pub fn base_exec_prefix(&self) -> &Path {
-        &self.base_exec_prefix
+    pub fn sys_base_exec_prefix(&self) -> &Path {
+        &self.sys_base_exec_prefix
     }
 
     /// Return the `sys.base_prefix` path for this Python interpreter.
-    pub fn base_prefix(&self) -> &Path {
-        &self.base_prefix
+    pub fn sys_base_prefix(&self) -> &Path {
+        &self.sys_base_prefix
     }
 
     /// Return the `sys.prefix` path for this Python interpreter.
-    pub fn prefix(&self) -> &Path {
-        &self.prefix
+    pub fn sys_prefix(&self) -> &Path {
+        &self.sys_prefix
     }
 
     /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
     /// have this attribute, so it may be `None`.
-    pub fn base_executable(&self) -> Option<&Path> {
-        self.base_executable.as_deref()
+    pub fn sys_base_executable(&self) -> Option<&Path> {
+        self.sys_base_executable.as_deref()
     }
 
     /// Return the `sys.executable` path for this Python interpreter.
@@ -374,7 +374,7 @@ impl Interpreter {
                     include: if self.is_virtualenv() {
                         // If the interpreter is a venv, then the `include` directory has a different structure.
                         // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
-                        self.prefix.join("include").join("site").join(format!(
+                        self.sys_prefix.join("include").join("site").join(format!(
                             "python{}.{}",
                             self.python_major(),
                             self.python_minor()
@@ -476,10 +476,10 @@ struct InterpreterInfo {
     markers: MarkerEnvironment,
     scheme: Scheme,
     virtualenv: Scheme,
-    prefix: PathBuf,
-    base_exec_prefix: PathBuf,
-    base_prefix: PathBuf,
-    base_executable: Option<PathBuf>,
+    sys_prefix: PathBuf,
+    sys_base_exec_prefix: PathBuf,
+    sys_base_prefix: PathBuf,
+    sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
@@ -709,9 +709,9 @@ mod tests {
                     "python_version": "3.12",
                     "sys_platform": "linux"
                 },
-                "base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
-                "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
-                "prefix": "/home/ferris/projects/uv/.venv",
+                "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+                "sys_base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+                "sys_prefix": "/home/ferris/projects/uv/.venv",
                 "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
                 "sys_path": [
                     "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
