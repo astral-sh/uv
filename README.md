@@ -140,6 +140,20 @@ useful with a minimal barrier to adoption.
 
 ## Advanced Usage
 
+### Installing specific versions of uv
+
+uv's standalone installer can also be pinned to a specific version, for example, to install version `0.2.6`:
+
+```shell
+# On macOS and Linux.
+curl -LsSf https://astral.sh/uv/0.2.6/install.sh | sh
+
+# On Windows.
+powershell -c "irm https://astral.sh/uv/0.2.6/install.ps1 | iex"
+```
+
+When using other package managers for installation of uv, such as `pip`, consult their documentation for requesting specific versions.
+
 ### Python discovery
 
 uv itself does not depend on Python, but it does need to locate a Python environment to (1)
