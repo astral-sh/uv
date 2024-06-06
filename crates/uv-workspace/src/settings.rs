@@ -58,6 +58,7 @@ pub struct PipOptions {
     pub system: Option<bool>,
     pub break_system_packages: Option<bool>,
     pub target: Option<PathBuf>,
+    pub prefix: Option<PathBuf>,
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
     pub no_index: Option<bool>,

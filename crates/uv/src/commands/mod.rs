@@ -134,7 +134,7 @@ pub(super) async fn compile_bytecode(
     let start = std::time::Instant::now();
     let mut files = 0;
     for site_packages in venv.site_packages() {
-        files += compile_tree(site_packages, venv.python_executable(), cache.root())
+        files += compile_tree(&site_packages, venv.python_executable(), cache.root())
             .await
             .with_context(|| {
                 format!(

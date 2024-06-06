@@ -16,7 +16,9 @@ use url::Url;
 use common::{create_venv, uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
-use crate::common::{copy_dir_all, get_bin, run_and_format, TestContext, EXCLUDE_NEWER};
+use crate::common::{
+    copy_dir_all, get_bin, run_and_format, site_packages_path, TestContext, EXCLUDE_NEWER,
+};
 
 mod common;
 
@@ -5170,6 +5172,70 @@ fn target_no_build_isolation() -> Result<()> {
         .current_dir(&context.temp_dir)
         .assert()
         .success();
+
+    Ok(())
+}
+
+/// Sync to a `--prefix` directory.
+#[test]
+fn prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install `iniconfig` to the target directory.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig==2.0.0")?;
+
+    uv_snapshot!(sync(&context)
+        .arg("requirements.in")
+        .arg("--prefix")
+        .arg("prefix"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Ensure that we can't import the package.
+    context.assert_command("import iniconfig").failure();
+
+    // Ensure that we can import the package by augmenting the `PYTHONPATH`.
+    Command::new(venv_to_interpreter(&context.venv))
+        .arg("-B")
+        .arg("-c")
+        .arg("import iniconfig")
+        .env(
+            "PYTHONPATH",
+            site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
+        )
+        .current_dir(&context.temp_dir)
+        .assert()
+        .success();
+
+    // Upgrade it.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig==1.1.1")?;
+
+    uv_snapshot!(sync(&context)
+        .arg("requirements.in")
+        .arg("--prefix")
+        .arg("prefix"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - iniconfig==2.0.0
+     + iniconfig==1.1.1
+    "###);
 
     Ok(())
 }

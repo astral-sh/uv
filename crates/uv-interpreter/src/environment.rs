@@ -1,18 +1,17 @@
-use itertools::Either;
+use std::borrow::Cow;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use uv_configuration::PreviewMode;
-
-use same_file::is_same_file;
 
 use uv_cache::Cache;
+use uv_configuration::PreviewMode;
 use uv_fs::{LockedFile, Simplified};
 
 use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython};
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
 use crate::{
-    find_default_interpreter, find_interpreter, Error, Interpreter, InterpreterSource, Target,
+    find_default_interpreter, find_interpreter, Error, Interpreter, InterpreterSource, Prefix,
+    Target,
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
@@ -159,6 +158,16 @@ impl PythonEnvironment {
         }))
     }
 
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--prefix` directory.
+    #[must_use]
+    pub fn with_prefix(self, prefix: Prefix) -> Self {
+        let inner = Arc::unwrap_or_clone(self.0);
+        Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_prefix(prefix),
+            ..inner
+        }))
+    }
+
     /// Returns the root (i.e., `prefix`) of the Python interpreter.
     pub fn root(&self) -> &Path {
         &self.0.root
@@ -189,20 +198,27 @@ impl PythonEnvironment {
     ///
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
-    pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
-        if let Some(target) = self.0.interpreter.target() {
-            Either::Left(std::iter::once(target.root()))
+    pub fn site_packages(&self) -> impl Iterator<Item = Cow<Path>> {
+        let target = self.0.interpreter.target().map(Target::site_packages);
+
+        let prefix = self
+            .0
+            .interpreter
+            .prefix()
+            .map(|prefix| prefix.site_packages(self.0.interpreter.virtualenv()));
+
+        let interpreter = if target.is_none() && prefix.is_none() {
+            Some(self.0.interpreter.site_packages())
         } else {
-            let purelib = self.0.interpreter.purelib();
-            let platlib = self.0.interpreter.platlib();
-            Either::Right(std::iter::once(purelib).chain(
-                if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
-                    None
-                } else {
-                    Some(platlib)
-                },
-            ))
-        }
+            None
+        };
+
+        target
+            .into_iter()
+            .flatten()
+            .map(Cow::Borrowed)
+            .chain(prefix.into_iter().flatten().map(Cow::Owned))
+            .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
     }
 
     /// Returns the path to the `bin` directory inside this environment.

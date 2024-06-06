@@ -74,7 +74,7 @@ impl TestContext {
             .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
             .to_path_buf();
 
-        let site_packages = site_packages_path(&venv, format!("python{python_version}"));
+        let site_packages = site_packages_path(&venv, &format!("python{python_version}"));
 
         let python_version =
             PythonVersion::from_str(python_version).expect("Tests must use valid Python versions");
@@ -364,12 +364,12 @@ impl TestContext {
     pub fn site_packages(&self) -> PathBuf {
         site_packages_path(
             &self.venv,
-            format!("{}{}", self.python_kind(), self.python_version),
+            &format!("{}{}", self.python_kind(), self.python_version),
         )
     }
 }
 
-fn site_packages_path(venv: &Path, python: String) -> PathBuf {
+pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
     if cfg!(unix) {
         venv.join("lib").join(python).join("site-packages")
     } else if cfg!(windows) {

@@ -21,7 +21,7 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_interpreter::{PythonEnvironment, PythonVersion, SystemPython, Target};
+use uv_interpreter::{Prefix, PythonEnvironment, PythonVersion, SystemPython, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
@@ -60,6 +60,7 @@ pub(crate) async fn pip_sync(
     system: bool,
     break_system_packages: bool,
     target: Option<Target>,
+    prefix: Option<Prefix>,
     concurrency: Concurrency,
     native_tls: bool,
     preview: PreviewMode,
@@ -124,7 +125,7 @@ pub(crate) async fn pip_sync(
         venv.python_executable().user_display().cyan()
     );
 
-    // Apply any `--target` directory.
+    // Apply any `--target` or `--prefix` directories.
     let venv = if let Some(target) = target {
         debug!(
             "Using `--target` directory at {}",
@@ -132,6 +133,13 @@ pub(crate) async fn pip_sync(
         );
         target.init()?;
         venv.with_target(target)
+    } else if let Some(prefix) = prefix {
+        debug!(
+            "Using `--prefix` directory at {}",
+            prefix.root().user_display()
+        );
+        prefix.init()?;
+        venv.with_prefix(prefix)
     } else {
         venv
     };

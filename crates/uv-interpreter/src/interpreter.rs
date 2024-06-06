@@ -5,6 +5,7 @@ use std::process::{Command, ExitStatus};
 use configparser::ini::Ini;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
+use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{trace, warn};
@@ -20,7 +21,7 @@ use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
 use crate::pointer_size::PointerSize;
-use crate::{PythonVersion, Target, VirtualEnvironment};
+use crate::{Prefix, PythonVersion, Target, VirtualEnvironment};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -38,6 +39,7 @@ pub struct Interpreter {
     stdlib: PathBuf,
     tags: OnceCell<Tags>,
     target: Option<Target>,
+    prefix: Option<Prefix>,
     pointer_size: PointerSize,
     gil_disabled: bool,
 }
@@ -69,6 +71,7 @@ impl Interpreter {
             stdlib: info.stdlib,
             tags: OnceCell::new(),
             target: None,
+            prefix: None,
         })
     }
 
@@ -100,6 +103,7 @@ impl Interpreter {
             stdlib: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
             target: None,
+            prefix: None,
             pointer_size: PointerSize::_64,
             gil_disabled: false,
         }
@@ -113,17 +117,25 @@ impl Interpreter {
             sys_executable: virtualenv.executable,
             sys_prefix: virtualenv.root,
             target: None,
+            prefix: None,
             ..self
         }
     }
 
     /// Return a new [`Interpreter`] to install into the given `--target` directory.
-    ///
-    /// Initializes the `--target` directory with the expected layout.
     #[must_use]
     pub fn with_target(self, target: Target) -> Self {
         Self {
             target: Some(target),
+            ..self
+        }
+    }
+
+    /// Return a new [`Interpreter`] to install into the given `--prefix` directory.
+    #[must_use]
+    pub fn with_prefix(self, prefix: Prefix) -> Self {
+        Self {
+            prefix: Some(prefix),
             ..self
         }
     }
@@ -166,6 +178,11 @@ impl Interpreter {
         self.target.is_some()
     }
 
+    /// Returns `true` if the environment is a `--prefix` environment.
+    pub fn is_prefix(&self) -> bool {
+        self.prefix.is_some()
+    }
+
     /// Returns `Some` if the environment is externally managed, optionally including an error
     /// message from the `EXTERNALLY-MANAGED` file.
     ///
@@ -176,8 +193,8 @@ impl Interpreter {
             return None;
         }
 
-        // If we're installing into a target directory, it's never externally managed.
-        if self.is_target() {
+        // If we're installing into a target or prefix directory, it's never externally managed.
+        if self.is_target() || self.is_prefix() {
             return None;
         }
 
@@ -357,6 +374,11 @@ impl Interpreter {
         self.target.as_ref()
     }
 
+    /// Return the `--prefix` directory for this interpreter, if any.
+    pub fn prefix(&self) -> Option<&Prefix> {
+        self.prefix.as_ref()
+    }
+
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
     pub fn layout(&self) -> Layout {
         Layout {
@@ -365,6 +387,8 @@ impl Interpreter {
             os_name: self.markers.os_name().to_string(),
             scheme: if let Some(target) = self.target.as_ref() {
                 target.scheme()
+            } else if let Some(prefix) = self.prefix.as_ref() {
+                prefix.scheme(&self.virtualenv)
             } else {
                 Scheme {
                     purelib: self.purelib().to_path_buf(),
@@ -385,6 +409,19 @@ impl Interpreter {
                 }
             },
         }
+    }
+
+    /// Return an iterator over the `site-packages` directories inside the environment.
+    pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
+        let purelib = self.purelib();
+        let platlib = self.platlib();
+        std::iter::once(purelib).chain(
+            if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
+                None
+            } else {
+                Some(platlib)
+            },
+        )
     }
 
     /// Check if the interpreter matches the given Python version.

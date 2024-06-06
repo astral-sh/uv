@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
-use uv_interpreter::{PythonEnvironment, SystemPython, Target};
+use uv_interpreter::{Prefix, PythonEnvironment, SystemPython, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::commands::{elapsed, ExitStatus};
@@ -27,6 +27,7 @@ pub(crate) async fn pip_uninstall(
     system: bool,
     break_system_packages: bool,
     target: Option<Target>,
+    prefix: Option<Prefix>,
     cache: Cache,
     connectivity: Connectivity,
     native_tls: bool,
@@ -57,7 +58,7 @@ pub(crate) async fn pip_uninstall(
         venv.python_executable().user_display().cyan(),
     );
 
-    // Apply any `--target` directory.
+    // Apply any `--target` or `--prefix` directories.
     let venv = if let Some(target) = target {
         debug!(
             "Using `--target` directory at {}",
@@ -65,6 +66,13 @@ pub(crate) async fn pip_uninstall(
         );
         target.init()?;
         venv.with_target(target)
+    } else if let Some(prefix) = prefix {
+        debug!(
+            "Using `--prefix` directory at {}",
+            prefix.root().user_display()
+        );
+        prefix.init()?;
+        venv.with_prefix(prefix)
     } else {
         venv
     };

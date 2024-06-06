@@ -72,6 +72,7 @@ impl Combine for PipOptions {
                 .break_system_packages
                 .combine(other.break_system_packages),
             target: self.target.combine(other.target),
+            prefix: self.prefix.combine(other.prefix),
             index_url: self.index_url.combine(other.index_url),
             extra_index_url: self.extra_index_url.combine(other.extra_index_url),
             no_index: self.no_index.combine(other.no_index),
