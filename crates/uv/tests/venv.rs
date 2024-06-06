@@ -162,6 +162,25 @@ fn create_venv_defaults_to_cwd() {
 }
 
 #[test]
+fn create_venv_ignores_virtual_env_variable() {
+    let context = VenvTestContext::new(&["3.12"]);
+    // We shouldn't care if `VIRTUAL_ENV` is set to an non-existant directory
+    // because we ignore virtual environment interpreter sources (we require a system interpreter)
+    uv_snapshot!(context.filters(), context.venv_command()
+        .env("VIRTUAL_ENV", context.temp_dir.child("does-not-exist").as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PATH]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+}
+
+#[test]
 fn seed() {
     let context = VenvTestContext::new(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv_command()
