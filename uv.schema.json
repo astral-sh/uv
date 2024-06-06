@@ -501,6 +501,12 @@
             "null"
           ]
         },
+        "prefix": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "prerelease": {
           "anyOf": [
             {

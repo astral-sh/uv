@@ -9,6 +9,7 @@ pub use crate::discovery::{
 pub use crate::environment::PythonEnvironment;
 pub use crate::interpreter::Interpreter;
 pub use crate::pointer_size::PointerSize;
+pub use crate::prefix::Prefix;
 pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
@@ -21,6 +22,7 @@ mod interpreter;
 pub mod managed;
 pub mod platform;
 mod pointer_size;
+mod prefix;
 mod py_launcher;
 mod python_version;
 mod target;

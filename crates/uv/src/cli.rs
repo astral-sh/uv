@@ -731,9 +731,20 @@ pub(crate) struct PipSyncArgs {
     pub(crate) no_break_system_packages: bool,
 
     /// Install packages into the specified directory, rather than into the virtual environment
-    /// or system Python interpreter.
-    #[arg(long)]
+    /// or system Python interpreter. The packages will be installed at the top-level of the
+    /// directory
+    #[arg(long, conflicts_with = "prefix")]
     pub(crate) target: Option<PathBuf>,
+
+    /// Install packages into `lib`, `bin`, and other top-level folders under the specified
+    /// directory, as if a virtual environment were created at the specified location.
+    ///
+    /// In general, prefer the use of `--python` to install into an alternate environment, as
+    /// scripts and other artifacts installed via `--prefix` will reference the installing
+    /// interpreter, rather than any interpreter added to the `--prefix` directory, rendering them
+    /// non-portable.
+    #[arg(long, conflicts_with = "target")]
+    pub(crate) prefix: Option<PathBuf>,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -1087,9 +1098,20 @@ pub(crate) struct PipInstallArgs {
     pub(crate) no_break_system_packages: bool,
 
     /// Install packages into the specified directory, rather than into the virtual environment
-    /// or system Python interpreter.
-    #[arg(long)]
+    /// or system Python interpreter. The packages will be installed at the top-level of the
+    /// directory
+    #[arg(long, conflicts_with = "prefix")]
     pub(crate) target: Option<PathBuf>,
+
+    /// Install packages into `lib`, `bin`, and other top-level folders under the specified
+    /// directory, as if a virtual environment were created at the specified location.
+    ///
+    /// In general, prefer the use of `--python` to install into an alternate environment, as
+    /// scripts and other artifacts installed via `--prefix` will reference the installing
+    /// interpreter, rather than any interpreter added to the `--prefix` directory, rendering them
+    /// non-portable.
+    #[arg(long, conflicts_with = "target")]
+    pub(crate) prefix: Option<PathBuf>,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -1300,10 +1322,13 @@ pub(crate) struct PipUninstallArgs {
     #[arg(long, overrides_with("break_system_packages"))]
     pub(crate) no_break_system_packages: bool,
 
-    /// Uninstall packages from the specified directory, rather than from the virtual environment
-    /// or system Python interpreter.
-    #[arg(long)]
+    /// Uninstall packages from the specified `--target` directory.
+    #[arg(long, conflicts_with = "prefix")]
     pub(crate) target: Option<PathBuf>,
+
+    /// Uninstall packages from the specified `--prefix` directory.
+    #[arg(long, conflicts_with = "target")]
+    pub(crate) prefix: Option<PathBuf>,
 }
 
 #[derive(Args)]
