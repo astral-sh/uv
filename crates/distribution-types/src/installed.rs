@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -20,8 +21,10 @@ pub enum InstalledDist {
     Registry(InstalledRegistryDist),
     /// The distribution was derived from an arbitrary URL.
     Url(InstalledDirectUrlDist),
+    /// The distribution was derived from pre-existing `.egg-info` file (as installed by distutils).
+    EggInfoFile(InstalledEggInfoFile),
     /// The distribution was derived from pre-existing `.egg-info` directory.
-    EggInfo(InstalledEggInfo),
+    EggInfoDirectory(InstalledEggInfoDirectory),
     /// The distribution was derived from an `.egg-link` pointer.
     LegacyEditable(InstalledLegacyEditable),
 }
@@ -44,7 +47,14 @@ pub struct InstalledDirectUrlDist {
 }
 
 #[derive(Debug, Clone)]
-pub struct InstalledEggInfo {
+pub struct InstalledEggInfoFile {
+    pub name: PackageName,
+    pub version: Version,
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
@@ -107,27 +117,49 @@ impl InstalledDist {
             };
         }
 
-        // Ex) `zstandard-0.22.0-py3.12.egg-info`
         if path.extension().is_some_and(|ext| ext == "egg-info") {
-            let Some(file_stem) = path.file_stem() else {
-                return Ok(None);
-            };
-            let Some(file_stem) = file_stem.to_str() else {
-                return Ok(None);
-            };
-            let Some((name, version_python)) = file_stem.split_once('-') else {
-                return Ok(None);
-            };
-            let Some((version, _)) = version_python.split_once('-') else {
-                return Ok(None);
-            };
-            let name = PackageName::from_str(name)?;
-            let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
-            return Ok(Some(Self::EggInfo(InstalledEggInfo {
-                name,
-                version,
-                path: path.to_path_buf(),
-            })));
+            // Ex) `zstandard-0.22.0-py3.12.egg-info`
+            if path.is_dir() {
+                let Some(file_stem) = path.file_stem() else {
+                    return Ok(None);
+                };
+                let Some(file_stem) = file_stem.to_str() else {
+                    return Ok(None);
+                };
+                let Some((name, version_python)) = file_stem.split_once('-') else {
+                    return Ok(None);
+                };
+                let Some((version, _)) = version_python.split_once('-') else {
+                    return Ok(None);
+                };
+                let name = PackageName::from_str(name)?;
+                let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+                return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
+                    name,
+                    version,
+                    path: path.to_path_buf(),
+                })));
+            }
+
+            // Ex) `vtk-9.2.6.egg-info`
+            if path.is_file() {
+                let Some(file_stem) = path.file_stem() else {
+                    return Ok(None);
+                };
+                let Some(file_stem) = file_stem.to_str() else {
+                    return Ok(None);
+                };
+                let Some((name, version)) = file_stem.split_once('-') else {
+                    return Ok(None);
+                };
+                let name = PackageName::from_str(name)?;
+                let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+                return Ok(Some(Self::EggInfoFile(InstalledEggInfoFile {
+                    name,
+                    version,
+                    path: path.to_path_buf(),
+                })));
+            }
         }
 
         // Ex) `zstandard.egg-link`
@@ -199,7 +231,8 @@ impl InstalledDist {
         match self {
             Self::Registry(dist) => &dist.path,
             Self::Url(dist) => &dist.path,
-            Self::EggInfo(dist) => &dist.path,
+            Self::EggInfoDirectory(dist) => &dist.path,
+            Self::EggInfoFile(dist) => &dist.path,
             Self::LegacyEditable(dist) => &dist.egg_info,
         }
     }
@@ -209,7 +242,8 @@ impl InstalledDist {
         match self {
             Self::Registry(dist) => &dist.version,
             Self::Url(dist) => &dist.version,
-            Self::EggInfo(dist) => &dist.version,
+            Self::EggInfoDirectory(dist) => &dist.version,
+            Self::EggInfoFile(dist) => &dist.version,
             Self::LegacyEditable(dist) => &dist.version,
         }
     }
@@ -238,13 +272,14 @@ impl InstalledDist {
                     )
                 })
             }
-            Self::EggInfo(_) | Self::LegacyEditable(_) => {
+            Self::EggInfoFile(_) | Self::EggInfoDirectory(_) | Self::LegacyEditable(_) => {
                 let path = match self {
-                    Self::EggInfo(dist) => dist.path.join("PKG-INFO"),
-                    Self::LegacyEditable(dist) => dist.egg_info.join("PKG-INFO"),
+                    Self::EggInfoFile(dist) => Cow::Borrowed(&dist.path),
+                    Self::EggInfoDirectory(dist) => Cow::Owned(dist.path.join("PKG-INFO")),
+                    Self::LegacyEditable(dist) => Cow::Owned(dist.egg_info.join("PKG-INFO")),
                     _ => unreachable!(),
                 };
-                let contents = fs::read(&path)?;
+                let contents = fs::read(path.as_ref())?;
                 pypi_types::Metadata23::parse_metadata(&contents).with_context(|| {
                     format!(
                         "Failed to parse `PKG-INFO` file at: {}",
@@ -278,7 +313,8 @@ impl InstalledDist {
         match self {
             Self::Registry(_) => None,
             Self::Url(dist) => dist.editable.then_some(&dist.url),
-            Self::EggInfo(_) => None,
+            Self::EggInfoFile(_) => None,
+            Self::EggInfoDirectory(_) => None,
             Self::LegacyEditable(dist) => Some(&dist.target_url),
         }
     }
@@ -288,7 +324,8 @@ impl InstalledDist {
         match self {
             Self::Registry(_) => false,
             Self::Url(dist) => matches!(&*dist.direct_url, DirectUrl::LocalDirectory { .. }),
-            Self::EggInfo(_) => false,
+            Self::EggInfoFile(_) => false,
+            Self::EggInfoDirectory(_) => false,
             Self::LegacyEditable(_) => true,
         }
     }
@@ -312,7 +349,13 @@ impl Name for InstalledDirectUrlDist {
     }
 }
 
-impl Name for InstalledEggInfo {
+impl Name for InstalledEggInfoFile {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+}
+
+impl Name for InstalledEggInfoDirectory {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -329,7 +372,8 @@ impl Name for InstalledDist {
         match self {
             Self::Registry(dist) => dist.name(),
             Self::Url(dist) => dist.name(),
-            Self::EggInfo(dist) => dist.name(),
+            Self::EggInfoDirectory(dist) => dist.name(),
+            Self::EggInfoFile(dist) => dist.name(),
             Self::LegacyEditable(dist) => dist.name(),
         }
     }
@@ -347,7 +391,13 @@ impl InstalledMetadata for InstalledDirectUrlDist {
     }
 }
 
-impl InstalledMetadata for InstalledEggInfo {
+impl InstalledMetadata for InstalledEggInfoFile {
+    fn installed_version(&self) -> InstalledVersion {
+        InstalledVersion::Version(&self.version)
+    }
+}
+
+impl InstalledMetadata for InstalledEggInfoDirectory {
     fn installed_version(&self) -> InstalledVersion {
         InstalledVersion::Version(&self.version)
     }
@@ -364,7 +414,8 @@ impl InstalledMetadata for InstalledDist {
         match self {
             Self::Registry(dist) => dist.installed_version(),
             Self::Url(dist) => dist.installed_version(),
-            Self::EggInfo(dist) => dist.installed_version(),
+            Self::EggInfoFile(dist) => dist.installed_version(),
+            Self::EggInfoDirectory(dist) => dist.installed_version(),
             Self::LegacyEditable(dist) => dist.installed_version(),
         }
     }
