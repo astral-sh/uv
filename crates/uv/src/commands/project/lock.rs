@@ -1,5 +1,4 @@
 use anstream::eprint;
-use anyhow::Result;
 use itertools::Itertools;
 use pubgrub::range::Range;
 
@@ -35,7 +34,7 @@ pub(crate) async fn lock(
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
-) -> Result<ExitStatus> {
+) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user!("`uv lock` is experimental and may change without warning.");
     }
@@ -135,19 +134,22 @@ pub(super) async fn do_lock(
                 .flat_map(VersionSpecifier::from_bounds)
                 .collect()
         });
+
     let requires_python = if let Some(requires_python) = requires_python_workspace {
         requires_python
     } else {
         let requires_python = VersionSpecifiers::from(
             VersionSpecifier::greater_than_equal_version(venv.interpreter().python_minor_version()),
         );
-        warn_user!(
-            "No `requires-python` field found in `{}`. Defaulting to `{requires_python}`.",
-            root_project_name
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or("workspace".to_string()),
-        );
+        if let Some(root_project_name) = root_project_name.as_ref() {
+            warn_user!(
+                "No `requires-python` field found in `{root_project_name}`. Defaulting to `{requires_python}`.",
+            );
+        } else {
+            warn_user!(
+                "No `requires-python` field found in workspace. Defaulting to `{requires_python}`.",
+            );
+        }
         requires_python
     };
 

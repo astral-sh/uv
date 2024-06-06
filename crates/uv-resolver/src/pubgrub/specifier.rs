@@ -1,3 +1,5 @@
+use std::ops::Bound;
+
 use itertools::Itertools;
 use pubgrub::range::Range;
 use thiserror::Error;
@@ -15,9 +17,8 @@ pub enum PubGrubSpecifierError {
 pub struct PubGrubSpecifier(Range<Version>);
 
 impl PubGrubSpecifier {
-    /// Returns `true` if the [`PubGrubSpecifier`] is a subset of the other.
-    pub(crate) fn subset_of(&self, other: &Self) -> bool {
-        self.0.subset_of(&other.0)
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
+        self.0.iter()
     }
 }
 

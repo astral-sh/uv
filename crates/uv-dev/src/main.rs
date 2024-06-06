@@ -1,6 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::str::FromStr;
 use std::time::Instant;
 
 use anstream::{eprintln, println};
@@ -10,9 +11,10 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 use tracing_durations_export::plot::PlotConfig;
 use tracing_durations_export::DurationsLayerBuilder;
+use tracing_subscriber::filter::Directive;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
@@ -117,15 +119,21 @@ async fn main() -> ExitCode {
         (None, None)
     };
 
-    let filter_layer = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::builder()
-            // Show only the important spans
-            .parse("uv_dev=info,uv_dispatch=info")
-            .unwrap()
-    });
+    // Show `INFO` messages from the `uv` crate, but allow `RUST_LOG` to override.
+    let default_directive = Directive::from_str("uv=info").unwrap();
+
+    let filter = EnvFilter::builder()
+        .with_default_directive(default_directive)
+        .from_env()
+        .expect("Valid RUST_LOG directives");
+
     tracing_subscriber::registry()
         .with(duration_layer)
-        .with(filter_layer)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_filter(filter),
+        )
         .init();
 
     let start = Instant::now();
