@@ -67,6 +67,14 @@ pub(crate) enum ProjectError {
     RequiresPython(#[from] uv_resolver::RequiresPythonError),
 }
 
+/// Find the virtual environment for the current project.
+pub(crate) fn find_environment(
+    workspace: &Workspace,
+    cache: &Cache,
+) -> Result<PythonEnvironment, uv_toolchain::Error> {
+    PythonEnvironment::from_root(workspace.venv(), cache)
+}
+
 /// Initialize a virtual environment for the current project.
 pub(crate) fn init_environment(
     workspace: &Workspace,
@@ -74,11 +82,9 @@ pub(crate) fn init_environment(
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
-    let venv = workspace.root().join(".venv");
-
     // Discover or create the virtual environment.
     // TODO(charlie): If the environment isn't compatible with `--python`, recreate it.
-    match PythonEnvironment::from_root(&venv, cache) {
+    match find_environment(workspace, cache) {
         Ok(venv) => Ok(venv),
         Err(uv_toolchain::Error::NotFound(_)) => {
             // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
@@ -94,6 +100,7 @@ pub(crate) fn init_environment(
                 interpreter.sys_executable().user_display().cyan()
             )?;
 
+            let venv = workspace.venv();
             writeln!(
                 printer.stderr(),
                 "Creating virtualenv at: {}",

@@ -200,6 +200,11 @@ impl Workspace {
         &self.root
     }
 
+    /// The path to the workspace virtual environment.
+    pub fn venv(&self) -> PathBuf {
+        self.root.join(".venv")
+    }
+
     /// The members of the workspace.
     pub fn packages(&self) -> &BTreeMap<PackageName, WorkspaceMember> {
         &self.packages

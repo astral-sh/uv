@@ -73,7 +73,7 @@ pub(crate) async fn run(
         let lock = project::lock::do_lock(
             root_project_name,
             project.workspace(),
-            &venv,
+            venv.interpreter(),
             &index_locations,
             upgrade,
             exclude_newer,

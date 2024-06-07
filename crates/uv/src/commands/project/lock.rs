@@ -14,7 +14,7 @@ use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
-use uv_toolchain::PythonEnvironment;
+use uv_toolchain::{Interpreter, Toolchain};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -39,8 +39,14 @@ pub(crate) async fn lock(
     // Find the project requirements.
     let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
 
-    // Discover or create the virtual environment.
-    let venv = project::init_environment(&workspace, preview, cache, printer)?;
+    // Find an interpreter for the project
+    let interpreter = match project::find_environment(&workspace, cache) {
+        Ok(environment) => environment.into_interpreter(),
+        Err(uv_toolchain::Error::NotFound(_)) => {
+            Toolchain::find_default(PreviewMode::Enabled, cache)?.into_interpreter()
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     // Perform the lock operation.
     let root_project_name = workspace.root_member().and_then(|member| {
@@ -53,7 +59,7 @@ pub(crate) async fn lock(
     match do_lock(
         root_project_name,
         &workspace,
-        &venv,
+        &interpreter,
         &index_locations,
         upgrade,
         exclude_newer,
@@ -81,7 +87,7 @@ pub(crate) async fn lock(
 pub(super) async fn do_lock(
     root_project_name: Option<PackageName>,
     workspace: &Workspace,
-    venv: &PythonEnvironment,
+    interpreter: &Interpreter,
     index_locations: &IndexLocations,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
@@ -119,7 +125,7 @@ pub(super) async fn do_lock(
         requires_python
     } else {
         let requires_python =
-            RequiresPython::greater_than_equal_version(venv.interpreter().python_minor_version());
+            RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
         if let Some(root_project_name) = root_project_name.as_ref() {
             warn_user!(
                 "No `requires-python` field found in `{root_project_name}`. Defaulting to `{requires_python}`.",
@@ -132,17 +138,16 @@ pub(super) async fn do_lock(
         requires_python
     };
 
-    // Determine the tags, markers, and interpreter to use for resolution.
-    let interpreter = venv.interpreter();
-    let tags = venv.interpreter().tags()?;
-    let markers = venv.interpreter().markers();
+    // Determine the tags and markers to use for resolution.
+    let tags = interpreter.tags()?;
+    let markers = interpreter.markers();
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
         .index_urls(index_locations.index_urls())
         .markers(markers)
-        .platform(venv.interpreter().platform())
+        .platform(interpreter.platform())
         .build();
 
     // TODO(charlie): Respect project configuration.
