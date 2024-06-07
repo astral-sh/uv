@@ -63,12 +63,18 @@ impl KeyringProvider {
         };
         // And fallback to a check for the host
         if password.is_none() {
-            let host = url.host_str()?;
+            let host = if let Some(port) = url.port() {
+                format!("{}:{}", url.host_str()?, port)
+            } else {
+                url.host_str()?.to_string()
+            };
             trace!("Checking keyring for host {host}");
             password = match self.backend {
-                KeyringProviderBackend::Subprocess => self.fetch_subprocess(host, username).await,
+                KeyringProviderBackend::Subprocess => self.fetch_subprocess(&host, username).await,
                 #[cfg(test)]
-                KeyringProviderBackend::Dummy(ref store) => self.fetch_dummy(store, host, username),
+                KeyringProviderBackend::Dummy(ref store) => {
+                    self.fetch_dummy(store, &host, username)
+                }
             };
         }
 

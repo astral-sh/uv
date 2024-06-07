@@ -784,7 +784,14 @@ mod tests {
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([(
-                        (base_url.host_str().unwrap(), username),
+                        (
+                            format!(
+                                "{}:{}",
+                                base_url.host_str().unwrap(),
+                                base_url.port().unwrap()
+                            ),
+                            username,
+                        ),
                         password,
                     )]))),
             )
@@ -832,6 +839,40 @@ mod tests {
         Ok(())
     }
 
+    /// We include ports in keyring requests, e.g., `localhost:8000` should be distinct from `localhost`,
+    /// unless the server is running on a default port, e.g., `localhost:80` is equivalent to `localhost`.
+    /// We don't unit test the latter case because it's possible to collide with a server a developer is
+    /// actually running.
+    #[test(tokio::test)]
+    async fn test_keyring_includes_non_standard_port() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_keyring(Some(KeyringProvider::dummy([(
+                        // Omit the port from the keyring entry
+                        (base_url.host_str().unwrap(), username),
+                        password,
+                    )]))),
+            )
+            .build();
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            401,
+            "We should fail because the port is not present in the keyring entry"
+        );
+
+        Ok(())
+    }
+
     #[test(tokio::test)]
     async fn test_credentials_in_keyring_seed() -> Result<(), Error> {
         let username = "user";
@@ -849,7 +890,17 @@ mod tests {
         );
         let client = test_client_builder()
             .with(AuthMiddleware::new().with_cache(cache).with_keyring(Some(
-                KeyringProvider::dummy([((base_url.host_str().unwrap(), username), password)]),
+                KeyringProvider::dummy([(
+                    (
+                        format!(
+                            "{}:{}",
+                            base_url.host_str().unwrap(),
+                            base_url.port().unwrap()
+                        ),
+                        username,
+                    ),
+                    password,
+                )]),
             )))
             .build();
 
@@ -954,8 +1005,28 @@ mod tests {
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([
-                        ((base_url_1.host_str().unwrap(), username_1), password_1),
-                        ((base_url_2.host_str().unwrap(), username_2), password_2),
+                        (
+                            (
+                                format!(
+                                    "{}:{}",
+                                    base_url_1.host_str().unwrap(),
+                                    base_url_1.port().unwrap()
+                                ),
+                                username_1,
+                            ),
+                            password_1,
+                        ),
+                        (
+                            (
+                                format!(
+                                    "{}:{}",
+                                    base_url_2.host_str().unwrap(),
+                                    base_url_2.port().unwrap()
+                                ),
+                                username_2,
+                            ),
+                            password_2,
+                        ),
                     ]))),
             )
             .build();
@@ -1188,8 +1259,28 @@ mod tests {
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([
-                        ((base_url_1.host_str().unwrap(), username_1), password_1),
-                        ((base_url_2.host_str().unwrap(), username_2), password_2),
+                        (
+                            (
+                                format!(
+                                    "{}:{}",
+                                    base_url_1.host_str().unwrap(),
+                                    base_url_1.port().unwrap()
+                                ),
+                                username_1,
+                            ),
+                            password_1,
+                        ),
+                        (
+                            (
+                                format!(
+                                    "{}:{}",
+                                    base_url_2.host_str().unwrap(),
+                                    base_url_2.port().unwrap()
+                                ),
+                                username_2,
+                            ),
+                            password_2,
+                        ),
                     ]))),
             )
             .build();
