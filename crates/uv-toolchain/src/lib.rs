@@ -151,6 +151,8 @@ mod tests {
             let mut run_vars = vec![
                 // Ensure `PATH` is used
                 ("UV_TEST_PYTHON_PATH", None),
+                // Ignore active virtual envrionments (i.e. that the dev is using)
+                ("VIRTUAL_ENV", None),
                 ("PATH", path.as_deref()),
                 // Use the temporary toolchain directory
                 ("UV_TOOLCHAIN_DIR", Some(self.toolchains.root().as_os_str())),
