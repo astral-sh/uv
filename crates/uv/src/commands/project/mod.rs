@@ -21,7 +21,7 @@ use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, Options, RequiresPython};
-use uv_toolchain::{find_default_interpreter, PythonEnvironment};
+use uv_toolchain::{find_default_toolchain, PythonEnvironment};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip;
@@ -82,7 +82,7 @@ pub(crate) fn init_environment(
         Ok(venv) => Ok(venv),
         Err(uv_toolchain::Error::NotFound(_)) => {
             // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
-            let interpreter = find_default_interpreter(preview, cache)
+            let interpreter = find_default_toolchain(preview, cache)
                 .map_err(uv_toolchain::Error::from)?
                 .map_err(uv_toolchain::Error::from)?
                 .into_interpreter();

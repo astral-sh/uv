@@ -2,8 +2,8 @@
 use thiserror::Error;
 
 pub use crate::discovery::{
-    find_best_interpreter, find_default_interpreter, find_interpreter, Error as DiscoveryError,
-    InterpreterNotFound, InterpreterRequest, InterpreterSource, SourceSelector, SystemPython,
+    find_best_toolchain, find_default_toolchain, find_toolchain, Error as DiscoveryError,
+    SystemPython, ToolchainNotFound, ToolchainRequest, ToolchainSource, ToolchainSources,
     VersionRequest,
 };
 pub use crate::environment::PythonEnvironment;
@@ -56,7 +56,7 @@ pub enum Error {
     PyLauncher(#[from] py_launcher::Error),
 
     #[error(transparent)]
-    NotFound(#[from] InterpreterNotFound),
+    NotFound(#[from] ToolchainNotFound),
 }
 
 // The mock interpreters are not valid on Windows so we don't have unit test coverage there
@@ -80,10 +80,10 @@ mod tests {
     use uv_configuration::PreviewMode;
 
     use crate::{
-        discovery::DiscoveredInterpreter, find_best_interpreter, find_default_interpreter,
-        find_interpreter, implementation::ImplementationName, managed::InstalledToolchains,
-        virtualenv::virtualenv_python_executable, Error, InterpreterNotFound, InterpreterRequest,
-        InterpreterSource, PythonEnvironment, PythonVersion, SourceSelector, SystemPython,
+        discovery::DiscoveredToolchain, find_best_toolchain, find_default_toolchain,
+        find_toolchain, implementation::ImplementationName, managed::InstalledToolchains,
+        virtualenv::virtualenv_python_executable, Error, PythonEnvironment, PythonVersion,
+        SystemPython, ToolchainNotFound, ToolchainRequest, ToolchainSource, ToolchainSources,
         VersionRequest,
     };
 
@@ -384,24 +384,16 @@ mod tests {
         let mut context = TestContext::new()?;
 
         context.search_path = Some(vec![]);
-        let result =
-            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache));
+        let result = context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache));
         assert!(
-            matches!(
-                result,
-                Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
-            ),
+            matches!(result, Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))),
             "With an empty path, no Python installation should be detected got {result:?}"
         );
 
         context.search_path = None;
-        let result =
-            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache));
+        let result = context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache));
         assert!(
-            matches!(
-                result,
-                Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
-            ),
+            matches!(result, Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))),
             "With an unset path, no Python installation should be detected got {result:?}"
         );
 
@@ -416,12 +408,11 @@ mod tests {
             .child(format!("python{}", env::consts::EXE_SUFFIX))
             .touch()?;
 
-        let result =
-            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache));
+        let result = context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache));
         assert!(
             matches!(
                 result,
-                Ok(Err(InterpreterNotFound::NoPythonInstallation(..)))
+                Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))
             ),
             "With an non-executable Python, no Python installation should be detected; got {result:?}"
         );
@@ -435,12 +426,12 @@ mod tests {
         context.add_python_versions(&["3.12.1"])?;
 
         let interpreter =
-            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache))??;
+            context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache))??;
         assert!(
             matches!(
                 interpreter,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::SearchPath,
+                DiscoveredToolchain {
+                    source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
             ),
@@ -488,19 +479,19 @@ mod tests {
             true,
         )?;
 
-        let found =
-            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache))??;
+        let toolchain =
+            context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache))??;
         assert!(
             matches!(
-                found,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::SearchPath,
+                toolchain,
+                DiscoveredToolchain {
+                    source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
             ),
-            "We should skip the bad executables in favor of the good one; got {found:?}"
+            "We should skip the bad executables in favor of the good one; got {toolchain:?}"
         );
-        assert_eq!(found.interpreter().sys_executable(), python);
+        assert_eq!(toolchain.interpreter().sys_executable(), python);
 
         Ok(())
     }
@@ -514,10 +505,10 @@ mod tests {
         TestContext::create_mock_python2_interpreter(&python)?;
 
         let result = context
-            .run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache))
-            .expect("An environment should be found");
+            .run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache))
+            .expect("An environment should be toolchain");
         assert!(
-            matches!(result, Err(InterpreterNotFound::NoPythonInstallation(..))),
+            matches!(result, Err(ToolchainNotFound::NoPythonInstallation(..))),
             // TODO(zanieb): We could improve the error handling to hint this to the user
             "If only Python 2 is available, we should not find an interpreter; got {result:?}"
         );
@@ -544,19 +535,19 @@ mod tests {
             true,
         )?;
 
-        let found =
-            context.run(|| find_default_interpreter(PreviewMode::Disabled, &context.cache))??;
+        let toolchain =
+            context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache))??;
         assert!(
             matches!(
-                found,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::SearchPath,
+                toolchain,
+                DiscoveredToolchain {
+                    source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
             ),
-            "We should skip the Python 2 installation and find the Python 3 interpreter; got {found:?}"
+            "We should skip the Python 2 installation and find the Python 3 interpreter; got {toolchain:?}"
         );
-        assert_eq!(found.interpreter().sys_executable(), python3.path());
+        assert_eq!(toolchain.interpreter().sys_executable(), python3.path());
 
         Ok(())
     }
@@ -569,16 +560,16 @@ mod tests {
             (true, ImplementationName::CPython, "python", "3.10.1"),
         ])?;
 
-        let found = context.run(|| {
-            find_interpreter(
-                &InterpreterRequest::Any,
+        let toolchain = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
                 SystemPython::Allowed,
-                &SourceSelector::All(PreviewMode::Disabled),
+                &ToolchainSources::All(PreviewMode::Disabled),
                 &context.cache,
             )
         })??;
         assert_eq!(
-            found.interpreter().python_full_version().to_string(),
+            toolchain.interpreter().python_full_version().to_string(),
             "3.10.0",
             "Should find the first interpreter regardless of system"
         );
@@ -590,16 +581,16 @@ mod tests {
             (false, ImplementationName::CPython, "python", "3.10.0"),
         ])?;
 
-        let found = context.run(|| {
-            find_interpreter(
-                &InterpreterRequest::Any,
+        let toolchain = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
                 SystemPython::Allowed,
-                &SourceSelector::All(PreviewMode::Disabled),
+                &ToolchainSources::All(PreviewMode::Disabled),
                 &context.cache,
             )
         })??;
         assert_eq!(
-            found.interpreter().python_full_version().to_string(),
+            toolchain.interpreter().python_full_version().to_string(),
             "3.10.1",
             "Should find the first interpreter regardless of system"
         );
@@ -615,16 +606,16 @@ mod tests {
             (true, ImplementationName::CPython, "python", "3.10.1"),
         ])?;
 
-        let found = context.run(|| {
-            find_interpreter(
-                &InterpreterRequest::Any,
+        let toolchain = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
                 SystemPython::Required,
-                &SourceSelector::All(PreviewMode::Disabled),
+                &ToolchainSources::All(PreviewMode::Disabled),
                 &context.cache,
             )
         })??;
         assert_eq!(
-            found.interpreter().python_full_version().to_string(),
+            toolchain.interpreter().python_full_version().to_string(),
             "3.10.1",
             "Should skip the virtual environment"
         );
@@ -640,16 +631,16 @@ mod tests {
             (false, ImplementationName::CPython, "python", "3.10.1"),
         ])?;
 
-        let found = context.run(|| {
-            find_interpreter(
-                &InterpreterRequest::Any,
+        let toolchain = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
                 SystemPython::Allowed,
-                &SourceSelector::All(PreviewMode::Disabled),
+                &ToolchainSources::All(PreviewMode::Disabled),
                 &context.cache,
             )
         })??;
         assert_eq!(
-            found.interpreter().python_full_version().to_string(),
+            toolchain.interpreter().python_full_version().to_string(),
             "3.10.0",
             "Should skip the system Python"
         );
@@ -662,27 +653,27 @@ mod tests {
         let mut context = TestContext::new()?;
         context.add_python_versions(&["3.10.1", "3.11.2", "3.12.3"])?;
 
-        let found = context.run(|| {
-            find_interpreter(
-                &InterpreterRequest::parse("3.11"),
+        let toolchain = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::parse("3.11"),
                 SystemPython::Allowed,
-                &SourceSelector::All(PreviewMode::Disabled),
+                &ToolchainSources::All(PreviewMode::Disabled),
                 &context.cache,
             )
         })??;
 
         assert!(
             matches!(
-                found,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::SearchPath,
+                toolchain,
+                DiscoveredToolchain {
+                    source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
             ),
-            "We should find an interpreter; got {found:?}"
+            "We should find an interpreter; got {toolchain:?}"
         );
         assert_eq!(
-            &found.interpreter().python_full_version().to_string(),
+            &toolchain.interpreter().python_full_version().to_string(),
             "3.11.2",
             "We should find the correct interpreter for the request"
         );
@@ -695,27 +686,27 @@ mod tests {
         let mut context = TestContext::new()?;
         context.add_python_versions(&["3.10.1", "3.11.3", "3.11.2", "3.12.3"])?;
 
-        let found = context.run(|| {
-            find_interpreter(
-                &InterpreterRequest::parse("3.11.2"),
+        let toolchain = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::parse("3.11.2"),
                 SystemPython::Allowed,
-                &SourceSelector::All(PreviewMode::Disabled),
+                &ToolchainSources::All(PreviewMode::Disabled),
                 &context.cache,
             )
         })??;
 
         assert!(
             matches!(
-                found,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::SearchPath,
+                toolchain,
+                DiscoveredToolchain {
+                    source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
             ),
-            "We should find an interpreter; got {found:?}"
+            "We should find an interpreter; got {toolchain:?}"
         );
         assert_eq!(
-            &found.interpreter().python_full_version().to_string(),
+            &toolchain.interpreter().python_full_version().to_string(),
             "3.11.2",
             "We should find the correct interpreter for the request"
         );
@@ -729,17 +720,17 @@ mod tests {
         context.add_python_versions(&["3.10.1", "3.11.2", "3.12.3"])?;
 
         let result = context.run(|| {
-            find_interpreter(
-                &InterpreterRequest::parse("3.9"),
+            find_toolchain(
+                &ToolchainRequest::parse("3.9"),
                 SystemPython::Allowed,
-                &SourceSelector::All(PreviewMode::Disabled),
+                &ToolchainSources::All(PreviewMode::Disabled),
                 &context.cache,
             )
         })?;
         assert!(
             matches!(
                 result,
-                Err(InterpreterNotFound::NoMatchingVersion(
+                Err(ToolchainNotFound::NoMatchingVersion(
                     _,
                     VersionRequest::MajorMinor(3, 9)
                 ))
@@ -756,17 +747,17 @@ mod tests {
         context.add_python_versions(&["3.10.1", "3.11.2", "3.12.3"])?;
 
         let result = context.run(|| {
-            find_interpreter(
-                &InterpreterRequest::parse("3.11.9"),
+            find_toolchain(
+                &ToolchainRequest::parse("3.11.9"),
                 SystemPython::Allowed,
-                &SourceSelector::All(PreviewMode::Disabled),
+                &ToolchainSources::All(PreviewMode::Disabled),
                 &context.cache,
             )
         })?;
         assert!(
             matches!(
                 result,
-                Err(InterpreterNotFound::NoMatchingVersion(
+                Err(ToolchainNotFound::NoMatchingVersion(
                     _,
                     VersionRequest::MajorMinorPatch(3, 11, 9)
                 ))
@@ -782,9 +773,9 @@ mod tests {
         let mut context = TestContext::new()?;
         context.add_python_versions(&["3.10.1", "3.11.2", "3.11.4", "3.11.3", "3.12.5"])?;
 
-        let found = context.run(|| {
-            find_best_interpreter(
-                &InterpreterRequest::parse("3.11.3"),
+        let toolchain = context.run(|| {
+            find_best_toolchain(
+                &ToolchainRequest::parse("3.11.3"),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -793,16 +784,16 @@ mod tests {
 
         assert!(
             matches!(
-                found,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::SearchPath,
+                toolchain,
+                DiscoveredToolchain {
+                    source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
             ),
-            "We should find an interpreter; got {found:?}"
+            "We should find an interpreter; got {toolchain:?}"
         );
         assert_eq!(
-            &found.interpreter().python_full_version().to_string(),
+            &toolchain.interpreter().python_full_version().to_string(),
             "3.11.3",
             "We should prefer the exact request"
         );
@@ -815,9 +806,9 @@ mod tests {
         let mut context = TestContext::new()?;
         context.add_python_versions(&["3.10.1", "3.11.2", "3.11.4", "3.11.3", "3.12.5"])?;
 
-        let found = context.run(|| {
-            find_best_interpreter(
-                &InterpreterRequest::parse("3.11.11"),
+        let toolchain = context.run(|| {
+            find_best_toolchain(
+                &ToolchainRequest::parse("3.11.11"),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -826,16 +817,16 @@ mod tests {
 
         assert!(
             matches!(
-                found,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::SearchPath,
+                toolchain,
+                DiscoveredToolchain {
+                    source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
             ),
-            "We should find an interpreter; got {found:?}"
+            "We should find an interpreter; got {toolchain:?}"
         );
         assert_eq!(
-            &found.interpreter().python_full_version().to_string(),
+            &toolchain.interpreter().python_full_version().to_string(),
             "3.11.2",
             "We should fallback to the first matching minor"
         );
@@ -850,23 +841,24 @@ mod tests {
         TestContext::mock_venv(&venv, "3.12.0")?;
         context.add_python_versions(&["3.10.1"])?;
 
-        let found = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-            find_best_interpreter(
-                &InterpreterRequest::parse("3.10"),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
-                &context.cache,
-            )
-        })??;
+        let toolchain =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                find_best_toolchain(
+                    &ToolchainRequest::parse("3.10"),
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })??;
         assert!(
             matches!(
-                found,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::SearchPath,
+                toolchain,
+                DiscoveredToolchain {
+                    source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
             ),
-            "We should skip the active environment in favor of the requested version; got {found:?}"
+            "We should skip the active environment in favor of the requested version; got {toolchain:?}"
         );
 
         Ok(())
@@ -879,26 +871,27 @@ mod tests {
         TestContext::mock_venv(&venv, "3.10.1")?;
         context.add_python_versions(&["3.10.3"])?;
 
-        let found = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-            find_best_interpreter(
-                &InterpreterRequest::parse("3.10.2"),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
-                &context.cache,
-            )
-        })??;
+        let toolchain =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                find_best_toolchain(
+                    &ToolchainRequest::parse("3.10.2"),
+                    SystemPython::Allowed,
+                    PreviewMode::Disabled,
+                    &context.cache,
+                )
+            })??;
         assert!(
             matches!(
-                found,
-                DiscoveredInterpreter {
-                    source: InterpreterSource::ActiveEnvironment,
+                toolchain,
+                DiscoveredToolchain {
+                    source: ToolchainSource::ActiveEnvironment,
                     interpreter: _
                 }
             ),
-            "We should prefer the active environment after relaxing; got {found:?}"
+            "We should prefer the active environment after relaxing; got {toolchain:?}"
         );
         assert_eq!(
-            found.interpreter().python_full_version().to_string(),
+            toolchain.interpreter().python_full_version().to_string(),
             "3.10.1",
             "We should prefer the active environment"
         );
@@ -1021,7 +1014,7 @@ mod tests {
                     &context.cache,
                 )
             })
-            .expect("An environment should be found");
+            .expect("An environment should be toolchain");
         assert_eq!(
             environment.interpreter().python_full_version().to_string(),
             "3.12.0",
@@ -1039,7 +1032,7 @@ mod tests {
                     &context.cache,
                 )
             })
-            .expect("An environment should be found");
+            .expect("An environment should be toolchain");
         assert_eq!(
             environment.interpreter().python_full_version().to_string(),
             "3.12.0",
@@ -1215,7 +1208,7 @@ mod tests {
             "We should skip the active environment"
         );
 
-        // With a patch version that cannot be found
+        // With a patch version that cannot be toolchain
         let result = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
             PythonEnvironment::find(
                 Some("3.12.3"),
@@ -1248,8 +1241,8 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Err(Error::NotFound(InterpreterNotFound::NoPythonInstallation(
-                    SourceSelector::VirtualEnv,
+                Err(Error::NotFound(ToolchainNotFound::NoPythonInstallation(
+                    ToolchainSources::VirtualEnv,
                     None
                 )))
             ),
@@ -1271,8 +1264,8 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Err(Error::NotFound(InterpreterNotFound::NoMatchingVersion(
-                    SourceSelector::System(PreviewMode::Disabled),
+                Err(Error::NotFound(ToolchainNotFound::NoMatchingVersion(
+                    ToolchainSources::System(PreviewMode::Disabled),
                     VersionRequest::MajorMinorPatch(3, 12, 3)
                 )))
             ),
@@ -1424,11 +1417,7 @@ mod tests {
             matches!(
                 result,
                 Err(Error::Discovery(
-                    crate::discovery::Error::SourceNotSelected(
-                        _,
-                        InterpreterSource::ProvidedPath,
-                        _
-                    )
+                    crate::discovery::Error::SourceNotSelected(_, ToolchainSource::ProvidedPath, _)
                 ))
             ),
             // TODO(zanieb): We should allow this, just enforce it's a virtualenv
@@ -1546,7 +1535,7 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Err(Error::NotFound(InterpreterNotFound::FileNotFound(_)))
+                Err(Error::NotFound(ToolchainNotFound::FileNotFound(_)))
             ),
             "We should not find the file; got {result:?}"
         );
@@ -1575,7 +1564,7 @@ mod tests {
                     &context.cache,
                 )
             })
-            .expect("An environment should be found");
+            .expect("An environment should be toolchain");
         assert_eq!(
             environment.interpreter().python_full_version().to_string(),
             "3.10.0",
@@ -1615,7 +1604,7 @@ mod tests {
                     &context.cache,
                 )
             })
-            .expect("An environment should be found");
+            .expect("An environment should be toolchain");
         assert_eq!(
             environment.interpreter().python_full_version().to_string(),
             "3.10.1",
@@ -1631,7 +1620,7 @@ mod tests {
                     &context.cache,
                 )
             })
-            .expect("An environment should be found");
+            .expect("An environment should be toolchain");
         assert_eq!(
             environment.interpreter().python_full_version().to_string(),
             "3.10.1",
@@ -1658,7 +1647,7 @@ mod tests {
                     &context.cache,
                 )
             })
-            .expect("An environment should be found");
+            .expect("An environment should be toolchain");
         assert_eq!(
             environment.interpreter().python_full_version().to_string(),
             "3.10.1",
@@ -1674,7 +1663,7 @@ mod tests {
                     &context.cache,
                 )
             })
-            .expect("An environment should be found");
+            .expect("An environment should be toolchain");
         assert_eq!(
             environment.interpreter().python_full_version().to_string(),
             "3.10.0",

@@ -42,7 +42,7 @@ use uv_resolver::{
     Resolver,
 };
 use uv_toolchain::{
-    find_best_interpreter, InterpreterRequest, PythonEnvironment, PythonVersion, SystemPython,
+    find_best_toolchain, PythonEnvironment, PythonVersion, SystemPython, ToolchainRequest,
     VersionRequest,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
@@ -167,11 +167,11 @@ pub(crate) async fn pip_compile(
     } else {
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
-            InterpreterRequest::Version(VersionRequest::from(version))
+            ToolchainRequest::Version(VersionRequest::from(version))
         } else {
-            InterpreterRequest::default()
+            ToolchainRequest::default()
         };
-        find_best_interpreter(&request, system, preview, &cache)??.into_interpreter()
+        find_best_toolchain(&request, system, preview, &cache)??.into_interpreter()
     };
 
     debug!(

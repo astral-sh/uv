@@ -7,11 +7,10 @@ use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::{LockedFile, Simplified};
 
-use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython};
+use crate::discovery::{SystemPython, ToolchainRequest, ToolchainSources};
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
 use crate::{
-    find_default_interpreter, find_interpreter, Error, Interpreter, InterpreterSource, Prefix,
-    Target,
+    find_default_toolchain, find_toolchain, Error, Interpreter, Prefix, Target, ToolchainSource,
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
@@ -65,33 +64,33 @@ impl PythonEnvironment {
     ///
     /// Allows Conda environments (via `CONDA_PREFIX`) though they are not technically virtual environments.
     pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
-        let sources = SourceSelector::VirtualEnv;
-        let request = InterpreterRequest::Any;
-        let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
+        let sources = ToolchainSources::VirtualEnv;
+        let request = ToolchainRequest::Any;
+        let toolchain = find_toolchain(&request, SystemPython::Disallowed, &sources, cache)??;
 
         debug_assert!(
-            found.interpreter().is_virtualenv()
-                || matches!(found.source(), InterpreterSource::CondaPrefix),
+            toolchain.interpreter().is_virtualenv()
+                || matches!(toolchain.source(), ToolchainSource::CondaPrefix),
             "Not a virtualenv (source: {}, prefix: {})",
-            found.source(),
-            found.interpreter().sys_base_prefix().display()
+            toolchain.source(),
+            toolchain.interpreter().sys_base_prefix().display()
         );
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: found.interpreter().sys_prefix().to_path_buf(),
-            interpreter: found.into_interpreter(),
+            root: toolchain.interpreter().sys_prefix().to_path_buf(),
+            interpreter: toolchain.into_interpreter(),
         })))
     }
 
     /// Create a [`PythonEnvironment`] for the parent interpreter i.e. the executable in `python -m uv ...`
     pub fn from_parent_interpreter(system: SystemPython, cache: &Cache) -> Result<Self, Error> {
-        let sources = SourceSelector::from_sources([InterpreterSource::ParentInterpreter]);
-        let request = InterpreterRequest::Any;
-        let found = find_interpreter(&request, system, &sources, cache)??;
+        let sources = ToolchainSources::from_sources([ToolchainSource::ParentInterpreter]);
+        let request = ToolchainRequest::Any;
+        let toolchain = find_toolchain(&request, system, &sources, cache)??;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: found.interpreter().sys_prefix().to_path_buf(),
-            interpreter: found.into_interpreter(),
+            root: toolchain.interpreter().sys_prefix().to_path_buf(),
+            interpreter: toolchain.into_interpreter(),
         })))
     }
 
@@ -101,7 +100,7 @@ impl PythonEnvironment {
             Ok(venv) => venv,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::NotFound(
-                    crate::InterpreterNotFound::DirectoryNotFound(root.to_path_buf()),
+                    crate::ToolchainNotFound::DirectoryNotFound(root.to_path_buf()),
                 ));
             }
             Err(err) => return Err(Error::Discovery(err.into())),
@@ -122,9 +121,9 @@ impl PythonEnvironment {
         preview: PreviewMode,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let sources = SourceSelector::from_settings(system, preview);
-        let request = InterpreterRequest::parse(request);
-        let interpreter = find_interpreter(&request, system, &sources, cache)??.into_interpreter();
+        let sources = ToolchainSources::from_settings(system, preview);
+        let request = ToolchainRequest::parse(request);
+        let interpreter = find_toolchain(&request, system, &sources, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
@@ -133,7 +132,7 @@ impl PythonEnvironment {
 
     /// Create a [`PythonEnvironment`] for the default Python interpreter.
     pub fn from_default_python(preview: PreviewMode, cache: &Cache) -> Result<Self, Error> {
-        let interpreter = find_default_interpreter(preview, cache)??.into_interpreter();
+        let interpreter = find_default_toolchain(preview, cache)??.into_interpreter();
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
