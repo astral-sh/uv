@@ -24,31 +24,31 @@ pub enum Error {
     PlatformError(#[from] PlatformError),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
-    #[error("invalid python version: {0}")]
+    #[error("Invalid python version: {0}")]
     InvalidPythonVersion(String),
-    #[error("download failed")]
+    #[error("Download failed")]
     NetworkError(#[from] BetterReqwestError),
-    #[error("download failed")]
+    #[error("Download failed")]
     NetworkMiddlewareError(#[source] anyhow::Error),
     #[error(transparent)]
     ExtractError(#[from] uv_extract::Error),
-    #[error("invalid download url")]
+    #[error("Invalid download url")]
     InvalidUrl(#[from] url::ParseError),
-    #[error("failed to create download directory")]
+    #[error("Failed to create download directory")]
     DownloadDirError(#[source] io::Error),
-    #[error("failed to copy to: {0}", to.user_display())]
+    #[error("Failed to copy to: {0}", to.user_display())]
     CopyError {
         to: PathBuf,
         #[source]
         err: io::Error,
     },
-    #[error("failed to read toolchain directory: {0}", dir.user_display())]
+    #[error("Failed to read toolchain directory: {0}", dir.user_display())]
     ReadError {
         dir: PathBuf,
         #[source]
         err: io::Error,
     },
-    #[error("failed to parse toolchain directory name: {0}")]
+    #[error("Failed to parse toolchain directory name: {0}")]
     NameError(String),
 }
 

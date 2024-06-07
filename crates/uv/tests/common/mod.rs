@@ -19,7 +19,7 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_toolchain::managed::InstalledToolchains;
 use uv_toolchain::{
-    find_interpreter, InterpreterRequest, PythonVersion, SourceSelector, VersionRequest,
+    find_toolchain, PythonVersion, ToolchainRequest, ToolchainSources, VersionRequest,
 };
 
 // Exclude any packages uploaded after this date.
@@ -416,7 +416,7 @@ pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path
                 .expect("Tests are run on a supported platform")
                 .next()
                 .as_ref()
-                .map(uv_toolchain::managed::Toolchain::executable)
+                .map(uv_toolchain::managed::InstalledToolchain::executable)
         })
         // We'll search for the request Python on the PATH if not found in the toolchain versions
         // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
@@ -476,12 +476,12 @@ pub fn python_path_with_versions(
                 .unwrap_or_default();
             if inner.is_empty() {
                 // Fallback to a system lookup if we failed to find one in the toolchain directory
-                let request = InterpreterRequest::Version(
+                let request = ToolchainRequest::Version(
                     VersionRequest::from_str(python_version)
                         .expect("The test version request must be valid"),
                 );
-                let sources = SourceSelector::All(PreviewMode::Enabled);
-                if let Ok(found) = find_interpreter(
+                let sources = ToolchainSources::All(PreviewMode::Enabled);
+                if let Ok(found) = find_toolchain(
                     &request,
                     // Without required, we could pick the current venv here and the test fails
                     // because the venv subcommand requires a system interpreter.

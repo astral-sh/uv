@@ -17,7 +17,7 @@ pub enum Error {
     #[error("Failed to determine Python interpreter to use")]
     Discovery(#[from] uv_toolchain::DiscoveryError),
     #[error("Failed to determine Python interpreter to use")]
-    InterpreterNotFound(#[from] uv_toolchain::InterpreterNotFound),
+    InterpreterNotFound(#[from] uv_toolchain::ToolchainNotFound),
     #[error(transparent)]
     Platform(#[from] PlatformError),
     #[error("Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}")]

@@ -13,7 +13,7 @@ pub use crate::downloads::Error;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 
-/// A collection of installed Python toolchains.
+/// A collection of uv-managed Python toolchains installed on the current system.
 #[derive(Debug, Clone)]
 pub struct InstalledToolchains {
     /// The path to the top-level directory of the installed toolchains.
@@ -72,7 +72,7 @@ impl InstalledToolchains {
     /// ordering across platforms. This also results in newer Python versions coming first,
     /// but should not be relied on — instead the toolchains should be sorted later by
     /// the parsed Python version.
-    fn find_all(&self) -> Result<impl DoubleEndedIterator<Item = Toolchain>, Error> {
+    fn find_all(&self) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(toolchain_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -101,14 +101,14 @@ impl InstalledToolchains {
         };
         Ok(dirs
             .into_iter()
-            .map(|path| Toolchain::new(path).unwrap())
+            .map(|path| InstalledToolchain::new(path).unwrap())
             .rev())
     }
 
     /// Iterate over toolchains that support the current platform.
     pub fn find_matching_current_platform(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = Toolchain>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
         let platform_key = platform_key_from_env()?;
 
         let iter = InstalledToolchains::from_settings()?
@@ -133,7 +133,7 @@ impl InstalledToolchains {
     pub fn find_version<'a>(
         &self,
         version: &'a PythonVersion,
-    ) -> Result<impl DoubleEndedIterator<Item = Toolchain> + 'a, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain> + 'a, Error> {
         Ok(self
             .find_matching_current_platform()?
             .filter(move |toolchain| {
@@ -150,28 +150,28 @@ impl InstalledToolchains {
     }
 }
 
-/// An installed Python toolchain.
+/// A uv-managed Python toolchain installed on the current system..
 #[derive(Debug, Clone)]
-pub struct Toolchain {
+pub struct InstalledToolchain {
     /// The path to the top-level directory of the installed toolchain.
     path: PathBuf,
     python_version: PythonVersion,
 }
 
-impl Toolchain {
+impl InstalledToolchain {
     pub fn new(path: PathBuf) -> Result<Self, Error> {
         let python_version = PythonVersion::from_str(
             path.file_name()
-                .ok_or(Error::NameError("No directory name".to_string()))?
+                .ok_or(Error::NameError("name is empty".to_string()))?
                 .to_str()
-                .ok_or(Error::NameError("Name not a valid string".to_string()))?
+                .ok_or(Error::NameError("not a valid string".to_string()))?
                 .split('-')
                 .nth(1)
                 .ok_or(Error::NameError(
-                    "Not enough `-`-separated values".to_string(),
+                    "not enough `-`-separated values".to_string(),
                 ))?,
         )
-        .map_err(|err| Error::NameError(format!("Name has invalid Python version: {err}")))?;
+        .map_err(|err| Error::NameError(format!("invalid Python version: {err}")))?;
 
         Ok(Self {
             path,
@@ -202,7 +202,7 @@ fn platform_key_from_env() -> Result<String, Error> {
     Ok(format!("{os}-{arch}-{libc}").to_lowercase())
 }
 
-impl fmt::Display for Toolchain {
+impl fmt::Display for InstalledToolchain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

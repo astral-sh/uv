@@ -4,15 +4,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
 use uv_fs::{LockedFile, Simplified};
 
-use crate::discovery::{InterpreterRequest, SourceSelector, SystemPython};
+use crate::toolchain::Toolchain;
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
-use crate::{
-    find_default_interpreter, find_interpreter, Error, Interpreter, InterpreterSource, Prefix,
-    Target,
-};
+use crate::{Error, Interpreter, Prefix, Target};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone)]
@@ -25,83 +21,13 @@ struct PythonEnvironmentShared {
 }
 
 impl PythonEnvironment {
-    /// Find a [`PythonEnvironment`].
-    ///
-    /// This is the standard interface for discovering a Python environment for use with uv.
-    pub fn find(
-        python: Option<&str>,
-        system: SystemPython,
-        preview: PreviewMode,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        // Detect the current Python interpreter.
-        if let Some(python) = python {
-            Self::from_requested_python(python, system, preview, cache)
-        } else if system.is_preferred() {
-            Self::from_default_python(preview, cache)
-        } else {
-            // First check for a parent intepreter
-            // We gate this check to avoid an extra log message when it is not set
-            if std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER").is_some() {
-                match Self::from_parent_interpreter(system, cache) {
-                    Ok(env) => return Ok(env),
-                    Err(Error::NotFound(_)) => {}
-                    Err(err) => return Err(err),
-                }
-            }
-
-            // Then a virtual environment
-            match Self::from_virtualenv(cache) {
-                Ok(venv) => Ok(venv),
-                Err(Error::NotFound(_)) if system.is_allowed() => {
-                    Self::from_default_python(preview, cache)
-                }
-                Err(err) => Err(err),
-            }
-        }
-    }
-
-    /// Create a [`PythonEnvironment`] for an existing virtual environment.
-    ///
-    /// Allows Conda environments (via `CONDA_PREFIX`) though they are not technically virtual environments.
-    pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
-        let sources = SourceSelector::VirtualEnv;
-        let request = InterpreterRequest::Any;
-        let found = find_interpreter(&request, SystemPython::Disallowed, &sources, cache)??;
-
-        debug_assert!(
-            found.interpreter().is_virtualenv()
-                || matches!(found.source(), InterpreterSource::CondaPrefix),
-            "Not a virtualenv (source: {}, prefix: {})",
-            found.source(),
-            found.interpreter().sys_base_prefix().display()
-        );
-
-        Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: found.interpreter().sys_prefix().to_path_buf(),
-            interpreter: found.into_interpreter(),
-        })))
-    }
-
-    /// Create a [`PythonEnvironment`] for the parent interpreter i.e. the executable in `python -m uv ...`
-    pub fn from_parent_interpreter(system: SystemPython, cache: &Cache) -> Result<Self, Error> {
-        let sources = SourceSelector::from_sources([InterpreterSource::ParentInterpreter]);
-        let request = InterpreterRequest::Any;
-        let found = find_interpreter(&request, system, &sources, cache)??;
-
-        Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: found.interpreter().sys_prefix().to_path_buf(),
-            interpreter: found.into_interpreter(),
-        })))
-    }
-
     /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
-    pub fn from_root(root: &Path, cache: &Cache) -> Result<Self, Error> {
-        let venv = match fs_err::canonicalize(root) {
+    pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
+        let venv = match fs_err::canonicalize(root.as_ref()) {
             Ok(venv) => venv,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::NotFound(
-                    crate::InterpreterNotFound::DirectoryNotFound(root.to_path_buf()),
+                    crate::ToolchainNotFound::DirectoryNotFound(root.as_ref().to_path_buf()),
                 ));
             }
             Err(err) => return Err(Error::Discovery(err.into())),
@@ -115,29 +41,9 @@ impl PythonEnvironment {
         })))
     }
 
-    /// Create a [`PythonEnvironment`] for a Python interpreter specifier (e.g., a path or a binary name).
-    pub fn from_requested_python(
-        request: &str,
-        system: SystemPython,
-        preview: PreviewMode,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        let sources = SourceSelector::from_settings(system, preview);
-        let request = InterpreterRequest::parse(request);
-        let interpreter = find_interpreter(&request, system, &sources, cache)??.into_interpreter();
-        Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: interpreter.sys_prefix().to_path_buf(),
-            interpreter,
-        })))
-    }
-
-    /// Create a [`PythonEnvironment`] for the default Python interpreter.
-    pub fn from_default_python(preview: PreviewMode, cache: &Cache) -> Result<Self, Error> {
-        let interpreter = find_default_interpreter(preview, cache)??.into_interpreter();
-        Ok(Self(Arc::new(PythonEnvironmentShared {
-            root: interpreter.sys_prefix().to_path_buf(),
-            interpreter,
-        })))
+    /// Create a [`PythonEnvironment`] from an existing [`Toolchain`].
+    pub fn from_toolchain(toolchain: Toolchain) -> Self {
+        Self::from_interpreter(toolchain.into_interpreter())
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`].

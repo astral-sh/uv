@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use tracing::info;
 use uv_cache::{Cache, CacheArgs};
-use uv_toolchain::PythonEnvironment;
+use uv_toolchain::Toolchain;
 
 #[derive(Parser)]
 pub(crate) struct CompileArgs {
@@ -20,8 +20,8 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
     let interpreter = if let Some(python) = args.python {
         python
     } else {
-        let venv = PythonEnvironment::from_virtualenv(&cache)?;
-        venv.python_executable().to_path_buf()
+        let interpreter = Toolchain::find_virtualenv(&cache)?.into_interpreter();
+        interpreter.sys_executable().to_path_buf()
     };
 
     let files = uv_installer::compile_tree(

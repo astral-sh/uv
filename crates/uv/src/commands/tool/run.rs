@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_requirements::RequirementsSource;
-use uv_toolchain::{PythonEnvironment, SystemPython};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
 use uv_warnings::warn_user;
 
 use crate::commands::project::update_environment;
@@ -53,10 +53,9 @@ pub(crate) async fn run(
 
     // Discover an interpreter.
     let interpreter = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, SystemPython::Allowed, preview, cache)?
-            .into_interpreter()
+        Toolchain::find_requested(python, SystemPython::Allowed, preview, cache)?.into_interpreter()
     } else {
-        PythonEnvironment::from_default_python(preview, cache)?.into_interpreter()
+        Toolchain::find_default(preview, cache)?.into_interpreter()
     };
 
     // Create a virtual environment

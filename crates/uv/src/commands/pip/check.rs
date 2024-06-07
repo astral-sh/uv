@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
-use uv_toolchain::{PythonEnvironment, SystemPython};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -31,16 +31,17 @@ pub(crate) fn pip_check(
     } else {
         SystemPython::Allowed
     };
-    let venv = PythonEnvironment::find(python, system, preview, cache)?;
+    let environment =
+        PythonEnvironment::from_toolchain(Toolchain::find(python, system, preview, cache)?);
 
     debug!(
         "Using Python {} environment at {}",
-        venv.interpreter().python_version(),
-        venv.python_executable().user_display().cyan()
+        environment.interpreter().python_version(),
+        environment.python_executable().user_display().cyan()
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&venv)?;
+    let site_packages = SitePackages::from_executable(&environment)?;
     let packages: Vec<&InstalledDist> = site_packages.iter().collect();
 
     let s = if packages.len() == 1 { "" } else { "s" };

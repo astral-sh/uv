@@ -15,7 +15,7 @@ use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
 use uv_resolver::ExcludeNewer;
-use uv_toolchain::{PythonEnvironment, SystemPython};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
@@ -109,10 +109,10 @@ pub(crate) async fn run(
         let interpreter = if let Some(project_env) = &project_env {
             project_env.interpreter().clone()
         } else if let Some(python) = python.as_ref() {
-            PythonEnvironment::from_requested_python(python, SystemPython::Allowed, preview, cache)?
+            Toolchain::find_requested(python, SystemPython::Allowed, preview, cache)?
                 .into_interpreter()
         } else {
-            PythonEnvironment::from_default_python(preview, cache)?.into_interpreter()
+            Toolchain::find_default(preview, cache)?.into_interpreter()
         };
 
         // TODO(charlie): If the environment satisfies the requirements, skip creation.
