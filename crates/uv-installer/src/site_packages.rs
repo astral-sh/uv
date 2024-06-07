@@ -12,8 +12,8 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{Requirement, VerbatimParsedUrl};
-use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
+use uv_toolchain::PythonEnvironment;
 use uv_types::InstalledPackagesProvider;
 
 use crate::satisfies::RequirementSatisfaction;

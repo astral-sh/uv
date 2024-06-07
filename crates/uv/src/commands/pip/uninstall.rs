@@ -13,8 +13,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
-use uv_interpreter::{Prefix, PythonEnvironment, SystemPython, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_toolchain::{Prefix, PythonEnvironment, SystemPython, Target};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;

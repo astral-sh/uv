@@ -9,7 +9,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 #[cfg(windows)]
 use uv_fs::Simplified;
-use uv_interpreter::PythonVersion;
+use uv_toolchain::PythonVersion;
 
 use crate::common::{get_bin, python_path_with_versions, uv_snapshot, TestContext, EXCLUDE_NEWER};
 

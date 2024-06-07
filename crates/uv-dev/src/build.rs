@@ -15,8 +15,8 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
-use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex};
+use uv_toolchain::PythonEnvironment;
 use uv_types::{BuildContext, BuildIsolation, InFlight};
 
 #[derive(Parser)]

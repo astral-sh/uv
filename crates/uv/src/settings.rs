@@ -15,9 +15,9 @@ use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, KeyringProviderType, NoBinary,
     NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple, Upgrade,
 };
-use uv_interpreter::{Prefix, PythonVersion, Target};
 use uv_normalize::PackageName;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_toolchain::{Prefix, PythonVersion, Target};
 use uv_workspace::{Combine, PipOptions, Workspace};
 
 use crate::cli::{

@@ -22,12 +22,12 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_interpreter::{Prefix, PythonEnvironment, PythonVersion, SystemPython, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
     ResolutionMode,
 };
+use uv_toolchain::{Prefix, PythonEnvironment, PythonVersion, SystemPython, Target};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip::operations;

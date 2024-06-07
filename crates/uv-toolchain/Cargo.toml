@@ -1,5 +1,5 @@
 [package]
-name = "uv-interpreter"
+name = "uv-toolchain"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }

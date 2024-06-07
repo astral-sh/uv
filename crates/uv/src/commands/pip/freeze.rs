@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_interpreter::{PythonEnvironment, SystemPython};
+use uv_toolchain::{PythonEnvironment, SystemPython};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

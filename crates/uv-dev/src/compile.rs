@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use tracing::info;
 use uv_cache::{Cache, CacheArgs};
-use uv_interpreter::PythonEnvironment;
+use uv_toolchain::PythonEnvironment;
 
 #[derive(Parser)]
 pub(crate) struct CompileArgs {

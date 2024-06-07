@@ -12,8 +12,8 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
+use uv_toolchain::PythonEnvironment;
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 

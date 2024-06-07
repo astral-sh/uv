@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use distribution_types::IndexUrl;
 use install_wheel_rs::linker::LinkMode;
 use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple};
-use uv_interpreter::PythonVersion;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_toolchain::PythonVersion;
 
 use crate::{Options, PipOptions, Workspace};
 

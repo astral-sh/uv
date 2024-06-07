@@ -25,8 +25,8 @@ pub(crate) use tool::run::run as run_tool;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
-use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
+use uv_toolchain::PythonEnvironment;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
 

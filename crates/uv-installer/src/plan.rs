@@ -22,7 +22,7 @@ use uv_distribution::{
 };
 use uv_fs::Simplified;
 use uv_git::GitUrl;
-use uv_interpreter::PythonEnvironment;
+use uv_toolchain::PythonEnvironment;
 use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;

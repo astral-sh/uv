@@ -5,8 +5,8 @@ use bench::criterion::{criterion_group, criterion_main, measurement::WallTime, C
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_interpreter::PythonEnvironment;
 use uv_resolver::Manifest;
+use uv_toolchain::PythonEnvironment;
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let runtime = &tokio::runtime::Builder::new_current_thread()
@@ -86,10 +86,10 @@ mod resolver {
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
     use uv_git::GitResolver;
-    use uv_interpreter::PythonEnvironment;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph, Resolver,
     };
+    use uv_toolchain::PythonEnvironment;
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
     static MARKERS: Lazy<MarkerEnvironment> = Lazy::new(|| {
