@@ -9,7 +9,7 @@ use tokio::process::Command;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_normalize::PackageName;
@@ -40,6 +40,8 @@ pub(crate) async fn run(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let client_builder = BaseClientBuilder::new().connectivity(connectivity);
+
     if preview.is_disabled() {
         warn_user!("`uv run` is experimental and may change without warning.");
     }
@@ -110,12 +112,14 @@ pub(crate) async fn run(
             project_env.interpreter().clone()
         } else {
             // Note we force preview on during `uv run` for now since the entire interface is in preview
-            Toolchain::find(
+            Toolchain::find_or_fetch(
                 python.as_deref(),
                 SystemPython::Allowed,
                 PreviewMode::Enabled,
+                client_builder,
                 cache,
-            )?
+            )
+            .await?
             .into_interpreter()
         };
 
