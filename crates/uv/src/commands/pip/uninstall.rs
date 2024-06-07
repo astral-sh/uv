@@ -14,6 +14,7 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_toolchain::Toolchain;
 use uv_toolchain::{Prefix, PythonEnvironment, SystemPython, Target};
 
 use crate::commands::{elapsed, ExitStatus};
@@ -50,57 +51,62 @@ pub(crate) async fn pip_uninstall(
     } else {
         SystemPython::Explicit
     };
-    let venv = PythonEnvironment::find(python.as_deref(), system, preview, &cache)?;
+    let environment = PythonEnvironment::from_toolchain(Toolchain::find(
+        python.as_deref(),
+        system,
+        preview,
+        &cache,
+    )?);
 
     debug!(
         "Using Python {} environment at {}",
-        venv.interpreter().python_version(),
-        venv.python_executable().user_display().cyan(),
+        environment.interpreter().python_version(),
+        environment.python_executable().user_display().cyan(),
     );
 
     // Apply any `--target` or `--prefix` directories.
-    let venv = if let Some(target) = target {
+    let environment = if let Some(target) = target {
         debug!(
             "Using `--target` directory at {}",
             target.root().user_display()
         );
         target.init()?;
-        venv.with_target(target)
+        environment.with_target(target)
     } else if let Some(prefix) = prefix {
         debug!(
             "Using `--prefix` directory at {}",
             prefix.root().user_display()
         );
         prefix.init()?;
-        venv.with_prefix(prefix)
+        environment.with_prefix(prefix)
     } else {
-        venv
+        environment
     };
 
     // If the environment is externally managed, abort.
-    if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
+    if let Some(externally_managed) = environment.interpreter().is_externally_managed() {
         if break_system_packages {
             debug!("Ignoring externally managed environment due to `--break-system-packages`");
         } else {
             return if let Some(error) = externally_managed.into_error() {
                 Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                    venv.root().user_display().cyan(),
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv environment`.",
+                    environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
                 ))
             } else {
                 Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                    venv.root().user_display().cyan()
+                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv environment`.",
+                    environment.root().user_display().cyan()
                 ))
             };
         }
     }
 
-    let _lock = venv.lock()?;
+    let _lock = environment.lock()?;
 
     // Index the current `site-packages` directory.
-    let site_packages = uv_installer::SitePackages::from_executable(&venv)?;
+    let site_packages = uv_installer::SitePackages::from_executable(&environment)?;
 
     // Partition the requirements into named and unnamed requirements.
     let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement<VerbatimParsedUrl>>) = spec

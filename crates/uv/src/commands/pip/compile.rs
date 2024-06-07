@@ -42,8 +42,7 @@ use uv_resolver::{
     Resolver,
 };
 use uv_toolchain::{
-    find_best_toolchain, PythonEnvironment, PythonVersion, SystemPython, ToolchainRequest,
-    VersionRequest,
+    PythonEnvironment, PythonVersion, SystemPython, Toolchain, ToolchainRequest, VersionRequest,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -162,17 +161,19 @@ pub(crate) async fn pip_compile(
         SystemPython::Allowed
     };
     let interpreter = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, system, preview, &cache)?
-            .into_interpreter()
+        Toolchain::find_requested(python, system, preview, &cache)
     } else {
+        // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
+        // `Toolchain::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
             ToolchainRequest::Version(VersionRequest::from(version))
         } else {
             ToolchainRequest::default()
         };
-        find_best_toolchain(&request, system, preview, &cache)??.into_interpreter()
-    };
+        Toolchain::find_best(&request, system, preview, &cache)
+    }?
+    .into_interpreter();
 
     debug!(
         "Using Python {} interpreter at {} for builds",
@@ -297,10 +298,10 @@ pub(crate) async fn pip_compile(
     let in_flight = InFlight::default();
 
     // Determine whether to enable build isolation.
-    let venv;
+    let environment;
     let build_isolation = if no_build_isolation {
-        venv = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&venv)
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&environment)
     } else {
         BuildIsolation::Isolated
     };

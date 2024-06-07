@@ -21,7 +21,7 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
-use uv_toolchain::{PythonEnvironment, SystemPython};
+use uv_toolchain::{SystemPython, Toolchain};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::{pip, ExitStatus};
@@ -120,10 +120,9 @@ async fn venv_impl(
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter to use in the environment
-    let interpreter =
-        PythonEnvironment::find(python_request, SystemPython::Required, preview, cache)
-            .into_diagnostic()?
-            .into_interpreter();
+    let interpreter = Toolchain::find(python_request, SystemPython::Required, preview, cache)
+        .into_diagnostic()?
+        .into_interpreter();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {

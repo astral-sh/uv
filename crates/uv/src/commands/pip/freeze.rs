@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_toolchain::{PythonEnvironment, SystemPython};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -31,16 +31,17 @@ pub(crate) fn pip_freeze(
     } else {
         SystemPython::Allowed
     };
-    let venv = PythonEnvironment::find(python, system, preview, cache)?;
+    let environment =
+        PythonEnvironment::from_toolchain(Toolchain::find(python, system, preview, cache)?);
 
     debug!(
         "Using Python {} environment at {}",
-        venv.interpreter().python_version(),
-        venv.python_executable().user_display().cyan()
+        environment.interpreter().python_version(),
+        environment.python_executable().user_display().cyan()
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&venv)?;
+    let site_packages = SitePackages::from_executable(&environment)?;
     for dist in site_packages
         .iter()
         .filter(|dist| !(exclude_editable && dist.is_editable()))

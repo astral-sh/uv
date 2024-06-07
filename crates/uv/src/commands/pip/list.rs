@@ -14,6 +14,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_toolchain::Toolchain;
 use uv_toolchain::{PythonEnvironment, SystemPython};
 
 use crate::commands::ExitStatus;
@@ -40,16 +41,17 @@ pub(crate) fn pip_list(
     } else {
         SystemPython::Allowed
     };
-    let venv = PythonEnvironment::find(python, system, preview, cache)?;
+    let environment =
+        PythonEnvironment::from_toolchain(Toolchain::find(python, system, preview, cache)?);
 
     debug!(
         "Using Python {} environment at {}",
-        venv.interpreter().python_version(),
-        venv.python_executable().user_display().cyan()
+        environment.interpreter().python_version(),
+        environment.python_executable().user_display().cyan()
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&venv)?;
+    let site_packages = SitePackages::from_executable(&environment)?;
 
     // Filter if `--editable` is specified; always sort by name.
     let results = site_packages
