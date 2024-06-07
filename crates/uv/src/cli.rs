@@ -253,15 +253,30 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
     }
 }
 
+/// Parse a string into a [`PathBuf`]. The string can represent a file, either as a path or a
+/// `file://` URL.
+fn parse_file_path(input: &str) -> Result<PathBuf, String> {
+    if input.starts_with("file://") {
+        let url = match url::Url::from_str(input) {
+            Ok(url) => url,
+            Err(err) => return Err(err.to_string()),
+        };
+        url.to_file_path()
+            .map_err(|()| "invalid file URL".to_string())
+    } else {
+        match PathBuf::from_str(input) {
+            Ok(path) => Ok(path),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 /// Parse a string into a [`PathBuf`], mapping the empty string to `None`.
-fn parse_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
+fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        match PathBuf::from_str(input) {
-            Ok(path) => Ok(Maybe::Some(path)),
-            Err(err) => Err(err.to_string()),
-        }
+        parse_file_path(input).map(Maybe::Some)
     }
 }
 
@@ -271,7 +286,7 @@ pub(crate) struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     ///
     /// When the path is `-`, then requirements are read from stdin.
-    #[arg(required(true))]
+    #[arg(required(true), value_parser = parse_file_path)]
     pub(crate) src_file: Vec<PathBuf>,
 
     /// Constrain versions using the given requirements files.
@@ -281,7 +296,7 @@ pub(crate) struct PipCompileArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
@@ -293,7 +308,7 @@ pub(crate) struct PipCompileArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long)]
+    #[arg(long, value_parser = parse_file_path)]
     pub(crate) r#override: Vec<PathBuf>,
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
@@ -593,7 +608,7 @@ pub(crate) struct PipCompileArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PipSyncArgs {
     /// Include all packages listed in the given `requirements.txt` files.
-    #[arg(required(true))]
+    #[arg(required(true), value_parser = parse_file_path)]
     pub(crate) src_file: Vec<PathBuf>,
 
     /// Constrain versions using the given requirements files.
@@ -603,7 +618,7 @@ pub(crate) struct PipSyncArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
@@ -892,7 +907,7 @@ pub(crate) struct PipInstallArgs {
     pub(crate) package: Vec<String>,
 
     /// Install all packages listed in the given requirements files.
-    #[arg(long, short, group = "sources")]
+    #[arg(long, short, group = "sources", value_parser = parse_file_path)]
     pub(crate) requirement: Vec<PathBuf>,
 
     /// Install the editable package based on the provided local file path.
@@ -906,7 +921,7 @@ pub(crate) struct PipInstallArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
@@ -918,7 +933,7 @@ pub(crate) struct PipInstallArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long)]
+    #[arg(long, value_parser = parse_file_path)]
     pub(crate) r#override: Vec<PathBuf>,
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
@@ -1259,7 +1274,7 @@ pub(crate) struct PipUninstallArgs {
     pub(crate) package: Vec<String>,
 
     /// Uninstall all packages listed in the given requirements files.
-    #[arg(long, short, group = "sources")]
+    #[arg(long, short, group = "sources", value_parser = parse_file_path)]
     pub(crate) requirement: Vec<PathBuf>,
 
     /// The Python interpreter from which packages should be uninstalled.
