@@ -131,7 +131,7 @@ impl<'a> BaseClientBuilder<'a> {
                     })
             })
             .unwrap_or(default_timeout);
-        debug!("Using registry request timeout of {timeout}s");
+        debug!("Using request timeout of {timeout}s");
 
         // Initialize the base client.
         let client = self.client.clone().unwrap_or_else(|| {
