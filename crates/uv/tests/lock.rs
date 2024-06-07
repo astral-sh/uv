@@ -788,7 +788,7 @@ fn lock_dependency_extra() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8' or python_version < '3.10'"
+        marker = "python_version < '3.10'"
         sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409 }]
 
@@ -1473,7 +1473,7 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8' or python_version < '3.11'"
+        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 }]
 
@@ -1625,7 +1625,7 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8' or python_version < '3.11'"
+        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 }]
 
@@ -1782,7 +1782,7 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8' or python_version < '3.11'"
+        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
 
