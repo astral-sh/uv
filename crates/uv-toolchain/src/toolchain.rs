@@ -2,11 +2,11 @@ use uv_configuration::PreviewMode;
 
 use uv_cache::Cache;
 
-use crate::discovery::{SystemPython, ToolchainRequest, ToolchainSources};
-use crate::{
-    find_best_toolchain, find_default_toolchain, find_toolchain, Error, Interpreter,
-    ToolchainSource,
+use crate::discovery::{
+    find_best_toolchain, find_default_toolchain, find_toolchain, SystemPython, ToolchainRequest,
+    ToolchainSources,
 };
+use crate::{Error, Interpreter, ToolchainSource};
 
 /// A Python interpreter and accompanying tools.
 #[derive(Clone, Debug)]
