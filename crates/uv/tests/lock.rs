@@ -1816,6 +1816,341 @@ fn lock_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// Lock a requirement from PyPI, respecting the `Requires-Python` metadata. In this case,
+/// `Requires-Python` uses the equals-star syntax.
+#[test]
+fn lock_requires_python_star() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let lockfile = context.temp_dir.join("uv.lock");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.11.*"
+        dependencies = ["linehaul"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 10 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(lockfile)?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.11.dev0, <3.12.dev0"
+
+        [[distribution]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 }]
+
+        [[distribution.dependencies]]
+        name = "importlib-metadata"
+        version = "7.1.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "cattrs"
+        version = "23.2.3"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/b3/0d/cd4a4071c7f38385dc5ba91286723b4d1090b87815db48216212c6c6c30e/cattrs-23.2.3-py3-none-any.whl", hash = "sha256:0341994d94971052e9ee70662542699a3162ea1e0c62f7ce1b4a57f563685108", size = 57474 }]
+
+        [[distribution.dependencies]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "exceptiongroup"
+        version = "1.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "exceptiongroup"
+        version = "1.2.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
+        sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
+
+        [[distribution]]
+        name = "importlib-metadata"
+        version = "7.1.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
+        sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409 }]
+
+        [[distribution.dependencies]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "zipp"
+        version = "3.18.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "linehaul"
+        version = "1.0.1"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/f8/e7/74d1bd36ed26ac43bfe22e97129edaa7066f7af4bf76084b9493cd581d58/linehaul-1.0.1.tar.gz", hash = "sha256:09d71b1f6a9ab92dd8c763b3d099e4ae05c2845ee783a02d5fe731e6e2a6a997", size = 19410 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/03/73/c73588052198be06462d1a7c4653b602a109a0df0208c59e58075dc3bc73/linehaul-1.0.1-py3-none-any.whl", hash = "sha256:d19ca669008dad910868dfae7f904dfc5362583729bda344799cf7ea2ad5ef12", size = 27848 }]
+
+        [[distribution.dependencies]]
+        name = "cattrs"
+        version = "23.2.3"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "packaging"
+        version = "24.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "pyparsing"
+        version = "3.1.2"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "packaging"
+        version = "24.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 }]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+file://[TEMP_DIR]/"
+        sdist = { url = "file://[TEMP_DIR]/" }
+
+        [[distribution.dependencies]]
+        name = "linehaul"
+        version = "1.0.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "pyparsing"
+        version = "3.1.2"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/46/3a/31fd28064d016a2182584d579e033ec95b809d8e220e74c4af6f0f2e8842/pyparsing-3.1.2.tar.gz", hash = "sha256:a1bac0ce561155ecc3ed78ca94d3c9378656ad4c94c1270de543f621420f94ad", size = 889571 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/9d/ea/6d76df31432a0e6fdf81681a895f009a4bb47b3c39036db3e1b528191d52/pyparsing-3.1.2-py3-none-any.whl", hash = "sha256:f9db75911801ed778fe61bb643079ff86601aca99fcae6345aa67292038fb742", size = 103245 }]
+
+        [[distribution]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
+
+        [[distribution]]
+        name = "zipp"
+        version = "3.18.1"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/3e/ef/65da662da6f9991e87f058bc90b91a935ae655a16ae5514660d6460d1298/zipp-3.18.1.tar.gz", hash = "sha256:2884ed22e7d8961de1c9a05142eb69a247f120291bc0206a00a7642f09b5b715", size = 21220 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/c2/0a/ba9d0ee9536d3ef73a3448e931776e658b36f128d344e175bc32b092a8bf/zipp-3.18.1-py3-none-any.whl", hash = "sha256:206f5a15f2af3dbaee80769fb7dc6f249695e940acca08dfb2a4769fe61e538b", size = 8247 }]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Lock a requirement from PyPI, respecting the `Requires-Python` metadata. In this case,
+/// `Requires-Python` uses a pre-release specifier, but it's effectively ignored, as `>=3.11.0b1`
+/// is interpreted as equivalent to `>=3.11.0`.
+#[test]
+fn lock_requires_python_pre() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let lockfile = context.temp_dir.join("uv.lock");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11b1"
+        dependencies = ["linehaul"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 10 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(lockfile)?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.11b1"
+
+        [[distribution]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 }]
+
+        [[distribution.dependencies]]
+        name = "importlib-metadata"
+        version = "7.1.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "cattrs"
+        version = "23.2.3"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/b3/0d/cd4a4071c7f38385dc5ba91286723b4d1090b87815db48216212c6c6c30e/cattrs-23.2.3-py3-none-any.whl", hash = "sha256:0341994d94971052e9ee70662542699a3162ea1e0c62f7ce1b4a57f563685108", size = 57474 }]
+
+        [[distribution.dependencies]]
+        name = "attrs"
+        version = "23.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "exceptiongroup"
+        version = "1.2.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "exceptiongroup"
+        version = "1.2.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
+        sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
+
+        [[distribution]]
+        name = "importlib-metadata"
+        version = "7.1.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
+        sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409 }]
+
+        [[distribution.dependencies]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "zipp"
+        version = "3.18.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "linehaul"
+        version = "1.0.1"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/f8/e7/74d1bd36ed26ac43bfe22e97129edaa7066f7af4bf76084b9493cd581d58/linehaul-1.0.1.tar.gz", hash = "sha256:09d71b1f6a9ab92dd8c763b3d099e4ae05c2845ee783a02d5fe731e6e2a6a997", size = 19410 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/03/73/c73588052198be06462d1a7c4653b602a109a0df0208c59e58075dc3bc73/linehaul-1.0.1-py3-none-any.whl", hash = "sha256:d19ca669008dad910868dfae7f904dfc5362583729bda344799cf7ea2ad5ef12", size = 27848 }]
+
+        [[distribution.dependencies]]
+        name = "cattrs"
+        version = "23.2.3"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "packaging"
+        version = "24.0"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution.dependencies]]
+        name = "pyparsing"
+        version = "3.1.2"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "packaging"
+        version = "24.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 }]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+file://[TEMP_DIR]/"
+        sdist = { url = "file://[TEMP_DIR]/" }
+
+        [[distribution.dependencies]]
+        name = "linehaul"
+        version = "1.0.1"
+        source = "registry+https://pypi.org/simple"
+
+        [[distribution]]
+        name = "pyparsing"
+        version = "3.1.2"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/46/3a/31fd28064d016a2182584d579e033ec95b809d8e220e74c4af6f0f2e8842/pyparsing-3.1.2.tar.gz", hash = "sha256:a1bac0ce561155ecc3ed78ca94d3c9378656ad4c94c1270de543f621420f94ad", size = 889571 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/9d/ea/6d76df31432a0e6fdf81681a895f009a4bb47b3c39036db3e1b528191d52/pyparsing-3.1.2-py3-none-any.whl", hash = "sha256:f9db75911801ed778fe61bb643079ff86601aca99fcae6345aa67292038fb742", size = 103245 }]
+
+        [[distribution]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
+
+        [[distribution]]
+        name = "zipp"
+        version = "3.18.1"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/3e/ef/65da662da6f9991e87f058bc90b91a935ae655a16ae5514660d6460d1298/zipp-3.18.1.tar.gz", hash = "sha256:2884ed22e7d8961de1c9a05142eb69a247f120291bc0206a00a7642f09b5b715", size = 21220 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/c2/0a/ba9d0ee9536d3ef73a3448e931776e658b36f128d344e175bc32b092a8bf/zipp-3.18.1-py3-none-any.whl", hash = "sha256:206f5a15f2af3dbaee80769fb7dc6f249695e940acca08dfb2a4769fe61e538b", size = 8247 }]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// Lock the development dependencies for a project.
 #[test]
 fn lock_dev() -> Result<()> {
