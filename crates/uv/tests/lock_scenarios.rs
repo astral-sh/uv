@@ -727,7 +727,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning.
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0 and package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
+      ╰─▶ Because package-b==1.0.0 depends on package-c>=2.0.0 and package-a==1.0.0 depends on package-c<2.0.0, we can conclude that package-a==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because project==0.1.0 depends on package-b{sys_platform == 'darwin'}==1.0.0 and package-a{sys_platform == 'linux'}==1.0.0, we can conclude that project==0.1.0 cannot be used.
           And because only project==0.1.0 is available and project depends on project, we can conclude that the requirements are unsatisfiable.
     "###
@@ -802,7 +802,6 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     warning: `uv lock` is experimental and may change without warning.
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0 and only package-c{sys_platform == 'darwin'}<=2.0.0 is available, we can conclude that package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}==2.0.0.
-          And because package-c{sys_platform == 'darwin'}==2.0.0 depends on package-c==2.0.0 and package-c{sys_platform == 'linux'}==1.0.0 depends on package-c==1.0.0, we can conclude that package-b==1.0.0 and package-c{sys_platform == 'linux'}==1.0.0 are incompatible.
           And because only the following versions of package-c{sys_platform == 'linux'} are available:
               package-c{sys_platform == 'linux'}==1.0.0
               package-c{sys_platform == 'linux'}>=2.0.0

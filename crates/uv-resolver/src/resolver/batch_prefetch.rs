@@ -57,7 +57,7 @@ impl BatchPrefetcher {
             name,
             extra: None,
             dev: None,
-            marker: _marker,
+            marker: None,
             url: None,
         } = &**next
         else {
@@ -166,11 +166,15 @@ impl BatchPrefetcher {
         // Only track base packages, no virtual packages from extras.
         if matches!(
             &*package,
-            PubGrubPackageInner::Package { extra: Some(_), .. }
+            PubGrubPackageInner::Package {
+                extra: None,
+                dev: None,
+                marker: None,
+                ..
+            }
         ) {
-            return;
+            *self.tried_versions.entry(package).or_default() += 1;
         }
-        *self.tried_versions.entry(package).or_default() += 1;
     }
 
     /// After 5, 10, 20, 40 tried versions, prefetch that many versions to start early but not
