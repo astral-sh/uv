@@ -136,6 +136,9 @@ fn add_requirements(
 
                     dependencies.push((package.clone(), version.clone()));
                 }
+                PubGrubPackageInner::Marker { .. } => {
+                    dependencies.push((package.clone(), version.clone()));
+                }
                 PubGrubPackageInner::Extra { name, extra, .. } => {
                     // Recursively add the dependencies of the current package (e.g., `black` depending on
                     // `black[colorama]`).
@@ -272,13 +275,12 @@ impl PubGrubRequirement {
                 }
 
                 Ok(Self {
-                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: requirement.name.clone(),
+                    package: PubGrubPackage::from_url(
+                        requirement.name.clone(),
                         extra,
-                        dev: None,
-                        marker: requirement.marker.clone(),
-                        url: Some(expected.clone()),
-                    }),
+                        requirement.marker.clone(),
+                        expected.clone(),
+                    ),
                     version: Range::full(),
                 })
             }
@@ -299,13 +301,12 @@ impl PubGrubRequirement {
                 }
 
                 Ok(Self {
-                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: requirement.name.clone(),
+                    package: PubGrubPackage::from_url(
+                        requirement.name.clone(),
                         extra,
-                        dev: None,
-                        marker: requirement.marker.clone(),
-                        url: Some(expected.clone()),
-                    }),
+                        requirement.marker.clone(),
+                        expected.clone(),
+                    ),
                     version: Range::full(),
                 })
             }
@@ -341,13 +342,12 @@ impl PubGrubRequirement {
                 }
 
                 Ok(Self {
-                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: requirement.name.clone(),
+                    package: PubGrubPackage::from_url(
+                        requirement.name.clone(),
                         extra,
-                        dev: None,
-                        marker: requirement.marker.clone(),
-                        url: Some(expected.clone()),
-                    }),
+                        requirement.marker.clone(),
+                        expected.clone(),
+                    ),
                     version: Range::full(),
                 })
             }

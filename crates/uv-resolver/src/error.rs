@@ -112,7 +112,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
 
 /// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
 /// wrap an [`PubGrubPackageInner::Extra`] package.
-fn collapse_extra_proxies(
+fn collapse_proxies(
     derivation_tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
     match derivation_tree {
@@ -125,20 +125,32 @@ fn collapse_extra_proxies(
                 (
                     DerivationTree::External(External::FromDependencyOf(package, ..)),
                     ref mut cause,
-                ) if matches!(&**package, PubGrubPackageInner::Extra { .. }) => {
-                    collapse_extra_proxies(cause);
+                ) if matches!(
+                    &**package,
+                    PubGrubPackageInner::Extra { .. }
+                        | PubGrubPackageInner::Marker { .. }
+                        | PubGrubPackageInner::Dev { .. }
+                ) =>
+                {
+                    collapse_proxies(cause);
                     *derivation_tree = cause.clone();
                 }
                 (
                     ref mut cause,
                     DerivationTree::External(External::FromDependencyOf(package, ..)),
-                ) if matches!(&**package, PubGrubPackageInner::Extra { .. }) => {
-                    collapse_extra_proxies(cause);
+                ) if matches!(
+                    &**package,
+                    PubGrubPackageInner::Extra { .. }
+                        | PubGrubPackageInner::Marker { .. }
+                        | PubGrubPackageInner::Dev { .. }
+                ) =>
+                {
+                    collapse_proxies(cause);
                     *derivation_tree = cause.clone();
                 }
                 _ => {
-                    collapse_extra_proxies(Arc::make_mut(&mut derived.cause1));
-                    collapse_extra_proxies(Arc::make_mut(&mut derived.cause2));
+                    collapse_proxies(Arc::make_mut(&mut derived.cause1));
+                    collapse_proxies(Arc::make_mut(&mut derived.cause2));
                 }
             }
         }
@@ -156,7 +168,7 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
             }
             pubgrub::error::PubGrubError::Failure(inner) => Self::Failure(inner),
             pubgrub::error::PubGrubError::NoSolution(mut derivation_tree) => {
-                collapse_extra_proxies(&mut derivation_tree);
+                collapse_proxies(&mut derivation_tree);
 
                 Self::NoSolution(NoSolutionError {
                     derivation_tree,
@@ -232,8 +244,9 @@ impl NoSolutionError {
         let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {
             match &**package {
-                PubGrubPackageInner::Root(_) => {}
-                PubGrubPackageInner::Python(_) => {}
+                PubGrubPackageInner::Root { .. } => {}
+                PubGrubPackageInner::Python { .. } => {}
+                PubGrubPackageInner::Marker { .. } => {}
                 PubGrubPackageInner::Extra { .. } => {}
                 PubGrubPackageInner::Dev { .. } => {}
                 PubGrubPackageInner::Package { name, .. } => {

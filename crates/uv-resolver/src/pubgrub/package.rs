@@ -119,10 +119,19 @@ pub enum PubGrubPackageInner {
         marker: Option<MarkerTree>,
         url: Option<VerbatimParsedUrl>,
     },
+    /// A proxy package for a base package with a marker (e.g., `black; python_version >= "3.6"`).
+    ///
+    /// If a requirement has an extra _and_ a marker, it will be represented via the `Extra` variant
+    /// rather than the `Marker` variant.
+    Marker {
+        name: PackageName,
+        marker: MarkerTree,
+        url: Option<VerbatimParsedUrl>,
+    },
 }
 
 impl PubGrubPackage {
-    /// Create a [`PubGrubPackage`] from a package name and optional extra name.
+    /// Create a [`PubGrubPackage`] from a package name and version.
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
@@ -143,6 +152,8 @@ impl PubGrubPackage {
                 marker,
                 url,
             }))
+        } else if let Some(marker) = marker {
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker, url }))
         } else {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
@@ -150,6 +161,43 @@ impl PubGrubPackage {
                 dev: None,
                 marker,
                 url,
+            }))
+        }
+    }
+
+    /// Create a [`PubGrubPackage`] from a package name and URL.
+    pub(crate) fn from_url(
+        name: PackageName,
+        extra: Option<ExtraName>,
+        mut marker: Option<MarkerTree>,
+        url: VerbatimParsedUrl,
+    ) -> Self {
+        // Remove all extra expressions from the marker, since we track extras
+        // separately. This also avoids an issue where packages added via
+        // extras end up having two distinct marker expressions, which in turn
+        // makes them two distinct packages. This results in PubGrub being
+        // unable to unify version constraints across such packages.
+        marker = marker.and_then(|m| m.simplify_extras_with(|_| true));
+        if let Some(extra) = extra {
+            Self(Arc::new(PubGrubPackageInner::Extra {
+                name,
+                extra,
+                marker,
+                url: Some(url),
+            }))
+        } else if let Some(marker) = marker {
+            Self(Arc::new(PubGrubPackageInner::Marker {
+                name,
+                marker,
+                url: Some(url),
+            }))
+        } else {
+            Self(Arc::new(PubGrubPackageInner::Package {
+                name,
+                extra,
+                dev: None,
+                marker,
+                url: Some(url),
             }))
         }
     }
@@ -202,6 +250,7 @@ impl std::fmt::Display for PubGrubPackageInner {
             } => {
                 write!(f, "{name}[{extra}]{{{marker}}}")
             }
+            Self::Marker { name, marker, .. } => write!(f, "{name}{{{marker}}}"),
             Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
             Self::Dev { name, dev, .. } => write!(f, "{name}:{dev}"),
         }
