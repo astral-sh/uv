@@ -445,7 +445,7 @@ fn should_stop_discovery(err: &Error) -> bool {
 ///
 /// If an error is encountered while locating or inspecting a candidate toolchain,
 /// the error will raised instead of attempting further candidates.
-pub fn find_toolchain(
+pub(crate) fn find_toolchain(
     request: &ToolchainRequest,
     system: SystemPython,
     sources: &ToolchainSources,
@@ -627,7 +627,7 @@ pub fn find_toolchain(
 /// Virtual environments are not included in discovery.
 ///
 /// See [`find_toolchain`] for more details on toolchain discovery.
-pub fn find_default_toolchain(
+pub(crate) fn find_default_toolchain(
     preview: PreviewMode,
     cache: &Cache,
 ) -> Result<ToolchainResult, Error> {

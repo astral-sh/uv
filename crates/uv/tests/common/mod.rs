@@ -18,9 +18,7 @@ use uv_configuration::PreviewMode;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_toolchain::managed::InstalledToolchains;
-use uv_toolchain::{
-    find_toolchain, PythonVersion, ToolchainRequest, ToolchainSources, VersionRequest,
-};
+use uv_toolchain::{PythonVersion, Toolchain};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -476,22 +474,15 @@ pub fn python_path_with_versions(
                 .unwrap_or_default();
             if inner.is_empty() {
                 // Fallback to a system lookup if we failed to find one in the toolchain directory
-                let request = ToolchainRequest::Version(
-                    VersionRequest::from_str(python_version)
-                        .expect("The test version request must be valid"),
-                );
-                let sources = ToolchainSources::All(PreviewMode::Enabled);
-                if let Ok(found) = find_toolchain(
-                    &request,
+                if let Ok(toolchain) = Toolchain::find(
+                    Some(python_version),
                     // Without required, we could pick the current venv here and the test fails
                     // because the venv subcommand requires a system interpreter.
                     uv_toolchain::SystemPython::Required,
-                    &sources,
+                    PreviewMode::Enabled,
                     &cache,
-                )
-                .unwrap()
-                {
-                    vec![found
+                ) {
+                    vec![toolchain
                         .into_interpreter()
                         .sys_executable()
                         .parent()

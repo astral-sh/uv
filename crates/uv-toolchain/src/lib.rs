@@ -2,9 +2,8 @@
 use thiserror::Error;
 
 pub use crate::discovery::{
-    find_best_toolchain, find_default_toolchain, find_toolchain, Error as DiscoveryError,
-    SystemPython, ToolchainNotFound, ToolchainRequest, ToolchainSource, ToolchainSources,
-    VersionRequest,
+    Error as DiscoveryError, SystemPython, ToolchainNotFound, ToolchainRequest, ToolchainSource,
+    ToolchainSources, VersionRequest,
 };
 pub use crate::environment::PythonEnvironment;
 pub use crate::interpreter::Interpreter;
@@ -81,9 +80,9 @@ mod tests {
     use uv_cache::Cache;
     use uv_configuration::PreviewMode;
 
+    use crate::discovery::{find_default_toolchain, find_toolchain};
     use crate::{
-        find_default_toolchain, find_toolchain, implementation::ImplementationName,
-        managed::InstalledToolchains, toolchain::Toolchain,
+        implementation::ImplementationName, managed::InstalledToolchains, toolchain::Toolchain,
         virtualenv::virtualenv_python_executable, Error, PythonVersion, SystemPython,
         ToolchainNotFound, ToolchainRequest, ToolchainSource, ToolchainSources, VersionRequest,
     };
