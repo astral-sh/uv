@@ -28,7 +28,6 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, Plan, Planner, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::{GroupName, PackageName};
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
@@ -38,6 +37,7 @@ use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     PythonRequirement, RequiresPython, ResolutionGraph, Resolver,
 };
+use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 

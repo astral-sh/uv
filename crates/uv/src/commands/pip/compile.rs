@@ -31,10 +31,6 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
-use uv_interpreter::PythonVersion;
-use uv_interpreter::{
-    find_best_interpreter, InterpreterRequest, PythonEnvironment, SystemPython, VersionRequest,
-};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::read_requirements_txt, LookaheadResolver, NamedRequirementsResolver,
@@ -44,6 +40,10 @@ use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex,
     InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
     Resolver,
+};
+use uv_toolchain::{
+    find_best_interpreter, InterpreterRequest, PythonEnvironment, PythonVersion, SystemPython,
+    VersionRequest,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;

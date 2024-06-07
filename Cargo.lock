@@ -407,8 +407,8 @@ dependencies = [
  "uv-dispatch",
  "uv-distribution",
  "uv-git",
- "uv-interpreter",
  "uv-resolver",
+ "uv-toolchain",
  "uv-types",
 ]
 
@@ -4424,10 +4424,10 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-installer",
- "uv-interpreter",
  "uv-normalize",
  "uv-requirements",
  "uv-resolver",
+ "uv-toolchain",
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
@@ -4483,7 +4483,7 @@ dependencies = [
  "tracing",
  "uv-configuration",
  "uv-fs",
- "uv-interpreter",
+ "uv-toolchain",
  "uv-types",
  "uv-virtualenv",
 ]
@@ -4619,8 +4619,8 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-installer",
- "uv-interpreter",
  "uv-resolver",
+ "uv-toolchain",
  "uv-types",
  "uv-workspace",
  "walkdir",
@@ -4645,8 +4645,8 @@ dependencies = [
  "uv-distribution",
  "uv-git",
  "uv-installer",
- "uv-interpreter",
  "uv-resolver",
+ "uv-toolchain",
  "uv-types",
 ]
 
@@ -4787,55 +4787,11 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-git",
- "uv-interpreter",
  "uv-normalize",
+ "uv-toolchain",
  "uv-types",
  "uv-warnings",
  "walkdir",
-]
-
-[[package]]
-name = "uv-interpreter"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "assert_fs",
- "cache-key",
- "configparser",
- "fs-err",
- "futures",
- "indoc",
- "install-wheel-rs",
- "itertools 0.13.0",
- "once_cell",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
- "regex",
- "reqwest",
- "reqwest-middleware",
- "rmp-serde",
- "same-file",
- "schemars",
- "serde",
- "serde_json",
- "temp-env",
- "tempfile",
- "test-log",
- "thiserror",
- "tokio-util",
- "tracing",
- "url",
- "uv-cache",
- "uv-client",
- "uv-configuration",
- "uv-extract",
- "uv-fs",
- "uv-state",
- "uv-warnings",
- "which",
- "winapi",
 ]
 
 [[package]]
@@ -4925,8 +4881,8 @@ dependencies = [
  "uv-configuration",
  "uv-distribution",
  "uv-git",
- "uv-interpreter",
  "uv-normalize",
+ "uv-toolchain",
  "uv-types",
  "uv-warnings",
 ]
@@ -4938,6 +4894,50 @@ dependencies = [
  "directories",
  "fs-err",
  "tempfile",
+]
+
+[[package]]
+name = "uv-toolchain"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "assert_fs",
+ "cache-key",
+ "configparser",
+ "fs-err",
+ "futures",
+ "indoc",
+ "install-wheel-rs",
+ "itertools 0.13.0",
+ "once_cell",
+ "pep440_rs",
+ "pep508_rs",
+ "platform-tags",
+ "pypi-types",
+ "regex",
+ "reqwest",
+ "reqwest-middleware",
+ "rmp-serde",
+ "same-file",
+ "schemars",
+ "serde",
+ "serde_json",
+ "temp-env",
+ "tempfile",
+ "test-log",
+ "thiserror",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uv-cache",
+ "uv-client",
+ "uv-configuration",
+ "uv-extract",
+ "uv-fs",
+ "uv-state",
+ "uv-warnings",
+ "which",
+ "winapi",
 ]
 
 [[package]]
@@ -4956,8 +4956,8 @@ dependencies = [
  "uv-cache",
  "uv-configuration",
  "uv-git",
- "uv-interpreter",
  "uv-normalize",
+ "uv-toolchain",
 ]
 
 [[package]]
@@ -4976,7 +4976,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "uv-fs",
- "uv-interpreter",
+ "uv-toolchain",
  "uv-version",
 ]
 
@@ -5007,9 +5007,9 @@ dependencies = [
  "tracing",
  "uv-configuration",
  "uv-fs",
- "uv-interpreter",
  "uv-normalize",
  "uv-resolver",
+ "uv-toolchain",
  "uv-warnings",
 ]
 

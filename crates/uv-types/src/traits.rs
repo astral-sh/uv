@@ -9,7 +9,7 @@ use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
 use uv_git::GitResolver;
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_toolchain::{Interpreter, PythonEnvironment};
 
 use crate::BuildIsolation;
 

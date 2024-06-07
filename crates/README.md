@@ -89,7 +89,7 @@ Functionality for interacting with Git repositories.
 
 Functionality for installing Python packages into a virtual environment.
 
-## [uv-interpreter](./uv-interpreter)
+## [uv-toolchain](./uv-toolchain)
 
 Functionality for detecting and leveraging the current Python interpreter.
 

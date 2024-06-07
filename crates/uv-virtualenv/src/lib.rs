@@ -4,7 +4,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use platform_tags::PlatformError;
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_toolchain::{Interpreter, PythonEnvironment};
 
 pub use crate::bare::create_bare_venv;
 
@@ -15,9 +15,9 @@ pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
     #[error("Failed to determine Python interpreter to use")]
-    Discovery(#[from] uv_interpreter::DiscoveryError),
+    Discovery(#[from] uv_toolchain::DiscoveryError),
     #[error("Failed to determine Python interpreter to use")]
-    InterpreterNotFound(#[from] uv_interpreter::InterpreterNotFound),
+    InterpreterNotFound(#[from] uv_toolchain::InterpreterNotFound),
     #[error(transparent)]
     Platform(#[from] PlatformError),
     #[error("Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}")]

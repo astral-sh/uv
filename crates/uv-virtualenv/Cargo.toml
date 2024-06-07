@@ -20,7 +20,7 @@ workspace = true
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-fs = { workspace = true }
-uv-interpreter = { workspace = true }
+uv-toolchain = { workspace = true }
 uv-version = { workspace = true }
 
 fs-err = { workspace = true }

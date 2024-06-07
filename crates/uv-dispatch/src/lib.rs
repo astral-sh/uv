@@ -21,8 +21,8 @@ use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
+use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]

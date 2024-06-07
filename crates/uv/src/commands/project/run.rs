@@ -12,10 +12,10 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::{ProjectWorkspace, Workspace};
-use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
 use uv_resolver::ExcludeNewer;
+use uv_toolchain::{PythonEnvironment, SystemPython};
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};

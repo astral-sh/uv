@@ -29,7 +29,7 @@ uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
-uv-interpreter = { workspace = true }
+uv-toolchain = { workspace = true }
 uv-normalize = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }

@@ -19,9 +19,9 @@ use uv_distribution::Workspace;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_interpreter::{find_default_interpreter, PythonEnvironment};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, Options, RequiresPython};
+use uv_toolchain::{find_default_interpreter, PythonEnvironment};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip;
@@ -37,7 +37,7 @@ pub(crate) enum ProjectError {
     PythonIncompatibility(Version, RequiresPython),
 
     #[error(transparent)]
-    Interpreter(#[from] uv_interpreter::Error),
+    Interpreter(#[from] uv_toolchain::Error),
 
     #[error(transparent)]
     Virtualenv(#[from] uv_virtualenv::Error),
@@ -80,11 +80,11 @@ pub(crate) fn init_environment(
     // TODO(charlie): If the environment isn't compatible with `--python`, recreate it.
     match PythonEnvironment::from_root(&venv, cache) {
         Ok(venv) => Ok(venv),
-        Err(uv_interpreter::Error::NotFound(_)) => {
+        Err(uv_toolchain::Error::NotFound(_)) => {
             // TODO(charlie): Respect `--python`; if unset, respect `Requires-Python`.
             let interpreter = find_default_interpreter(preview, cache)
-                .map_err(uv_interpreter::Error::from)?
-                .map_err(uv_interpreter::Error::from)?
+                .map_err(uv_toolchain::Error::from)?
+                .map_err(uv_toolchain::Error::from)?
                 .into_interpreter();
 
             writeln!(

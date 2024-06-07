@@ -20,8 +20,8 @@ use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPy
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
-use uv_interpreter::{PythonEnvironment, SystemPython};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_toolchain::{PythonEnvironment, SystemPython};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::{pip, ExitStatus};
