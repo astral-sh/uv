@@ -412,8 +412,11 @@ impl PubGrubReportFormatter<'_> {
         match derivation_tree {
             DerivationTree::External(external) => match external {
                 External::Custom(package, set, _) | External::NoVersions(package, set) => {
-                    if let PubGrubPackageInner::Package { name, .. } = &**package {
-                        // Check for no versions due to pre-release options
+                    if let PubGrubPackageInner::Package {
+                        name, url: None, ..
+                    } = &**package
+                    {
+                        // Check for no versions due to pre-release options.
                         if let Some(selector) = selector {
                             let any_prerelease = set.iter().any(|(start, end)| {
                                 let is_pre1 = match start {
@@ -455,7 +458,9 @@ impl PubGrubReportFormatter<'_> {
                                 }
                             }
                         }
+                    }
 
+                    if let PubGrubPackageInner::Package { name, .. } = &**package {
                         // Check for no versions due to no `--find-links` flat index
                         if let Some(index_locations) = index_locations {
                             let no_find_links =
