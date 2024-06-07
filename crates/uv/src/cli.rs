@@ -1691,10 +1691,11 @@ pub(crate) struct RunArgs {
     pub(crate) no_all_extras: bool,
 
     /// Include development dependencies.
-    #[arg(long, overrides_with("no_dev"))]
+    #[arg(long, overrides_with("no_dev"), hide = true)]
     pub(crate) dev: bool,
 
-    #[arg(long, conflicts_with("offline"), overrides_with("dev"), hide = true)]
+    /// Omit development dependencies.
+    #[arg(long, overrides_with("dev"))]
     pub(crate) no_dev: bool,
 
     /// The command to run.
@@ -1779,10 +1780,11 @@ pub(crate) struct SyncArgs {
     pub(crate) no_all_extras: bool,
 
     /// Include development dependencies.
-    #[arg(long, overrides_with("no_dev"))]
+    #[arg(long, overrides_with("no_dev"), hide = true)]
     pub(crate) dev: bool,
 
-    #[arg(long, conflicts_with("offline"), overrides_with("dev"), hide = true)]
+    /// Omit development dependencies.
+    #[arg(long, overrides_with("dev"))]
     pub(crate) no_dev: bool,
 
     /// Refresh all cached data.

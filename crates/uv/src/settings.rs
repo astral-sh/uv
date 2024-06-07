@@ -170,7 +170,7 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: flag(dev, no_dev).unwrap_or(false),
+            dev: flag(dev, no_dev).unwrap_or(true),
             target,
             args,
             with,
@@ -278,7 +278,7 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: flag(dev, no_dev).unwrap_or(false),
+            dev: flag(dev, no_dev).unwrap_or(true),
             python,
         }
     }
@@ -445,7 +445,6 @@ impl PipCompileSettings {
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-
                     index_url: index_args.index_url.and_then(Maybe::into_option),
                     extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
