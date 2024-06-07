@@ -476,45 +476,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 {
                     // Retrieve that package dependencies.
                     let package = state.next.clone();
-                    let forks = self.get_dependencies_forking(
+                    let forked_deps = self.get_dependencies_forking(
                         &package,
                         &version,
                         &mut state.priorities,
                         &request_sink,
                     )?;
-                    let forks_len = forks.len();
-                    // This is a somewhat tortured technique to ensure
-                    // that our resolver state is only cloned as much
-                    // as it needs to be. And *especially*, in the case
-                    // when no forks occur, the state should not be
-                    // cloned at all. We basically move the state into
-                    // `forked_states`, and then only clone it if there
-                    // it at least one more fork to visit.
-                    let mut cur_state = Some(state);
-                    for (i, fork) in forks.into_iter().enumerate() {
-                        let is_last = i == forks_len - 1;
-
-                        let dependencies = match fork {
-                            Dependencies::Unavailable(reason) => {
-                                let mut forked_state = cur_state.take().unwrap();
-                                if !is_last {
-                                    cur_state = Some(forked_state.clone());
-                                }
-
-                                forked_state.pubgrub.add_incompatibility(
-                                    Incompatibility::custom_version(
-                                        package.clone(),
-                                        version.clone(),
-                                        UnavailableReason::Version(reason),
-                                    ),
-                                );
-                                forked_states.push(forked_state);
-                                continue;
-                            }
-                            Dependencies::Available(constraints)
-                                if constraints
-                                    .iter()
-                                    .any(|(dependency, _)| dependency == &package) =>
+                    match forked_deps {
+                        ForkedDependencies::Unavailable(reason) => {
+                            state
+                                .pubgrub
+                                .add_incompatibility(Incompatibility::custom_version(
+                                    package.clone(),
+                                    version.clone(),
+                                    UnavailableReason::Version(reason),
+                                ));
+                            forked_states.push(state);
+                        }
+                        ForkedDependencies::Unforked(constraints) => {
+                            if constraints
+                                .iter()
+                                .any(|(dependency, _)| dependency == &package)
                             {
                                 if enabled!(Level::DEBUG) {
                                     prefetcher.log_tried_versions();
@@ -525,28 +507,69 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
                                 .into());
                             }
-                            Dependencies::Available(constraints) => constraints,
-                        };
 
-                        let mut forked_state = cur_state.take().unwrap();
-                        if !is_last {
-                            cur_state = Some(forked_state.clone());
-                        }
-
-                        // Add that package and version if the dependencies are not problematic.
-                        let dep_incompats =
-                            forked_state.pubgrub.add_incompatibility_from_dependencies(
+                            // Add that package and version if the dependencies are not problematic.
+                            let dep_incompats =
+                                state.pubgrub.add_incompatibility_from_dependencies(
+                                    package.clone(),
+                                    version.clone(),
+                                    constraints,
+                                );
+                            state.pubgrub.partial_solution.add_version(
                                 package.clone(),
                                 version.clone(),
-                                dependencies,
+                                dep_incompats,
+                                &state.pubgrub.incompatibility_store,
                             );
-                        forked_state.pubgrub.partial_solution.add_version(
-                            package.clone(),
-                            version.clone(),
-                            dep_incompats,
-                            &forked_state.pubgrub.incompatibility_store,
-                        );
-                        forked_states.push(forked_state);
+                            forked_states.push(state);
+                        }
+                        ForkedDependencies::Forked(forks) => {
+                            assert!(forks.len() >= 2);
+                            // This is a somewhat tortured technique to ensure
+                            // that our resolver state is only cloned as much
+                            // as it needs to be. We basically move the state
+                            // into `forked_states`, and then only clone it if
+                            // there it at least one more fork to visit.
+                            let mut cur_state = Some(state);
+                            let forks_len = forks.len();
+                            for (i, fork) in forks.into_iter().enumerate() {
+                                if fork
+                                    .dependencies
+                                    .iter()
+                                    .any(|(dependency, _)| dependency == &package)
+                                {
+                                    if enabled!(Level::DEBUG) {
+                                        prefetcher.log_tried_versions();
+                                    }
+                                    return Err(PubGrubError::SelfDependency {
+                                        package: package.clone(),
+                                        version: version.clone(),
+                                    }
+                                    .into());
+                                }
+
+                                let is_last = i == forks_len - 1;
+                                let mut forked_state = cur_state.take().unwrap();
+                                if !is_last {
+                                    cur_state = Some(forked_state.clone());
+                                }
+
+                                // Add that package and version if the dependencies are not problematic.
+                                let dep_incompats =
+                                    forked_state.pubgrub.add_incompatibility_from_dependencies(
+                                        package.clone(),
+                                        version.clone(),
+                                        fork.dependencies,
+                                    );
+                                forked_state.pubgrub.partial_solution.add_version(
+                                    package.clone(),
+                                    version.clone(),
+                                    dep_incompats,
+                                    &forked_state.pubgrub.incompatibility_store,
+                                );
+                                forked_states.push(forked_state);
+                            }
+                        }
                     }
                     continue 'FORK;
                 }
@@ -896,16 +919,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
-    ) -> Result<Vec<Dependencies>, ResolveError> {
+    ) -> Result<ForkedDependencies, ResolveError> {
         type Dep = (PubGrubPackage, Range<Version>);
 
         let result = self.get_dependencies(package, version, priorities, request_sink);
         if self.markers.is_some() {
-            return result.map(|deps| vec![deps]);
+            return result.map(|deps| match deps {
+                Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
+                Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
+            });
         }
         let deps: Vec<Dep> = match result? {
             Dependencies::Available(deps) => deps,
-            Dependencies::Unavailable(err) => return Ok(vec![Dependencies::Unavailable(err)]),
+            Dependencies::Unavailable(err) => return Ok(ForkedDependencies::Unavailable(err)),
         };
 
         let mut by_grouping: FxHashMap<&PackageName, FxHashMap<&Range<Version>, Vec<&Dep>>> =
@@ -951,7 +977,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 forks = new_forks;
             }
         }
-        Ok(forks.into_iter().map(Dependencies::Available).collect())
+        if forks.len() <= 1 {
+            Ok(ForkedDependencies::Unforked(
+                forks.pop().unwrap_or_else(|| vec![]),
+            ))
+        } else {
+            Ok(ForkedDependencies::Forked(
+                forks
+                    .into_iter()
+                    .map(|dependencies| Fork { dependencies })
+                    .collect(),
+            ))
+        }
     }
 
     /// Given a candidate package and version, return its dependencies.
@@ -1812,6 +1849,25 @@ enum Dependencies {
     Unavailable(UnavailableVersion),
     /// Container for all available package versions.
     Available(Vec<(PubGrubPackage, Range<Version>)>),
+}
+
+#[derive(Debug)]
+enum ForkedDependencies {
+    /// Package dependencies are not available.
+    Unavailable(UnavailableVersion),
+    /// No forking occurred.
+    Unforked(Vec<(PubGrubPackage, Range<Version>)>),
+    /// Forked containers for all available package versions.
+    ///
+    /// Note that there is always at least two forks. If there would
+    /// be fewer than 2 forks, then there is no fork at all and the
+    /// `Unforked` variant is used instead.
+    Forked(Vec<Fork>),
+}
+
+#[derive(Clone, Debug)]
+struct Fork {
+    dependencies: Vec<(PubGrubPackage, Range<Version>)>,
 }
 
 fn uncapitalize<T: AsRef<str>>(string: T) -> String {
