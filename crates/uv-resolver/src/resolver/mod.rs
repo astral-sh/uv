@@ -878,9 +878,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Emit a request to fetch the metadata for this version.
                 if matches!(&**package, PubGrubPackageInner::Package { .. }) {
                     if self.index.distributions().register(candidate.version_id()) {
-                        debug!("Fetching metadata for {}=={} ({}) {}",         package,
-                    candidate.version(),
-                    filename, dist.for_resolution());
                         let request = Request::from(dist.for_resolution());
                         request_sink.blocking_send(request)?;
                     }
@@ -1325,7 +1322,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Fetch distribution metadata from the distribution database.
             Request::Dist(dist) => {
-                debug!("Fetching metadata for: {dist}", dist = dist);
                 let metadata = provider
                     .get_or_build_wheel_metadata(&dist)
                     .boxed_local()
@@ -1358,18 +1354,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Pre-fetch the package and distribution metadata.
             Request::Prefetch(package_name, range) => {
-                debug!("Searching for prefetch metadata for: {package_name} ({range})");
-
-                // Avoid prefetching with unbounded lower-bound ranges.
-                if !self.selector.use_highest_version(&package_name) {
-                    if let Some((lower, _)) = range.iter().next() {
-                        if lower == &Bound::Unbounded {
-                            debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
-                            return Ok(None);
-                        }
-                    }
-                }
-
                 // Wait for the package metadata to become available.
                 let versions_response = self
                     .index
@@ -1419,11 +1403,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(None);
                 };
 
+                // Avoid prefetching source distributions with unbounded lower-bound ranges. This
+                // often leads to failed attempts to build legacy versions of packages that are
+                // incompatible with modern build tools.
+                if !dist.prefetchable() {
+                    if !self.selector.use_highest_version(&package_name) {
+                        if let Some((lower, _)) = range.iter().next() {
+                            if lower == &Bound::Unbounded {
+                                debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
+                                return Ok(None);
+                            }
+                        }
+                    }
+                }
+
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
                     let dist = dist.for_resolution().to_owned();
-
-                    debug!("Prefetching metadata for: {dist}", dist = dist);
 
                     let response = match dist {
                         ResolvedDist::Installable(dist) => {
