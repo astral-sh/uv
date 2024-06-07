@@ -26,7 +26,7 @@ use distribution_types::{
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, MarkerTree};
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Requirement};
 pub(crate) use urls::Urls;
@@ -920,8 +920,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        type Dep = (PubGrubPackage, Range<Version>);
-
         let result = self.get_dependencies(package, version, priorities, request_sink);
         if self.markers.is_some() {
             return result.map(|deps| match deps {
@@ -929,66 +927,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             });
         }
-        let deps: Vec<Dep> = match result? {
-            Dependencies::Available(deps) => deps,
-            Dependencies::Unavailable(err) => return Ok(ForkedDependencies::Unavailable(err)),
-        };
-
-        let mut by_grouping: FxHashMap<&PackageName, FxHashMap<&Range<Version>, Vec<&Dep>>> =
-            FxHashMap::default();
-        for dep in &deps {
-            let (ref pkg, ref range) = *dep;
-            let name = match &**pkg {
-                // A root can never be a dependency of another package, and a `Python` pubgrub
-                // package is never returned by `get_dependencies`. So these cases never occur.
-                // TODO(charlie): This might be overly conservative for `Extra` and `Group`. If
-                // multiple groups are enabled, we shouldn't need to fork. Similarly, if multiple
-                // extras are enabled, we shouldn't need to fork.
-                PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => unreachable!(),
-                PubGrubPackageInner::Package { ref name, .. }
-                | PubGrubPackageInner::Marker { ref name, .. }
-                | PubGrubPackageInner::Extra { ref name, .. }
-                | PubGrubPackageInner::Dev { ref name, .. } => name,
-            };
-            by_grouping
-                .entry(name)
-                .or_default()
-                .entry(range)
-                .or_default()
-                .push(dep);
-        }
-        let mut forks: Vec<Vec<Dep>> = vec![vec![]];
-        for (_, groups) in by_grouping {
-            if groups.len() <= 1 {
-                for deps in groups.into_values() {
-                    for fork in &mut forks {
-                        fork.extend(deps.iter().map(|dep| (*dep).clone()));
-                    }
-                }
-            } else {
-                let mut new_forks: Vec<Vec<Dep>> = vec![];
-                for deps in groups.into_values() {
-                    let mut new_forks_for_group = forks.clone();
-                    for fork in &mut new_forks_for_group {
-                        fork.extend(deps.iter().map(|dep| (*dep).clone()));
-                    }
-                    new_forks.extend(new_forks_for_group);
-                }
-                forks = new_forks;
-            }
-        }
-        if forks.len() <= 1 {
-            Ok(ForkedDependencies::Unforked(
-                forks.pop().unwrap_or_else(|| vec![]),
-            ))
-        } else {
-            Ok(ForkedDependencies::Forked(
-                forks
-                    .into_iter()
-                    .map(|dependencies| Fork { dependencies })
-                    .collect(),
-            ))
-        }
+        Ok(result?.fork())
     }
 
     /// Given a candidate package and version, return its dependencies.
@@ -1851,6 +1790,133 @@ enum Dependencies {
     Available(Vec<(PubGrubPackage, Range<Version>)>),
 }
 
+impl Dependencies {
+    fn fork(self) -> ForkedDependencies {
+        use std::collections::hash_map::Entry;
+
+        let deps = match self {
+            Dependencies::Available(deps) => deps,
+            Dependencies::Unavailable(err) => return ForkedDependencies::Unavailable(err),
+        };
+
+        let mut by_name: FxHashMap<&PackageName, PossibleForks> = FxHashMap::default();
+        for (index, (ref pkg, _)) in deps.iter().enumerate() {
+            let (name, marker) = match &**pkg {
+                // A root can never be a dependency of another package, and a `Python` pubgrub
+                // package is never returned by `get_dependencies`. So these cases never occur.
+                PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => unreachable!(),
+                PubGrubPackageInner::Package { name, marker, .. }
+                | PubGrubPackageInner::Extra { name, marker, .. }
+                | PubGrubPackageInner::Dev { name, marker, .. } => (name, marker.as_ref()),
+                PubGrubPackageInner::Marker { name, marker, .. } => (name, Some(marker)),
+            };
+            let Some(marker) = marker else {
+                // When no marker is found, it implies there is a dependency on
+                // this package that is unconditional with respect to marker
+                // expressions. Therefore, it should never be the cause of a
+                // fork since it is necessarily overlapping with every other
+                // possible marker expression that isn't pathological.
+                match by_name.entry(name) {
+                    Entry::Vacant(e) => {
+                        e.insert(PossibleForks::NoForkPossible(vec![index]));
+                    }
+                    Entry::Occupied(mut e) => {
+                        e.get_mut().push_unconditional_package(index);
+                    }
+                }
+                continue;
+            };
+            let possible_forks = match by_name.entry(name) {
+                // If one doesn't exist, then this is the first dependency
+                // with this package name. And since it has a marker, we can
+                // add it as the initial instance of a possibly forking set of
+                // dependencies. (A fork will only actually happen if another
+                // dependency is found with the same package name *and* where
+                // its marker expression is disjoint with this one.)
+                Entry::Vacant(e) => {
+                    let possible_fork = PossibleFork {
+                        packages: vec![(index, marker)],
+                    };
+                    let fork_groups = PossibleForkGroups {
+                        forks: vec![possible_fork],
+                    };
+                    e.insert(PossibleForks::PossiblyForking(fork_groups));
+                    continue;
+                }
+                // Now that we have a marker, look for an existing entry. If
+                // one already exists and is "no fork possible," then we know
+                // we can't fork.
+                Entry::Occupied(e) => match *e.into_mut() {
+                    PossibleForks::NoForkPossible(ref mut indices) => {
+                        indices.push(index);
+                        continue;
+                    }
+                    PossibleForks::PossiblyForking(ref mut possible_forks) => possible_forks,
+                },
+            };
+            // At this point, we know we 1) have a duplicate dependency on
+            // a package and 2) the original and this one both have marker
+            // expressions. This still doesn't guarantee that a fork occurs
+            // though. A fork can only occur when the marker expressions from
+            // (2) are provably disjoint. Otherwise, we could end up with
+            // a resolution that would result in installing two different
+            // versions of the same package. Specifically, this could occur in
+            // precisely the cases where the marker expressions intersect.
+            //
+            // By construction, the marker expressions *in* each fork group
+            // have some non-empty intersection, and the marker expressions
+            // *between* each fork group are completely disjoint. So what we do
+            // is look for a group in which there is some overlap. If so, this
+            // package gets added to that fork group. Otherwise, we create a
+            // new fork group.
+            // possible_forks.push(PossibleFork { packages: vec![] });
+            let Some(possible_fork) = possible_forks.find_overlapping_fork_group(marker) else {
+                // Create a new fork since there was no overlap.
+                possible_forks.forks.push(PossibleFork {
+                    packages: vec![(index, marker)],
+                });
+                continue;
+            };
+            // Add to an existing fork since there was overlap.
+            possible_fork.packages.push((index, marker));
+        }
+        // If all possible forks have exactly 1 group, then there is no forking.
+        if !by_name.values().any(PossibleForks::has_fork) {
+            return ForkedDependencies::Unforked(deps);
+        }
+        let mut forks = vec![Fork {
+            dependencies: vec![],
+        }];
+        for (_, possible_forks) in by_name {
+            let fork_groups = match possible_forks {
+                PossibleForks::PossiblyForking(fork_groups) => fork_groups,
+                PossibleForks::NoForkPossible(indices) => {
+                    // No fork is provoked by this package, so just add
+                    // everything in this group to each of the forks.
+                    for index in indices {
+                        for fork in &mut forks {
+                            fork.dependencies.push(deps[index].clone());
+                        }
+                    }
+                    continue;
+                }
+            };
+            let mut new_forks: Vec<Fork> = vec![];
+            for group in fork_groups.forks {
+                let mut new_forks_for_group = forks.clone();
+                for (index, _) in group.packages {
+                    for fork in &mut new_forks_for_group {
+                        fork.dependencies.push(deps[index].clone());
+                    }
+                }
+                new_forks.extend(new_forks_for_group);
+            }
+            forks = new_forks;
+        }
+        ForkedDependencies::Forked(forks)
+    }
+}
+
 #[derive(Debug)]
 enum ForkedDependencies {
     /// Package dependencies are not available.
@@ -1868,6 +1934,100 @@ enum ForkedDependencies {
 #[derive(Clone, Debug)]
 struct Fork {
     dependencies: Vec<(PubGrubPackage, Range<Version>)>,
+}
+
+#[derive(Debug)]
+enum PossibleForks<'a> {
+    NoForkPossible(Vec<usize>),
+    PossiblyForking(PossibleForkGroups<'a>),
+}
+
+impl<'a> PossibleForks<'a> {
+    /// Returns true if and only if this contains a fork assuming there are
+    /// no other dependencies to be considered.
+    fn has_fork(&self) -> bool {
+        let PossibleForks::PossiblyForking(ref fork_groups) = *self else {
+            return false;
+        };
+        fork_groups.forks.len() > 1
+    }
+
+    /// Pushes an unconditional index to a package.
+    ///
+    /// If this previously contained possible forks, those are combined into
+    /// one single set of dependencies that can never be forked.
+    ///
+    /// That is, adding an unconditional package means it is not disjoint with
+    /// all other possible dependencies using the same package name.
+    fn push_unconditional_package(&mut self, index: usize) {
+        self.make_no_forks_possible();
+        let PossibleForks::NoForkPossible(ref mut indices) = *self else {
+            unreachable!("all forks should be eliminated")
+        };
+        indices.push(index);
+    }
+
+    /// Convert this set of possible forks into something that can never fork.
+    ///
+    /// This is useful in cases where a dependency on a package is found
+    /// without any marker expressions at all. In this case, it is never
+    /// possible for this package to provoke a fork. Since it is unconditional,
+    /// it implies it is never disjoint with any other dependency specification
+    /// on the same package. (Except for pathological cases of marker
+    /// expressions that always evaluate to false. But we generally ignore
+    /// those.)
+    fn make_no_forks_possible(&mut self) {
+        let PossibleForks::PossiblyForking(ref fork_groups) = *self else {
+            return;
+        };
+        let mut indices = vec![];
+        for possible_fork in &fork_groups.forks {
+            for &(index, _) in &possible_fork.packages {
+                indices.push(index);
+            }
+        }
+        *self = PossibleForks::NoForkPossible(indices);
+    }
+}
+
+#[derive(Debug)]
+struct PossibleForkGroups<'a> {
+    forks: Vec<PossibleFork<'a>>,
+}
+
+impl<'a> PossibleForkGroups<'a> {
+    /// Given a marker expression, if there is a fork in this set of fork
+    /// groups with non-empty overlap with it, then that fork group is
+    /// returned. Otherwise, `None` is returned.
+    fn find_overlapping_fork_group<'g>(
+        &'g mut self,
+        marker: &MarkerTree,
+    ) -> Option<&'g mut PossibleFork<'a>> {
+        self.forks
+            .iter_mut()
+            .find(|fork| fork.is_overlapping(marker))
+    }
+}
+
+#[derive(Debug)]
+struct PossibleFork<'a> {
+    packages: Vec<(usize, &'a MarkerTree)>,
+}
+
+impl<'a> PossibleFork<'a> {
+    /// Returns true if and only if the given marker expression has a non-empty
+    /// intersection with *any* of the package markers within this possible
+    /// fork.
+    fn is_overlapping(&self, marker: &MarkerTree) -> bool {
+        use crate::marker::is_disjoint;
+
+        for (_, tree) in &self.packages {
+            if !is_disjoint(marker, tree) {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 fn uncapitalize<T: AsRef<str>>(string: T) -> String {
