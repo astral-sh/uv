@@ -34,7 +34,7 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
-    Toml(PathBuf, #[source] Box<toml::de::Error>),
+    Toml(PathBuf, #[source] anyhow::Error),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
 }
@@ -75,8 +75,8 @@ impl Workspace {
 
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), err))?;
 
         let project_path = absolutize_path(project_root)
             .map_err(WorkspaceError::Normalize)?
@@ -242,8 +242,8 @@ impl Workspace {
             if let Some(project) = &workspace_pyproject_toml.project {
                 let pyproject_path = workspace_root.join("pyproject.toml");
                 let contents = fs_err::read_to_string(&pyproject_path)?;
-                let pyproject_toml = toml::from_str(&contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
+                let pyproject_toml = PyProjectToml::from_string(contents)
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path, err))?;
 
                 debug!(
                     "Adding root workspace member: {}",
@@ -297,8 +297,8 @@ impl Workspace {
                 // Read the member `pyproject.toml`.
                 let pyproject_path = member_root.join("pyproject.toml");
                 let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-                let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
+                let pyproject_toml = PyProjectToml::from_string(contents)
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path, err))?;
 
                 // Extract the package name.
                 let Some(project) = pyproject_toml.project.clone() else {
@@ -490,8 +490,8 @@ impl ProjectWorkspace {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), err))?;
 
         // It must have a `[project]` table.
         let project = pyproject_toml
@@ -514,8 +514,8 @@ impl ProjectWorkspace {
             // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
             return Ok(None);
         };
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), err))?;
 
         // Extract the `[project]` metadata.
         let Some(project) = pyproject_toml.project.clone() else {
@@ -656,8 +656,8 @@ async fn find_workspace(
 
         // Read the `pyproject.toml`.
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
-            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), err))?;
 
         return if let Some(workspace) = pyproject_toml
             .tool

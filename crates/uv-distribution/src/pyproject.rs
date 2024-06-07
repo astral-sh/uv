@@ -18,14 +18,34 @@ use pypi_types::VerbatimParsedUrl;
 use uv_normalize::{ExtraName, PackageName};
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     /// PEP 621-compliant project metadata.
     pub project: Option<Project>,
     /// Tool-specific metadata.
     pub tool: Option<Tool>,
+    /// The raw unserialized document.
+    #[serde(skip)]
+    pub(crate) raw: String,
 }
+
+impl PyProjectToml {
+    /// Parse a `PyProjectToml` from a raw TOML string.
+    pub fn from_string(raw: String) -> anyhow::Result<Self> {
+        let pyproject = toml::from_str(&raw)?;
+        Ok(PyProjectToml { raw, ..pyproject })
+    }
+}
+
+// Ignore raw document in comparison.
+impl PartialEq for PyProjectToml {
+    fn eq(&self, other: &Self) -> bool {
+        self.project.eq(&other.project) && self.tool.eq(&other.tool)
+    }
+}
+
+impl Eq for PyProjectToml {}
 
 /// PEP 621 project metadata (`project`).
 ///

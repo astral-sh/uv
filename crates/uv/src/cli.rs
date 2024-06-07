@@ -153,6 +153,12 @@ pub(crate) enum Commands {
     /// Resolve the project requirements into a lockfile.
     #[clap(hide = true)]
     Lock(LockArgs),
+    /// Add one or more packages to the project requirements.
+    #[clap(hide = true)]
+    Add(AddArgs),
+    /// Remove one or more packages from the project requirements.
+    #[clap(hide = true)]
+    Remove(RemoveArgs),
     /// Display uv's version
     Version {
         #[arg(long, value_enum, default_value = "text")]
@@ -1922,16 +1928,18 @@ pub(crate) struct LockArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-struct AddArgs {
-    /// The name of the package to add (e.g., `Django==4.2.6`).
-    name: String,
+pub(crate) struct AddArgs {
+    /// The packages to add as PEP 508 requirement strings. e.g. 'flask==2.2.3'
+    #[arg(required = true)]
+    pub(crate) requirements: Vec<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-struct RemoveArgs {
-    /// The name of the package to remove (e.g., `Django`).
-    name: PackageName,
+pub(crate) struct RemoveArgs {
+    /// The packages to remove as PEP 508 requirement strings. e.g. 'flask==2.2.3'
+    #[arg(required = true)]
+    pub(crate) requirements: Vec<String>,
 }
 
 #[derive(Args)]

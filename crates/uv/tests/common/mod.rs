@@ -317,6 +317,34 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv add` command for the given requirements.
+    pub fn add(&self, reqs: &[&str]) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("add")
+            .args(reqs)
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
+            .current_dir(&self.temp_dir);
+        command
+    }
+
+    /// Create a `uv remove` command for the given requirements.
+    pub fn remove(&self, reqs: &[&str]) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("remove")
+            .args(reqs)
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
+            .current_dir(&self.temp_dir);
+        command
+    }
+
     pub fn interpreter(&self) -> PathBuf {
         venv_to_interpreter(&self.venv)
     }

@@ -29,6 +29,8 @@ use crate::commands::pip;
 use crate::printer::Printer;
 
 pub(crate) mod lock;
+pub(crate) mod add;
+pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
 

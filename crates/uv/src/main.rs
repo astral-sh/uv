@@ -637,6 +637,24 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Add(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AddSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::add(args.requirements, globals.preview, &cache, printer).await
+        }
+        Commands::Remove(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::RemoveSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::remove(args.requirements, globals.preview, &cache, printer).await
+        }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command: SelfCommand::Update,
