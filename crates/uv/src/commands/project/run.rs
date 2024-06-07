@@ -108,11 +108,15 @@ pub(crate) async fn run(
         // Discover an interpreter.
         let interpreter = if let Some(project_env) = &project_env {
             project_env.interpreter().clone()
-        } else if let Some(python) = python.as_ref() {
-            Toolchain::find_requested(python, SystemPython::Allowed, preview, cache)?
-                .into_interpreter()
         } else {
-            Toolchain::find_default(preview, cache)?.into_interpreter()
+            // Note we force preview on during `uv run` for now since the entire interface is in preview
+            Toolchain::find(
+                python.as_deref(),
+                SystemPython::Allowed,
+                PreviewMode::Enabled,
+                cache,
+            )?
+            .into_interpreter()
         };
 
         // TODO(charlie): If the environment satisfies the requirements, skip creation.
