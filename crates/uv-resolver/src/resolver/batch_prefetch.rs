@@ -132,7 +132,8 @@ impl BatchPrefetcher {
             let CandidateDist::Compatible(dist) = candidate.dist() else {
                 continue;
             };
-            // Avoid building a lot of source distributions.
+
+            // Avoid prefetching source distributions, which could be expensive.
             if !dist.prefetchable() {
                 continue;
             }

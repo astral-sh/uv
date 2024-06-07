@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use std::ops::Bound;
 use std::sync::Arc;
 use std::thread;
 
@@ -1401,6 +1402,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let Some(dist) = candidate.compatible() else {
                     return Ok(None);
                 };
+
+                // Avoid prefetching source distributions with unbounded lower-bound ranges. This
+                // often leads to failed attempts to build legacy versions of packages that are
+                // incompatible with modern build tools.
+                if !dist.prefetchable() {
+                    if !self.selector.use_highest_version(&package_name) {
+                        if let Some((lower, _)) = range.iter().next() {
+                            if lower == &Bound::Unbounded {
+                                debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
+                                return Ok(None);
+                            }
+                        }
+                    }
+                }
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
