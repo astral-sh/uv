@@ -506,6 +506,10 @@ uv has Tier 2 support (["guaranteed to build"](https://doc.rust-lang.org/beta/ru
 - Linux (i686)
 - Linux (s390x)
 
+The ABI used for Linux platform is MUSL, except for _PPC64_ and _s390x_ archs used GNU ABI.
+
+The ABI used for Windows platform is MSVC with statically linked C-Runtime.
+
 uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv/) for its Tier 1 and
 Tier 2 platforms. However, while Tier 2 platforms are continuously built, they are not continuously
 tested or developed against, and so stability may vary in practice.
