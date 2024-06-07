@@ -262,6 +262,7 @@ impl RequirementsTxt {
                     read_url_to_string(&requirements_txt, client).await
                 }
             } else {
+                // Ex) `file:///home/ferris/project/requirements.txt`
                 uv_fs::read_to_string_transcode(&requirements_txt)
                     .await
                     .map_err(RequirementsTxtParserError::IO)
@@ -321,6 +322,22 @@ impl RequirementsTxt {
                     let sub_file =
                         if filename.starts_with("http://") || filename.starts_with("https://") {
                             PathBuf::from(filename.as_ref())
+                        } else if filename.starts_with("file://") {
+                            requirements_txt.join(
+                                Url::parse(filename.as_ref())
+                                    .map_err(|err| RequirementsTxtParserError::Url {
+                                        source: err,
+                                        url: filename.to_string(),
+                                        start,
+                                        end,
+                                    })?
+                                    .to_file_path()
+                                    .map_err(|()| RequirementsTxtParserError::FileUrl {
+                                        url: filename.to_string(),
+                                        start,
+                                        end,
+                                    })?,
+                            )
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
@@ -360,6 +377,22 @@ impl RequirementsTxt {
                     let sub_file =
                         if filename.starts_with("http://") || filename.starts_with("https://") {
                             PathBuf::from(filename.as_ref())
+                        } else if filename.starts_with("file://") {
+                            requirements_txt.join(
+                                Url::parse(filename.as_ref())
+                                    .map_err(|err| RequirementsTxtParserError::Url {
+                                        source: err,
+                                        url: filename.to_string(),
+                                        start,
+                                        end,
+                                    })?
+                                    .to_file_path()
+                                    .map_err(|()| RequirementsTxtParserError::FileUrl {
+                                        url: filename.to_string(),
+                                        start,
+                                        end,
+                                    })?,
+                            )
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
@@ -815,6 +848,11 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
+    FileUrl {
+        url: String,
+        start: usize,
+        end: usize,
+    },
     VerbatimUrl {
         source: pep508_rs::VerbatimUrlError,
         url: String,
@@ -882,6 +920,9 @@ impl Display for RequirementsTxtParserError {
             Self::Url { url, start, .. } => {
                 write!(f, "Invalid URL at position {start}: `{url}`")
             }
+            Self::FileUrl { url, start, .. } => {
+                write!(f, "Invalid file URL at position {start}: `{url}`")
+            }
             Self::VerbatimUrl { source, url } => {
                 write!(f, "Invalid URL: `{url}`: {source}")
             }
@@ -945,6 +986,7 @@ impl std::error::Error for RequirementsTxtParserError {
         match &self {
             Self::IO(err) => err.source(),
             Self::Url { source, .. } => Some(source),
+            Self::FileUrl { .. } => None,
             Self::VerbatimUrl { source, .. } => Some(source),
             Self::UrlConversion(_) => None,
             Self::UnsupportedUrl(_) => None,
@@ -973,6 +1015,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Invalid URL in `{}` at position {start}: `{url}`",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::FileUrl { url, start, .. } => {
+                write!(
+                    f,
+                    "Invalid file URL in `{}` at position {start}: `{url}`",
                     self.file.user_display(),
                 )
             }
