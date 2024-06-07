@@ -57,6 +57,12 @@ pub enum Error {
     PyLauncher(#[from] py_launcher::Error),
 
     #[error(transparent)]
+    ManagedToolchain(#[from] managed::Error),
+
+    #[error(transparent)]
+    Download(#[from] downloads::Error),
+
+    #[error(transparent)]
     NotFound(#[from] ToolchainNotFound),
 }
 
