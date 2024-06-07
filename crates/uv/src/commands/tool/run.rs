@@ -52,13 +52,16 @@ pub(crate) async fn run(
     debug!("Syncing ephemeral environment.");
 
     // Discover an interpreter.
-    let interpreter = if let Some(python) = python.as_ref() {
-        Toolchain::find_requested(python, SystemPython::Allowed, preview, cache)?.into_interpreter()
-    } else {
-        Toolchain::find_default(preview, cache)?.into_interpreter()
-    };
+    // Note we force preview on during `uv tool run` for now since the entire interface is in preview
+    let interpreter = Toolchain::find(
+        python.as_deref(),
+        SystemPython::Allowed,
+        PreviewMode::Enabled,
+        cache,
+    )?
+    .into_interpreter();
 
-    // Create a virtual environment
+    // Create a virtual environment1
     // TODO(zanieb): Move this path derivation elsewhere
     let uv_state_path = std::env::current_dir()?.join(".uv");
     fs_err::create_dir_all(&uv_state_path)?;
