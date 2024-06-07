@@ -119,6 +119,10 @@ pub enum PubGrubPackageInner {
         marker: Option<MarkerTree>,
         url: Option<VerbatimParsedUrl>,
     },
+    /// A proxy package for a base package with a marker (e.g., `black; python_version >= "3.6"`).
+    ///
+    /// If a requirement has an extra _and_ a marker, it will be represented via the `Extra` variant
+    /// rather than the `Marker` variant.
     Marker {
         name: PackageName,
         marker: MarkerTree,

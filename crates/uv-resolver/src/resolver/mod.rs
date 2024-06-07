@@ -8,6 +8,7 @@ use std::thread;
 
 use dashmap::DashMap;
 use futures::{FutureExt, StreamExt, TryFutureExt};
+use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
@@ -1152,28 +1153,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Add a dependency on both the marker and base package.
-            PubGrubPackageInner::Marker { name, marker, url } => Ok(Dependencies::Available(vec![
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: None,
-                        dev: None,
-                        marker: Some(marker.clone()),
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: None,
-                        dev: None,
-                        marker: None,
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-            ])),
+            PubGrubPackageInner::Marker { name, marker, url } => Ok(Dependencies::Available(
+                [None, Some(marker)]
+                    .into_iter()
+                    .map(move |marker| {
+                        (
+                            PubGrubPackage::from(PubGrubPackageInner::Package {
+                                name: name.clone(),
+                                extra: None,
+                                dev: None,
+                                marker: marker.cloned(),
+                                url: url.clone(),
+                            }),
+                            Range::singleton(version.clone()),
+                        )
+                    })
+                    .collect(),
+            )),
 
             // Add a dependency on both the extra and base package, with and without the marker.
             PubGrubPackageInner::Extra {
@@ -1181,48 +1177,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 extra,
                 marker,
                 url,
-            } => Ok(Dependencies::Available(vec![
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: None,
-                        dev: None,
-                        marker: marker.clone(),
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: Some(extra.clone()),
-                        dev: None,
-                        marker: marker.clone(),
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: None,
-                        dev: None,
-                        marker: None,
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: Some(extra.clone()),
-                        dev: None,
-                        marker: None,
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-            ])),
+            } => Ok(Dependencies::Available(
+                [None, marker.as_ref()]
+                    .into_iter()
+                    .dedup()
+                    .flat_map(move |marker| {
+                        [None, Some(extra)].into_iter().map(move |extra| {
+                            (
+                                PubGrubPackage::from(PubGrubPackageInner::Package {
+                                    name: name.clone(),
+                                    extra: extra.cloned(),
+                                    dev: None,
+                                    marker: marker.cloned(),
+                                    url: url.clone(),
+                                }),
+                                Range::singleton(version.clone()),
+                            )
+                        })
+                    })
+                    .collect(),
+            )),
 
             // Add a dependency on both the development dependency group and base package, with and
             // without the marker.
@@ -1231,48 +1205,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dev,
                 marker,
                 url,
-            } => Ok(Dependencies::Available(vec![
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: None,
-                        dev: None,
-                        marker: None,
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: None,
-                        dev: Some(dev.clone()),
-                        marker: None,
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: None,
-                        dev: None,
-                        marker: marker.clone(),
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-                (
-                    PubGrubPackage::from(PubGrubPackageInner::Package {
-                        name: name.clone(),
-                        extra: None,
-                        dev: Some(dev.clone()),
-                        marker: marker.clone(),
-                        url: url.clone(),
-                    }),
-                    Range::singleton(version.clone()),
-                ),
-            ])),
+            } => Ok(Dependencies::Available(
+                [None, marker.as_ref()]
+                    .into_iter()
+                    .dedup()
+                    .flat_map(move |marker| {
+                        [None, Some(dev)].into_iter().map(move |dev| {
+                            (
+                                PubGrubPackage::from(PubGrubPackageInner::Package {
+                                    name: name.clone(),
+                                    extra: None,
+                                    dev: dev.cloned(),
+                                    marker: marker.cloned(),
+                                    url: url.clone(),
+                                }),
+                                Range::singleton(version.clone()),
+                            )
+                        })
+                    })
+                    .collect(),
+            )),
         }
     }
 
