@@ -11,6 +11,7 @@ use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::InstalledToolchains;
 use crate::py_launcher::py_list_paths;
+use crate::toolchain::Toolchain;
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
@@ -83,12 +84,12 @@ pub enum SystemPython {
     Required,
 }
 
-/// The result of an interpreter search.
+/// The result of an toolchain search.
 ///
-/// Returned by [`find_interpreter`].
-type ToolchainResult = Result<DiscoveredToolchain, ToolchainNotFound>;
+/// Returned by [`find_toolchain`].
+type ToolchainResult = Result<Toolchain, ToolchainNotFound>;
 
-/// The result of failed interpreter discovery.
+/// The result of failed toolchain discovery.
 ///
 /// See [`InterpreterResult`].
 #[derive(Clone, Debug, Error)]
@@ -113,16 +114,7 @@ pub enum ToolchainNotFound {
     FileNotExecutable(PathBuf),
 }
 
-/// The result of successful toolchain discovery.
-///
-/// See [`ToolchainResult`].
-#[derive(Clone, Debug)]
-pub struct DiscoveredToolchain {
-    pub(crate) source: ToolchainSource,
-    pub(crate) interpreter: Interpreter,
-}
-
-/// The source of a discovered Python interpreter.
+/// The source of a discovered Python toolchain.
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash, PartialOrd, Ord)]
 pub enum ToolchainSource {
     /// The toolchain path was provided directly
@@ -474,7 +466,7 @@ pub fn find_toolchain(
                     path.clone(),
                 )));
             }
-            DiscoveredToolchain {
+            Toolchain {
                 source: ToolchainSource::ProvidedPath,
                 interpreter: Interpreter::query(path, cache)?,
             }
@@ -499,7 +491,7 @@ pub fn find_toolchain(
                     ToolchainNotFound::ExecutableNotFoundInDirectory(path.clone(), executable),
                 ));
             }
-            DiscoveredToolchain {
+            Toolchain {
                 source: ToolchainSource::ProvidedPath,
                 interpreter: Interpreter::query(executable, cache)?,
             }
@@ -518,7 +510,7 @@ pub fn find_toolchain(
                     ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone()),
                 ));
             };
-            DiscoveredToolchain {
+            Toolchain {
                 source: ToolchainSource::SearchPath,
                 interpreter: Interpreter::query(executable, cache)?,
             }
@@ -542,7 +534,7 @@ pub fn find_toolchain(
                     ToolchainNotFound::NoMatchingImplementation(sources.clone(), *implementation),
                 ));
             };
-            DiscoveredToolchain {
+            Toolchain {
                 source,
                 interpreter,
             }
@@ -573,7 +565,7 @@ pub fn find_toolchain(
                     ),
                 ));
             };
-            DiscoveredToolchain {
+            Toolchain {
                 source,
                 interpreter,
             }
@@ -595,7 +587,7 @@ pub fn find_toolchain(
                     ToolchainNotFound::NoPythonInstallation(sources.clone(), None),
                 ));
             };
-            DiscoveredToolchain {
+            Toolchain {
                 source,
                 interpreter,
             }
@@ -620,7 +612,7 @@ pub fn find_toolchain(
                 };
                 return Ok(ToolchainResult::Err(err));
             };
-            DiscoveredToolchain {
+            Toolchain {
                 source,
                 interpreter,
             }
@@ -1345,21 +1337,6 @@ impl fmt::Display for ToolchainSources {
                 }
             }
         }
-    }
-}
-
-impl DiscoveredToolchain {
-    #[allow(dead_code)]
-    pub fn source(&self) -> &ToolchainSource {
-        &self.source
-    }
-
-    pub fn interpreter(&self) -> &Interpreter {
-        &self.interpreter
-    }
-
-    pub fn into_interpreter(self) -> Interpreter {
-        self.interpreter
     }
 }
 

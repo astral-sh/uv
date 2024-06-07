@@ -26,6 +26,7 @@ mod prefix;
 mod py_launcher;
 mod python_version;
 mod target;
+mod toolchain;
 mod virtualenv;
 
 #[cfg(not(test))]
@@ -80,8 +81,8 @@ mod tests {
     use uv_configuration::PreviewMode;
 
     use crate::{
-        discovery::DiscoveredToolchain, find_best_toolchain, find_default_toolchain,
-        find_toolchain, implementation::ImplementationName, managed::InstalledToolchains,
+        find_best_toolchain, find_default_toolchain, find_toolchain,
+        implementation::ImplementationName, managed::InstalledToolchains, toolchain::Toolchain,
         virtualenv::virtualenv_python_executable, Error, PythonEnvironment, PythonVersion,
         SystemPython, ToolchainNotFound, ToolchainRequest, ToolchainSource, ToolchainSources,
         VersionRequest,
@@ -430,7 +431,7 @@ mod tests {
         assert!(
             matches!(
                 interpreter,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
@@ -484,7 +485,7 @@ mod tests {
         assert!(
             matches!(
                 toolchain,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
@@ -540,7 +541,7 @@ mod tests {
         assert!(
             matches!(
                 toolchain,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
@@ -665,7 +666,7 @@ mod tests {
         assert!(
             matches!(
                 toolchain,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
@@ -698,7 +699,7 @@ mod tests {
         assert!(
             matches!(
                 toolchain,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
@@ -785,7 +786,7 @@ mod tests {
         assert!(
             matches!(
                 toolchain,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
@@ -818,7 +819,7 @@ mod tests {
         assert!(
             matches!(
                 toolchain,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
@@ -853,7 +854,7 @@ mod tests {
         assert!(
             matches!(
                 toolchain,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::SearchPath,
                     interpreter: _
                 }
@@ -883,7 +884,7 @@ mod tests {
         assert!(
             matches!(
                 toolchain,
-                DiscoveredToolchain {
+                Toolchain {
                     source: ToolchainSource::ActiveEnvironment,
                     interpreter: _
                 }
