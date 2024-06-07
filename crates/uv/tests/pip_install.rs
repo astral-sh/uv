@@ -2420,6 +2420,7 @@ fn install_sdist_resolution_lowest() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound.
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]

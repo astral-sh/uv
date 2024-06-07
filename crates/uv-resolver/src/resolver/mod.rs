@@ -33,6 +33,7 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
+use uv_warnings::warn_user_once;
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
@@ -46,6 +47,7 @@ use crate::pubgrub::{
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
+use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
@@ -867,7 +869,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<Vec<Dependencies>, ResolveError> {
         type Dep = (PubGrubPackage, Range<Version>);
 
-        let result = self.get_dependencies(package, version, priorities, request_sink);
+        let result = self.get_dependencies(
+            package,
+            version,
+            priorities,
+            request_sink,
+            self.selector.resolution_strategy(),
+        );
         if self.markers.is_some() {
             return result.map(|deps| vec![deps]);
         }
@@ -929,6 +937,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
+        resolution_strategy: &ResolutionStrategy,
     ) -> Result<Dependencies, ResolveError> {
         match &**package {
             PubGrubPackageInner::Root(_) => {
@@ -959,6 +968,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for (package, version) in dependencies.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
+                    // Warn the user if the direct dependency is not pinned.
+                    if matches!(
+                        resolution_strategy,
+                        ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
+                    ) && *version == (Range::full())
+                    {
+                        warn_user_once!("The direct dependency `{package}` is unpinned. Consider setting a lower bound.");
+                    }
                     // Update the package priorities.
                     priorities.insert(package, version);
 
@@ -1106,6 +1123,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for (dep_package, dep_version) in dependencies.iter() {
                     debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
+                    // Warn the user if the transitive dependency is not pinned.
+                    if matches!(
+                        resolution_strategy,
+                        ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
+                    ) && *dep_version == (Range::full())
+                    {
+                        warn_user_once!("The transitive dependency `{dep_package}` is unpinned. Consider setting a lower bound.");
+                    }
                     // Update the package priorities.
                     priorities.insert(dep_package, dep_version);
 
@@ -1689,7 +1714,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
         // N.B. This is almost identical to `ResolvedDistRef::to_owned`, but
         // creates a `Request` instead of a `ResolvedDist`. There's probably
         // some room for DRYing this up a bit. The obvious way would be to
-        // add a method to create a `Dist`, but a `Dist` cannot reprented an
+        // add a method to create a `Dist`, but a `Dist` cannot represented an
         // installed dist.
         match dist {
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized } => {

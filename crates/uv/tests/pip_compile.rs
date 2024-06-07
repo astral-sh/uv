@@ -1080,6 +1080,7 @@ fn compile_sdist_resolution_lowest() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound.
     Resolved 3 packages in [TIME]
     "###
     );
@@ -6638,6 +6639,8 @@ fn editable_direct_dependency() -> Result<()> {
         # via setuptools-editable
 
     ----- stderr -----
+    warning: The direct dependency `setuptools-editable` is unpinned. Consider setting a lower bound.
+    warning: The transitive dependency `iniconfig` is unpinned. Consider setting a lower bound.
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6985,6 +6988,8 @@ dev = ["setuptools"]
         # via example
 
     ----- stderr -----
+    warning: The direct dependency `example` is unpinned. Consider setting a lower bound.
+    warning: The transitive dependency `setuptools` is unpinned. Consider setting a lower bound.
     Resolved 4 packages in [TIME]
     "###
     );
@@ -8577,6 +8582,7 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
+    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound.
     Resolved 1 package in [TIME]
     "###
     );
