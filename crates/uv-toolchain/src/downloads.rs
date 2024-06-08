@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::implementation::{Error as ImplementationError, ImplementationName};
-use crate::platform::{Arch, Error as PlatformError, Libc, Os};
+use crate::platform::{Arch, Libc, Os};
 use crate::{PythonVersion, ToolchainRequest, VersionRequest};
 use thiserror::Error;
 use uv_client::BetterReqwestError;
@@ -20,8 +20,6 @@ use uv_fs::Simplified;
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    #[error(transparent)]
-    PlatformError(#[from] PlatformError),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
     #[error("Invalid python version: {0}")]
@@ -59,7 +57,6 @@ pub enum Error {
 
 #[derive(Debug, PartialEq)]
 pub struct PythonDownload {
-    key: &'static str,
     implementation: ImplementationName,
     arch: Arch,
     os: Os,
@@ -157,10 +154,10 @@ impl PythonDownloadRequest {
             self.implementation = Some(ImplementationName::CPython);
         }
         if self.arch.is_none() {
-            self.arch = Some(Arch::from_env()?);
+            self.arch = Some(Arch::from_env());
         }
         if self.os.is_none() {
-            self.os = Some(Os::from_env()?);
+            self.os = Some(Os::from_env());
         }
         if self.libc.is_none() {
             self.libc = Some(Libc::from_env());
@@ -173,8 +170,8 @@ impl PythonDownloadRequest {
         Ok(Self::new(
             None,
             None,
-            Some(Arch::from_env()?),
-            Some(Os::from_env()?),
+            Some(Arch::from_env()),
+            Some(Os::from_env()),
             Some(Libc::from_env()),
         ))
     }
@@ -252,11 +249,6 @@ pub enum DownloadResult {
 }
 
 impl PythonDownload {
-    /// Return the [`PythonDownload`] corresponding to the key, if it exists.
-    pub fn from_key(key: &str) -> Option<&PythonDownload> {
-        PYTHON_DOWNLOADS.iter().find(|&value| value.key == key)
-    }
-
     /// Return the first [`PythonDownload`] matching a request, if any.
     pub fn from_request(request: &PythonDownloadRequest) -> Result<&'static PythonDownload, Error> {
         request
@@ -274,8 +266,17 @@ impl PythonDownload {
         self.url
     }
 
-    pub fn key(&self) -> &str {
-        self.key
+    pub fn key(&self) -> String {
+        format!(
+            "{}-{}.{}.{}-{}-{}-{}",
+            self.implementation.as_str().to_ascii_lowercase(),
+            self.major,
+            self.minor,
+            self.patch,
+            self.os,
+            self.arch,
+            self.libc
+        )
     }
 
     pub fn sha256(&self) -> Option<&str> {
@@ -289,7 +290,7 @@ impl PythonDownload {
         parent_path: &Path,
     ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
-        let path = parent_path.join(self.key).clone();
+        let path = parent_path.join(self.key()).clone();
 
         // If it already exists, return it
         if path.is_dir() {
@@ -363,6 +364,6 @@ impl From<reqwest_middleware::Error> for Error {
 
 impl Display for PythonDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.key)
+        f.write_str(&self.key())
     }
 }

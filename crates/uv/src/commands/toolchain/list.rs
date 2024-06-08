@@ -54,10 +54,7 @@ pub(crate) async fn list(
         ));
     }
     for download in downloads {
-        output.insert((
-            download.python_version().version().clone(),
-            download.key().to_owned(),
-        ));
+        output.insert((download.python_version().version().clone(), download.key()));
     }
 
     for (version, key) in output {

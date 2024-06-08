@@ -84,11 +84,7 @@ _suffix_re = re.compile(
 ARCH_MAP = {
     "ppc64": "powerpc64",
     "ppc64le": "powerpc64le",
-    "i686": "x86",
-    "i386": "x86",
-    "armv7": "armv7l",
 }
-OS_MAP = {"darwin": "macos"}
 
 
 def parse_filename(filename):
@@ -107,8 +103,8 @@ def parse_filename(filename):
 
 
 def normalize_triple(triple):
-    if "-static" in triple or "-gnueabihf" in triple or "-gnueabi" in triple:
-        logging.debug("Skipping %r: unknown triple", triple)
+    if "-static" in triple:
+        logging.debug("Skipping %r: static unsupported", triple)
         return
     triple = SPECIAL_TRIPLES.get(triple, triple)
     pieces = triple.split("-")
@@ -134,7 +130,7 @@ def normalize_arch(arch):
 
 
 def normalize_os(os):
-    return OS_MAP.get(os, os)
+    return os
 
 
 def read_sha256(url):
