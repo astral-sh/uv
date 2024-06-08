@@ -14,7 +14,7 @@ different index, etc.
 ## `project.dependencies`
 
 The `project.dependencies` table represents the dependencies that are used when uploading to PyPI or
-building a wheel. Individual dependencies are specified using [PEP 508](#PEP 508), and the table as
+building a wheel. Individual dependencies are specified using [PEP 508](https://peps.python.org/pep-0508/), and the table as
 a whole follows the [PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/)
 standard.
 
