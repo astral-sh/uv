@@ -23,7 +23,7 @@ use uv_workspace::{Combine, PipOptions, Workspace};
 use crate::cli::{
     ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
     PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs,
-    ToolRunArgs, VenvArgs,
+    ToolRunArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -227,6 +227,42 @@ impl ToolRunSettings {
             with,
             python,
         }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) enum ToolchainListIncludes {
+    #[default]
+    Default,
+    All,
+    Installed,
+}
+
+/// The resolved settings to use for a `tool run` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolchainListSettings {
+    pub(crate) includes: ToolchainListIncludes,
+}
+
+impl ToolchainListSettings {
+    /// Resolve the [`ToolchainListSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolchainListArgs, _workspace: Option<Workspace>) -> Self {
+        let ToolchainListArgs {
+            all,
+            only_installed,
+        } = args;
+
+        let includes = if all {
+            ToolchainListIncludes::All
+        } else if only_installed {
+            ToolchainListIncludes::Installed
+        } else {
+            ToolchainListIncludes::default()
+        };
+
+        Self { includes }
     }
 }
 

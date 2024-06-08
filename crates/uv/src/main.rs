@@ -10,7 +10,7 @@ use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
-use cli::{ToolCommand, ToolNamespace};
+use cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
 use uv_cache::Cache;
 use uv_requirements::RequirementsSource;
 use uv_workspace::Combine;
@@ -670,6 +670,17 @@ async fn run() -> Result<ExitStatus> {
                 printer,
             )
             .await
+        }
+        Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::List(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolchainListSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::toolchain_list(args.includes, globals.preview, &cache, printer).await
         }
     }
 }

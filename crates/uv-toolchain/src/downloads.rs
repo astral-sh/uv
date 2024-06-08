@@ -128,6 +128,7 @@ impl PythonDownloadRequest {
         self
     }
 
+    /// Construct a new [`PythonDownloadRequest`] from a [`ToolchainRequest`].
     pub fn from_request(request: ToolchainRequest) -> Result<Self, Error> {
         let result = Self::default();
         let result = match request {
@@ -149,6 +150,9 @@ impl PythonDownloadRequest {
         Ok(result)
     }
 
+    /// Fill empty entries with default values.
+    ///
+    /// Platform information is pulled from the environment.
     pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
             self.implementation = Some(ImplementationName::CPython);
@@ -163,6 +167,48 @@ impl PythonDownloadRequest {
             self.libc = Some(Libc::from_env());
         }
         Ok(self)
+    }
+
+    /// Construct a new [`PythonDownloadRequest`] with platform information from the environment.
+    pub fn from_env() -> Result<Self, Error> {
+        Ok(Self::new(
+            None,
+            None,
+            Some(Arch::from_env()?),
+            Some(Os::from_env()?),
+            Some(Libc::from_env()),
+        ))
+    }
+
+    /// Iterate over all [`PythonDownload`]'s that match this request.
+    pub fn iter_downloads(&self) -> impl Iterator<Item = &'static PythonDownload> + '_ {
+        PythonDownload::iter_all().filter(move |download| {
+            if let Some(arch) = &self.arch {
+                if download.arch != *arch {
+                    return false;
+                }
+            }
+            if let Some(os) = &self.os {
+                if download.os != *os {
+                    return false;
+                }
+            }
+            if let Some(implementation) = &self.implementation {
+                if download.implementation != *implementation {
+                    return false;
+                }
+            }
+            if let Some(version) = &self.version {
+                if !version.matches_major_minor_patch(
+                    download.major,
+                    download.minor,
+                    download.patch,
+                ) {
+                    return false;
+                }
+            }
+            true
+        })
     }
 }
 
@@ -211,39 +257,25 @@ impl PythonDownload {
         PYTHON_DOWNLOADS.iter().find(|&value| value.key == key)
     }
 
+    /// Return the first [`PythonDownload`] matching a request, if any.
     pub fn from_request(request: &PythonDownloadRequest) -> Result<&'static PythonDownload, Error> {
-        for download in PYTHON_DOWNLOADS {
-            if let Some(arch) = &request.arch {
-                if download.arch != *arch {
-                    continue;
-                }
-            }
-            if let Some(os) = &request.os {
-                if download.os != *os {
-                    continue;
-                }
-            }
-            if let Some(implementation) = &request.implementation {
-                if download.implementation != *implementation {
-                    continue;
-                }
-            }
-            if let Some(version) = &request.version {
-                if !version.matches_major_minor_patch(
-                    download.major,
-                    download.minor,
-                    download.patch,
-                ) {
-                    continue;
-                }
-            }
-            return Ok(download);
-        }
-        Err(Error::NoDownloadFound(request.clone()))
+        request
+            .iter_downloads()
+            .next()
+            .ok_or(Error::NoDownloadFound(request.clone()))
+    }
+
+    /// Iterate over all [`PythonDownload`]'s.
+    pub fn iter_all() -> impl Iterator<Item = &'static PythonDownload> {
+        PYTHON_DOWNLOADS.iter()
     }
 
     pub fn url(&self) -> &str {
         self.url
+    }
+
+    pub fn key(&self) -> &str {
+        self.key
     }
 
     pub fn sha256(&self) -> Option<&str> {
