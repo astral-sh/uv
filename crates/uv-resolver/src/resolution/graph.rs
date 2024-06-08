@@ -31,7 +31,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    pub(crate) petgraph: Graph<AnnotatedDist, (), Directed>,
+    pub(crate) petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: Option<RequiresPython>,
     /// Any diagnostics that were encountered while building the graph.
@@ -55,28 +55,8 @@ impl ResolutionGraph {
         python: &PythonRequirement,
         resolution: Resolution,
     ) -> anyhow::Result<Self, ResolveError> {
-        // Collect all marker expressions from relevant PubGrub packages.
-        let mut markers: FxHashMap<(&PackageName, &Version, &Option<ExtraName>), MarkerTree> =
-            FxHashMap::default();
-        for (package, versions) in &resolution.packages {
-            if let PubGrubPackageInner::Package {
-                name,
-                marker: Some(marker),
-                extra,
-                ..
-            } = &**package
-            {
-                for version in versions {
-                    markers
-                        .entry((name, version, extra))
-                        .or_insert_with(|| MarkerTree::Or(vec![]))
-                        .or(marker.clone());
-                }
-            }
-        }
-
         // Add every package to the graph.
-        let mut petgraph: Graph<AnnotatedDist, (), Directed> =
+        let mut petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed> =
             Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
         let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> = FxHashMap::with_capacity_and_hasher(
             resolution.packages.len(),
@@ -186,15 +166,11 @@ impl ResolutionGraph {
                             }
                         }
 
-                        // Extract the markers.
-                        let marker = markers.get(&(name, version, extra)).cloned();
-
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
                             dist,
                             extra: extra.clone(),
                             dev: dev.clone(),
-                            marker,
                             hashes,
                             metadata,
                         });
@@ -278,15 +254,11 @@ impl ResolutionGraph {
                             }
                         }
 
-                        // Extract the markers.
-                        let marker = markers.get(&(name, version, extra)).cloned();
-
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(AnnotatedDist {
                             dist: dist.into(),
                             extra: extra.clone(),
                             dev: dev.clone(),
-                            marker,
                             hashes,
                             metadata,
                         });
@@ -313,7 +285,23 @@ impl ResolutionGraph {
                     versions.to_extra.as_ref(),
                     versions.to_dev.as_ref(),
                 )];
-                petgraph.update_edge(from_index, to_index, ());
+
+                if let Some(edge) = petgraph
+                    .find_edge(from_index, to_index)
+                    .and_then(|edge| petgraph.edge_weight_mut(edge))
+                {
+                    // If either the existing marker or new marker is `None`, then the dependency is
+                    // included unconditionally, and so the combined marker should be `None`.
+                    if let (Some(marker), Some(ref version_marker)) =
+                        (edge.as_mut(), versions.marker)
+                    {
+                        marker.or(version_marker.clone());
+                    } else {
+                        *edge = None;
+                    }
+                } else {
+                    petgraph.update_edge(from_index, to_index, versions.marker.clone());
+                }
             }
         }
 
