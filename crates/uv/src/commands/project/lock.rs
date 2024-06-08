@@ -4,6 +4,7 @@ use anstream::eprint;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::RequirementOrigin;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -124,7 +125,30 @@ pub(super) async fn do_lock(
         .map(UnresolvedRequirementSpecification::from)
         .collect();
     let constraints = vec![];
-    let overrides = vec![];
+
+    let mut overrides: Vec<UnresolvedRequirementSpecification> = vec![];
+    for workspace_package in workspace.packages().values() {
+        if workspace_package.root() == workspace.root() {
+            if let Some(override_dependencies) = workspace_package
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.override_dependencies.as_ref())
+            {
+                for override_dependency in override_dependencies {
+                    let req = pypi_types::Requirement::from(
+                        override_dependency
+                            .clone()
+                            .with_origin(RequirementOrigin::Workspace),
+                    );
+                    overrides.push(UnresolvedRequirementSpecification::from(req));
+                }
+            }
+            break;
+        }
+    }
+
     let dev = vec![DEV_DEPENDENCIES.clone()];
 
     let source_trees = vec![];
