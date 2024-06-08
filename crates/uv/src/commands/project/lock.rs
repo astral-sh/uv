@@ -166,7 +166,7 @@ pub(super) async fn do_lock(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, None, &hasher, &no_build, &no_binary)
     };
 
     // If an existing lockfile exists, build up a set of preferences.
