@@ -85,15 +85,15 @@ impl ResolutionGraph {
         let mut diagnostics = Vec::new();
 
         for (package, versions) in &resolution.packages {
-            for version in versions {
-                match &**package {
-                    PubGrubPackageInner::Package {
-                        name,
-                        extra,
-                        dev,
-                        marker: None,
-                        url: None,
-                    } => {
+            match &**package {
+                PubGrubPackageInner::Package {
+                    name,
+                    extra,
+                    dev,
+                    marker: None,
+                    url: None,
+                } => {
+                    for version in versions {
                         // Create the distribution.
                         let dist = resolution
                             .pins
@@ -200,14 +200,16 @@ impl ResolutionGraph {
                         });
                         inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
                     }
+                }
 
-                    PubGrubPackageInner::Package {
-                        name,
-                        extra,
-                        dev,
-                        marker: None,
-                        url: Some(url),
-                    } => {
+                PubGrubPackageInner::Package {
+                    name,
+                    extra,
+                    dev,
+                    marker: None,
+                    url: Some(url),
+                } => {
+                    for version in versions {
                         // Create the distribution.
                         let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
 
@@ -290,10 +292,10 @@ impl ResolutionGraph {
                         });
                         inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
                     }
+                }
 
-                    _ => {}
-                };
-            }
+                _ => {}
+            };
         }
 
         // Add every edge to the graph.
