@@ -4922,6 +4922,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "target-lexicon",
  "temp-env",
  "tempfile",
  "test-log",

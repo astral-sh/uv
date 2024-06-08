@@ -1,7 +1,4 @@
-use std::{
-    fmt::{self},
-    str::FromStr,
-};
+use std::{fmt, str::FromStr};
 use thiserror::Error;
 
 /// All supported operating systems.
@@ -130,10 +127,18 @@ impl Arch {
 
 impl Libc {
     pub(crate) fn from_env() -> Self {
-        // TODO(zanieb): Perform this lookup
         match std::env::consts::OS {
             // Supported platforms.
-            "linux" => Libc::Gnu,
+            "linux" => {
+                let environment = target_lexicon::HOST.environment.into_str();
+                if environment.starts_with("gnu") || environment == "linuxkernel" {
+                    Libc::Gnu
+                } else if environment.starts_with("musl") {
+                    Libc::Musl
+                } else {
+                    Libc::None
+                }
+            }
             "windows" | "macos" => Libc::None,
             // Platforms without explicit support.
             _ => Libc::None,
