@@ -1037,7 +1037,7 @@ impl VersionRequest {
         }
     }
 
-    fn matches_version(self, version: &PythonVersion) -> bool {
+    pub(crate) fn matches_version(self, version: &PythonVersion) -> bool {
         match self {
             Self::Any => true,
             Self::Major(major) => version.major() == major,

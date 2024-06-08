@@ -682,6 +682,25 @@ async fn run() -> Result<ExitStatus> {
 
             commands::toolchain_list(args.includes, globals.preview, &cache, printer).await
         }
+        Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::Install(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolchainInstallSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::toolchain_install(
+                args.target,
+                globals.native_tls,
+                globals.connectivity,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
+        }
     }
 }
 
