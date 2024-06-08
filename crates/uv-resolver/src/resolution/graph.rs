@@ -31,7 +31,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    pub(crate) petgraph: Graph<AnnotatedDist, Version, Directed>,
+    pub(crate) petgraph: Graph<AnnotatedDist, (), Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: Option<RequiresPython>,
     /// Any diagnostics that were encountered while building the graph.
@@ -76,7 +76,7 @@ impl ResolutionGraph {
         }
 
         // Add every package to the graph.
-        let mut petgraph: Graph<AnnotatedDist, Version, Directed> =
+        let mut petgraph: Graph<AnnotatedDist, (), Directed> =
             Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
         let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> = FxHashMap::with_capacity_and_hasher(
             resolution.packages.len(),
@@ -311,7 +311,7 @@ impl ResolutionGraph {
                     versions.to_extra.as_ref(),
                     versions.to_dev.as_ref(),
                 )];
-                petgraph.update_edge(from_index, to_index, versions.to_version.clone());
+                petgraph.update_edge(from_index, to_index, ());
             }
         }
 
