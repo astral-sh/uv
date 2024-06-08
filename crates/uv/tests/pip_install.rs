@@ -5211,3 +5211,41 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
 
     Ok(())
 }
+
+/// Allow transitive URLs via recursive extras.
+#[test]
+fn recursive_extra_transitive_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        dependencies = []
+
+        [project.optional-dependencies]
+        all = [
+            "project[docs]",
+        ]
+        docs = [
+            "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg(".[all]"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + project==0.0.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
