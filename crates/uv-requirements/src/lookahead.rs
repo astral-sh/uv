@@ -141,38 +141,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         requirement: Requirement,
     ) -> Result<Option<RequestedRequirements>, LookaheadError> {
         trace!("Performing lookahead for {requirement}");
+
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
-        let dist = match requirement.source {
-            RequirementSource::Registry { .. } => return Ok(None),
-            RequirementSource::Url {
-                subdirectory,
-                location,
-                url,
-            } => Dist::from_http_url(requirement.name, url, location, subdirectory)?,
-            RequirementSource::Git {
-                repository,
-                reference,
-                precise,
-                subdirectory,
-                url,
-            } => {
-                let mut git_url = GitUrl::new(repository, reference);
-                if let Some(precise) = precise {
-                    git_url = git_url.with_precise(precise);
-                }
-                Dist::Source(SourceDist::Git(GitSourceDist {
-                    name: requirement.name,
-                    git: Box::new(git_url),
-                    subdirectory,
-                    url,
-                }))
-            }
-            RequirementSource::Path {
-                path,
-                url,
-                editable,
-            } => Dist::from_file_url(requirement.name, url, &path, editable)?,
+        let Some(dist) = required_dist(&requirement)? else {
+            return Ok(None);
         };
 
         // Fetch the metadata for the distribution.
@@ -217,6 +190,21 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             }
         };
 
+        // Respect recursive extras by propagating the source extras to the dependencies.
+        let requires_dist = requires_dist
+            .into_iter()
+            .map(|dependency| {
+                if dependency.name == requirement.name {
+                    Requirement {
+                        source: requirement.source.clone(),
+                        ..dependency
+                    }
+                } else {
+                    dependency
+                }
+            })
+            .collect();
+
         // Consider the dependencies to be "direct" if the requirement is a local source tree.
         let direct = if let Dist::Source(source_dist) = &dist {
             source_dist.as_path().is_some_and(std::path::Path::is_dir)
@@ -231,4 +219,44 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             direct,
         )))
     }
+}
+
+/// Convert a [`Requirement`] into a [`Dist`], if it is a direct URL.
+fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution_types::Error> {
+    Ok(Some(match &requirement.source {
+        RequirementSource::Registry { .. } => return Ok(None),
+        RequirementSource::Url {
+            subdirectory,
+            location,
+            url,
+        } => Dist::from_http_url(
+            requirement.name.clone(),
+            url.clone(),
+            location.clone(),
+            subdirectory.clone(),
+        )?,
+        RequirementSource::Git {
+            repository,
+            reference,
+            precise,
+            subdirectory,
+            url,
+        } => {
+            let mut git_url = GitUrl::new(repository.clone(), reference.clone());
+            if let Some(precise) = precise {
+                git_url = git_url.with_precise(*precise);
+            }
+            Dist::Source(SourceDist::Git(GitSourceDist {
+                name: requirement.name.clone(),
+                git: Box::new(git_url),
+                subdirectory: subdirectory.clone(),
+                url: url.clone(),
+            }))
+        }
+        RequirementSource::Path {
+            path,
+            url,
+            editable,
+        } => Dist::from_file_url(requirement.name.clone(), url.clone(), path, *editable)?,
+    }))
 }
