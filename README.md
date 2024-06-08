@@ -506,7 +506,7 @@ uv has Tier 2 support (["guaranteed to build"](https://doc.rust-lang.org/beta/ru
 - Linux (i686)
 - Linux (s390x)
 
-The ABI used for Linux platform is MUSL, except for _PPC64_ and _s390x_ archs used GNU ABI.
+The ABI used for Linux platform is MUSL with statically linked C-Runtime, except for _PPC64_ and _s390x_ archs which are only available with dynamically linked GNU ABI.
 
 The ABI used for Windows platform is MSVC with statically linked C-Runtime.
 
