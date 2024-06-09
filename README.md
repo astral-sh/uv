@@ -462,7 +462,8 @@ most use cases, but may lose fidelity for complex package and platform combinati
 
 uv supports an `--exclude-newer` option to limit resolution to distributions published before a specific
 date, allowing reproduction of installations regardless of new package releases. The date may be specified
-as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g., `2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
+as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g., `2006-12-02T02:07:43Z`) or
+UTC date in the same format (e.g., `2006-12-02`).
 
 Note the package index must support the `upload-time` field as specified in [`PEP 700`](https://peps.python.org/pep-0700/).
 If the field is not present for a given distribution, the distribution will be treated as unavailable.
