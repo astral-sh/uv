@@ -22,8 +22,8 @@ use uv_workspace::{Combine, PipOptions, Workspace};
 
 use crate::cli::{
     ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
-    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs,
-    ToolRunArgs, VenvArgs,
+    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, RunArgs,
+    SyncArgs, ToolRunArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -946,6 +946,40 @@ impl PipShowSettings {
             // CLI-only settings.
             package,
 
+            // Shared settings.
+            shared: PipSharedSettings::combine(
+                PipOptions {
+                    python,
+                    system: flag(system, no_system),
+                    strict: flag(strict, no_strict),
+                    ..PipOptions::default()
+                },
+                workspace,
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for a `pip show` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PipTreeSettings {
+    // CLI-only settings.
+    pub(crate) shared: PipSharedSettings,
+}
+
+impl PipTreeSettings {
+    /// Resolve the [`PipTreeSettings`] from the CLI and workspace configuration.
+    pub(crate) fn resolve(args: PipTreeArgs, workspace: Option<Workspace>) -> Self {
+        let PipTreeArgs {
+            strict,
+            no_strict,
+            python,
+            system,
+            no_system,
+        } = args;
+
+        Self {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {

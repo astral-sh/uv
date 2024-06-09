@@ -6,4 +6,5 @@ pub(crate) mod list;
 pub(crate) mod operations;
 pub(crate) mod show;
 pub(crate) mod sync;
+pub(crate) mod tree;
 pub(crate) mod uninstall;

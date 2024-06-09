@@ -15,6 +15,7 @@ pub(crate) use pip::install::pip_install;
 pub(crate) use pip::list::pip_list;
 pub(crate) use pip::show::pip_show;
 pub(crate) use pip::sync::pip_sync;
+pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::lock::lock;
 pub(crate) use project::run::run;

@@ -8,6 +8,7 @@ use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
+use settings::PipTreeSettings;
 use tracing::instrument;
 
 use cli::{ToolCommand, ToolNamespace};
@@ -98,6 +99,12 @@ async fn run() -> Result<ExitStatus> {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip show".to_string()),
+                        );
+                    }
+                    "tree" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("uv pip tree".to_string()),
                         );
                     }
                     _ => {}
@@ -479,6 +486,24 @@ async fn run() -> Result<ExitStatus> {
 
             commands::pip_show(
                 args.package,
+                args.shared.strict,
+                args.shared.python.as_deref(),
+                args.shared.system,
+                globals.preview,
+                &cache,
+                printer,
+            )
+        }
+        Commands::Pip(PipNamespace {
+            command: PipCommand::Tree(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipTreeSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::pip_tree(
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
