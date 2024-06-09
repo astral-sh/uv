@@ -3,6 +3,7 @@
 use std::str::FromStr;
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use mailparse::{MailHeaderMap, MailParseError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -86,16 +87,14 @@ impl Metadata23 {
         .map_err(MetadataError::Pep440VersionError)?;
         let requires_dist = headers
             .get_all_values("Requires-Dist")
-            .map(|requires_dist| {
-                LenientRequirement::from_str(&requires_dist).map(Requirement::from)
-            })
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
             .collect::<Result<Vec<_>, _>>()?;
         let requires_python = headers
             .get_first_value("Requires-Python")
-            .map(|requires_python| {
-                LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
-            })
-            .transpose()?;
+            .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
+            .transpose()?
+            .map(VersionSpecifiers::from);
         let provides_extras = headers
             .get_all_values("Provides-Extra")
             .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
@@ -161,16 +160,14 @@ impl Metadata23 {
         // The remaining fields are required to be present.
         let requires_dist = headers
             .get_all_values("Requires-Dist")
-            .map(|requires_dist| {
-                LenientRequirement::from_str(&requires_dist).map(Requirement::from)
-            })
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
             .collect::<Result<Vec<_>, _>>()?;
         let requires_python = headers
             .get_first_value("Requires-Python")
-            .map(|requires_python| {
-                LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
-            })
-            .transpose()?;
+            .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
+            .transpose()?
+            .map(VersionSpecifiers::from);
         let provides_extras = headers
             .get_all_values("Provides-Extra")
             .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
@@ -217,15 +214,23 @@ impl Metadata23 {
         let version = project
             .version
             .ok_or(MetadataError::FieldNotFound("version"))?;
-        let requires_python = project.requires_python.map(VersionSpecifiers::from);
+
+        // Parse the Python version requirements.
+        let requires_python = project
+            .requires_python
+            .map(|requires_python| {
+                LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
+            })
+            .transpose()?;
 
         // Extract the requirements.
         let mut requires_dist = project
             .dependencies
             .unwrap_or_default()
             .into_iter()
-            .map(Requirement::from)
-            .collect::<Vec<_>>();
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Extract the optional dependencies.
         let mut provides_extras: Vec<ExtraName> = Vec::new();
@@ -233,9 +238,10 @@ impl Metadata23 {
             requires_dist.extend(
                 requirements
                     .into_iter()
-                    .map(Requirement::from)
-                    .map(|requirement| requirement.with_extra_marker(&extra))
-                    .collect::<Vec<_>>(),
+                    .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+                    .map_ok(Requirement::from)
+                    .map_ok(|requirement| requirement.with_extra_marker(&extra))
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             provides_extras.push(extra);
         }
@@ -272,11 +278,11 @@ struct Project {
     /// The version of the project as supported by PEP 440
     version: Option<Version>,
     /// The Python version requirements of the project
-    requires_python: Option<LenientVersionSpecifiers>,
+    requires_python: Option<String>,
     /// Project dependencies
-    dependencies: Option<Vec<LenientRequirement>>,
+    dependencies: Option<Vec<String>>,
     /// Optional dependencies
-    optional_dependencies: Option<IndexMap<ExtraName, Vec<LenientRequirement>>>,
+    optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
     dynamic: Option<Vec<String>>,
@@ -370,8 +376,9 @@ impl RequiresDist {
             .dependencies
             .unwrap_or_default()
             .into_iter()
-            .map(Requirement::from)
-            .collect::<Vec<_>>();
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Extract the optional dependencies.
         let mut provides_extras: Vec<ExtraName> = Vec::new();
@@ -379,9 +386,10 @@ impl RequiresDist {
             requires_dist.extend(
                 requirements
                     .into_iter()
-                    .map(Requirement::from)
-                    .map(|requirement| requirement.with_extra_marker(&extra))
-                    .collect::<Vec<_>>(),
+                    .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+                    .map_ok(Requirement::from)
+                    .map_ok(|requirement| requirement.with_extra_marker(&extra))
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             provides_extras.push(extra);
         }

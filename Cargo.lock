@@ -2781,6 +2781,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "indexmap",
+ "itertools 0.13.0",
  "mailparse",
  "once_cell",
  "pep440_rs",
