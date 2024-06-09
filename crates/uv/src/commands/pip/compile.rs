@@ -291,7 +291,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, &tags, &hasher, &no_build, &NoBinary::None)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, &no_build, &NoBinary::None)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -509,7 +509,7 @@ pub(crate) async fn pip_compile(
         options,
         &python_requirement,
         Some(&markers),
-        &tags,
+        Some(&tags),
         &flat_index,
         &top_level_index,
         &hasher,
