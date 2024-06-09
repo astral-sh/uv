@@ -502,6 +502,9 @@ If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT
 variable to the path of the certificate bundle, to instruct uv to use that file instead of the
 system's trust store.
 
+If client certificate authentication (mTLS) is desired, set the `SSL_CLIENT_CERT` environment
+variable to the path of the PEM formatted file containing the certificate followed by the private key.
+
 ## Platform support
 
 uv has Tier 1 support for the following platforms:
@@ -595,6 +598,8 @@ In addition, uv respects the following environment variables:
 
 - `SSL_CERT_FILE`: If set, uv will use this file as the certificate bundle instead of the system's
   trust store.
+- `SSL_CLIENT_CERT`: If set, uv will use this file for mTLS authentication. This should be a single
+  file containing both the certificate and the private key in PEM format.
 - `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
   any filter compatible with the `tracing_subscriber` crate. For example, `RUST_LOG=trace` will
   enable trace-level logging. See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
