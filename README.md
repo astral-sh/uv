@@ -215,7 +215,7 @@ For example, to set a persistent index URL, add the following to a `pyproject.to
 index-url = "https://test.pypi.org/simple"
 ```
 
-(If there is no such table, the `pyproject.toml` file be ignored, and uv will continue searching in
+(If there is no such table, the `pyproject.toml` file will be ignored, and uv will continue searching in
 the directory hierarchy.)
 
 If a `uv.toml` file is found, uv will read from the `[pip]` table. For example:
@@ -399,7 +399,7 @@ By default, uv will accept pre-release versions during dependency resolution in 
 If dependency resolution fails due to a transitive pre-release, uv will prompt the user to
 re-run with `--prerelease=allow`, to allow pre-releases for all dependencies.
 
-Alternatively, you can add the transitive dependency to your `requirements.in` file with
+Alternatively, you can add the transitive dependency to your `requirements.in` file with a
 pre-release specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific
 dependency.
 
@@ -462,7 +462,7 @@ most use cases, but may lose fidelity for complex package and platform combinati
 
 uv supports an `--exclude-newer` option to limit resolution to distributions published before a specific
 date, allowing reproduction of installations regardless of new package releases. The date may be specified
-as a RFC 3339 timestamp (e.g., `2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
+as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g., `2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
 
 Note the package index must support the `upload-time` field as specified in [`PEP 700`](https://peps.python.org/pep-0700/).
 If the field is not present for a given distribution, the distribution will be treated as unavailable.
@@ -583,7 +583,7 @@ In addition, uv respects the following environment variables:
   for more.
 - `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: The proxy to use for all HTTP/HTTPS requests.
 - `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
-  for HTTP reads (default: 30s).
+  for HTTP reads (default: 30 s).
 - `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`.
   See: [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
