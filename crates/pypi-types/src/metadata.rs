@@ -253,9 +253,9 @@ impl Metadata23 {
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct PyProjectToml {
+struct PyProjectToml {
     /// Project metadata
-    pub(crate) project: Option<Project>,
+    project: Option<Project>,
 }
 
 /// PEP 621 project metadata.
@@ -266,20 +266,20 @@ pub(crate) struct PyProjectToml {
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct Project {
+struct Project {
     /// The name of the project
-    pub(crate) name: PackageName,
+    name: PackageName,
     /// The version of the project as supported by PEP 440
-    pub(crate) version: Option<Version>,
+    version: Option<Version>,
     /// The Python version requirements of the project
-    pub(crate) requires_python: Option<LenientVersionSpecifiers>,
+    requires_python: Option<LenientVersionSpecifiers>,
     /// Project dependencies
-    pub(crate) dependencies: Option<Vec<LenientRequirement>>,
+    dependencies: Option<Vec<LenientRequirement>>,
     /// Optional dependencies
-    pub(crate) optional_dependencies: Option<IndexMap<ExtraName, Vec<LenientRequirement>>>,
+    optional_dependencies: Option<IndexMap<ExtraName, Vec<LenientRequirement>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
-    pub(crate) dynamic: Option<Vec<String>>,
+    dynamic: Option<Vec<String>>,
 }
 
 /// Python Package Metadata 1.0 and later as specified in
