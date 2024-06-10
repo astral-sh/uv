@@ -1,5 +1,5 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
-use std::ops::Deref;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -26,17 +26,17 @@ pub(crate) async fn list(
         warn_user!("`uv toolchain list` is experimental and may change without warning.");
     }
 
-    let downloads = match includes {
-        ToolchainListIncludes::All => {
-            let request = PythonDownloadRequest::default();
-            request.iter_downloads().collect()
-        }
-        ToolchainListIncludes::Installed => Vec::new(),
-        ToolchainListIncludes::Default => {
-            let request = PythonDownloadRequest::from_env()?;
-            request.iter_downloads().collect()
-        }
+    let download_request = match includes {
+        ToolchainListIncludes::All => Some(PythonDownloadRequest::default()),
+        ToolchainListIncludes::Installed => None,
+        ToolchainListIncludes::Default => Some(PythonDownloadRequest::from_env()?),
     };
+
+    let downloads = download_request
+        .as_ref()
+        .map(uv_toolchain::downloads::PythonDownloadRequest::iter_downloads)
+        .into_iter()
+        .flatten();
 
     let installed = {
         InstalledToolchains::from_settings()?
@@ -45,22 +45,20 @@ pub(crate) async fn list(
             .collect_vec()
     };
 
-    let mut output = Vec::new();
+    // Sort and de-duplicate the output.
+    let mut output = BTreeSet::new();
     for toolchain in installed {
-        output.push((
-            toolchain.python_version().deref().version.clone(),
+        output.insert((
+            toolchain.python_version().version().clone(),
             toolchain.key().to_owned(),
         ));
     }
     for download in downloads {
-        output.push((
-            download.python_version().deref().version.clone(),
+        output.insert((
+            download.python_version().version().clone(),
             download.key().to_owned(),
         ));
     }
-
-    output.sort();
-    output.dedup();
 
     for (version, key) in output {
         writeln!(printer.stdout(), "{:<8} ({key})", version.to_string())?;
