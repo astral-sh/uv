@@ -46,7 +46,7 @@ include = [{ path = "rust-toolchain.toml", format = ["sdist", "wheel"] }, { path
 [tool.rooster]
 major_labels = []  # We do not use the major version number yet
 minor_labels = ["breaking"]
-changelog_ignore_labels = ["internal", "ci", "testing"]
+changelog_ignore_labels = ["internal", "ci", "testing", "preview"]
 changelog_sections.breaking = "Breaking changes"
 changelog_sections.enhancement = "Enhancements"
 changelog_sections.compatibility = "Enhancements"
