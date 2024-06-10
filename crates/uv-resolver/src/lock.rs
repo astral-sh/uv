@@ -135,7 +135,7 @@ impl Lock {
         root_name: &PackageName,
         extras: &ExtrasSpecification,
         dev: &[GroupName],
-    ) -> Resolution {
+    ) -> Result<Resolution, LockError> {
         let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
 
         // Add the root distribution to the queue.
@@ -187,11 +187,11 @@ impl Lock {
                 }
             }
             let name = dist.id.name.clone();
-            let resolved_dist = ResolvedDist::Installable(dist.to_dist(tags));
+            let resolved_dist = ResolvedDist::Installable(dist.to_dist(tags)?);
             map.insert(name, resolved_dist);
         }
         let diagnostics = vec![];
-        Resolution::new(map, diagnostics)
+        Ok(Resolution::new(map, diagnostics))
     }
 
     /// Returns the distribution with the given name. If there are multiple
@@ -548,7 +548,7 @@ impl Distribution {
     }
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
-    fn to_dist(&self, tags: &Tags) -> Dist {
+    fn to_dist(&self, tags: &Tags) -> Result<Dist, LockError> {
         if let Some(best_wheel_index) = self.find_best_wheel(tags) {
             return match &self.id.source.kind {
                 SourceKind::Registry => {
@@ -562,7 +562,7 @@ impl Distribution {
                         best_wheel_index,
                         sdist: None,
                     };
-                    Dist::Built(BuiltDist::Registry(reg_built_dist))
+                    Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
                 }
                 SourceKind::Path => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
@@ -572,7 +572,7 @@ impl Distribution {
                         path: self.id.source.url.to_file_path().unwrap(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
-                    Dist::Built(built_dist)
+                    Ok(Dist::Built(built_dist))
                 }
                 SourceKind::Direct(direct) => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
@@ -586,16 +586,15 @@ impl Distribution {
                         url: VerbatimUrl::from_url(url),
                     };
                     let built_dist = BuiltDist::DirectUrl(direct_dist);
-                    Dist::Built(built_dist)
+                    Ok(Dist::Built(built_dist))
                 }
-                SourceKind::Git(_) => {
-                    unreachable!("Wheels cannot come from Git sources")
-                }
-                SourceKind::Directory => {
-                    unreachable!("Wheels cannot come from directory sources")
-                }
+                SourceKind::Git(_) => Err(LockError::invalid_wheel_source(self.id.clone(), "Git")),
+                SourceKind::Directory => Err(LockError::invalid_wheel_source(
+                    self.id.clone(),
+                    "directory",
+                )),
                 SourceKind::Editable => {
-                    unreachable!("Wheels cannot come from editable sources")
+                    Err(LockError::invalid_wheel_source(self.id.clone(), "editable"))
                 }
             };
         }
@@ -609,7 +608,7 @@ impl Distribution {
                         path: self.id.source.url.to_file_path().unwrap(),
                     };
                     let source_dist = distribution_types::SourceDist::Path(path_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Directory => {
                     let dir_dist = DirectorySourceDist {
@@ -619,7 +618,7 @@ impl Distribution {
                         editable: false,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Editable => {
                     let dir_dist = DirectorySourceDist {
@@ -629,7 +628,7 @@ impl Distribution {
                         editable: true,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Git(git) => {
                     // Reconstruct the `GitUrl` from the `GitSource`.
@@ -652,7 +651,7 @@ impl Distribution {
                         subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
                     };
                     let source_dist = distribution_types::SourceDist::Git(git_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Direct(direct) => {
                     let url = Url::from(ParsedArchiveUrl {
@@ -666,7 +665,7 @@ impl Distribution {
                         url: VerbatimUrl::from_url(url),
                     };
                     let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Registry => {
                     let file = Box::new(distribution_types::File {
@@ -688,13 +687,12 @@ impl Distribution {
                         wheels: vec![],
                     };
                     let source_dist = distribution_types::SourceDist::Registry(reg_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
             };
         }
 
-        // TODO: Convert this to a deserialization error.
-        panic!("invalid lock distribution")
+        Err(LockError::neither_source_dist_nor_wheel(self.id.clone()))
     }
 
     fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
@@ -1576,6 +1574,15 @@ pub struct LockError {
 }
 
 impl LockError {
+    fn neither_source_dist_nor_wheel(id: DistributionId) -> LockError {
+        let kind = LockErrorKind::NeitherSourceDistNorWheel { id };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
+}
+
+impl LockError {
     fn duplicate_distribution(id: DistributionId) -> LockError {
         let kind = LockErrorKind::DuplicateDistribution { id };
         LockError {
@@ -1674,6 +1681,13 @@ impl LockError {
             kind: Box::new(kind),
         }
     }
+
+    fn invalid_wheel_source(id: DistributionId, source: &'static str) -> LockError {
+        let kind = LockErrorKind::InvalidWheelSource { id, source };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
 }
 
 impl std::error::Error for LockError {
@@ -1689,6 +1703,8 @@ impl std::error::Error for LockError {
             LockErrorKind::Hash { .. } => None,
             LockErrorKind::MissingExtraBase { .. } => None,
             LockErrorKind::MissingDevBase { .. } => None,
+            LockErrorKind::InvalidWheelSource { .. } => None,
+            LockErrorKind::NeitherSourceDistNorWheel { .. } => None,
         }
     }
 }
@@ -1778,6 +1794,15 @@ impl std::fmt::Display for LockError {
                 write!(
                     f,
                     "found distribution `{id}` with development dependency group `{group}` but no base distribution",
+                )
+            }
+            LockErrorKind::InvalidWheelSource { ref id, source } => {
+                write!(f, "wheels cannot come from {source} sources")
+            }
+            LockErrorKind::NeitherSourceDistNorWheel { ref id } => {
+                write!(
+                    f,
+                    "found distribution {id} with neither wheels nor source distribution"
                 )
             }
         }
@@ -1877,6 +1902,18 @@ enum LockErrorKind {
         id: DistributionId,
         /// The development dependency group that was found.
         group: GroupName,
+    },
+    /// An error that occurs from an invalid lockfile where a wheel comes from a non-wheel source
+    /// such as a directory.
+    InvalidWheelSource {
+        /// The ID of the distribution that has a missing base.
+        id: DistributionId,
+        /// The kind of the invalid source.
+        source: &'static str,
+    },
+    NeitherSourceDistNorWheel {
+        /// The ID of the distribution that has a missing base.
+        id: DistributionId,
     },
 }
 
