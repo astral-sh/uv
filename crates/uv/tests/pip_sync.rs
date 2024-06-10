@@ -110,27 +110,14 @@ fn missing_venv() -> Result<()> {
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), sync_without_exclude_newer(&context).arg("requirements.txt"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context).arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: failed to canonicalize path `[VENV]/Scripts/python.exe`
-          Caused by: The system cannot find the path specified. (os error 3)
-        "###);
-    } else {
-        uv_snapshot!(context.filters(), sync_without_exclude_newer(&context).arg("requirements.txt"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: failed to canonicalize path `[VENV]/bin/python3`
-          Caused by: No such file or directory (os error 2)
-        "###);
-    }
+    ----- stderr -----
+    error: No Python interpreters found in virtual environments
+    "###);
 
     assert!(predicates::path::missing().eval(&context.venv));
 

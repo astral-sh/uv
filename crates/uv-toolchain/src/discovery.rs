@@ -438,6 +438,10 @@ fn should_stop_discovery(err: &Error) -> bool {
                 trace!("Skipping bad interpreter at {}", path.display());
                 false
             }
+            InterpreterError::NotFound(path) => {
+                trace!("Skipping missing interpreter at {}", path.display());
+                false
+            }
         },
         _ => true,
     }
