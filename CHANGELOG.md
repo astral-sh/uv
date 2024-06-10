@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.10
+
+### Enhancements
+
+- Accept `file://` URLs for `requirements.txt` et all references ([#4145](https://github.com/astral-sh/uv/pull/4145))
+- Add support for `--prefix` ([#4085](https://github.com/astral-sh/uv/pull/4085))
+
+### CLI
+
+- Add `pyproject.toml` to CLI help ([#4181](https://github.com/astral-sh/uv/pull/4181))
+- Drop "registry" prefix from request timeout log ([#4144](https://github.com/astral-sh/uv/pull/4144))
+
+### Bug fixes
+
+- Allow transitive URLs via recursive extras ([#4155](https://github.com/astral-sh/uv/pull/4155))
+- Avoid pre-fetching for unbounded minimum versions ([#4149](https://github.com/astral-sh/uv/pull/4149))
+- Avoid showing dev hints for Python requirements ([#4111](https://github.com/astral-sh/uv/pull/4111))
+- Include non-standard ports in keyring host queries ([#4061](https://github.com/astral-sh/uv/pull/4061))
+- Omit URL dependencies from pre-release hints ([#4140](https://github.com/astral-sh/uv/pull/4140))
+- Improve static metadata extraction for Poetry projects ([#4182](https://github.com/astral-sh/uv/pull/4182))
+
+### Documentation
+
+- Document bytecode compilation in pip compatibility guide ([#4195](https://github.com/astral-sh/uv/pull/4195))
+- Fix PEP 508 link in preview doc `specifying_dependencies` ([#4158](https://github.com/astral-sh/uv/pull/4158))
+- Clarify role of `--system` flag ([#4031](https://github.com/astral-sh/uv/pull/4031))
+
 ## 0.2.9
 
 ### Enhancements
