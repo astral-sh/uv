@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use fs_err as fs;
 use rustc_hash::FxHashSet;
-use tempfile::{tempdir, TempDir};
 use tracing::debug;
 
 pub use archive::ArchiveId;
@@ -121,7 +120,7 @@ pub struct Cache {
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
     /// is dropped at the end as appropriate.
-    _temp_dir_drop: Option<Arc<TempDir>>,
+    _temp_dir_drop: Option<Arc<tempfile::TempDir>>,
 }
 
 impl Cache {
@@ -136,7 +135,7 @@ impl Cache {
 
     /// Create a temporary cache directory.
     pub fn temp() -> Result<Self, io::Error> {
-        let temp_dir = tempdir()?;
+        let temp_dir = tempfile::tempdir()?;
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
@@ -178,6 +177,12 @@ impl Cache {
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
         self.bucket(CacheBucket::Archive).join(id)
+    }
+
+    /// Create an ephemeral Python environment in the cache.
+    pub fn environment(&self) -> io::Result<tempfile::TempDir> {
+        fs::create_dir_all(self.bucket(CacheBucket::Environments))?;
+        tempfile::tempdir_in(self.bucket(CacheBucket::Environments))
     }
 
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.

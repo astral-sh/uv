@@ -4,11 +4,10 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use distribution_types::IndexLocations;
 use itertools::Itertools;
-use tempfile::tempdir_in;
 use tokio::process::Command;
 use tracing::debug;
 
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::{ProjectWorkspace, Workspace};
@@ -135,7 +134,7 @@ pub(crate) async fn run(
         // environment.
 
         // Create a virtual environment
-        temp_dir = tempdir_in(cache.bucket(CacheBucket::Environments))?;
+        temp_dir = cache.environment()?;
         let venv = uv_virtualenv::create_venv(
             temp_dir.path(),
             interpreter,
