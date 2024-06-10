@@ -4,8 +4,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
 
-use crate::common::get_toolchain;
-use common::{uv_snapshot, TestContext};
+use common::{python_path_with_versions, uv_snapshot, TestContext};
 
 mod common;
 
@@ -13,6 +12,8 @@ mod common;
 #[test]
 fn run_with_python_version() -> Result<()> {
     let context = TestContext::new("3.12");
+    let python_path = python_path_with_versions(&context.temp_dir, &["3.11", "3.12"])
+        .expect("Failed to create Python test path");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -43,7 +44,8 @@ fn run_with_python_version() -> Result<()> {
         .arg("--preview")
         .arg("python")
         .arg("-B")
-        .arg("main.py");
+        .arg("main.py")
+        .env("UV_TEST_PYTHON_PATH", &python_path);
     uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true
     exit_code: 0
@@ -66,10 +68,11 @@ fn run_with_python_version() -> Result<()> {
     let command_with_args = command
         .arg("--preview")
         .arg("-p")
-        .arg(get_toolchain("3.12"))
+        .arg("3.12")
         .arg("python")
         .arg("-B")
-        .arg("main.py");
+        .arg("main.py")
+        .env("UV_TEST_PYTHON_PATH", &python_path);
     uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true
     exit_code: 0
@@ -87,16 +90,20 @@ fn run_with_python_version() -> Result<()> {
     let command_with_args = command
         .arg("--preview")
         .arg("-p")
-        .arg(get_toolchain("3.11"))
+        .arg("3.11")
         .arg("python")
         .arg("-B")
-        .arg("main.py");
+        .arg("main.py")
+        .env("UV_TEST_PYTHON_PATH", &python_path)
+        .env_remove("VIRTUAL_ENV");
+
     let mut filters = context.filters();
     filters.push((
         r"Using Python 3.11.\d+ interpreter at: .*",
         "Using Python 3.11.[X] interpreter at: [PYTHON]",
     ));
     filters.push((r"3.11.\d+", "3.11.[X]"));
+
     uv_snapshot!(filters, command_with_args, @r###"
     success: true
     exit_code: 0

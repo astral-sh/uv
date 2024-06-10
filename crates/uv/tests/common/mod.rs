@@ -45,6 +45,12 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
 ];
 
+/// Create a context for tests which simplfiies shared behavior across tests.
+///
+/// * Set the current directory to a temporary directory (`temp_dir`).
+/// * Set the cache dir to a different temporary directory (`cache_dir`).
+/// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
+/// * Set the venv to a fresh `.venv` in `temp_dir`.
 #[derive(Debug)]
 pub struct TestContext {
     pub temp_dir: assert_fs::TempDir,
@@ -153,11 +159,7 @@ impl TestContext {
         }
     }
 
-    /// Set shared defaults between tests:
-    /// * Set the current directory to a temporary directory (`temp_dir`).
-    /// * Set the cache dir to a different temporary directory (`cache_dir`).
-    /// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
-    /// * Set the venv to a fresh `.venv` in `temp_dir`.
+    /// Create a `pip compile` command for testing.
     pub fn compile(&self) -> std::process::Command {
         let mut command = self.compile_without_exclude_newer();
         command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
@@ -178,6 +180,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_TEST_PYTHON_PATH", "/dev/null")
             .current_dir(self.temp_dir.path());
 
         if cfg!(all(windows, debug_assertions)) {
@@ -211,6 +214,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_TEST_PYTHON_PATH", "/dev/null")
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -231,6 +235,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_TEST_PYTHON_PATH", "/dev/null")
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -263,6 +268,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_TEST_PYTHON_PATH", "/dev/null")
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -295,6 +301,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("UV_TEST_PYTHON_PATH", "/dev/null")
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
