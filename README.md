@@ -193,11 +193,11 @@ Although we generally recommend using virtual environments for dependency manage
 `--system` is appropriate in continuous integration and containerized environments.
 
 The `--system` flag is also used to opt in to mutating system environments. For example, the
-the `--python` argument can be used to request a Python version e.g. `--python 3.12` and uv will
-search for an interpreter that meets the request. If uv finds a system interpreter, e.g., `/usr/lib/python3.12`,
+the `--python` argument can be used to request a Python version (e.g., `--python 3.12`), and uv will
+search for an interpreter that meets the request. If uv finds a system interpreter (e.g., `/usr/lib/python3.12`),
 then the `--system` flag is required to allow modification of this non-virtual Python environment.
 Without the `--system` flag, uv will ignore any interpreters that are not in virtual environments.
-Conversely, when the `--system` flag is provided, uv will ignore any interpreters that are
+Conversely, when the `--system` flag is provided, uv will ignore any interpreters that *are*
 in virtual environments.
 
 Installing into system Python across platforms and distributions is notoriously difficult. uv
