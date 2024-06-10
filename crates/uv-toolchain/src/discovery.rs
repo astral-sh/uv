@@ -1504,7 +1504,7 @@ mod tests {
             ToolchainRequest::Version(VersionRequest::from_str(">=3.12").unwrap())
         );
         assert_eq!(
-            ToolchainRequest::parse(">=3.12"),
+            ToolchainRequest::parse(">=3.12,<3.13"),
             ToolchainRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
         );
         assert_eq!(

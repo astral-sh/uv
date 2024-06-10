@@ -2065,29 +2065,27 @@ fn lock_requires_python() -> Result<()> {
     });
 
     // Validate that attempting to install with an unsupported Python version raises an error.
-    let context = TestContext::new("3.8");
+    let context38 = TestContext::new("3.8");
 
-    fs_err::copy(pyproject_toml, context.temp_dir.join("pyproject.toml"))?;
-    fs_err::copy(&lockfile, context.temp_dir.join("uv.lock"))?;
+    fs_err::copy(pyproject_toml, context38.temp_dir.join("pyproject.toml"))?;
+    fs_err::copy(&lockfile, context38.temp_dir.join("uv.lock"))?;
+
+    let filters: Vec<_> = context38
+        .filters()
+        .into_iter()
+        .chain(context.filters())
+        .collect();
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(filters, context38.sync(), @r###"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
     Removing virtual environment at: [VENV]/
-    Using Python 3.12.3 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
-    Creating virtualenv at: [VENV]/
-    Downloaded 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + attrs==23.2.0
-     + cattrs==23.2.3
-     + lsprotocol==2023.0.1
-     + project==0.1.0 (from file://private/var/folders/6p/k5sd5z7j31b31pq4lhn0l8d80000gn/T/.tmp2LoTc2)
-     + pygls==1.3.0
+    error: No interpreter found for Python >=3.12 in provided path, active virtual environment, or search path
     "###);
 
     Ok(())
