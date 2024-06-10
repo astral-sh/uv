@@ -1059,6 +1059,17 @@ impl VersionRequest {
         }
     }
 
+    pub(crate) fn matches_major_minor_patch(self, major: u8, minor: u8, patch: u8) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Major(self_major) => self_major == major,
+            Self::MajorMinor(self_major, self_minor) => (self_major, self_minor) == (major, minor),
+            Self::MajorMinorPatch(self_major, self_minor, self_patch) => {
+                (self_major, self_minor, self_patch) == (major, minor, patch)
+            }
+        }
+    }
+
     /// Return true if a patch version is present in the request.
     fn has_patch(self) -> bool {
         match self {

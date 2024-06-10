@@ -5,14 +5,46 @@ use std::ffi::OsStr;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use thiserror::Error;
 
 use uv_state::{StateBucket, StateStore};
 
-// TODO(zanieb): Separate download and managed error types
-pub use crate::downloads::Error;
+use crate::downloads::Error as DownloadError;
+use crate::implementation::Error as ImplementationError;
+use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
+use uv_fs::Simplified;
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    IO(#[from] io::Error),
+    #[error(transparent)]
+    Download(#[from] DownloadError),
+    #[error(transparent)]
+    PlatformError(#[from] PlatformError),
+    #[error(transparent)]
+    ImplementationError(#[from] ImplementationError),
+    #[error("Invalid python version: {0}")]
+    InvalidPythonVersion(String),
+    #[error(transparent)]
+    ExtractError(#[from] uv_extract::Error),
+    #[error("Failed to copy to: {0}", to.user_display())]
+    CopyError {
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Failed to read toolchain directory: {0}", dir.user_display())]
+    ReadError {
+        dir: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Failed to parse toolchain directory name: {0}")]
+    NameError(String),
+}
 /// A collection of uv-managed Python toolchains installed on the current system.
 #[derive(Debug, Clone)]
 pub struct InstalledToolchains {
@@ -22,31 +54,35 @@ pub struct InstalledToolchains {
 
 impl InstalledToolchains {
     /// A directory for installed toolchains at `root`.
-    pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
-        Ok(Self { root: root.into() })
+    fn from_path(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
     }
 
     /// Prefer, in order:
     /// 1. The specific toolchain directory specified by the user, i.e., `UV_TOOLCHAIN_DIR`
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/toolchains`
     /// 3. A directory in the local data directory, e.g., `./.uv/toolchains`
-    pub fn from_settings() -> Result<Self, io::Error> {
+    pub fn from_settings() -> Result<Self, Error> {
         if let Some(toolchain_dir) = std::env::var_os("UV_TOOLCHAIN_DIR") {
-            Self::from_path(toolchain_dir)
+            Ok(Self::from_path(toolchain_dir))
         } else {
-            Self::from_path(StateStore::from_settings(None)?.bucket(StateBucket::Toolchains))
+            Ok(Self::from_path(
+                StateStore::from_settings(None)?.bucket(StateBucket::Toolchains),
+            ))
         }
     }
 
     /// Create a temporary installed toolchain directory.
-    pub fn temp() -> Result<Self, io::Error> {
-        Self::from_path(StateStore::temp()?.bucket(StateBucket::Toolchains))
+    pub fn temp() -> Result<Self, Error> {
+        Ok(Self::from_path(
+            StateStore::temp()?.bucket(StateBucket::Toolchains),
+        ))
     }
 
     /// Initialize the installed toolchain directory.
     ///
     /// Ensures the directory is created.
-    pub fn init(self) -> Result<Self, io::Error> {
+    pub fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
         // Create the cache directory, if it doesn't exist.
@@ -60,7 +96,7 @@ impl InstalledToolchains {
         {
             Ok(mut file) => file.write_all(b"*")?,
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(err) => return Err(err),
+            Err(err) => return Err(err.into()),
         }
 
         Ok(self)
