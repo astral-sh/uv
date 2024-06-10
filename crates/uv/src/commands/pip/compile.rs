@@ -161,7 +161,8 @@ pub(crate) async fn pip_compile(
         SystemPython::Allowed
     };
     let interpreter = if let Some(python) = python.as_ref() {
-        Toolchain::find_requested(python, system, preview, &cache)
+        let request = ToolchainRequest::parse(python);
+        Toolchain::find_requested(&request, system, preview, &cache)
     } else {
         // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
         // `Toolchain::find(...)` here.

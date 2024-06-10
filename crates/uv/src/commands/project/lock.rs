@@ -49,7 +49,8 @@ pub(crate) async fn lock(
                 if request.satisfied(&interpreter, cache) {
                     interpreter
                 } else {
-                    Toolchain::find_requested(python, SystemPython::Allowed, preview, cache)?
+                    let request = ToolchainRequest::parse(python);
+                    Toolchain::find_requested(&request, SystemPython::Allowed, preview, cache)?
                         .into_interpreter()
                 }
             } else {

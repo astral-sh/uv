@@ -33,7 +33,8 @@ impl Toolchain {
         cache: &Cache,
     ) -> Result<Self, Error> {
         if let Some(python) = python {
-            Self::find_requested(python, system, preview, cache)
+            let request = ToolchainRequest::parse(python);
+            Self::find_requested(&request, system, preview, cache)
         } else if system.is_preferred() {
             Self::find_default(preview, cache)
         } else {
@@ -60,14 +61,13 @@ impl Toolchain {
 
     /// Find an installed [`Toolchain`] that satisfies a request.
     pub fn find_requested(
-        request: &str,
+        request: &ToolchainRequest,
         system: SystemPython,
         preview: PreviewMode,
         cache: &Cache,
     ) -> Result<Self, Error> {
         let sources = ToolchainSources::from_settings(system, preview);
-        let request = ToolchainRequest::parse(request);
-        let toolchain = find_toolchain(&request, system, &sources, cache)??;
+        let toolchain = find_toolchain(request, system, &sources, cache)??;
 
         Ok(toolchain)
     }
