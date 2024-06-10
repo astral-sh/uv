@@ -130,7 +130,7 @@ pub(super) async fn do_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, &no_build, &no_binary)
     };
 
     // Create a build dispatch.
