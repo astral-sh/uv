@@ -33,7 +33,7 @@ impl Toolchain {
         } else if system.is_preferred() {
             Self::find_default(preview, cache)
         } else {
-            // First check for a parent intepreter
+            // First check for a parent interpreter
             // We gate this check to avoid an extra log message when it is not set
             if std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER").is_some() {
                 match Self::find_parent_interpreter(system, cache) {

@@ -45,8 +45,8 @@ pub(crate) async fn run(
     .chain(with.into_iter().map(RequirementsSource::from_package))
     .collect::<Vec<_>>();
 
-    // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool
-    // TOOD(zanieb): Determine if we sould layer on top of the project environment if it is present
+    // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
+    // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
     // If necessary, create an environment for the ephemeral requirements.
     debug!("Syncing ephemeral environment.");

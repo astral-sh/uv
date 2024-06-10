@@ -291,6 +291,12 @@ jobs:
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: cargo build --release --target x86_64-pc-windows-msvc
 
+  typos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
+
   build-binary-linux:
     runs-on:
       labels: ubuntu-latest-large
