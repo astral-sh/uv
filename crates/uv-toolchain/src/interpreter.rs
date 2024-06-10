@@ -456,6 +456,8 @@ impl ExternallyManaged {
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
+    #[error("Python interpreter not found at `{0}`")]
+    NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
     SpawnFailed {
         path: PathBuf,
@@ -645,7 +647,14 @@ impl InterpreterInfo {
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified
-        let modified = Timestamp::from_path(uv_fs::canonicalize_executable(executable)?)?;
+        let modified =
+            Timestamp::from_path(uv_fs::canonicalize_executable(executable).map_err(|err| {
+                if err.kind() == io::ErrorKind::NotFound {
+                    Error::NotFound(executable.to_path_buf())
+                } else {
+                    err.into()
+                }
+            })?)?;
 
         // Read from the cache.
         if cache
