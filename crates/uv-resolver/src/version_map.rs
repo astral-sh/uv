@@ -45,7 +45,7 @@ impl VersionMap {
         simple_metadata: OwnedArchive<SimpleMetadata>,
         package_name: &PackageName,
         index: &IndexUrl,
-        tags: &Tags,
+        tags: Option<&Tags>,
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
@@ -120,7 +120,7 @@ impl VersionMap {
                 no_binary,
                 no_build,
                 index: index.clone(),
-                tags: tags.clone(),
+                tags: tags.cloned(),
                 python_requirement: python_requirement.clone(),
                 exclude_newer: exclude_newer.copied(),
                 allowed_yanks,
@@ -298,7 +298,7 @@ struct VersionMapLazy {
     index: IndexUrl,
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
-    tags: Tags,
+    tags: Option<Tags>,
     /// The version of Python active in the current environment. This is used
     /// to determine whether a package's Python version constraint (if one
     /// exists) is satisfied or not.
@@ -551,11 +551,14 @@ impl VersionMapLazy {
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match filename.compatibility(&self.tags) {
-            TagCompatibility::Incompatible(tag) => {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
-            }
-            TagCompatibility::Compatible(priority) => priority,
+        let priority = match &self.tags {
+            Some(tags) => match filename.compatibility(tags) {
+                TagCompatibility::Incompatible(tag) => {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+                }
+                TagCompatibility::Compatible(priority) => Some(priority),
+            },
+            None => None,
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.

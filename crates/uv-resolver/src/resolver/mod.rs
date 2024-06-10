@@ -131,7 +131,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         markers: Option<&'a MarkerEnvironment>,
-        tags: &'a Tags,
+        tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,

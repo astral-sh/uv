@@ -180,7 +180,7 @@ async fn venv_impl(
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(
                 entries,
-                tags,
+                Some(tags),
                 &HashStrategy::None,
                 &NoBuild::All,
                 &NoBinary::None,
