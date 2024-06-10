@@ -12,6 +12,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
+use uv_normalize::PackageName;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_toolchain::PythonEnvironment;
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -58,7 +59,7 @@ pub(crate) async fn sync(
 
     // Perform the sync operation.
     do_sync(
-        &project,
+        project.project_name(),
         &venv,
         &lock,
         &index_locations,
@@ -76,7 +77,7 @@ pub(crate) async fn sync(
 /// Sync a lockfile with an environment.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn do_sync(
-    project: &ProjectWorkspace,
+    project: &PackageName,
     venv: &PythonEnvironment,
     lock: &Lock,
     index_locations: &IndexLocations,
@@ -107,7 +108,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras, &dev)?;
+    let resolution = lock.to_resolution(markers, tags, project, &extras, &dev)?;
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
