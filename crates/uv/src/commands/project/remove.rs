@@ -33,7 +33,7 @@ pub(crate) async fn remove(
         let req = Requirement::from(LenientRequirement::from_str(&req)?);
         if pyproject.remove_dependency(&req)?.is_none() {
             anyhow::bail!(
-                "the dependency `{}` could not be found in `dependencies`",
+                "The dependency `{}` could not be found in `dependencies`",
                 req.name
             );
         }

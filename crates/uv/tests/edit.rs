@@ -15,14 +15,14 @@ fn add_registry() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r###"
+    pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         # ...
         requires-python = ">=3.12"
         dependencies = []
-    "###})?;
+    "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]), @r###"
     success: true
@@ -160,13 +160,13 @@ fn add_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r###"
+    pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-    "###})?;
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -340,13 +340,13 @@ fn remove_registry() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r###"
+    pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-    "###})?;
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
