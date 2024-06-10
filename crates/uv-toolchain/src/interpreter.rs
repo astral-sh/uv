@@ -454,7 +454,7 @@ impl ExternallyManaged {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error(transparent)]
+    #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error("Failed to query Python interpreter at `{path}`")]
     SpawnFailed {
