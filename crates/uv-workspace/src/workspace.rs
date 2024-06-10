@@ -27,6 +27,14 @@ impl Workspace {
         match read_file(&file) {
             Ok(options) => Ok(Some(Self { options, root })),
             Err(WorkspaceError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) if !dir.is_dir() => {
+                // Ex) `XDG_CONFIG_HOME=/dev/null`
+                debug!(
+                    "User configuration directory `{}` does not exist or is not a directory",
+                    dir.display()
+                );
+                Ok(None)
+            }
             Err(err) => Err(err),
         }
     }
