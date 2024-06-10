@@ -127,7 +127,7 @@ impl RequiresPython {
         // does not. But, it's debatable.
         //
         // If this scheme proves problematic, we could explore using different semantics when
-        // converting to PubGrub. For example, we could parse `>=3.8.*` as `>=3.8,<3.9`. But this
+        // converting to PubGrub. For example, we could parse `==3.8.*` as `>=3.8,<3.9`. But this
         // too could be problematic. Imagine that the user requests `>=3.8.0b0`, and the target
         // declares `==3.8.*`. In this case, we _do_ want to allow resolution, because the target
         // is saying it supports all versions of `3.8`, including pre-releases. But under those
