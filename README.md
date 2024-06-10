@@ -188,7 +188,7 @@ will install into the environment linked to the `/path/to/python` interpreter.
 
 For convenience, `uv pip install --system` will install into the system Python environment.
 Using `--system` is roughly equivalent to `uv pip install --python=$(which python)`,
-but note it will skip `python` executables on the `PATH` that execute in a virtual environment.
+but note that executables that are linked to virtual environments will be skipped.
 Although we generally recommend using virtual environments for dependency management,
 `--system` is appropriate in continuous integration and containerized environments.
 
