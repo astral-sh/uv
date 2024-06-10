@@ -402,16 +402,6 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
         &work_dir,
     )?;
 
-    // TODO(konsti): `--python` is being ignored atm, so we need to create the correct venv
-    // ourselves and add the output filters.
-    let venv = work_dir.join(".venv");
-    assert_cmd::Command::new(get_bin())
-        .arg("venv")
-        .arg("-p")
-        .arg(context.interpreter())
-        .arg(&venv)
-        .assert();
-
     let mut filters = context.filters();
     filters.push((
         r"Using Python 3.12.\[X\] interpreter at: .*",
@@ -429,6 +419,8 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON]
+    Creating virtualenv at: [VENV]/
     Resolved 10 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -470,16 +462,6 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
 
-    // TODO(konsti): `--python` is being ignored atm, so we need to create the correct venv
-    // ourselves and add the output filters.
-    let venv = work_dir.join(".venv");
-    assert_cmd::Command::new(get_bin())
-        .arg("venv")
-        .arg("-p")
-        .arg(context.interpreter())
-        .arg(&venv)
-        .assert();
-
     let mut filters = context.filters();
     filters.push((
         r"Using Python 3.12.\[X\] interpreter at: .*",
@@ -497,6 +479,8 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON]
+    Creating virtualenv at: [VENV]/
     Resolved 10 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -539,16 +523,6 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
         let work_dir = context.temp_dir.join(workspace);
 
         copy_dir_ignore(workspaces_dir().join(workspace), &work_dir)?;
-
-        // TODO(konsti): `--python` is being ignored atm, so we need to create the correct venv
-        // ourselves and add the output filters.
-        let venv = work_dir.join(".venv");
-        assert_cmd::Command::new(get_bin())
-            .arg("venv")
-            .arg("-p")
-            .arg(context.interpreter())
-            .arg(&venv)
-            .assert();
 
         lock_workspace(&context)
             .current_dir(&work_dir.join(dir))
