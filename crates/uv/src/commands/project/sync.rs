@@ -100,7 +100,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras, &dev);
+    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras, &dev)?;
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
