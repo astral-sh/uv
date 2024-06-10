@@ -3,7 +3,7 @@ use anstream::eprint;
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
-use uv_client::RegistryClientBuilder;
+use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy, Upgrade,
@@ -155,7 +155,6 @@ pub(super) async fn do_lock(
     let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
     let extras = ExtrasSpecification::default();
-    let flat_index = FlatIndex::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
     let link_mode = LinkMode::default();
@@ -166,6 +165,13 @@ pub(super) async fn do_lock(
 
     let hasher = HashStrategy::Generate;
     let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
+    };
 
     // If an existing lockfile exists, build up a set of preferences.
     let LockedRequirements { preferences, git } = read_lockfile(workspace, &upgrade).await?;

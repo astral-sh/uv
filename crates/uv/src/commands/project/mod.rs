@@ -46,6 +46,9 @@ pub(crate) enum ProjectError {
     Tags(#[from] platform_tags::TagsError),
 
     #[error(transparent)]
+    FlatIndex(#[from] uv_client::FlatIndexError),
+
+    #[error(transparent)]
     Lock(#[from] uv_resolver::LockError),
 
     #[error(transparent)]
