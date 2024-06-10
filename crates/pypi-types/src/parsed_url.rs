@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
-use uv_git::{GitUrl, OidParseError};
+use uv_git::{GitReference, GitSha, GitUrl, OidParseError};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -175,6 +175,17 @@ pub struct ParsedPathUrl {
     pub editable: bool,
 }
 
+impl ParsedPathUrl {
+    /// Construct a [`ParsedPathUrl`] from a path requirement source.
+    pub fn from_source(path: PathBuf, editable: bool, url: Url) -> Self {
+        Self {
+            url,
+            path,
+            editable,
+        }
+    }
+}
+
 /// A Git repository URL.
 ///
 /// Examples:
@@ -184,6 +195,22 @@ pub struct ParsedPathUrl {
 pub struct ParsedGitUrl {
     pub url: GitUrl,
     pub subdirectory: Option<PathBuf>,
+}
+
+impl ParsedGitUrl {
+    /// Construct a [`ParsedGitUrl`] from a Git requirement source.
+    pub fn from_source(
+        repository: Url,
+        reference: GitReference,
+        precise: Option<GitSha>,
+        subdirectory: Option<PathBuf>,
+    ) -> Self {
+        let mut url = GitUrl::new(repository, reference);
+        if let Some(precise) = precise {
+            url = url.with_precise(precise);
+        }
+        Self { url, subdirectory }
+    }
 }
 
 impl TryFrom<Url> for ParsedGitUrl {
@@ -217,6 +244,16 @@ impl TryFrom<Url> for ParsedGitUrl {
 pub struct ParsedArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,
+}
+
+impl ParsedArchiveUrl {
+    /// Construct a [`ParsedArchiveUrl`] from a URL requirement source.
+    pub fn from_source(location: Url, subdirectory: Option<PathBuf>) -> Self {
+        Self {
+            url: location,
+            subdirectory,
+        }
+    }
 }
 
 impl From<Url> for ParsedArchiveUrl {
