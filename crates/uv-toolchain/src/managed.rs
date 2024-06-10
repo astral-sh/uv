@@ -108,7 +108,7 @@ impl InstalledToolchains {
     /// ordering across platforms. This also results in newer Python versions coming first,
     /// but should not be relied on — instead the toolchains should be sorted later by
     /// the parsed Python version.
-    fn find_all(&self) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
+    pub fn find_all(&self) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(toolchain_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -191,27 +191,29 @@ impl InstalledToolchains {
 pub struct InstalledToolchain {
     /// The path to the top-level directory of the installed toolchain.
     path: PathBuf,
+    /// The Python version of the toolchain.
     python_version: PythonVersion,
+    /// An install key for the toolchain
+    key: String,
 }
 
 impl InstalledToolchain {
     pub fn new(path: PathBuf) -> Result<Self, Error> {
-        let python_version = PythonVersion::from_str(
-            path.file_name()
-                .ok_or(Error::NameError("name is empty".to_string()))?
-                .to_str()
-                .ok_or(Error::NameError("not a valid string".to_string()))?
-                .split('-')
-                .nth(1)
-                .ok_or(Error::NameError(
-                    "not enough `-`-separated values".to_string(),
-                ))?,
-        )
+        let key = path
+            .file_name()
+            .ok_or(Error::NameError("name is empty".to_string()))?
+            .to_str()
+            .ok_or(Error::NameError("not a valid string".to_string()))?
+            .to_string();
+        let python_version = PythonVersion::from_str(key.split('-').nth(1).ok_or(
+            Error::NameError("not enough `-`-separated values".to_string()),
+        )?)
         .map_err(|err| Error::NameError(format!("invalid Python version: {err}")))?;
 
         Ok(Self {
             path,
             python_version,
+            key,
         })
     }
 
@@ -227,6 +229,14 @@ impl InstalledToolchain {
 
     pub fn python_version(&self) -> &PythonVersion {
         &self.python_version
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
     }
 }
 

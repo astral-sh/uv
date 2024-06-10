@@ -22,6 +22,7 @@ pub(crate) use project::sync::sync;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::run::run as run_tool;
+pub(crate) use toolchain::list::list as toolchain_list;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
@@ -39,6 +40,7 @@ mod pip;
 mod project;
 pub(crate) mod reporters;
 mod tool;
+mod toolchain;
 
 #[cfg(feature = "self-update")]
 mod self_update;
