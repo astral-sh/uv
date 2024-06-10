@@ -61,7 +61,7 @@ pub enum MetadataError {
     #[error("The following field was marked as dynamic: {0}")]
     DynamicField(&'static str),
     #[error("The project uses Poetry's syntax to declare its dependencies, despite including a `project` table in `pyproject.toml`")]
-    Poetry,
+    PoetrySyntax,
 }
 
 impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
@@ -213,11 +213,12 @@ impl Metadata23 {
         }
 
         // If dependencies are declared with Poetry, and `project.dependencies` is omitted, treat
-        // the dependencies as dynamic.
+        // the dependencies as dynamic. The inclusion of a `project` table without defining
+        // `project.dependencies` is almost certainly an error.
         if project.dependencies.is_none()
             && pyproject_toml.tool.and_then(|tool| tool.poetry).is_some()
         {
-            return Err(MetadataError::Poetry);
+            return Err(MetadataError::PoetrySyntax);
         }
 
         let name = project.name;
@@ -306,6 +307,7 @@ struct Tool {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
+#[allow(clippy::empty_structs_with_brackets)]
 struct ToolPoetry {}
 
 /// Python Package Metadata 1.0 and later as specified in
@@ -390,11 +392,12 @@ impl RequiresDist {
         }
 
         // If dependencies are declared with Poetry, and `project.dependencies` is omitted, treat
-        // the dependencies as dynamic.
+        // the dependencies as dynamic. The inclusion of a `project` table without defining
+        // `project.dependencies` is almost certainly an error.
         if project.dependencies.is_none()
             && pyproject_toml.tool.and_then(|tool| tool.poetry).is_some()
         {
-            return Err(MetadataError::Poetry);
+            return Err(MetadataError::PoetrySyntax);
         }
 
         let name = project.name;

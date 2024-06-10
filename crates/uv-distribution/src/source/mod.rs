@@ -1418,7 +1418,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     | pypi_types::MetadataError::DynamicField(_)
                     | pypi_types::MetadataError::FieldNotFound(_)
                     | pypi_types::MetadataError::UnsupportedMetadataVersion(_)
-                    | pypi_types::MetadataError::Poetry,
+                    | pypi_types::MetadataError::PoetrySyntax,
                 )),
             ) => {
                 debug!("No static `PKG-INFO` available for: {source} ({err:?})");
@@ -1443,7 +1443,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     | pypi_types::MetadataError::DynamicField(_)
                     | pypi_types::MetadataError::FieldNotFound(_)
                     | pypi_types::MetadataError::UnsupportedMetadataVersion(_)
-                    | pypi_types::MetadataError::Poetry,
+                    | pypi_types::MetadataError::PoetrySyntax,
                 )),
             ) => {
                 debug!("No static `pyproject.toml` available for: {source} ({err:?})");
