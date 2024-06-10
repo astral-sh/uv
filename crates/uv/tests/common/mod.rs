@@ -18,7 +18,9 @@ use uv_configuration::PreviewMode;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_toolchain::managed::InstalledToolchains;
-use uv_toolchain::{PythonVersion, Toolchain};
+use uv_toolchain::{
+    virtualenv_python_executable, PythonVersion, Toolchain,
+};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -62,6 +64,7 @@ impl TestContext {
         let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
         let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
         let venv = create_venv(&temp_dir, &cache_dir, python_version);
+        let interpreter_path = virtualenv_python_executable(&venv);
 
         // The workspace root directory is not available without walking up the tree
         // https://github.com/rust-lang/cargo/issues/3946
@@ -102,6 +105,11 @@ impl TestContext {
             Self::path_patterns(&workspace_root)
                 .into_iter()
                 .map(|pattern| (pattern, "[WORKSPACE]/".to_string())),
+        );
+        filters.extend(
+            Self::path_patterns(interpreter_path)
+                .into_iter()
+                .map(|pattern| (pattern, "[INTERPRETER]".to_string())),
         );
 
         // Account for [`Simplified::user_display`] which is relative to the command working directory
