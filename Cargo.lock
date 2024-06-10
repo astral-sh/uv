@@ -4404,7 +4404,6 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
- "tempfile",
  "textwrap",
  "thiserror",
  "tikv-jemallocator",

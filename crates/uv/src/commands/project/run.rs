@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use distribution_types::IndexLocations;
 use itertools::Itertools;
-use tempfile::tempdir_in;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -107,7 +106,7 @@ pub(crate) async fn run(
     };
 
     // If necessary, create an environment for the ephemeral requirements.
-    let tmpdir;
+    let temp_dir;
     let ephemeral_env = if requirements.is_empty() {
         None
     } else {
@@ -135,12 +134,9 @@ pub(crate) async fn run(
         // environment.
 
         // Create a virtual environment
-        // TODO(zanieb): Move this path derivation elsewhere
-        let uv_state_path = std::env::current_dir()?.join(".uv");
-        fs_err::create_dir_all(&uv_state_path)?;
-        tmpdir = tempdir_in(uv_state_path)?;
+        temp_dir = cache.environment()?;
         let venv = uv_virtualenv::create_venv(
-            tmpdir.path(),
+            temp_dir.path(),
             interpreter,
             uv_virtualenv::Prompt::None,
             false,

@@ -413,7 +413,7 @@ impl SourceBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         concurrent_builds: usize,
     ) -> Result<Self, Error> {
-        let temp_dir = tempdir_in(build_context.cache().root())?;
+        let temp_dir = build_context.cache().environment()?;
 
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
@@ -431,7 +431,7 @@ impl SourceBuild {
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = match build_isolation {
             BuildIsolation::Isolated => uv_virtualenv::create_venv(
-                &temp_dir.path().join(".venv"),
+                temp_dir.path(),
                 interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
