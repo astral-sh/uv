@@ -285,7 +285,10 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
 pub(crate) struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     ///
-    /// When the path is `-`, then requirements are read from stdin.
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, `uv` will
+    /// extract the requirements for the relevant project.
+    ///
+    /// If `-` is provided, then requirements will be read from stdin.
     #[arg(required(true), value_parser = parse_file_path)]
     pub(crate) src_file: Vec<PathBuf>,
 
@@ -311,11 +314,13 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, value_parser = parse_file_path)]
     pub(crate) r#override: Vec<PathBuf>,
 
-    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra")]
     pub(crate) all_extras: bool,
 
@@ -608,6 +613,11 @@ pub(crate) struct PipCompileArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PipSyncArgs {
     /// Include all packages listed in the given `requirements.txt` files.
+    ///
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, `uv` will
+    /// extract the requirements for the relevant project.
+    ///
+    /// If `-` is provided, then requirements will be read from stdin.
     #[arg(required(true), value_parser = parse_file_path)]
     pub(crate) src_file: Vec<PathBuf>,
 
@@ -906,7 +916,12 @@ pub(crate) struct PipInstallArgs {
     #[arg(group = "sources")]
     pub(crate) package: Vec<String>,
 
-    /// Install all packages listed in the given requirements files.
+    /// Install all packages listed in the given `requirements.txt` files.
+    ///
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, `uv` will
+    /// extract the requirements for the relevant project.
+    ///
+    /// If `-` is provided, then requirements will be read from stdin.
     #[arg(long, short, group = "sources", value_parser = parse_file_path)]
     pub(crate) requirement: Vec<PathBuf>,
 
@@ -936,11 +951,13 @@ pub(crate) struct PipInstallArgs {
     #[arg(long, value_parser = parse_file_path)]
     pub(crate) r#override: Vec<PathBuf>,
 
-    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
     pub(crate) all_extras: bool,
 
@@ -1694,11 +1711,13 @@ pub(crate) struct VenvArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
-    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra")]
     pub(crate) all_extras: bool,
 
@@ -1783,11 +1802,13 @@ pub(crate) struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct SyncArgs {
-    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra")]
     pub(crate) all_extras: bool,
 
