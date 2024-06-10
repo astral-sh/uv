@@ -8,7 +8,7 @@ use tempfile::tempdir_in;
 use tokio::process::Command;
 use tracing::debug;
 
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_requirements::RequirementsSource;
@@ -61,13 +61,10 @@ pub(crate) async fn run(
     )?
     .into_interpreter();
 
-    // Create a virtual environment1
-    // TODO(zanieb): Move this path derivation elsewhere
-    let uv_state_path = std::env::current_dir()?.join(".uv");
-    fs_err::create_dir_all(&uv_state_path)?;
-    let tmpdir = tempdir_in(uv_state_path)?;
+    // Create a virtual environment.
+    let temp_dir = tempdir_in(cache.bucket(CacheBucket::Environments))?;
     let venv = uv_virtualenv::create_venv(
-        tmpdir.path(),
+        temp_dir.path(),
         interpreter,
         uv_virtualenv::Prompt::None,
         false,

@@ -4482,6 +4482,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "uv-cache",
  "uv-configuration",
  "uv-fs",
  "uv-toolchain",

@@ -8,7 +8,7 @@ use tempfile::tempdir_in;
 use tokio::process::Command;
 use tracing::debug;
 
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::{ProjectWorkspace, Workspace};
@@ -107,7 +107,7 @@ pub(crate) async fn run(
     };
 
     // If necessary, create an environment for the ephemeral requirements.
-    let tmpdir;
+    let temp_dir;
     let ephemeral_env = if requirements.is_empty() {
         None
     } else {
@@ -135,12 +135,9 @@ pub(crate) async fn run(
         // environment.
 
         // Create a virtual environment
-        // TODO(zanieb): Move this path derivation elsewhere
-        let uv_state_path = std::env::current_dir()?.join(".uv");
-        fs_err::create_dir_all(&uv_state_path)?;
-        tmpdir = tempdir_in(uv_state_path)?;
+        temp_dir = tempdir_in(cache.bucket(CacheBucket::Environments))?;
         let venv = uv_virtualenv::create_venv(
-            tmpdir.path(),
+            temp_dir.path(),
             interpreter,
             uv_virtualenv::Prompt::None,
             false,

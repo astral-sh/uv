@@ -628,6 +628,8 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
+    /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
+    Environments,
 }
 
 impl CacheBucket {
@@ -640,6 +642,7 @@ impl CacheBucket {
             Self::Simple => "simple-v8",
             Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
+            Self::Environments => "environments-v0",
         }
     }
 
@@ -750,20 +753,24 @@ impl CacheBucket {
             Self::Archive => {
                 // Nothing to do.
             }
+            Self::Environments => {
+                // Nothing to do.
+            }
         }
         Ok(summary)
     }
 
     /// Return an iterator over all cache buckets.
-    pub fn iter() -> impl Iterator<Item = CacheBucket> {
+    pub fn iter() -> impl Iterator<Item = Self> {
         [
-            CacheBucket::Wheels,
-            CacheBucket::BuiltWheels,
-            CacheBucket::FlatIndex,
-            CacheBucket::Git,
-            CacheBucket::Interpreter,
-            CacheBucket::Simple,
-            CacheBucket::Archive,
+            Self::Wheels,
+            Self::BuiltWheels,
+            Self::FlatIndex,
+            Self::Git,
+            Self::Interpreter,
+            Self::Simple,
+            Self::Archive,
+            Self::Environments,
         ]
         .iter()
         .copied()
