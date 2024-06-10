@@ -1566,12 +1566,14 @@ impl SolveState {
                             to_version: dependency_version.clone(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
+                            marker: None,
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
 
                     PubGrubPackageInner::Marker {
                         name: ref dependency_name,
+                        marker: ref dependency_marker,
                         ..
                     } => {
                         if self_name == dependency_name {
@@ -1588,6 +1590,7 @@ impl SolveState {
                             to_version: dependency_version.clone(),
                             to_extra: None,
                             to_dev: None,
+                            marker: Some(dependency_marker.clone()),
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
@@ -1595,6 +1598,7 @@ impl SolveState {
                     PubGrubPackageInner::Extra {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
+                        marker: ref dependency_marker,
                         ..
                     } => {
                         if self_name == dependency_name {
@@ -1611,6 +1615,7 @@ impl SolveState {
                             to_version: dependency_version.clone(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
+                            marker: dependency_marker.clone(),
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
@@ -1618,6 +1623,7 @@ impl SolveState {
                     PubGrubPackageInner::Dev {
                         name: ref dependency_name,
                         dev: ref dependency_dev,
+                        marker: ref dependency_marker,
                         ..
                     } => {
                         if self_name == dependency_name {
@@ -1634,6 +1640,7 @@ impl SolveState {
                             to_version: dependency_version.clone(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
+                            marker: dependency_marker.clone(),
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
@@ -1676,6 +1683,7 @@ pub(crate) struct ResolutionDependencyVersions {
     pub(crate) to_version: Version,
     pub(crate) to_extra: Option<ExtraName>,
     pub(crate) to_dev: Option<GroupName>,
+    pub(crate) marker: Option<MarkerTree>,
 }
 
 impl Resolution {
