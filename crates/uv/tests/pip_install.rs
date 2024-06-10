@@ -5249,3 +5249,60 @@ fn recursive_extra_transitive_url() -> Result<()> {
 
     Ok(())
 }
+
+/// If a package is requested as both editable and non-editable, always install it as editable.
+#[test]
+fn prefer_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("scripts/packages/black_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    // Validate that `black.pth` was created.
+    let path = context.site_packages().join("black.pth");
+    assert!(path.is_file());
+
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "black @ file://{}/scripts/packages/black_editable",
+        context.workspace_root.simplified_display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    // Validate that `black.pth` was created.
+    let path = context.site_packages().join("black.pth");
+    assert!(path.is_file());
+
+    Ok(())
+}
