@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::fs;
 use std::str::FromStr;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 
@@ -38,7 +37,7 @@ pub(crate) async fn remove(
     }
 
     // Save the modified `pyproject.toml`.
-    fs::write(
+    fs_err::write(
         project.current_project().root().join("pyproject.toml"),
         pyproject.to_string(),
     )?;

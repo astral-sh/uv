@@ -1,3 +1,4 @@
+use std::fmt;
 use std::str::FromStr;
 
 use thiserror::Error;
@@ -8,7 +9,7 @@ use pypi_types::{LenientRequirement, VerbatimParsedUrl};
 
 use crate::pyproject::PyProjectToml;
 
-/// A raw, mutable `pyproject.toml`.
+/// Raw and mutable representation of a `pyproject.toml`.
 ///
 /// This is useful for operations that require editing an existing `pyproject.toml` while
 /// preserving comments and other structure, such as `uv add` and `uv remove`.
@@ -38,15 +39,13 @@ impl PyProjectTomlMut {
         if deps.is_none() {
             *deps = Item::Value(Value::Array(Array::new()));
         }
-        let deps = deps
-            .as_array_mut()
-            .ok_or_else(|| Error::MalformedDependencies)?;
+        let deps = deps.as_array_mut().ok_or(Error::MalformedDependencies)?;
 
         // Try to find a matching dependency.
         let mut to_replace = None;
         for (i, dep) in deps.iter().enumerate() {
             if let Some(dep) = dep.as_str().and_then(|dep| parse_requirement(dep).ok()) {
-                if dep.name.as_ref().eq_ignore_ascii_case(&req.name.as_ref()) {
+                if dep.name.as_ref().eq_ignore_ascii_case(req.name.as_ref()) {
                     to_replace = Some(i);
                     break;
                 }
@@ -72,15 +71,13 @@ impl PyProjectTomlMut {
             return Ok(None);
         }
 
-        let deps = deps
-            .as_array_mut()
-            .ok_or_else(|| Error::MalformedDependencies)?;
+        let deps = deps.as_array_mut().ok_or(Error::MalformedDependencies)?;
 
         // Try to find a matching dependency.
         let mut to_remove = None;
         for (i, dep) in deps.iter().enumerate() {
             if let Some(dep) = dep.as_str().and_then(|dep| parse_requirement(dep).ok()) {
-                if dep.name.as_ref().eq_ignore_ascii_case(&req.name.as_ref()) {
+                if dep.name.as_ref().eq_ignore_ascii_case(req.name.as_ref()) {
                     to_remove = Some(i);
                     break;
                 }
@@ -99,13 +96,15 @@ impl PyProjectTomlMut {
             None => Ok(None),
         }
     }
+}
 
-    /// Serialize this `pyproject.toml` to a string.
-    pub fn to_string(&self) -> String {
-        self.doc.to_string()
+impl fmt::Display for PyProjectTomlMut {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.doc.fmt(f)
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn parse_requirement(
     req: &str,
 ) -> Result<Requirement<VerbatimParsedUrl>, Pep508Error<VerbatimParsedUrl>> {
