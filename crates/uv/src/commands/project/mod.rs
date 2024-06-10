@@ -286,7 +286,7 @@ pub(crate) async fn update_environment(
         &reinstall,
         &upgrade,
         interpreter,
-        tags,
+        Some(tags),
         Some(markers),
         None,
         &client,

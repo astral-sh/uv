@@ -107,7 +107,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras, &dev);
+    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras, &dev)?;
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
@@ -137,7 +137,7 @@ pub(super) async fn do_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, &no_build, &no_binary)
     };
 
     // Create a build dispatch.

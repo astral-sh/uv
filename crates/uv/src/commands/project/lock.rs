@@ -153,15 +153,11 @@ pub(super) async fn do_lock(
         requires_python
     };
 
-    // Determine the tags and markers to use for resolution.
-    let tags = interpreter.tags()?;
-    let markers = interpreter.markers();
-
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
         .index_urls(index_locations.index_urls())
-        .markers(markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -185,7 +181,7 @@ pub(super) async fn do_lock(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, None, &hasher, &no_build, &no_binary)
     };
 
     // If an existing lockfile exists, build up a set of preferences.
@@ -229,7 +225,7 @@ pub(super) async fn do_lock(
         &reinstall,
         &upgrade,
         interpreter,
-        tags,
+        None,
         None,
         Some(&requires_python),
         &client,

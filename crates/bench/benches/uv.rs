@@ -162,7 +162,7 @@ mod resolver {
             Options::default(),
             &python_requirement,
             Some(&MARKERS),
-            &TAGS,
+            Some(&TAGS),
             &flat_index,
             &index,
             &hashes,

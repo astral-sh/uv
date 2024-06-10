@@ -34,7 +34,7 @@ impl FlatIndex {
     #[instrument(skip_all)]
     pub fn from_entries(
         entries: FlatIndexEntries,
-        tags: &Tags,
+        tags: Option<&Tags>,
         hasher: &HashStrategy,
         no_build: &NoBuild,
         no_binary: &NoBinary,
@@ -66,7 +66,7 @@ impl FlatIndex {
         distributions: &mut FlatDistributions,
         file: File,
         filename: DistFilename,
-        tags: &Tags,
+        tags: Option<&Tags>,
         hasher: &HashStrategy,
         no_build: &NoBuild,
         no_binary: &NoBinary,
@@ -152,7 +152,7 @@ impl FlatIndex {
     fn wheel_compatibility(
         filename: &WheelFilename,
         hashes: &[HashDigest],
-        tags: &Tags,
+        tags: Option<&Tags>,
         hasher: &HashStrategy,
         no_binary: &NoBinary,
     ) -> WheelCompatibility {
@@ -168,11 +168,14 @@ impl FlatIndex {
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match filename.compatibility(tags) {
-            TagCompatibility::Incompatible(tag) => {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
-            }
-            TagCompatibility::Compatible(priority) => priority,
+        let priority = match tags {
+            Some(tags) => match filename.compatibility(tags) {
+                TagCompatibility::Incompatible(tag) => {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+                }
+                TagCompatibility::Compatible(priority) => Some(priority),
+            },
+            None => None,
         };
 
         // Check if hashes line up.

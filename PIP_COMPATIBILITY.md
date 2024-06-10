@@ -310,6 +310,12 @@ the package is "allowed" in such cases without building its metadata.
 Both pip and uv allow editables requirements to be built and installed even when `--only-binary` is
 provided. For example, `uv pip install -e . --only-binary :all:` is allowed.
 
+## Bytecode compilation
+
+Unlike pip, uv does not compile `.py` files to `.pyc` files during installation by default (i.e.,
+uv does not create or populate `__pycache__` directories). To enable bytecode compilation
+during installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync`.
+
 ## Strictness and spec enforcement
 
 uv tends to be stricter than `pip`, and will often reject packages that `pip` would install.

@@ -16,11 +16,11 @@ use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::preferences::Preferences;
-use crate::pubgrub::{PubGrubDistribution, PubGrubPackageInner};
+use crate::pubgrub::PubGrubDistribution;
 use crate::python_requirement::PythonTarget;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
-use crate::resolver::Resolution;
+use crate::resolver::{Resolution, ResolutionPackage};
 use crate::{
     InMemoryIndex, Manifest, MetadataResponse, PythonRequirement, RequiresPython, ResolveError,
     VersionsResponse,
@@ -31,7 +31,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    pub(crate) petgraph: Graph<AnnotatedDist, (), Directed>,
+    pub(crate) petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: Option<RequiresPython>,
     /// Any diagnostics that were encountered while building the graph.
@@ -47,7 +47,6 @@ type NodeKey<'a> = (
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
         index: &InMemoryIndex,
         preferences: &Preferences,
@@ -55,28 +54,7 @@ impl ResolutionGraph {
         python: &PythonRequirement,
         resolution: Resolution,
     ) -> anyhow::Result<Self, ResolveError> {
-        // Collect all marker expressions from relevant PubGrub packages.
-        let mut markers: FxHashMap<(&PackageName, &Version, &Option<ExtraName>), MarkerTree> =
-            FxHashMap::default();
-        for (package, versions) in &resolution.packages {
-            if let PubGrubPackageInner::Package {
-                name,
-                marker: Some(marker),
-                extra,
-                ..
-            } = &**package
-            {
-                for version in versions {
-                    markers
-                        .entry((name, version, extra))
-                        .or_insert_with(|| MarkerTree::Or(vec![]))
-                        .or(marker.clone());
-                }
-            }
-        }
-
-        // Add every package to the graph.
-        let mut petgraph: Graph<AnnotatedDist, (), Directed> =
+        let mut petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed> =
             Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
         let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> = FxHashMap::with_capacity_and_hasher(
             resolution.packages.len(),
@@ -84,218 +62,172 @@ impl ResolutionGraph {
         );
         let mut diagnostics = Vec::new();
 
+        // Add every package to the graph.
         for (package, versions) in &resolution.packages {
-            match &**package {
-                PubGrubPackageInner::Package {
-                    name,
-                    extra,
-                    dev,
-                    marker: None,
-                    url: None,
-                } => {
-                    for version in versions {
-                        // Create the distribution.
-                        let dist = resolution
-                            .pins
-                            .get(name, version)
-                            .expect("Every package should be pinned")
-                            .clone();
+            let ResolutionPackage {
+                name,
+                extra,
+                dev,
+                url,
+            } = &package;
 
-                        // Track yanks for any registry distributions.
-                        match dist.yanked() {
-                            None | Some(Yanked::Bool(false)) => {}
-                            Some(Yanked::Bool(true)) => {
-                                diagnostics.push(ResolutionDiagnostic::YankedVersion {
-                                    dist: dist.clone(),
-                                    reason: None,
-                                });
-                            }
-                            Some(Yanked::Reason(reason)) => {
-                                diagnostics.push(ResolutionDiagnostic::YankedVersion {
-                                    dist: dist.clone(),
-                                    reason: Some(reason.clone()),
-                                });
-                            }
-                        }
+            for version in versions {
+                // Map the package to a distribution.
+                let (dist, hashes, metadata) = if let Some(url) = url {
+                    // Create the distribution.
+                    let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
 
-                        // Extract the hashes, preserving those that were already present in the
-                        // lockfile if necessary.
-                        let hashes = if let Some(digests) = preferences
-                            .match_hashes(name, version)
-                            .filter(|digests| !digests.is_empty())
-                        {
-                            digests.to_vec()
-                        } else if let Some(versions_response) = index.packages().get(name) {
-                            if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                                version_maps
-                                    .iter()
-                                    .find_map(|version_map| version_map.hashes(version))
-                                    .map(|mut digests| {
-                                        digests.sort_unstable();
-                                        digests
-                                    })
-                                    .unwrap_or_default()
-                            } else {
-                                vec![]
-                            }
+                    // Extract the hashes, preserving those that were already present in the
+                    // lockfile if necessary.
+                    let hashes = if let Some(digests) = preferences
+                        .match_hashes(name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        digests.to_vec()
+                    } else if let Some(metadata_response) =
+                        index.distributions().get(&dist.version_id())
+                    {
+                        if let MetadataResponse::Found(ref archive) = *metadata_response {
+                            let mut digests = archive.hashes.clone();
+                            digests.sort_unstable();
+                            digests
                         } else {
                             vec![]
-                        };
+                        }
+                    } else {
+                        vec![]
+                    };
 
-                        // Extract the metadata.
-                        let metadata = {
-                            let dist = PubGrubDistribution::from_registry(name, version);
+                    // Extract the metadata.
+                    let metadata = {
+                        let dist = PubGrubDistribution::from_url(name, url);
 
-                            let response = index
-                                .distributions()
-                                .get(&dist.version_id())
-                                .unwrap_or_else(|| {
-                                    panic!(
-                                        "Every package should have metadata: {:?}",
-                                        dist.version_id()
-                                    )
-                                });
-
-                            let MetadataResponse::Found(archive) = &*response else {
+                        let response = index
+                            .distributions()
+                            .get(&dist.version_id())
+                            .unwrap_or_else(|| {
                                 panic!(
                                     "Every package should have metadata: {:?}",
                                     dist.version_id()
                                 )
-                            };
+                            });
 
-                            archive.metadata.clone()
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
                         };
 
-                        // Validate the extra.
-                        if let Some(extra) = extra {
-                            if !metadata.provides_extras.contains(extra) {
-                                diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                                    dist: dist.clone(),
-                                    extra: extra.clone(),
-                                });
-                            }
+                        archive.metadata.clone()
+                    };
+
+                    (dist.into(), hashes, metadata)
+                } else {
+                    let dist = resolution
+                        .pins
+                        .get(name, version)
+                        .expect("Every package should be pinned")
+                        .clone();
+
+                    // Track yanks for any registry distributions.
+                    match dist.yanked() {
+                        None | Some(Yanked::Bool(false)) => {}
+                        Some(Yanked::Bool(true)) => {
+                            diagnostics.push(ResolutionDiagnostic::YankedVersion {
+                                dist: dist.clone(),
+                                reason: None,
+                            });
                         }
-
-                        // Validate the development dependency group.
-                        if let Some(dev) = dev {
-                            if !metadata.dev_dependencies.contains_key(dev) {
-                                diagnostics.push(ResolutionDiagnostic::MissingDev {
-                                    dist: dist.clone(),
-                                    dev: dev.clone(),
-                                });
-                            }
+                        Some(Yanked::Reason(reason)) => {
+                            diagnostics.push(ResolutionDiagnostic::YankedVersion {
+                                dist: dist.clone(),
+                                reason: Some(reason.clone()),
+                            });
                         }
-
-                        // Extract the markers.
-                        let marker = markers.get(&(name, version, extra)).cloned();
-
-                        // Add the distribution to the graph.
-                        let index = petgraph.add_node(AnnotatedDist {
-                            dist,
-                            extra: extra.clone(),
-                            dev: dev.clone(),
-                            marker,
-                            hashes,
-                            metadata,
-                        });
-                        inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
                     }
-                }
 
-                PubGrubPackageInner::Package {
-                    name,
-                    extra,
-                    dev,
-                    marker: None,
-                    url: Some(url),
-                } => {
-                    for version in versions {
-                        // Create the distribution.
-                        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
-
-                        // Extract the hashes, preserving those that were already present in the
-                        // lockfile if necessary.
-                        let hashes = if let Some(digests) = preferences
-                            .match_hashes(name, version)
-                            .filter(|digests| !digests.is_empty())
-                        {
-                            digests.to_vec()
-                        } else if let Some(metadata_response) =
-                            index.distributions().get(&dist.version_id())
-                        {
-                            if let MetadataResponse::Found(ref archive) = *metadata_response {
-                                let mut digests = archive.hashes.clone();
-                                digests.sort_unstable();
-                                digests
-                            } else {
-                                vec![]
-                            }
+                    // Extract the hashes, preserving those that were already present in the
+                    // lockfile if necessary.
+                    let hashes = if let Some(digests) = preferences
+                        .match_hashes(name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        digests.to_vec()
+                    } else if let Some(versions_response) = index.packages().get(name) {
+                        if let VersionsResponse::Found(ref version_maps) = *versions_response {
+                            version_maps
+                                .iter()
+                                .find_map(|version_map| version_map.hashes(version))
+                                .map(|mut digests| {
+                                    digests.sort_unstable();
+                                    digests
+                                })
+                                .unwrap_or_default()
                         } else {
                             vec![]
-                        };
+                        }
+                    } else {
+                        vec![]
+                    };
 
-                        // Extract the metadata.
-                        let metadata = {
-                            let dist = PubGrubDistribution::from_url(name, url);
+                    // Extract the metadata.
+                    let metadata = {
+                        let dist = PubGrubDistribution::from_registry(name, version);
 
-                            let response = index
-                                .distributions()
-                                .get(&dist.version_id())
-                                .unwrap_or_else(|| {
-                                    panic!(
-                                        "Every package should have metadata: {:?}",
-                                        dist.version_id()
-                                    )
-                                });
-
-                            let MetadataResponse::Found(archive) = &*response else {
+                        let response = index
+                            .distributions()
+                            .get(&dist.version_id())
+                            .unwrap_or_else(|| {
                                 panic!(
                                     "Every package should have metadata: {:?}",
                                     dist.version_id()
                                 )
-                            };
+                            });
 
-                            archive.metadata.clone()
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
                         };
 
-                        // Validate the extra.
-                        if let Some(extra) = extra {
-                            if !metadata.provides_extras.contains(extra) {
-                                diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                                    dist: dist.clone().into(),
-                                    extra: extra.clone(),
-                                });
-                            }
-                        }
+                        archive.metadata.clone()
+                    };
 
-                        // Validate the development dependency group.
-                        if let Some(dev) = dev {
-                            if !metadata.dev_dependencies.contains_key(dev) {
-                                diagnostics.push(ResolutionDiagnostic::MissingDev {
-                                    dist: dist.clone().into(),
-                                    dev: dev.clone(),
-                                });
-                            }
-                        }
+                    (dist, hashes, metadata)
+                };
 
-                        // Extract the markers.
-                        let marker = markers.get(&(name, version, extra)).cloned();
-
-                        // Add the distribution to the graph.
-                        let index = petgraph.add_node(AnnotatedDist {
-                            dist: dist.into(),
+                // Validate the extra.
+                if let Some(extra) = extra {
+                    if !metadata.provides_extras.contains(extra) {
+                        diagnostics.push(ResolutionDiagnostic::MissingExtra {
+                            dist: dist.clone(),
                             extra: extra.clone(),
-                            dev: dev.clone(),
-                            marker,
-                            hashes,
-                            metadata,
                         });
-                        inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
                     }
                 }
 
-                _ => {}
-            };
+                // Validate the development dependency group.
+                if let Some(dev) = dev {
+                    if !metadata.dev_dependencies.contains_key(dev) {
+                        diagnostics.push(ResolutionDiagnostic::MissingDev {
+                            dist: dist.clone(),
+                            dev: dev.clone(),
+                        });
+                    }
+                }
+
+                // Add the distribution to the graph.
+                let index = petgraph.add_node(AnnotatedDist {
+                    dist,
+                    extra: extra.clone(),
+                    dev: dev.clone(),
+                    hashes,
+                    metadata,
+                });
+                inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
+            }
         }
 
         // Add every edge to the graph.
@@ -313,7 +245,23 @@ impl ResolutionGraph {
                     versions.to_extra.as_ref(),
                     versions.to_dev.as_ref(),
                 )];
-                petgraph.update_edge(from_index, to_index, ());
+
+                if let Some(edge) = petgraph
+                    .find_edge(from_index, to_index)
+                    .and_then(|edge| petgraph.edge_weight_mut(edge))
+                {
+                    // If either the existing marker or new marker is `None`, then the dependency is
+                    // included unconditionally, and so the combined marker should be `None`.
+                    if let (Some(marker), Some(ref version_marker)) =
+                        (edge.as_mut(), versions.marker)
+                    {
+                        marker.or(version_marker.clone());
+                    } else {
+                        *edge = None;
+                    }
+                } else {
+                    petgraph.update_edge(from_index, to_index, versions.marker.clone());
+                }
             }
         }
 

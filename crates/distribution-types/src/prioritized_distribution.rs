@@ -44,7 +44,7 @@ pub enum CompatibleDist<'a> {
         /// The wheel that should be used.
         wheel: &'a RegistryBuiltWheel,
         /// The platform priority associated with the wheel.
-        priority: TagPriority,
+        priority: Option<TagPriority>,
         /// The prioritized distribution that the wheel came from.
         prioritized: &'a PrioritizedDist,
     },
@@ -145,7 +145,7 @@ pub enum PythonRequirementKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
-    Compatible(HashComparison, TagPriority, Option<BuildTag>),
+    Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
