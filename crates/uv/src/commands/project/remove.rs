@@ -27,8 +27,8 @@ pub(crate) async fn remove(
 
     // Find the project requirements.
     let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
-    let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
 
+    let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements {
         let req = Requirement::from(LenientRequirement::from_str(&req)?);
         if pyproject.remove_dependency(&req)?.is_none() {
@@ -46,7 +46,7 @@ pub(crate) async fn remove(
     )?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(&project, preview, cache, printer)?;
+    let venv = project::init_environment(project.workspace(), preview, cache, printer)?;
 
     let index_locations = IndexLocations::default();
     let upgrade = Upgrade::default();
@@ -55,9 +55,17 @@ pub(crate) async fn remove(
     let dev = false; // We only add regular dependencies currently.
 
     // Lock and sync the environment.
+    let root_project_name = project
+        .current_project()
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .map(|project| project.name.clone());
+
     let lock = project::lock::do_lock(
-        &project,
-        &venv,
+        root_project_name,
+        project.workspace(),
+        venv.interpreter(),
         &index_locations,
         upgrade,
         exclude_newer,
