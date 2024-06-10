@@ -60,6 +60,8 @@ pub enum MetadataError {
     UnsupportedMetadataVersion(String),
     #[error("The following field was marked as dynamic: {0}")]
     DynamicField(&'static str),
+    #[error("The project uses Poetry's syntax to declare its dependencies, despite including a `project` table in `pyproject.toml`")]
+    Poetry,
 }
 
 impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
@@ -210,6 +212,14 @@ impl Metadata23 {
             }
         }
 
+        // If dependencies are declared with Poetry, and `project.dependencies` is omitted, treat
+        // the dependencies as dynamic.
+        if project.dependencies.is_none()
+            && pyproject_toml.tool.and_then(|tool| tool.poetry).is_some()
+        {
+            return Err(MetadataError::Poetry);
+        }
+
         let name = project.name;
         let version = project
             .version
@@ -257,11 +267,11 @@ impl Metadata23 {
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct PyProjectToml {
-    /// Project metadata
     project: Option<Project>,
+    tool: Option<Tool>,
 }
 
 /// PEP 621 project metadata.
@@ -270,7 +280,7 @@ struct PyProjectToml {
 /// relevant for dependency resolution.
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project
@@ -287,6 +297,16 @@ struct Project {
     /// so another tool can/will provide such metadata dynamically.
     dynamic: Option<Vec<String>>,
 }
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Tool {
+    poetry: Option<ToolPoetry>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct ToolPoetry {}
 
 /// Python Package Metadata 1.0 and later as specified in
 /// <https://peps.python.org/pep-0241/>.
@@ -367,6 +387,14 @@ impl RequiresDist {
                 }
                 _ => (),
             }
+        }
+
+        // If dependencies are declared with Poetry, and `project.dependencies` is omitted, treat
+        // the dependencies as dynamic.
+        if project.dependencies.is_none()
+            && pyproject_toml.tool.and_then(|tool| tool.poetry).is_some()
+        {
+            return Err(MetadataError::Poetry);
         }
 
         let name = project.name;
