@@ -3,7 +3,7 @@ use anyhow::Result;
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
-use uv_client::RegistryClientBuilder;
+use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy,
@@ -116,7 +116,6 @@ pub(super) async fn do_sync(
     let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
     let dry_run = false;
-    let flat_index = FlatIndex::default();
     let git = GitResolver::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
@@ -126,6 +125,13 @@ pub(super) async fn do_sync(
     let no_build = NoBuild::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
+    };
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
