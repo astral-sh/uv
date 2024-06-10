@@ -234,6 +234,7 @@ impl TestContext {
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_TEST_PYTHON_PATH", "/dev/null")
             .env("UV_NO_WRAP", "1")
             .env("UV_TEST_PYTHON_PATH", "/dev/null")
             .current_dir(&self.temp_dir);
@@ -250,7 +251,10 @@ impl TestContext {
     /// Create a `uv lock` command with options shared across scenarios.
     pub fn lock(&self) -> std::process::Command {
         let mut command = self.lock_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+        command
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("UV_TEST_PYTHON_PATH", "/dev/null");
         command
     }
 
