@@ -1,11 +1,20 @@
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::fmt::{self, Formatter};
+use std::num::ParseIntError;
+use std::{env, io};
+use std::{path::Path, path::PathBuf, str::FromStr};
+
 use itertools::Itertools;
+use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
+use which::which;
+
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
-use which::which;
 
 use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::interpreter::Error as InterpreterError;
@@ -17,14 +26,6 @@ use crate::virtualenv::{
     virtualenv_python_executable,
 };
 use crate::{Interpreter, PythonVersion};
-use std::borrow::Cow;
-
-use same_file::is_same_file;
-use std::collections::HashSet;
-use std::fmt::{self, Formatter};
-use std::num::ParseIntError;
-use std::{env, io};
-use std::{path::Path, path::PathBuf, str::FromStr};
 
 /// A request to find a Python toolchain.
 ///
@@ -937,7 +938,12 @@ impl ToolchainRequest {
     }
 
     /// Check if a given interpreter satisfies the interpreter request.
-    pub fn satisfied(&self, interpreter: &Interpreter) -> bool {
+    pub fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
+        /// Returns `true` if the two paths refer to the same interpreter executable.
+        fn is_same_executable(path1: &Path, path2: &Path) -> bool {
+            path1 == path2 || is_same_file(path1, path2).unwrap_or(false)
+        }
+
         match self {
             ToolchainRequest::Any => true,
             ToolchainRequest::Version(version_request) => {
@@ -945,21 +951,37 @@ impl ToolchainRequest {
             }
             ToolchainRequest::Directory(directory) => {
                 // `sys.prefix` points to the venv root.
-                is_same_file(directory, interpreter.sys_prefix()).unwrap_or(false)
+                is_same_executable(directory, interpreter.sys_prefix())
             }
             ToolchainRequest::File(file) => {
-                // The interpreter satisfies the request both if it is the venv ...
-                if is_same_file(interpreter.sys_executable(), file).unwrap_or(false) {
+                // The interpreter satisfies the request both if it is the venv...
+                if is_same_executable(interpreter.sys_executable(), file) {
                     return true;
                 }
-                // ... or if it is the base interpreter the venv was created from.
+                // ...or if it is the base interpreter the venv was created from.
                 if interpreter
                     .sys_base_executable()
                     .is_some_and(|sys_base_executable| {
-                        is_same_file(sys_base_executable, file).unwrap_or(false)
+                        is_same_executable(sys_base_executable, file)
                     })
                 {
                     return true;
+                }
+                // ...or, on Windows, if both interpreters have the same base executable. On
+                // Windows, interpreters are copied rather than symlinked, so a virtual environment
+                // created from within a virtual environment will _not_ evaluate to the same
+                // `sys.executable`, but will have the same `sys._base_executable`.
+                if cfg!(windows) {
+                    if let Ok(file_interpreter) = Interpreter::query(file, cache) {
+                        if let (Some(file_base), Some(interpreter_base)) = (
+                            file_interpreter.sys_base_executable(),
+                            interpreter.sys_base_executable(),
+                        ) {
+                            if is_same_executable(file_base, interpreter_base) {
+                                return true;
+                            }
+                        }
+                    }
                 }
                 false
             }
@@ -1409,12 +1431,10 @@ impl fmt::Display for ToolchainSources {
 
 #[cfg(test)]
 mod tests {
-
     use std::{path::PathBuf, str::FromStr};
 
-    use test_log::test;
-
     use assert_fs::{prelude::*, TempDir};
+    use test_log::test;
 
     use crate::{
         discovery::{ToolchainRequest, VersionRequest},

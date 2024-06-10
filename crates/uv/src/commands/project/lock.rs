@@ -46,7 +46,7 @@ pub(crate) async fn lock(
             let interpreter = environment.into_interpreter();
             if let Some(python) = python.as_deref() {
                 let request = ToolchainRequest::parse(python);
-                if request.satisfied(&interpreter) {
+                if request.satisfied(&interpreter, cache) {
                     interpreter
                 } else {
                     Toolchain::find_requested(python, SystemPython::Allowed, preview, cache)?

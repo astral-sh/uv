@@ -101,16 +101,15 @@ pub(crate) fn init_environment(
             // we'll fail at the build or at last the install step when we aren't able to install
             // the editable wheel for the current project into the venv.
             // TODO(konsti): Do we want to support a workspace python version requirement?
-
-            let venv_python_satisfactory = if let Some(python) = python {
-                ToolchainRequest::parse(python).satisfied(venv.interpreter())
+            let is_satisfied = if let Some(python) = python {
+                ToolchainRequest::parse(python).satisfied(venv.interpreter(), cache)
             } else if let Some(requires_python) = requires_python {
                 requires_python.contains(venv.interpreter().python_version())
             } else {
                 true
             };
 
-            if venv_python_satisfactory {
+            if is_satisfied {
                 return Ok(venv);
             }
 
