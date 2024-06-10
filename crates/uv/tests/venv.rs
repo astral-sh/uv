@@ -164,7 +164,7 @@ fn create_venv_defaults_to_cwd() {
 #[test]
 fn create_venv_ignores_virtual_env_variable() {
     let context = VenvTestContext::new(&["3.12"]);
-    // We shouldn't care if `VIRTUAL_ENV` is set to an non-existant directory
+    // We shouldn't care if `VIRTUAL_ENV` is set to an non-existent directory
     // because we ignore virtual environment interpreter sources (we require a system interpreter)
     uv_snapshot!(context.filters(), context.venv_command()
         .env("VIRTUAL_ENV", context.temp_dir.child("does-not-exist").as_os_str()), @r###"

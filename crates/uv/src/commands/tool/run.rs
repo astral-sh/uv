@@ -2,12 +2,11 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use distribution_types::IndexLocations;
 use itertools::Itertools;
-use tempfile::tempdir_in;
 use tokio::process::Command;
 use tracing::debug;
 
+use distribution_types::IndexLocations;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
@@ -45,8 +44,8 @@ pub(crate) async fn run(
     .chain(with.into_iter().map(RequirementsSource::from_package))
     .collect::<Vec<_>>();
 
-    // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool
-    // TOOD(zanieb): Determine if we sould layer on top of the project environment if it is present
+    // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
+    // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
     // If necessary, create an environment for the ephemeral requirements.
     debug!("Syncing ephemeral environment.");
@@ -61,13 +60,10 @@ pub(crate) async fn run(
     )?
     .into_interpreter();
 
-    // Create a virtual environment1
-    // TODO(zanieb): Move this path derivation elsewhere
-    let uv_state_path = std::env::current_dir()?.join(".uv");
-    fs_err::create_dir_all(&uv_state_path)?;
-    let tmpdir = tempdir_in(uv_state_path)?;
+    // Create a virtual environment.
+    let temp_dir = cache.environment()?;
     let venv = uv_virtualenv::create_venv(
-        tmpdir.path(),
+        temp_dir.path(),
         interpreter,
         uv_virtualenv::Prompt::None,
         false,

@@ -3,6 +3,7 @@
 use std::str::FromStr;
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use mailparse::{MailHeaderMap, MailParseError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -59,6 +60,8 @@ pub enum MetadataError {
     UnsupportedMetadataVersion(String),
     #[error("The following field was marked as dynamic: {0}")]
     DynamicField(&'static str),
+    #[error("The project uses Poetry's syntax to declare its dependencies, despite including a `project` table in `pyproject.toml`")]
+    PoetrySyntax,
 }
 
 impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
@@ -86,16 +89,14 @@ impl Metadata23 {
         .map_err(MetadataError::Pep440VersionError)?;
         let requires_dist = headers
             .get_all_values("Requires-Dist")
-            .map(|requires_dist| {
-                LenientRequirement::from_str(&requires_dist).map(Requirement::from)
-            })
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
             .collect::<Result<Vec<_>, _>>()?;
         let requires_python = headers
             .get_first_value("Requires-Python")
-            .map(|requires_python| {
-                LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
-            })
-            .transpose()?;
+            .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
+            .transpose()?
+            .map(VersionSpecifiers::from);
         let provides_extras = headers
             .get_all_values("Provides-Extra")
             .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
@@ -161,16 +162,14 @@ impl Metadata23 {
         // The remaining fields are required to be present.
         let requires_dist = headers
             .get_all_values("Requires-Dist")
-            .map(|requires_dist| {
-                LenientRequirement::from_str(&requires_dist).map(Requirement::from)
-            })
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
             .collect::<Result<Vec<_>, _>>()?;
         let requires_python = headers
             .get_first_value("Requires-Python")
-            .map(|requires_python| {
-                LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
-            })
-            .transpose()?;
+            .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
+            .transpose()?
+            .map(VersionSpecifiers::from);
         let provides_extras = headers
             .get_all_values("Provides-Extra")
             .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
@@ -213,19 +212,36 @@ impl Metadata23 {
             }
         }
 
+        // If dependencies are declared with Poetry, and `project.dependencies` is omitted, treat
+        // the dependencies as dynamic. The inclusion of a `project` table without defining
+        // `project.dependencies` is almost certainly an error.
+        if project.dependencies.is_none()
+            && pyproject_toml.tool.and_then(|tool| tool.poetry).is_some()
+        {
+            return Err(MetadataError::PoetrySyntax);
+        }
+
         let name = project.name;
         let version = project
             .version
             .ok_or(MetadataError::FieldNotFound("version"))?;
-        let requires_python = project.requires_python.map(VersionSpecifiers::from);
+
+        // Parse the Python version requirements.
+        let requires_python = project
+            .requires_python
+            .map(|requires_python| {
+                LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
+            })
+            .transpose()?;
 
         // Extract the requirements.
         let mut requires_dist = project
             .dependencies
             .unwrap_or_default()
             .into_iter()
-            .map(Requirement::from)
-            .collect::<Vec<_>>();
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Extract the optional dependencies.
         let mut provides_extras: Vec<ExtraName> = Vec::new();
@@ -233,9 +249,10 @@ impl Metadata23 {
             requires_dist.extend(
                 requirements
                     .into_iter()
-                    .map(Requirement::from)
-                    .map(|requirement| requirement.with_extra_marker(&extra))
-                    .collect::<Vec<_>>(),
+                    .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+                    .map_ok(Requirement::from)
+                    .map_ok(|requirement| requirement.with_extra_marker(&extra))
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             provides_extras.push(extra);
         }
@@ -251,11 +268,11 @@ impl Metadata23 {
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct PyProjectToml {
-    /// Project metadata
-    pub(crate) project: Option<Project>,
+struct PyProjectToml {
+    project: Option<Project>,
+    tool: Option<Tool>,
 }
 
 /// PEP 621 project metadata.
@@ -264,23 +281,34 @@ pub(crate) struct PyProjectToml {
 /// relevant for dependency resolution.
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct Project {
+struct Project {
     /// The name of the project
-    pub(crate) name: PackageName,
+    name: PackageName,
     /// The version of the project as supported by PEP 440
-    pub(crate) version: Option<Version>,
+    version: Option<Version>,
     /// The Python version requirements of the project
-    pub(crate) requires_python: Option<LenientVersionSpecifiers>,
+    requires_python: Option<String>,
     /// Project dependencies
-    pub(crate) dependencies: Option<Vec<LenientRequirement>>,
+    dependencies: Option<Vec<String>>,
     /// Optional dependencies
-    pub(crate) optional_dependencies: Option<IndexMap<ExtraName, Vec<LenientRequirement>>>,
+    optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
-    pub(crate) dynamic: Option<Vec<String>>,
+    dynamic: Option<Vec<String>>,
 }
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Tool {
+    poetry: Option<ToolPoetry>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+#[allow(clippy::empty_structs_with_brackets)]
+struct ToolPoetry {}
 
 /// Python Package Metadata 1.0 and later as specified in
 /// <https://peps.python.org/pep-0241/>.
@@ -363,6 +391,15 @@ impl RequiresDist {
             }
         }
 
+        // If dependencies are declared with Poetry, and `project.dependencies` is omitted, treat
+        // the dependencies as dynamic. The inclusion of a `project` table without defining
+        // `project.dependencies` is almost certainly an error.
+        if project.dependencies.is_none()
+            && pyproject_toml.tool.and_then(|tool| tool.poetry).is_some()
+        {
+            return Err(MetadataError::PoetrySyntax);
+        }
+
         let name = project.name;
 
         // Extract the requirements.
@@ -370,8 +407,9 @@ impl RequiresDist {
             .dependencies
             .unwrap_or_default()
             .into_iter()
-            .map(Requirement::from)
-            .collect::<Vec<_>>();
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Extract the optional dependencies.
         let mut provides_extras: Vec<ExtraName> = Vec::new();
@@ -379,9 +417,10 @@ impl RequiresDist {
             requires_dist.extend(
                 requirements
                     .into_iter()
-                    .map(Requirement::from)
-                    .map(|requirement| requirement.with_extra_marker(&extra))
-                    .collect::<Vec<_>>(),
+                    .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+                    .map_ok(Requirement::from)
+                    .map_ok(|requirement| requirement.with_extra_marker(&extra))
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             provides_extras.push(extra);
         }

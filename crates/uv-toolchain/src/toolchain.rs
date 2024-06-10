@@ -1,3 +1,5 @@
+use tracing::{debug, info};
+use uv_client::BaseClientBuilder;
 use uv_configuration::PreviewMode;
 
 use uv_cache::Cache;
@@ -6,6 +8,8 @@ use crate::discovery::{
     find_best_toolchain, find_default_toolchain, find_toolchain, SystemPython, ToolchainRequest,
     ToolchainSources,
 };
+use crate::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
+use crate::managed::{InstalledToolchain, InstalledToolchains};
 use crate::{Error, Interpreter, ToolchainSource};
 
 /// A Python interpreter and accompanying tools.
@@ -29,11 +33,12 @@ impl Toolchain {
         cache: &Cache,
     ) -> Result<Self, Error> {
         if let Some(python) = python {
-            Self::find_requested(python, system, preview, cache)
+            let request = ToolchainRequest::parse(python);
+            Self::find_requested(&request, system, preview, cache)
         } else if system.is_preferred() {
             Self::find_default(preview, cache)
         } else {
-            // First check for a parent intepreter
+            // First check for a parent interpreter
             // We gate this check to avoid an extra log message when it is not set
             if std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER").is_some() {
                 match Self::find_parent_interpreter(system, cache) {
@@ -56,14 +61,13 @@ impl Toolchain {
 
     /// Find an installed [`Toolchain`] that satisfies a request.
     pub fn find_requested(
-        request: &str,
+        request: &ToolchainRequest,
         system: SystemPython,
         preview: PreviewMode,
         cache: &Cache,
     ) -> Result<Self, Error> {
         let sources = ToolchainSources::from_settings(system, preview);
-        let request = ToolchainRequest::parse(request);
-        let toolchain = find_toolchain(&request, system, &sources, cache)??;
+        let toolchain = find_toolchain(request, system, &sources, cache)??;
 
         Ok(toolchain)
     }
@@ -112,6 +116,60 @@ impl Toolchain {
     pub fn find_default(preview: PreviewMode, cache: &Cache) -> Result<Self, Error> {
         let toolchain = find_default_toolchain(preview, cache)??;
         Ok(toolchain)
+    }
+
+    /// Find or fetch a [`Toolchain`].
+    ///
+    /// Unlike [`Toolchain::find`], if the toolchain is not installed it will be installed automatically.
+    pub async fn find_or_fetch<'a>(
+        python: Option<&str>,
+        system: SystemPython,
+        preview: PreviewMode,
+        client_builder: BaseClientBuilder<'a>,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        // Perform a find first
+        match Self::find(python, system, preview, cache) {
+            Ok(venv) => Ok(venv),
+            Err(Error::NotFound(_)) if system.is_allowed() && preview.is_enabled() => {
+                debug!("Requested Python not found, checking for available download...");
+                let request = if let Some(request) = python {
+                    ToolchainRequest::parse(request)
+                } else {
+                    ToolchainRequest::default()
+                };
+                Self::fetch(request, client_builder, cache).await
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    pub async fn fetch<'a>(
+        request: ToolchainRequest,
+        client_builder: BaseClientBuilder<'a>,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let toolchains = InstalledToolchains::from_settings()?.init()?;
+        let toolchain_dir = toolchains.root();
+
+        let request = PythonDownloadRequest::from_request(request)?.fill()?;
+        let download = PythonDownload::from_request(&request)?;
+        let client = client_builder.build();
+
+        info!("Fetching requested toolchain...");
+        let result = download.fetch(&client, toolchain_dir).await?;
+
+        let path = match result {
+            DownloadResult::AlreadyAvailable(path) => path,
+            DownloadResult::Fetched(path) => path,
+        };
+
+        let installed = InstalledToolchain::new(path)?;
+
+        Ok(Self {
+            source: ToolchainSource::Managed,
+            interpreter: Interpreter::query(installed.executable(), cache)?,
+        })
     }
 
     /// Create a [`Toolchain`] from an existing [`Interpreter`].

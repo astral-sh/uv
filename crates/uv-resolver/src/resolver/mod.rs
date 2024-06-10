@@ -28,7 +28,7 @@ pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
 use platform_tags::Tags;
-use pypi_types::{Metadata23, Requirement};
+use pypi_types::{Metadata23, Requirement, VerbatimParsedUrl};
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -131,7 +131,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         markers: Option<&'a MarkerEnvironment>,
-        tags: &'a Tags,
+        tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,
@@ -529,7 +529,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             // that our resolver state is only cloned as much
                             // as it needs to be. We basically move the state
                             // into `forked_states`, and then only clone it if
-                            // there it at least one more fork to visit.
+                            // there is at least one more fork to visit.
                             let mut cur_state = Some(state);
                             let forks_len = forks.len();
                             for (i, fork) in forks.into_iter().enumerate() {
@@ -1506,12 +1506,12 @@ struct SolveState {
 
 impl SolveState {
     fn into_resolution(self) -> Resolution {
-        let packages = self.pubgrub.partial_solution.extract_solution();
+        let solution = self.pubgrub.partial_solution.extract_solution();
         let mut dependencies: FxHashMap<
             ResolutionDependencyNames,
             FxHashSet<ResolutionDependencyVersions>,
         > = FxHashMap::default();
-        for (package, self_version) in &packages {
+        for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
                 let pubgrub::solver::Kind::FromDependencyOf(
                     ref self_package,
@@ -1528,7 +1528,7 @@ impl SolveState {
                 if !self_range.contains(self_version) {
                     continue;
                 }
-                let Some(dependency_version) = packages.get(dependency_package) else {
+                let Some(dependency_version) = solution.get(dependency_package) else {
                     continue;
                 };
                 if !dependency_range.contains(dependency_version) {
@@ -1566,12 +1566,14 @@ impl SolveState {
                             to_version: dependency_version.clone(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
+                            marker: None,
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
 
                     PubGrubPackageInner::Marker {
                         name: ref dependency_name,
+                        marker: ref dependency_marker,
                         ..
                     } => {
                         if self_name == dependency_name {
@@ -1588,6 +1590,7 @@ impl SolveState {
                             to_version: dependency_version.clone(),
                             to_extra: None,
                             to_dev: None,
+                            marker: Some(dependency_marker.clone()),
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
@@ -1595,6 +1598,7 @@ impl SolveState {
                     PubGrubPackageInner::Extra {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
+                        marker: ref dependency_marker,
                         ..
                     } => {
                         if self_name == dependency_name {
@@ -1611,6 +1615,7 @@ impl SolveState {
                             to_version: dependency_version.clone(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
+                            marker: dependency_marker.clone(),
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
@@ -1618,6 +1623,7 @@ impl SolveState {
                     PubGrubPackageInner::Dev {
                         name: ref dependency_name,
                         dev: ref dependency_dev,
+                        marker: ref dependency_marker,
                         ..
                     } => {
                         if self_name == dependency_name {
@@ -1634,6 +1640,7 @@ impl SolveState {
                             to_version: dependency_version.clone(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
+                            marker: dependency_marker.clone(),
                         };
                         dependencies.entry(names).or_default().insert(versions);
                     }
@@ -1642,10 +1649,33 @@ impl SolveState {
                 }
             }
         }
-        let packages = packages
+
+        let packages = solution
             .into_iter()
-            .map(|(package, version)| (package, FxHashSet::from_iter([version])))
+            .filter_map(|(package, version)| {
+                if let PubGrubPackageInner::Package {
+                    name,
+                    extra,
+                    dev,
+                    url,
+                    marker: None,
+                } = &*package
+                {
+                    Some((
+                        ResolutionPackage {
+                            name: name.clone(),
+                            extra: extra.clone(),
+                            dev: dev.clone(),
+                            url: url.clone(),
+                        },
+                        FxHashSet::from_iter([version]),
+                    ))
+                } else {
+                    None
+                }
+            })
             .collect();
+
         Resolution {
             packages,
             dependencies,
@@ -1656,10 +1686,18 @@ impl SolveState {
 
 #[derive(Debug, Default)]
 pub(crate) struct Resolution {
-    pub(crate) packages: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
+    pub(crate) packages: FxHashMap<ResolutionPackage, FxHashSet<Version>>,
     pub(crate) dependencies:
         FxHashMap<ResolutionDependencyNames, FxHashSet<ResolutionDependencyVersions>>,
     pub(crate) pins: FilePins,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct ResolutionPackage {
+    pub(crate) name: PackageName,
+    pub(crate) extra: Option<ExtraName>,
+    pub(crate) dev: Option<GroupName>,
+    pub(crate) url: Option<VerbatimParsedUrl>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -1676,6 +1714,7 @@ pub(crate) struct ResolutionDependencyVersions {
     pub(crate) to_version: Version,
     pub(crate) to_extra: Option<ExtraName>,
     pub(crate) to_dev: Option<GroupName>,
+    pub(crate) marker: Option<MarkerTree>,
 }
 
 impl Resolution {
@@ -1712,8 +1751,8 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
         // N.B. This is almost identical to `ResolvedDistRef::to_owned`, but
         // creates a `Request` instead of a `ResolvedDist`. There's probably
         // some room for DRYing this up a bit. The obvious way would be to
-        // add a method to create a `Dist`, but a `Dist` cannot reprented an
-        // installed dist.
+        // add a method to create a `Dist`, but a `Dist` cannot be represented
+        // as an installed dist.
         match dist {
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized } => {
                 // This is okay because we're only here if the prioritized dist

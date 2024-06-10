@@ -53,8 +53,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # For a specific version.
-curl -LsSf https://astral.sh/uv/0.2.9/install.sh | sh
-powershell -c "irm https://astral.sh/uv/0.2.9/install.ps1 | iex"
+curl -LsSf https://astral.sh/uv/0.2.10/install.sh | sh
+powershell -c "irm https://astral.sh/uv/0.2.10/install.ps1 | iex"
 
 # With pip.
 pip install uv
@@ -180,18 +180,29 @@ search for a Python interpreter matching that version in the following order:
 
 ### Installing into arbitrary Python environments
 
-Since uv has no dependency on Python, it can even install into virtual environments other than
+Since uv has no dependency on Python, it can install into virtual environments other than
 its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to install into
-`/path/to/venv`, no matter where uv is installed.
+`/path/to/venv`, regardless of where uv is installed. Note that if `VIRTUAL_ENV` is set to
+a directory that is **not** a [PEP 405 compliant](https://peps.python.org/pep-0405/#specification)
+virtual environment, it will be ignored.
 
-uv can also install into arbitrary, even non-virtual environments by providing a `--python` argument
-to `uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python` will
-install into the environment linked to the `/path/to/python` interpreter.
+uv can also install into arbitrary, even non-virtual environments, with the `--python` argument
+provided to `uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python`
+will install into the environment linked to the `/path/to/python` interpreter.
 
-For convenience, `uv pip install --system` will install into the system Python environment, as an
-approximate shorthand for, e.g., `uv pip install --python=$(which python3)`. Though we generally
-recommend the use of virtual environments for dependency management, `--system` is intended to
-enable the use of uv in continuous integration and containerized environments.
+For convenience, `uv pip install --system` will install into the system Python environment.
+Using `--system` is roughly equivalent to `uv pip install --python=$(which python)`,
+but note that executables that are linked to virtual environments will be skipped.
+Although we generally recommend using virtual environments for dependency management,
+`--system` is appropriate in continuous integration and containerized environments.
+
+The `--system` flag is also used to opt in to mutating system environments. For example, the
+the `--python` argument can be used to request a Python version (e.g., `--python 3.12`), and uv will
+search for an interpreter that meets the request. If uv finds a system interpreter (e.g., `/usr/lib/python3.12`),
+then the `--system` flag is required to allow modification of this non-virtual Python environment.
+Without the `--system` flag, uv will ignore any interpreters that are not in virtual environments.
+Conversely, when the `--system` flag is provided, uv will ignore any interpreters that *are*
+in virtual environments.
 
 Installing into system Python across platforms and distributions is notoriously difficult. uv
 supports the common cases, but will not work in all cases. For example, installing into system
@@ -199,6 +210,11 @@ Python on Debian prior to Python 3.10 is unsupported due to the [distribution's 
 of `distutils` (but not `sysconfig`)](https://ffy00.github.io/blog/02-python-debian-and-the-install-locations/).
 While we always recommend the use of virtual environments, uv considers them to be required in
 these non-standard environments.
+
+If uv is installed in a Python environment, e.g., with `pip`, it can still be used to modify
+other environments. However, when invoked with `python -m uv`, uv will default to using the parent
+interpreter's environment. Invoking uv via Python adds startup overhead and is not recommended for
+general usage.
 
 ### Persistent configuration
 
@@ -513,6 +529,7 @@ tested or developed against, and so stability may vary in practice.
 
 Beyond the Tier 1 and Tier 2 platforms, uv is known to build on i686 Windows, and known _not_
 to build on aarch64 Windows, but does not consider either platform to be supported at this time.
+The minimum supported Windows version is Windows 10, following [Rust's own Tier 1 support](https://blog.rust-lang.org/2024/02/26/Windows-7.html).
 
 uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
 

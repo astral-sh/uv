@@ -3,7 +3,7 @@ use anyhow::Result;
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
-use uv_client::RegistryClientBuilder;
+use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy,
@@ -12,6 +12,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
+use uv_normalize::PackageName;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_toolchain::PythonEnvironment;
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -28,6 +29,7 @@ pub(crate) async fn sync(
     index_locations: IndexLocations,
     extras: ExtrasSpecification,
     dev: bool,
+    python: Option<String>,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -40,7 +42,13 @@ pub(crate) async fn sync(
     let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(project.workspace(), preview, cache, printer)?;
+    let venv = project::init_environment(
+        project.workspace(),
+        python.as_deref(),
+        preview,
+        cache,
+        printer,
+    )?;
 
     // Read the lockfile.
     let lock: Lock = {
@@ -51,7 +59,7 @@ pub(crate) async fn sync(
 
     // Perform the sync operation.
     do_sync(
-        &project,
+        project.project_name(),
         &venv,
         &lock,
         &index_locations,
@@ -69,7 +77,7 @@ pub(crate) async fn sync(
 /// Sync a lockfile with an environment.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn do_sync(
-    project: &ProjectWorkspace,
+    project: &PackageName,
     venv: &PythonEnvironment,
     lock: &Lock,
     index_locations: &IndexLocations,
@@ -100,7 +108,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(markers, tags, project.project_name(), &extras, &dev);
+    let resolution = lock.to_resolution(markers, tags, project, &extras, &dev)?;
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
@@ -116,7 +124,6 @@ pub(super) async fn do_sync(
     let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
     let dry_run = false;
-    let flat_index = FlatIndex::default();
     let git = GitResolver::default();
     let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
@@ -126,6 +133,13 @@ pub(super) async fn do_sync(
     let no_build = NoBuild::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(entries, Some(tags), &hasher, &no_build, &no_binary)
+    };
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

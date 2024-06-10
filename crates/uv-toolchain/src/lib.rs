@@ -57,6 +57,12 @@ pub enum Error {
     PyLauncher(#[from] py_launcher::Error),
 
     #[error(transparent)]
+    ManagedToolchain(#[from] managed::Error),
+
+    #[error(transparent)]
+    Download(#[from] downloads::Error),
+
+    #[error(transparent)]
     NotFound(#[from] ToolchainNotFound),
 }
 
@@ -150,7 +156,7 @@ mod tests {
             let mut run_vars = vec![
                 // Ensure `PATH` is used
                 ("UV_TEST_PYTHON_PATH", None),
-                // Ignore active virtual envrionments (i.e. that the dev is using)
+                // Ignore active virtual environments (i.e. that the dev is using)
                 ("VIRTUAL_ENV", None),
                 ("PATH", path.as_deref()),
                 // Use the temporary toolchain directory
@@ -1292,7 +1298,7 @@ mod tests {
         assert_eq!(
             toolchain.interpreter().python_full_version().to_string(),
             "3.10.0",
-            "We should find the named executbale"
+            "We should find the named executable"
         );
 
         let result = context.run(|| {
@@ -1478,7 +1484,7 @@ mod tests {
             "We should find the absolute venv path"
         );
 
-        // We should allow it to be a directory that _looks_ like a virtual environmnet
+        // We should allow it to be a directory that _looks_ like a virtual environment.
         let python = context.tempdir.child("bar").join("bin").join("python");
         TestContext::create_mock_interpreter(
             &python,

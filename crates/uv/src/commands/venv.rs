@@ -14,7 +14,7 @@ use install_wheel_rs::linker::LinkMode;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
-use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, KeyringProviderType, PreviewMode};
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
@@ -119,10 +119,21 @@ async fn venv_impl(
     cache: &Cache,
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
+    let client_builder = BaseClientBuilder::default()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
     // Locate the Python interpreter to use in the environment
-    let interpreter = Toolchain::find(python_request, SystemPython::Required, preview, cache)
-        .into_diagnostic()?
-        .into_interpreter();
+    let interpreter = Toolchain::find_or_fetch(
+        python_request,
+        SystemPython::Required,
+        preview,
+        client_builder,
+        cache,
+    )
+    .await
+    .into_diagnostic()?
+    .into_interpreter();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -180,7 +191,7 @@ async fn venv_impl(
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(
                 entries,
-                tags,
+                Some(tags),
                 &HashStrategy::None,
                 &NoBuild::All,
                 &NoBinary::None,

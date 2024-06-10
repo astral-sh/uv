@@ -1,11 +1,20 @@
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::fmt::{self, Formatter};
+use std::{env, io};
+use std::{path::Path, path::PathBuf, str::FromStr};
+
 use itertools::Itertools;
+use pep440_rs::{Version, VersionSpecifiers};
+use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
+use which::which;
+
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
-use which::which;
 
 use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::interpreter::Error as InterpreterError;
@@ -17,23 +26,16 @@ use crate::virtualenv::{
     virtualenv_python_executable,
 };
 use crate::{Interpreter, PythonVersion};
-use std::borrow::Cow;
-
-use std::collections::HashSet;
-use std::fmt::{self, Formatter};
-use std::num::ParseIntError;
-use std::{env, io};
-use std::{path::Path, path::PathBuf, str::FromStr};
 
 /// A request to find a Python toolchain.
 ///
-/// See [`InterpreterRequest::from_str`].
+/// See [`ToolchainRequest::from_str`].
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ToolchainRequest {
     /// Use any discovered Python toolchain
     #[default]
     Any,
-    /// A Python version without an implementation name e.g. `3.10`
+    /// A Python version without an implementation name e.g. `3.10` or `>=3.12,<3.13`
     Version(VersionRequest),
     /// A path to a directory containing a Python installation, e.g. `.venv`
     Directory(PathBuf),
@@ -61,13 +63,14 @@ pub enum ToolchainSources {
 }
 
 /// A Python toolchain version request.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum VersionRequest {
     #[default]
     Any,
     Major(u8),
     MajorMinor(u8, u8),
     MajorMinorPatch(u8, u8, u8),
+    Range(VersionSpecifiers),
 }
 
 /// The policy for discovery of "system" Python interpreters.
@@ -156,6 +159,10 @@ pub enum Error {
     /// An error was encountered when using the `py` launcher on Windows.
     #[error(transparent)]
     PyLauncher(#[from] crate::py_launcher::Error),
+
+    /// An invalid version request was given
+    #[error("Invalid version request: {0}")]
+    InvalidVersionRequest(String),
 
     #[error("Interpreter discovery for `{0}` requires `{1}` but it is not selected; the following are selected: {2}")]
     SourceNotSelected(ToolchainRequest, ToolchainSource, ToolchainSources),
@@ -436,6 +443,10 @@ fn should_stop_discovery(err: &Error) -> bool {
                 trace!("Skipping bad interpreter at {}", path.display());
                 false
             }
+            InterpreterError::NotFound(path) => {
+                trace!("Skipping missing interpreter at {}", path.display());
+                false
+            }
         },
         _ => true,
     }
@@ -561,7 +572,7 @@ pub(crate) fn find_toolchain(
                     ToolchainNotFound::NoMatchingImplementationVersion(
                         sources.clone(),
                         *implementation,
-                        *version,
+                        version.clone(),
                     ),
                 ));
             };
@@ -606,9 +617,9 @@ pub(crate) fn find_toolchain(
                     .transpose()?
             else {
                 let err = if matches!(version, VersionRequest::Any) {
-                    ToolchainNotFound::NoPythonInstallation(sources.clone(), Some(*version))
+                    ToolchainNotFound::NoPythonInstallation(sources.clone(), Some(version.clone()))
                 } else {
-                    ToolchainNotFound::NoMatchingVersion(sources.clone(), *version)
+                    ToolchainNotFound::NoMatchingVersion(sources.clone(), version.clone())
                 };
                 return Ok(ToolchainResult::Err(err));
             };
@@ -677,14 +688,17 @@ pub fn find_best_toolchain(
     if let Some(request) = match request {
         ToolchainRequest::Version(version) => {
             if version.has_patch() {
-                Some(ToolchainRequest::Version((*version).without_patch()))
+                Some(ToolchainRequest::Version(version.clone().without_patch()))
             } else {
                 None
             }
         }
-        ToolchainRequest::ImplementationVersion(implementation, version) => Some(
-            ToolchainRequest::ImplementationVersion(*implementation, (*version).without_patch()),
-        ),
+        ToolchainRequest::ImplementationVersion(implementation, version) => {
+            Some(ToolchainRequest::ImplementationVersion(
+                *implementation,
+                version.clone().without_patch(),
+            ))
+        }
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
@@ -699,7 +713,7 @@ pub fn find_best_toolchain(
     debug!("Looking for Python toolchain with any version");
     let request = ToolchainRequest::Any;
     Ok(find_toolchain(
-        // TODO(zanieb): Add a dedicated `Default` variant to `InterpreterRequest`
+        // TODO(zanieb): Add a dedicated `Default` variant to `ToolchainRequest`
         &request, system, &sources, cache,
     )?
     .map_err(|err| {
@@ -860,7 +874,7 @@ fn is_windows_store_shim(_path: &Path) -> bool {
 impl ToolchainRequest {
     /// Create a request from a string.
     ///
-    /// This cannot fail, which means weird inputs will be parsed as [`InterpreterRequest::File`] or [`InterpreterRequest::ExecutableName`].
+    /// This cannot fail, which means weird inputs will be parsed as [`ToolchainRequest::File`] or [`ToolchainRequest::ExecutableName`].
     pub fn parse(value: &str) -> Self {
         // e.g. `3.12.1`
         if let Ok(version) = VersionRequest::from_str(value) {
@@ -934,10 +948,97 @@ impl ToolchainRequest {
         // e.g. foo.exe
         Self::ExecutableName(value.to_string())
     }
+
+    /// Check if a given interpreter satisfies the interpreter request.
+    pub fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
+        /// Returns `true` if the two paths refer to the same interpreter executable.
+        fn is_same_executable(path1: &Path, path2: &Path) -> bool {
+            path1 == path2 || is_same_file(path1, path2).unwrap_or(false)
+        }
+
+        match self {
+            ToolchainRequest::Any => true,
+            ToolchainRequest::Version(version_request) => {
+                version_request.matches_interpreter(interpreter)
+            }
+            ToolchainRequest::Directory(directory) => {
+                // `sys.prefix` points to the venv root.
+                is_same_executable(directory, interpreter.sys_prefix())
+            }
+            ToolchainRequest::File(file) => {
+                // The interpreter satisfies the request both if it is the venv...
+                if is_same_executable(interpreter.sys_executable(), file) {
+                    return true;
+                }
+                // ...or if it is the base interpreter the venv was created from.
+                if interpreter
+                    .sys_base_executable()
+                    .is_some_and(|sys_base_executable| {
+                        is_same_executable(sys_base_executable, file)
+                    })
+                {
+                    return true;
+                }
+                // ...or, on Windows, if both interpreters have the same base executable. On
+                // Windows, interpreters are copied rather than symlinked, so a virtual environment
+                // created from within a virtual environment will _not_ evaluate to the same
+                // `sys.executable`, but will have the same `sys._base_executable`.
+                if cfg!(windows) {
+                    if let Ok(file_interpreter) = Interpreter::query(file, cache) {
+                        if let (Some(file_base), Some(interpreter_base)) = (
+                            file_interpreter.sys_base_executable(),
+                            interpreter.sys_base_executable(),
+                        ) {
+                            if is_same_executable(file_base, interpreter_base) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            ToolchainRequest::ExecutableName(name) => {
+                // First, see if we have a match in the venv ...
+                if interpreter
+                    .sys_executable()
+                    .file_name()
+                    .is_some_and(|filename| filename == name.as_str())
+                {
+                    return true;
+                }
+                // ... or the venv's base interpreter (without performing IO), if that fails, ...
+                if interpreter
+                    .sys_base_executable()
+                    .and_then(|executable| executable.file_name())
+                    .is_some_and(|file_name| file_name == name.as_str())
+                {
+                    return true;
+                }
+                // ... check in `PATH`. The name we find here does not need to be the
+                // name we install, so we can find `foopython` here which got installed as `python`.
+                if which(name)
+                    .ok()
+                    .as_ref()
+                    .and_then(|executable| executable.file_name())
+                    .is_some_and(|file_name| file_name == name.as_str())
+                {
+                    return true;
+                }
+                false
+            }
+            ToolchainRequest::Implementation(implementation) => {
+                interpreter.implementation_name() == implementation.as_str()
+            }
+            ToolchainRequest::ImplementationVersion(implementation, version) => {
+                version.matches_interpreter(interpreter)
+                    && interpreter.implementation_name() == implementation.as_str()
+            }
+        }
+    }
 }
 
 impl VersionRequest {
-    pub(crate) fn default_names(self) -> [Option<Cow<'static, str>>; 4] {
+    pub(crate) fn default_names(&self) -> [Option<Cow<'static, str>>; 4] {
         let (python, python3, extension) = if cfg!(windows) {
             (
                 Cow::Borrowed("python.exe"),
@@ -949,7 +1050,7 @@ impl VersionRequest {
         };
 
         match self {
-            Self::Any => [Some(python3), Some(python), None, None],
+            Self::Any | Self::Range(_) => [Some(python3), Some(python), None, None],
             Self::Major(major) => [
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
@@ -992,7 +1093,7 @@ impl VersionRequest {
                 };
 
                 match self {
-                    Self::Any => [Some(python3), Some(python), None, None],
+                    Self::Any | Self::Range(_) => [Some(python3), Some(python), None, None],
                     Self::Major(major) => [
                         Some(Cow::Owned(format!("{name}{major}{extension}"))),
                         Some(python),
@@ -1020,56 +1121,87 @@ impl VersionRequest {
     }
 
     /// Check if a interpreter matches the requested Python version.
-    fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
+    fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         match self {
             Self::Any => true,
-            Self::Major(major) => interpreter.python_major() == major,
+            Self::Major(major) => interpreter.python_major() == *major,
             Self::MajorMinor(major, minor) => {
-                (interpreter.python_major(), interpreter.python_minor()) == (major, minor)
+                (interpreter.python_major(), interpreter.python_minor()) == (*major, *minor)
             }
             Self::MajorMinorPatch(major, minor, patch) => {
                 (
                     interpreter.python_major(),
                     interpreter.python_minor(),
                     interpreter.python_patch(),
-                ) == (major, minor, patch)
+                ) == (*major, *minor, *patch)
             }
+            Self::Range(specifiers) => specifiers.contains(interpreter.python_version()),
         }
     }
 
-    fn matches_version(self, version: &PythonVersion) -> bool {
+    pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
             Self::Any => true,
-            Self::Major(major) => version.major() == major,
-            Self::MajorMinor(major, minor) => (version.major(), version.minor()) == (major, minor),
+            Self::Major(major) => version.major() == *major,
+            Self::MajorMinor(major, minor) => {
+                (version.major(), version.minor()) == (*major, *minor)
+            }
             Self::MajorMinorPatch(major, minor, patch) => {
-                (version.major(), version.minor(), version.patch()) == (major, minor, Some(patch))
+                (version.major(), version.minor(), version.patch())
+                    == (*major, *minor, Some(*patch))
+            }
+            Self::Range(specifiers) => specifiers.contains(&version.version),
+        }
+    }
+
+    fn matches_major_minor(&self, major: u8, minor: u8) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Major(self_major) => *self_major == major,
+            Self::MajorMinor(self_major, self_minor) => {
+                (*self_major, *self_minor) == (major, minor)
+            }
+            Self::MajorMinorPatch(self_major, self_minor, _) => {
+                (*self_major, *self_minor) == (major, minor)
+            }
+            Self::Range(specifiers) => {
+                specifiers.contains(&Version::new([u64::from(major), u64::from(minor)]))
             }
         }
     }
 
-    fn matches_major_minor(self, major: u8, minor: u8) -> bool {
+    pub(crate) fn matches_major_minor_patch(&self, major: u8, minor: u8, patch: u8) -> bool {
         match self {
             Self::Any => true,
-            Self::Major(self_major) => self_major == major,
-            Self::MajorMinor(self_major, self_minor) => (self_major, self_minor) == (major, minor),
-            Self::MajorMinorPatch(self_major, self_minor, _) => {
-                (self_major, self_minor) == (major, minor)
+            Self::Major(self_major) => *self_major == major,
+            Self::MajorMinor(self_major, self_minor) => {
+                (*self_major, *self_minor) == (major, minor)
             }
+            Self::MajorMinorPatch(self_major, self_minor, self_patch) => {
+                (*self_major, *self_minor, *self_patch) == (major, minor, patch)
+            }
+            Self::Range(specifiers) => specifiers.contains(&Version::new([
+                u64::from(major),
+                u64::from(minor),
+                u64::from(patch),
+            ])),
         }
     }
 
     /// Return true if a patch version is present in the request.
-    fn has_patch(self) -> bool {
+    fn has_patch(&self) -> bool {
         match self {
             Self::Any => false,
             Self::Major(..) => false,
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
+            Self::Range(_) => false,
         }
     }
 
-    /// Return a new `VersionRequest` without the patch version.
+    /// Return a new [`VersionRequest`] without the patch version if possible.
+    ///
+    /// If the patch version is not present, it is returned unchanged.
     #[must_use]
     fn without_patch(self) -> Self {
         match self {
@@ -1077,30 +1209,38 @@ impl VersionRequest {
             Self::Major(major) => Self::Major(major),
             Self::MajorMinor(major, minor) => Self::MajorMinor(major, minor),
             Self::MajorMinorPatch(major, minor, _) => Self::MajorMinor(major, minor),
+            Self::Range(_) => self,
         }
     }
 }
 
 impl FromStr for VersionRequest {
-    type Err = ParseIntError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let versions = s
+        // e.g. `3.12.1`
+        if let Ok(versions) = s
             .splitn(3, '.')
             .map(str::parse::<u8>)
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()
+        {
+            let selector = match versions.as_slice() {
+                // e.g. `3`
+                [major] => VersionRequest::Major(*major),
+                // e.g. `3.10`
+                [major, minor] => VersionRequest::MajorMinor(*major, *minor),
+                // e.g. `3.10.4`
+                [major, minor, patch] => VersionRequest::MajorMinorPatch(*major, *minor, *patch),
+                _ => unreachable!(),
+            };
 
-        let selector = match versions.as_slice() {
-            // e.g. `3`
-            [major] => VersionRequest::Major(*major),
-            // e.g. `3.10`
-            [major, minor] => VersionRequest::MajorMinor(*major, *minor),
-            // e.g. `3.10.4`
-            [major, minor, patch] => VersionRequest::MajorMinorPatch(*major, *minor, *patch),
-            _ => unreachable!(),
-        };
-
-        Ok(selector)
+            Ok(selector)
+        // e.g. `>=3.12.1,<3.12`
+        } else if let Ok(specifiers) = VersionSpecifiers::from_str(s) {
+            Ok(Self::Range(specifiers))
+        } else {
+            Err(Error::InvalidVersionRequest(s.to_string()))
+        }
     }
 }
 
@@ -1120,6 +1260,7 @@ impl fmt::Display for VersionRequest {
             Self::MajorMinorPatch(major, minor, patch) => {
                 write!(f, "{major}.{minor}.{patch}")
             }
+            Self::Range(specifiers) => write!(f, "{specifiers}"),
         }
     }
 }
@@ -1342,12 +1483,10 @@ impl fmt::Display for ToolchainSources {
 
 #[cfg(test)]
 mod tests {
-
     use std::{path::PathBuf, str::FromStr};
 
-    use test_log::test;
-
     use assert_fs::{prelude::*, TempDir};
+    use test_log::test;
 
     use crate::{
         discovery::{ToolchainRequest, VersionRequest},
@@ -1359,6 +1498,14 @@ mod tests {
         assert_eq!(
             ToolchainRequest::parse("3.12"),
             ToolchainRequest::Version(VersionRequest::from_str("3.12").unwrap())
+        );
+        assert_eq!(
+            ToolchainRequest::parse(">=3.12"),
+            ToolchainRequest::Version(VersionRequest::from_str(">=3.12").unwrap())
+        );
+        assert_eq!(
+            ToolchainRequest::parse(">=3.12,<3.13"),
+            ToolchainRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
         );
         assert_eq!(
             ToolchainRequest::parse("foo"),
@@ -1424,14 +1571,17 @@ mod tests {
 
     #[test]
     fn version_request_from_str() {
-        assert_eq!(VersionRequest::from_str("3"), Ok(VersionRequest::Major(3)));
         assert_eq!(
-            VersionRequest::from_str("3.12"),
-            Ok(VersionRequest::MajorMinor(3, 12))
+            VersionRequest::from_str("3").unwrap(),
+            VersionRequest::Major(3)
         );
         assert_eq!(
-            VersionRequest::from_str("3.12.1"),
-            Ok(VersionRequest::MajorMinorPatch(3, 12, 1))
+            VersionRequest::from_str("3.12").unwrap(),
+            VersionRequest::MajorMinor(3, 12)
+        );
+        assert_eq!(
+            VersionRequest::from_str("3.12.1").unwrap(),
+            VersionRequest::MajorMinorPatch(3, 12, 1)
         );
         assert!(VersionRequest::from_str("1.foo.1").is_err());
     }

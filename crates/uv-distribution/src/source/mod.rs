@@ -1411,7 +1411,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 return Ok(Some(metadata));
             }
-            Err(err @ (Error::MissingPkgInfo | Error::DynamicPkgInfo(_))) => {
+            Err(
+                err @ (Error::MissingPkgInfo
+                | Error::PkgInfo(
+                    pypi_types::MetadataError::Pep508Error(_)
+                    | pypi_types::MetadataError::DynamicField(_)
+                    | pypi_types::MetadataError::FieldNotFound(_)
+                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_)
+                    | pypi_types::MetadataError::PoetrySyntax,
+                )),
+            ) => {
                 debug!("No static `PKG-INFO` available for: {source} ({err:?})");
             }
             Err(err) => return Err(err),
@@ -1427,7 +1436,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 return Ok(Some(metadata));
             }
-            Err(err @ (Error::MissingPyprojectToml | Error::DynamicPyprojectToml(_))) => {
+            Err(
+                err @ (Error::MissingPyprojectToml
+                | Error::PyprojectToml(
+                    pypi_types::MetadataError::Pep508Error(_)
+                    | pypi_types::MetadataError::DynamicField(_)
+                    | pypi_types::MetadataError::FieldNotFound(_)
+                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_)
+                    | pypi_types::MetadataError::PoetrySyntax,
+                )),
+            ) => {
                 debug!("No static `pyproject.toml` available for: {source} ({err:?})");
             }
             Err(err) => return Err(err),
@@ -1602,7 +1620,7 @@ async fn read_pkg_info(
     };
 
     // Parse the metadata.
-    let metadata = Metadata23::parse_pkg_info(&content).map_err(Error::DynamicPkgInfo)?;
+    let metadata = Metadata23::parse_pkg_info(&content).map_err(Error::PkgInfo)?;
 
     Ok(metadata)
 }
@@ -1627,8 +1645,7 @@ async fn read_pyproject_toml(
     };
 
     // Parse the metadata.
-    let metadata =
-        Metadata23::parse_pyproject_toml(&content).map_err(Error::DynamicPyprojectToml)?;
+    let metadata = Metadata23::parse_pyproject_toml(&content).map_err(Error::PyprojectToml)?;
 
     Ok(metadata)
 }
@@ -1646,8 +1663,8 @@ async fn read_requires_dist(project_root: &Path) -> Result<pypi_types::RequiresD
     };
 
     // Parse the metadata.
-    let requires_dist = pypi_types::RequiresDist::parse_pyproject_toml(&content)
-        .map_err(Error::DynamicPyprojectToml)?;
+    let requires_dist =
+        pypi_types::RequiresDist::parse_pyproject_toml(&content).map_err(Error::PyprojectToml)?;
 
     Ok(requires_dist)
 }

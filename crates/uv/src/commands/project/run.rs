@@ -4,12 +4,11 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use distribution_types::IndexLocations;
 use itertools::Itertools;
-use tempfile::tempdir_in;
 use tokio::process::Command;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_normalize::PackageName;
@@ -40,6 +39,8 @@ pub(crate) async fn run(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let client_builder = BaseClientBuilder::new().connectivity(connectivity);
+
     if preview.is_disabled() {
         warn_user!("`uv run` is experimental and may change without warning.");
     }
@@ -61,7 +62,13 @@ pub(crate) async fn run(
         } else {
             ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
         };
-        let venv = project::init_environment(project.workspace(), preview, cache, printer)?;
+        let venv = project::init_environment(
+            project.workspace(),
+            python.as_deref(),
+            preview,
+            cache,
+            printer,
+        )?;
 
         // Lock and sync the environment.
         let root_project_name = project
@@ -83,7 +90,7 @@ pub(crate) async fn run(
         )
         .await?;
         project::sync::do_sync(
-            &project,
+            project.project_name(),
             &venv,
             &lock,
             &index_locations,
@@ -99,7 +106,7 @@ pub(crate) async fn run(
     };
 
     // If necessary, create an environment for the ephemeral requirements.
-    let tmpdir;
+    let temp_dir;
     let ephemeral_env = if requirements.is_empty() {
         None
     } else {
@@ -110,12 +117,14 @@ pub(crate) async fn run(
             project_env.interpreter().clone()
         } else {
             // Note we force preview on during `uv run` for now since the entire interface is in preview
-            Toolchain::find(
+            Toolchain::find_or_fetch(
                 python.as_deref(),
                 SystemPython::Allowed,
                 PreviewMode::Enabled,
+                client_builder,
                 cache,
-            )?
+            )
+            .await?
             .into_interpreter()
         };
 
@@ -125,12 +134,9 @@ pub(crate) async fn run(
         // environment.
 
         // Create a virtual environment
-        // TODO(zanieb): Move this path derivation elsewhere
-        let uv_state_path = std::env::current_dir()?.join(".uv");
-        fs_err::create_dir_all(&uv_state_path)?;
-        tmpdir = tempdir_in(uv_state_path)?;
+        temp_dir = cache.environment()?;
         let venv = uv_virtualenv::create_venv(
-            tmpdir.path(),
+            temp_dir.path(),
             interpreter,
             uv_virtualenv::Prompt::None,
             false,

@@ -9,6 +9,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use either::Either;
 use indexmap::IndexMap;
+use petgraph::visit::EdgeRef;
 use rustc_hash::FxHashMap;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
@@ -62,9 +63,10 @@ impl Lock {
             let dist = &graph.petgraph[node_index];
             if dist.is_base() {
                 let mut locked_dist = Distribution::from_annotated_dist(dist)?;
-                for neighbor in graph.petgraph.neighbors(node_index) {
-                    let dependency_dist = &graph.petgraph[neighbor];
-                    locked_dist.add_dependency(dependency_dist);
+                for edge in graph.petgraph.edges(node_index) {
+                    let dependency_dist = &graph.petgraph[edge.target()];
+                    let marker = edge.weight().as_ref();
+                    locked_dist.add_dependency(dependency_dist, marker);
                 }
                 let id = locked_dist.id.clone();
                 if let Some(locked_dist) = locked_dists.insert(id, locked_dist) {
@@ -81,9 +83,10 @@ impl Lock {
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
                     return Err(LockError::missing_extra_base(id, extra.clone()));
                 };
-                for neighbor in graph.petgraph.neighbors(node_index) {
-                    let dependency_dist = &graph.petgraph[neighbor];
-                    locked_dist.add_optional_dependency(extra.clone(), dependency_dist);
+                for edge in graph.petgraph.edges(node_index) {
+                    let dependency_dist = &graph.petgraph[edge.target()];
+                    let marker = edge.weight().as_ref();
+                    locked_dist.add_optional_dependency(extra.clone(), dependency_dist, marker);
                 }
             }
             if let Some(group) = dist.dev.as_ref() {
@@ -91,9 +94,10 @@ impl Lock {
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
                     return Err(LockError::missing_dev_base(id, group.clone()));
                 };
-                for neighbor in graph.petgraph.neighbors(node_index) {
-                    let dependency_dist = &graph.petgraph[neighbor];
-                    locked_dist.add_dev_dependency(group.clone(), dependency_dist);
+                for edge in graph.petgraph.edges(node_index) {
+                    let dependency_dist = &graph.petgraph[edge.target()];
+                    let marker = edge.weight().as_ref();
+                    locked_dist.add_dev_dependency(group.clone(), dependency_dist, marker);
                 }
             }
         }
@@ -135,7 +139,7 @@ impl Lock {
         root_name: &PackageName,
         extras: &ExtrasSpecification,
         dev: &[GroupName],
-    ) -> Resolution {
+    ) -> Result<Resolution, LockError> {
         let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
 
         // Add the root distribution to the queue.
@@ -176,22 +180,22 @@ impl Lock {
                 };
 
             for dep in deps {
-                let dep_dist = self.find_by_id(&dep.distribution_id);
-                if dep_dist
+                if dep
                     .marker
                     .as_ref()
                     .map_or(true, |marker| marker.evaluate(marker_env, &[]))
                 {
+                    let dep_dist = self.find_by_id(&dep.distribution_id);
                     let dep_extra = dep.extra.as_ref();
                     queue.push_back((dep_dist, dep_extra));
                 }
             }
             let name = dist.id.name.clone();
-            let resolved_dist = ResolvedDist::Installable(dist.to_dist(tags));
+            let resolved_dist = ResolvedDist::Installable(dist.to_dist(tags)?);
             map.insert(name, resolved_dist);
         }
         let diagnostics = vec![];
-        Resolution::new(map, diagnostics)
+        Ok(Resolution::new(map, diagnostics))
     }
 
     /// Returns the distribution with the given name. If there are multiple
@@ -258,10 +262,6 @@ impl Lock {
             table.insert("name", value(dist.id.name.to_string()));
             table.insert("version", value(dist.id.version.to_string()));
             table.insert("source", value(dist.id.source.to_string()));
-
-            if let Some(ref marker) = dist.marker {
-                table.insert("marker", value(marker.to_string()));
-            }
 
             if let Some(ref sdist) = dist.sdist {
                 table.insert("sdist", value(sdist.to_toml()?));
@@ -491,8 +491,6 @@ pub struct Distribution {
     #[serde(flatten)]
     pub(crate) id: DistributionId,
     #[serde(default)]
-    marker: Option<MarkerTree>,
-    #[serde(default)]
     sdist: Option<SourceDist>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     wheels: Vec<Wheel>,
@@ -507,17 +505,10 @@ pub struct Distribution {
 impl Distribution {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Self, LockError> {
         let id = DistributionId::from_annotated_dist(annotated_dist);
-        let mut marker = annotated_dist.marker.clone();
-        // Markers can be combined in an unpredictable order, so normalize them
-        // such that the lock file output is consistent and deterministic.
-        if let Some(ref mut marker) = marker {
-            crate::marker::normalize(marker);
-        }
         let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
         Ok(Distribution {
             id,
-            marker,
             sdist,
             wheels,
             dependencies: vec![],
@@ -527,28 +518,39 @@ impl Distribution {
     }
 
     /// Add the [`AnnotatedDist`] as a dependency of the [`Distribution`].
-    fn add_dependency(&mut self, annotated_dist: &AnnotatedDist) {
+    fn add_dependency(&mut self, annotated_dist: &AnnotatedDist, marker: Option<&MarkerTree>) {
         self.dependencies
-            .push(Dependency::from_annotated_dist(annotated_dist));
+            .push(Dependency::from_annotated_dist(annotated_dist, marker));
     }
 
     /// Add the [`AnnotatedDist`] as an optional dependency of the [`Distribution`].
-    fn add_optional_dependency(&mut self, extra: ExtraName, annotated_dist: &AnnotatedDist) {
-        let dep = Dependency::from_annotated_dist(annotated_dist);
+    fn add_optional_dependency(
+        &mut self,
+        extra: ExtraName,
+        annotated_dist: &AnnotatedDist,
+        marker: Option<&MarkerTree>,
+    ) {
         self.optional_dependencies
             .entry(extra)
             .or_default()
-            .push(dep);
+            .push(Dependency::from_annotated_dist(annotated_dist, marker));
     }
 
     /// Add the [`AnnotatedDist`] as a development dependency of the [`Distribution`].
-    fn add_dev_dependency(&mut self, dev: GroupName, annotated_dist: &AnnotatedDist) {
-        let dep = Dependency::from_annotated_dist(annotated_dist);
-        self.dev_dependencies.entry(dev).or_default().push(dep);
+    fn add_dev_dependency(
+        &mut self,
+        dev: GroupName,
+        annotated_dist: &AnnotatedDist,
+        marker: Option<&MarkerTree>,
+    ) {
+        self.dev_dependencies
+            .entry(dev)
+            .or_default()
+            .push(Dependency::from_annotated_dist(annotated_dist, marker));
     }
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
-    fn to_dist(&self, tags: &Tags) -> Dist {
+    fn to_dist(&self, tags: &Tags) -> Result<Dist, LockError> {
         if let Some(best_wheel_index) = self.find_best_wheel(tags) {
             return match &self.id.source.kind {
                 SourceKind::Registry => {
@@ -562,7 +564,7 @@ impl Distribution {
                         best_wheel_index,
                         sdist: None,
                     };
-                    Dist::Built(BuiltDist::Registry(reg_built_dist))
+                    Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
                 }
                 SourceKind::Path => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
@@ -572,7 +574,7 @@ impl Distribution {
                         path: self.id.source.url.to_file_path().unwrap(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
-                    Dist::Built(built_dist)
+                    Ok(Dist::Built(built_dist))
                 }
                 SourceKind::Direct(direct) => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
@@ -586,16 +588,15 @@ impl Distribution {
                         url: VerbatimUrl::from_url(url),
                     };
                     let built_dist = BuiltDist::DirectUrl(direct_dist);
-                    Dist::Built(built_dist)
+                    Ok(Dist::Built(built_dist))
                 }
-                SourceKind::Git(_) => {
-                    unreachable!("Wheels cannot come from Git sources")
-                }
-                SourceKind::Directory => {
-                    unreachable!("Wheels cannot come from directory sources")
-                }
+                SourceKind::Git(_) => Err(LockError::invalid_wheel_source(self.id.clone(), "Git")),
+                SourceKind::Directory => Err(LockError::invalid_wheel_source(
+                    self.id.clone(),
+                    "directory",
+                )),
                 SourceKind::Editable => {
-                    unreachable!("Wheels cannot come from editable sources")
+                    Err(LockError::invalid_wheel_source(self.id.clone(), "editable"))
                 }
             };
         }
@@ -609,7 +610,7 @@ impl Distribution {
                         path: self.id.source.url.to_file_path().unwrap(),
                     };
                     let source_dist = distribution_types::SourceDist::Path(path_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Directory => {
                     let dir_dist = DirectorySourceDist {
@@ -619,7 +620,7 @@ impl Distribution {
                         editable: false,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Editable => {
                     let dir_dist = DirectorySourceDist {
@@ -629,7 +630,7 @@ impl Distribution {
                         editable: true,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Git(git) => {
                     // Reconstruct the `GitUrl` from the `GitSource`.
@@ -652,7 +653,7 @@ impl Distribution {
                         subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
                     };
                     let source_dist = distribution_types::SourceDist::Git(git_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Direct(direct) => {
                     let url = Url::from(ParsedArchiveUrl {
@@ -666,7 +667,7 @@ impl Distribution {
                         url: VerbatimUrl::from_url(url),
                     };
                     let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
                 SourceKind::Registry => {
                     let file = Box::new(distribution_types::File {
@@ -688,13 +689,12 @@ impl Distribution {
                         wheels: vec![],
                     };
                     let source_dist = distribution_types::SourceDist::Registry(reg_dist);
-                    Dist::Source(source_dist)
+                    Ok(Dist::Source(source_dist))
                 }
             };
         }
 
-        // TODO: Convert this to a deserialization error.
-        panic!("invalid lock distribution")
+        Err(LockError::neither_source_dist_nor_wheel(self.id.clone()))
     }
 
     fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
@@ -1469,15 +1469,27 @@ struct Dependency {
     distribution_id: DistributionId,
     #[serde(skip_serializing_if = "Option::is_none")]
     extra: Option<ExtraName>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    marker: Option<MarkerTree>,
 }
 
 impl Dependency {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Dependency {
+    fn from_annotated_dist(
+        annotated_dist: &AnnotatedDist,
+        marker: Option<&MarkerTree>,
+    ) -> Dependency {
         let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.clone();
+        let mut marker = marker.cloned();
+        // Markers can be combined in an unpredictable order, so normalize them
+        // such that the lock file output is consistent and deterministic.
+        if let Some(ref mut marker) = marker {
+            crate::marker::normalize(marker);
+        }
         Dependency {
             distribution_id,
             extra,
+            marker,
         }
     }
 
@@ -1489,6 +1501,9 @@ impl Dependency {
         table.insert("source", value(self.distribution_id.source.to_string()));
         if let Some(ref extra) = self.extra {
             table.insert("extra", value(extra.to_string()));
+        }
+        if let Some(ref marker) = self.marker {
+            table.insert("marker", value(marker.to_string()));
         }
 
         table
@@ -1573,6 +1588,15 @@ impl<'de> serde::Deserialize<'de> for Hash {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LockError {
     kind: Box<LockErrorKind>,
+}
+
+impl LockError {
+    fn neither_source_dist_nor_wheel(id: DistributionId) -> LockError {
+        let kind = LockErrorKind::NeitherSourceDistNorWheel { id };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
 }
 
 impl LockError {
@@ -1674,6 +1698,13 @@ impl LockError {
             kind: Box::new(kind),
         }
     }
+
+    fn invalid_wheel_source(id: DistributionId, source: &'static str) -> LockError {
+        let kind = LockErrorKind::InvalidWheelSource { id, source };
+        LockError {
+            kind: Box::new(kind),
+        }
+    }
 }
 
 impl std::error::Error for LockError {
@@ -1689,6 +1720,8 @@ impl std::error::Error for LockError {
             LockErrorKind::Hash { .. } => None,
             LockErrorKind::MissingExtraBase { .. } => None,
             LockErrorKind::MissingDevBase { .. } => None,
+            LockErrorKind::InvalidWheelSource { .. } => None,
+            LockErrorKind::NeitherSourceDistNorWheel { .. } => None,
         }
     }
 }
@@ -1778,6 +1811,15 @@ impl std::fmt::Display for LockError {
                 write!(
                     f,
                     "found distribution `{id}` with development dependency group `{group}` but no base distribution",
+                )
+            }
+            LockErrorKind::InvalidWheelSource { ref id, source } => {
+                write!(f, "wheels cannot come from {source} sources")
+            }
+            LockErrorKind::NeitherSourceDistNorWheel { ref id } => {
+                write!(
+                    f,
+                    "found distribution {id} with neither wheels nor source distribution"
                 )
             }
         }
@@ -1877,6 +1919,18 @@ enum LockErrorKind {
         id: DistributionId,
         /// The development dependency group that was found.
         group: GroupName,
+    },
+    /// An error that occurs from an invalid lockfile where a wheel comes from a non-wheel source
+    /// such as a directory.
+    InvalidWheelSource {
+        /// The ID of the distribution that has a missing base.
+        id: DistributionId,
+        /// The kind of the invalid source.
+        source: &'static str,
+    },
+    NeitherSourceDistNorWheel {
+        /// The ID of the distribution that has a missing base.
+        id: DistributionId,
     },
 }
 

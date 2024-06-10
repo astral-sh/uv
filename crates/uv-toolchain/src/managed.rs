@@ -5,14 +5,50 @@ use std::ffi::OsStr;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use thiserror::Error;
+use tracing::warn;
 
 use uv_state::{StateBucket, StateStore};
 
-// TODO(zanieb): Separate download and managed error types
-pub use crate::downloads::Error;
+use crate::downloads::Error as DownloadError;
+use crate::implementation::{Error as ImplementationError, ImplementationName};
+use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
+use crate::ToolchainRequest;
+use uv_fs::Simplified;
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    IO(#[from] io::Error),
+    #[error(transparent)]
+    Download(#[from] DownloadError),
+    #[error(transparent)]
+    PlatformError(#[from] PlatformError),
+    #[error(transparent)]
+    ImplementationError(#[from] ImplementationError),
+    #[error("Invalid python version: {0}")]
+    InvalidPythonVersion(String),
+    #[error(transparent)]
+    ExtractError(#[from] uv_extract::Error),
+    #[error("Failed to copy to: {0}", to.user_display())]
+    CopyError {
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Failed to read toolchain directory: {0}", dir.user_display())]
+    ReadError {
+        dir: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Failed to read toolchain directory name: {0}")]
+    NameError(String),
+    #[error("Failed to parse toolchain directory name `{0}`: {1}")]
+    NameParseError(String, String),
+}
 /// A collection of uv-managed Python toolchains installed on the current system.
 #[derive(Debug, Clone)]
 pub struct InstalledToolchains {
@@ -22,31 +58,35 @@ pub struct InstalledToolchains {
 
 impl InstalledToolchains {
     /// A directory for installed toolchains at `root`.
-    pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
-        Ok(Self { root: root.into() })
+    fn from_path(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
     }
 
     /// Prefer, in order:
     /// 1. The specific toolchain directory specified by the user, i.e., `UV_TOOLCHAIN_DIR`
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/toolchains`
     /// 3. A directory in the local data directory, e.g., `./.uv/toolchains`
-    pub fn from_settings() -> Result<Self, io::Error> {
+    pub fn from_settings() -> Result<Self, Error> {
         if let Some(toolchain_dir) = std::env::var_os("UV_TOOLCHAIN_DIR") {
-            Self::from_path(toolchain_dir)
+            Ok(Self::from_path(toolchain_dir))
         } else {
-            Self::from_path(StateStore::from_settings(None)?.bucket(StateBucket::Toolchains))
+            Ok(Self::from_path(
+                StateStore::from_settings(None)?.bucket(StateBucket::Toolchains),
+            ))
         }
     }
 
     /// Create a temporary installed toolchain directory.
-    pub fn temp() -> Result<Self, io::Error> {
-        Self::from_path(StateStore::temp()?.bucket(StateBucket::Toolchains))
+    pub fn temp() -> Result<Self, Error> {
+        Ok(Self::from_path(
+            StateStore::temp()?.bucket(StateBucket::Toolchains),
+        ))
     }
 
     /// Initialize the installed toolchain directory.
     ///
     /// Ensures the directory is created.
-    pub fn init(self) -> Result<Self, io::Error> {
+    pub fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
         // Create the cache directory, if it doesn't exist.
@@ -60,7 +100,7 @@ impl InstalledToolchains {
         {
             Ok(mut file) => file.write_all(b"*")?,
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(err) => return Err(err),
+            Err(err) => return Err(err.into()),
         }
 
         Ok(self)
@@ -72,7 +112,7 @@ impl InstalledToolchains {
     /// ordering across platforms. This also results in newer Python versions coming first,
     /// but should not be relied on — instead the toolchains should be sorted later by
     /// the parsed Python version.
-    fn find_all(&self) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
+    pub fn find_all(&self) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(toolchain_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -101,7 +141,13 @@ impl InstalledToolchains {
         };
         Ok(dirs
             .into_iter()
-            .map(|path| InstalledToolchain::new(path).unwrap())
+            .filter_map(|path| {
+                InstalledToolchain::new(path)
+                    .inspect_err(|err| {
+                        warn!("Ignoring malformed toolchain entry:\n    {err}");
+                    })
+                    .ok()
+            })
             .rev())
     }
 
@@ -155,27 +201,44 @@ impl InstalledToolchains {
 pub struct InstalledToolchain {
     /// The path to the top-level directory of the installed toolchain.
     path: PathBuf,
+    /// The Python version of the toolchain.
     python_version: PythonVersion,
+    /// The name of the Python implementation of the toolchain.
+    implementation: ImplementationName,
+    /// An install key for the toolchain.
+    key: String,
 }
 
 impl InstalledToolchain {
     pub fn new(path: PathBuf) -> Result<Self, Error> {
-        let python_version = PythonVersion::from_str(
-            path.file_name()
-                .ok_or(Error::NameError("name is empty".to_string()))?
-                .to_str()
-                .ok_or(Error::NameError("not a valid string".to_string()))?
-                .split('-')
-                .nth(1)
-                .ok_or(Error::NameError(
-                    "not enough `-`-separated values".to_string(),
-                ))?,
-        )
-        .map_err(|err| Error::NameError(format!("invalid Python version: {err}")))?;
+        let key = path
+            .file_name()
+            .ok_or(Error::NameError("name is empty".to_string()))?
+            .to_str()
+            .ok_or(Error::NameError("not a valid string".to_string()))?
+            .to_string();
+
+        let parts = key.split('-').collect::<Vec<_>>();
+        let [implementation, version, ..] = parts.as_slice() else {
+            return Err(Error::NameParseError(
+                key.clone(),
+                "not enough `-`-separated values".to_string(),
+            ));
+        };
+
+        let implementation = ImplementationName::from_str(implementation).map_err(|err| {
+            Error::NameParseError(key.clone(), format!("invalid Python implementation: {err}"))
+        })?;
+
+        let python_version = PythonVersion::from_str(version).map_err(|err| {
+            Error::NameParseError(key.clone(), format!("invalid Python version: {err}"))
+        })?;
 
         Ok(Self {
             path,
             python_version,
+            implementation,
+            key,
         })
     }
 
@@ -191,6 +254,34 @@ impl InstalledToolchain {
 
     pub fn python_version(&self) -> &PythonVersion {
         &self.python_version
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    pub fn satisfies(&self, request: &ToolchainRequest) -> bool {
+        match request {
+            ToolchainRequest::File(path) => self.executable() == *path,
+            ToolchainRequest::Any => true,
+            ToolchainRequest::Directory(path) => self.path() == *path,
+            ToolchainRequest::ExecutableName(name) => self
+                .executable()
+                .file_name()
+                .map_or(false, |filename| filename.to_string_lossy() == *name),
+            ToolchainRequest::Implementation(implementation) => {
+                *implementation == self.implementation
+            }
+            ToolchainRequest::ImplementationVersion(implementation, version) => {
+                *implementation == self.implementation
+                    && version.matches_version(&self.python_version)
+            }
+            ToolchainRequest::Version(version) => version.matches_version(&self.python_version),
+        }
     }
 }
 

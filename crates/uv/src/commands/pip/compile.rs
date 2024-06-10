@@ -161,7 +161,8 @@ pub(crate) async fn pip_compile(
         SystemPython::Allowed
     };
     let interpreter = if let Some(python) = python.as_ref() {
-        Toolchain::find_requested(python, system, preview, &cache)
+        let request = ToolchainRequest::parse(python);
+        Toolchain::find_requested(&request, system, preview, &cache)
     } else {
         // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
         // `Toolchain::find(...)` here.
@@ -291,7 +292,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, &tags, &hasher, &no_build, &NoBinary::None)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, &no_build, &NoBinary::None)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -509,7 +510,7 @@ pub(crate) async fn pip_compile(
         options,
         &python_requirement,
         Some(&markers),
-        &tags,
+        Some(&tags),
         &flat_index,
         &top_level_index,
         &hasher,

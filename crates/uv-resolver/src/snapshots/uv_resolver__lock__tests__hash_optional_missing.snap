@@ -27,7 +27,6 @@ Ok(
                         },
                     },
                 },
-                marker: None,
                 sdist: None,
                 wheels: [
                     Wheel {

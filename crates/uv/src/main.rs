@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tracing::instrument;
 
-use cli::{ToolCommand, ToolNamespace};
+use cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
 use uv_cache::Cache;
 use uv_requirements::RequirementsSource;
 use uv_workspace::Combine;
@@ -637,6 +637,7 @@ async fn run() -> Result<ExitStatus> {
                 args.index_locations,
                 args.extras,
                 args.dev,
+                args.python,
                 globals.preview,
                 &cache,
                 printer,
@@ -654,6 +655,7 @@ async fn run() -> Result<ExitStatus> {
                 args.index_locations,
                 args.upgrade,
                 args.exclude_newer,
+                args.python,
                 globals.preview,
                 &cache,
                 printer,
@@ -691,6 +693,36 @@ async fn run() -> Result<ExitStatus> {
                 globals.preview,
                 args.index_locations,
                 globals.connectivity,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::List(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolchainListSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::toolchain_list(args.includes, globals.preview, &cache, printer).await
+        }
+        Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::Install(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolchainInstallSettings::resolve(args, workspace);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::toolchain_install(
+                args.target,
+                globals.native_tls,
+                globals.connectivity,
+                globals.preview,
                 &cache,
                 printer,
             )

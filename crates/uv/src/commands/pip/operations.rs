@@ -88,7 +88,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     interpreter: &Interpreter,
-    tags: &Tags,
+    tags: Option<&Tags>,
     markers: Option<&MarkerEnvironment>,
     requires_python: Option<&RequiresPython>,
     client: &RegistryClient,

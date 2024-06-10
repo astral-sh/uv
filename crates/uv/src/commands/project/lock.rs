@@ -3,7 +3,7 @@ use anstream::eprint;
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
-use uv_client::RegistryClientBuilder;
+use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy, Upgrade,
@@ -14,7 +14,7 @@ use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
-use uv_toolchain::{Interpreter, Toolchain};
+use uv_toolchain::{Interpreter, SystemPython, Toolchain, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -28,6 +28,7 @@ pub(crate) async fn lock(
     index_locations: IndexLocations,
     upgrade: Upgrade,
     exclude_newer: Option<ExcludeNewer>,
+    python: Option<String>,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -41,9 +42,24 @@ pub(crate) async fn lock(
 
     // Find an interpreter for the project
     let interpreter = match project::find_environment(&workspace, cache) {
-        Ok(environment) => environment.into_interpreter(),
+        Ok(environment) => {
+            let interpreter = environment.into_interpreter();
+            if let Some(python) = python.as_deref() {
+                let request = ToolchainRequest::parse(python);
+                if request.satisfied(&interpreter, cache) {
+                    interpreter
+                } else {
+                    let request = ToolchainRequest::parse(python);
+                    Toolchain::find_requested(&request, SystemPython::Allowed, preview, cache)?
+                        .into_interpreter()
+                }
+            } else {
+                interpreter
+            }
+        }
         Err(uv_toolchain::Error::NotFound(_)) => {
-            Toolchain::find_default(PreviewMode::Enabled, cache)?.into_interpreter()
+            Toolchain::find(python.as_deref(), SystemPython::Allowed, preview, cache)?
+                .into_interpreter()
         }
         Err(err) => return Err(err.into()),
     };
@@ -138,15 +154,11 @@ pub(super) async fn do_lock(
         requires_python
     };
 
-    // Determine the tags and markers to use for resolution.
-    let tags = interpreter.tags()?;
-    let markers = interpreter.markers();
-
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
         .index_urls(index_locations.index_urls())
-        .markers(markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -155,7 +167,6 @@ pub(super) async fn do_lock(
     let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
     let extras = ExtrasSpecification::default();
-    let flat_index = FlatIndex::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
     let link_mode = LinkMode::default();
@@ -166,6 +177,13 @@ pub(super) async fn do_lock(
 
     let hasher = HashStrategy::Generate;
     let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(entries, None, &hasher, &no_build, &no_binary)
+    };
 
     // If an existing lockfile exists, build up a set of preferences.
     let LockedRequirements { preferences, git } = read_lockfile(workspace, &upgrade).await?;
@@ -208,7 +226,7 @@ pub(super) async fn do_lock(
         &reinstall,
         &upgrade,
         interpreter,
-        tags,
+        None,
         None,
         Some(&requires_python),
         &client,

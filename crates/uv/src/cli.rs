@@ -130,6 +130,8 @@ pub(crate) enum Commands {
     Pip(PipNamespace),
     /// Run and manage executable Python packages.
     Tool(ToolNamespace),
+    /// Manage Python installations.
+    Toolchain(ToolchainNamespace),
     /// Create a virtual environment.
     #[command(alias = "virtualenv", alias = "v")]
     Venv(VenvArgs),
@@ -287,7 +289,10 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
 pub(crate) struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     ///
-    /// When the path is `-`, then requirements are read from stdin.
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, `uv` will
+    /// extract the requirements for the relevant project.
+    ///
+    /// If `-` is provided, then requirements will be read from stdin.
     #[arg(required(true), value_parser = parse_file_path)]
     pub(crate) src_file: Vec<PathBuf>,
 
@@ -313,11 +318,13 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, value_parser = parse_file_path)]
     pub(crate) r#override: Vec<PathBuf>,
 
-    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra")]
     pub(crate) all_extras: bool,
 
@@ -610,6 +617,11 @@ pub(crate) struct PipCompileArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PipSyncArgs {
     /// Include all packages listed in the given `requirements.txt` files.
+    ///
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, `uv` will
+    /// extract the requirements for the relevant project.
+    ///
+    /// If `-` is provided, then requirements will be read from stdin.
     #[arg(required(true), value_parser = parse_file_path)]
     pub(crate) src_file: Vec<PathBuf>,
 
@@ -908,7 +920,12 @@ pub(crate) struct PipInstallArgs {
     #[arg(group = "sources")]
     pub(crate) package: Vec<String>,
 
-    /// Install all packages listed in the given requirements files.
+    /// Install all packages listed in the given `requirements.txt` files.
+    ///
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, `uv` will
+    /// extract the requirements for the relevant project.
+    ///
+    /// If `-` is provided, then requirements will be read from stdin.
     #[arg(long, short, group = "sources", value_parser = parse_file_path)]
     pub(crate) requirement: Vec<PathBuf>,
 
@@ -938,11 +955,13 @@ pub(crate) struct PipInstallArgs {
     #[arg(long, value_parser = parse_file_path)]
     pub(crate) r#override: Vec<PathBuf>,
 
-    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
     pub(crate) all_extras: bool,
 
@@ -1742,11 +1761,13 @@ pub(crate) struct VenvArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
-    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra")]
     pub(crate) all_extras: bool,
 
@@ -1831,11 +1852,13 @@ pub(crate) struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct SyncArgs {
-    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra")]
     pub(crate) all_extras: bool,
 
@@ -2001,6 +2024,42 @@ pub(crate) struct ToolRunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub(crate) python: Option<String>,
+}
+
+#[derive(Args)]
+pub(crate) struct ToolchainNamespace {
+    #[command(subcommand)]
+    pub(crate) command: ToolchainCommand,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ToolchainCommand {
+    /// List the available toolchains.
+    List(ToolchainListArgs),
+
+    /// Download and install a specific toolchain.
+    Install(ToolchainInstallArgs),
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct ToolchainListArgs {
+    /// List all available toolchains, including those that do not match the current platform.
+    #[arg(long, conflicts_with = "only_installed")]
+    pub(crate) all: bool,
+
+    /// Only list installed toolchains.
+    #[arg(long, conflicts_with = "all")]
+    pub(crate) only_installed: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct ToolchainInstallArgs {
+    /// The toolchain to fetch.
+    ///
+    /// If not provided, the latest available version will be installed.
+    pub(crate) target: Option<String>,
 }
 
 #[derive(Args)]

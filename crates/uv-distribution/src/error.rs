@@ -70,12 +70,12 @@ pub enum Error {
     NotFound(PathBuf),
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
-    #[error("The source distribution does not support static metadata in `PKG-INFO`")]
-    DynamicPkgInfo(#[source] pypi_types::MetadataError),
+    #[error("Failed to extract static metadata from `PKG-INFO`")]
+    PkgInfo(#[source] pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
-    #[error("The source distribution does not support static metadata in `pyproject.toml`")]
-    DynamicPyprojectToml(#[source] pypi_types::MetadataError),
+    #[error("Failed to extract static metadata from `pyproject.toml`")]
+    PyprojectToml(#[source] pypi_types::MetadataError),
     #[error("Unsupported scheme in URL: {0}")]
     UnsupportedScheme(String),
     #[error(transparent)]

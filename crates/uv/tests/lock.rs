@@ -55,6 +55,7 @@ fn lock_wheel_registry() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "idna"
@@ -70,12 +71,12 @@ fn lock_wheel_registry() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -108,7 +109,6 @@ fn lock_wheel_registry() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
         "###
@@ -312,6 +312,7 @@ fn lock_wheel_url() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "idna"
@@ -327,12 +328,12 @@ fn lock_wheel_url() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -365,7 +366,6 @@ fn lock_wheel_url() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
         "###
@@ -437,6 +437,7 @@ fn lock_sdist_url() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "idna"
@@ -452,12 +453,12 @@ fn lock_sdist_url() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -490,7 +491,6 @@ fn lock_sdist_url() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
         "###
@@ -566,6 +566,7 @@ fn lock_project_extra() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "idna"
@@ -581,12 +582,12 @@ fn lock_project_extra() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -633,7 +634,6 @@ fn lock_project_extra() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
         "###
@@ -726,17 +726,18 @@ fn lock_dependency_extra() -> Result<()> {
         name = "colorama"
         version = "0.4.6"
         source = "registry+https://pypi.org/simple"
+        marker = "platform_system == 'Windows'"
 
         [[distribution.dependencies]]
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "colorama"
         version = "0.4.6"
         source = "registry+https://pypi.org/simple"
-        marker = "platform_system == 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 }]
 
@@ -761,6 +762,7 @@ fn lock_dependency_extra() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.10'"
 
         [[distribution.dependencies]]
         name = "itsdangerous"
@@ -788,7 +790,6 @@ fn lock_dependency_extra() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.10'"
         sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409 }]
 
@@ -796,6 +797,7 @@ fn lock_dependency_extra() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution.dependencies]]
         name = "zipp"
@@ -916,7 +918,6 @@ fn lock_dependency_extra() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
 
@@ -967,9 +968,6 @@ fn lock_dependency_extra() -> Result<()> {
 }
 
 /// Lock a project with a dependency that has a conditional extra.
-///
-/// TODO(charlie): This test incorrectly omits `requests` due to the condition applied to its
-/// extra.
 #[test]
 fn lock_conditional_dependency_extra() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -981,7 +979,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.7"
-        dependencies = ["requests", "requests[socks] ; python_version < '3.8'"]
+        dependencies = ["requests", "requests[socks] ; python_version < '3.10'"]
         "#,
     )?;
 
@@ -995,7 +993,8 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     Resolved 7 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lockfile = context.temp_dir.join("uv.lock");
+    let lock = fs_err::read_to_string(&lockfile)?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1130,6 +1129,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         version = "2.31.0"
         source = "registry+https://pypi.org/simple"
         extra = "socks"
+        marker = "python_version < '3.10'"
 
         [[distribution]]
         name = "pysocks"
@@ -1145,7 +1145,6 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         name = "requests"
         version = "2.31.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d4380d62fd5b955065c3/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7ffb0d1cf7af05c3d2791656dbd6ad1e1", size = 110794 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", hash = "sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f", size = 62574 }]
 
@@ -1194,9 +1193,39 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Downloaded 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.0.1
+     + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     + requests==2.31.0
+     + urllib3==2.0.7
+    "###);
+
+    // Validate that the extra is included on relevant Python versions.
+    let context_38 = TestContext::new("3.8");
+
+    fs_err::copy(pyproject_toml, context_38.temp_dir.join("pyproject.toml"))?;
+    fs_err::copy(lockfile, context_38.temp_dir.join("uv.lock"))?;
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context_38.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.0.1
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + pysocks==1.7.1
+     + requests==2.31.0
+     + urllib3==2.0.7
     "###);
 
     Ok(())
@@ -1604,6 +1633,7 @@ fn lock_requires_python() -> Result<()> {
         name = "importlib-metadata"
         version = "6.7.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "cattrs"
@@ -1621,17 +1651,18 @@ fn lock_requires_python() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -1639,7 +1670,6 @@ fn lock_requires_python() -> Result<()> {
         name = "importlib-metadata"
         version = "6.7.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/ff/94/64287b38c7de4c90683630338cf28f129decbba0a44f0c6db35a873c73c4/importlib_metadata-6.7.0-py3-none-any.whl", hash = "sha256:cb52082e659e97afc5dac71e79de97d8681de3aa07ff18578330904a9d18e5b5", size = 22934 }]
 
@@ -1647,6 +1677,7 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution.dependencies]]
         name = "zipp"
@@ -1709,7 +1740,6 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 }]
 
@@ -1768,6 +1798,7 @@ fn lock_requires_python() -> Result<()> {
         name = "importlib-metadata"
         version = "6.7.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "cattrs"
@@ -1785,17 +1816,18 @@ fn lock_requires_python() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -1803,7 +1835,6 @@ fn lock_requires_python() -> Result<()> {
         name = "importlib-metadata"
         version = "6.7.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/ff/94/64287b38c7de4c90683630338cf28f129decbba0a44f0c6db35a873c73c4/importlib_metadata-6.7.0-py3-none-any.whl", hash = "sha256:cb52082e659e97afc5dac71e79de97d8681de3aa07ff18578330904a9d18e5b5", size = 22934 }]
 
@@ -1811,6 +1842,7 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution.dependencies]]
         name = "zipp"
@@ -1861,7 +1893,6 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 }]
 
@@ -1920,6 +1951,7 @@ fn lock_requires_python() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "cattrs"
@@ -1937,17 +1969,18 @@ fn lock_requires_python() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -1955,7 +1988,6 @@ fn lock_requires_python() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409 }]
 
@@ -1963,6 +1995,7 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution.dependencies]]
         name = "zipp"
@@ -2018,7 +2051,6 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
 
@@ -2033,20 +2065,27 @@ fn lock_requires_python() -> Result<()> {
     });
 
     // Validate that attempting to install with an unsupported Python version raises an error.
-    let context = TestContext::new("3.8");
+    let context38 = TestContext::new("3.8");
 
-    fs_err::copy(pyproject_toml, context.temp_dir.join("pyproject.toml"))?;
-    fs_err::copy(&lockfile, context.temp_dir.join("uv.lock"))?;
+    fs_err::copy(pyproject_toml, context38.temp_dir.join("pyproject.toml"))?;
+    fs_err::copy(&lockfile, context38.temp_dir.join("uv.lock"))?;
+
+    let filters: Vec<_> = context38
+        .filters()
+        .into_iter()
+        .chain(context.filters())
+        .collect();
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(filters, context38.sync(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    error: The current Python version (3.8.[X]) is not compatible with the locked Python requirement (>=3.12)
+    Removing virtual environment at: [VENV]/
+    error: No interpreter found for Python >=3.12 in provided path, active virtual environment, or search path
     "###);
 
     Ok(())
@@ -2102,6 +2141,7 @@ fn lock_requires_python_star() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "cattrs"
@@ -2119,17 +2159,18 @@ fn lock_requires_python_star() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -2137,7 +2178,6 @@ fn lock_requires_python_star() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409 }]
 
@@ -2145,6 +2185,7 @@ fn lock_requires_python_star() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution.dependencies]]
         name = "zipp"
@@ -2202,7 +2243,6 @@ fn lock_requires_python_star() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
 
@@ -2270,6 +2310,7 @@ fn lock_requires_python_pre() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "cattrs"
@@ -2287,17 +2328,18 @@ fn lock_requires_python_pre() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -2305,7 +2347,6 @@ fn lock_requires_python_pre() -> Result<()> {
         name = "importlib-metadata"
         version = "7.1.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409 }]
 
@@ -2313,6 +2354,7 @@ fn lock_requires_python_pre() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution.dependencies]]
         name = "zipp"
@@ -2370,7 +2412,6 @@ fn lock_requires_python_pre() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
 
@@ -2487,6 +2528,127 @@ fn lock_dev() -> Result<()> {
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
     "###);
+
+    Ok(())
+}
+
+/// Lock a package that's included both conditionally and unconditionally in the lockfile.
+#[test]
+fn lock_conditional_unconditional() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig", "iniconfig ; python_version < '3.12'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[distribution]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 }]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+file://[TEMP_DIR]/"
+        sdist = { url = "file://[TEMP_DIR]/" }
+
+        [[distribution.dependencies]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = "registry+https://pypi.org/simple"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Lock a package that's included twice with different markers.
+#[test]
+fn lock_multiple_markers() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig ; implementation_name == 'cpython'", "iniconfig ; python_version < '3.12'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[distribution]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 }]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+file://[TEMP_DIR]/"
+        sdist = { url = "file://[TEMP_DIR]/" }
+
+        [[distribution.dependencies]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.12' or implementation_name == 'cpython'"
+        "###
+        );
+    });
 
     Ok(())
 }

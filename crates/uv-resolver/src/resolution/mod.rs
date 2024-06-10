@@ -5,7 +5,7 @@ use std::path::Path;
 use itertools::Itertools;
 
 use distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
-use pep508_rs::{split_scheme, MarkerTree, Scheme};
+use pep508_rs::{split_scheme, Scheme};
 use pypi_types::HashDigest;
 use uv_distribution::Metadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -24,7 +24,6 @@ pub(crate) struct AnnotatedDist {
     pub(crate) dist: ResolvedDist,
     pub(crate) extra: Option<ExtraName>,
     pub(crate) dev: Option<GroupName>,
-    pub(crate) marker: Option<MarkerTree>,
     pub(crate) hashes: Vec<HashDigest>,
     pub(crate) metadata: Metadata,
 }

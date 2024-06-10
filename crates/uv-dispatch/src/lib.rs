@@ -158,7 +158,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.options,
             &python_requirement,
             Some(markers),
-            tags,
+            Some(tags),
             self.flat_index,
             self.index,
             &HashStrategy::None,

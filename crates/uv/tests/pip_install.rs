@@ -247,32 +247,32 @@ dependencies = ["flask==1.0.x"]
     --- stderr:
     Traceback (most recent call last):
       File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+      File "[CACHE_DIR]/environments-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
         return self._get_build_requires(config_settings, requirements=['wheel'])
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/[TMP]/build_meta.py", line 295, in _get_build_requires
+      File "[CACHE_DIR]/environments-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
         self.run_setup()
-      File "[CACHE_DIR]/[TMP]/build_meta.py", line 487, in run_setup
+      File "[CACHE_DIR]/environments-v0/[TMP]/build_meta.py", line 487, in run_setup
         super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/[TMP]/build_meta.py", line 311, in run_setup
+      File "[CACHE_DIR]/environments-v0/[TMP]/build_meta.py", line 311, in run_setup
         exec(code, locals())
       File "<string>", line 1, in <module>
-      File "[CACHE_DIR]/[TMP]/__init__.py", line 104, in setup
+      File "[CACHE_DIR]/environments-v0/[TMP]/__init__.py", line 104, in setup
         return distutils.core.setup(**attrs)
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/[TMP]/core.py", line 159, in setup
+      File "[CACHE_DIR]/environments-v0/[TMP]/core.py", line 159, in setup
         dist.parse_config_files()
-      File "[CACHE_DIR]/[TMP]/_virtualenv.py", line 22, in parse_config_files
+      File "[CACHE_DIR]/environments-v0/[TMP]/_virtualenv.py", line 22, in parse_config_files
         result = old_parse_config_files(self, *args, **kwargs)
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/[TMP]/dist.py", line 631, in parse_config_files
+      File "[CACHE_DIR]/environments-v0/[TMP]/dist.py", line 631, in parse_config_files
         pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
-      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 68, in apply_configuration
+      File "[CACHE_DIR]/environments-v0/[TMP]/pyprojecttoml.py", line 68, in apply_configuration
         config = read_configuration(filepath, True, ignore_option_errors, dist)
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 129, in read_configuration
+      File "[CACHE_DIR]/environments-v0/[TMP]/pyprojecttoml.py", line 129, in read_configuration
         validate(subset, filepath)
-      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 57, in validate
+      File "[CACHE_DIR]/environments-v0/[TMP]/pyprojecttoml.py", line 57, in validate
         raise ValueError(f"{error}/n{summary}") from None
     ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
     configuration error: `project.dependencies[0]` must be pep508
@@ -5246,6 +5246,63 @@ fn recursive_extra_transitive_url() -> Result<()> {
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
      + project==0.0.0 (from file://[TEMP_DIR]/)
     "###);
+
+    Ok(())
+}
+
+/// If a package is requested as both editable and non-editable, always install it as editable.
+#[test]
+fn prefer_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("scripts/packages/black_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    // Validate that `black.pth` was created.
+    let path = context.site_packages().join("black.pth");
+    assert!(path.is_file());
+
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "black @ file://{}/scripts/packages/black_editable",
+        context.workspace_root.simplified_display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    // Validate that `black.pth` was created.
+    let path = context.site_packages().join("black.pth");
+    assert!(path.is_file());
 
     Ok(())
 }
