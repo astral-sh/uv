@@ -1712,8 +1712,8 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
         // N.B. This is almost identical to `ResolvedDistRef::to_owned`, but
         // creates a `Request` instead of a `ResolvedDist`. There's probably
         // some room for DRYing this up a bit. The obvious way would be to
-        // add a method to create a `Dist`, but a `Dist` cannot reprented an
-        // installed dist.
+        // add a method to create a `Dist`, but a `Dist` cannot be represented
+        // as an installed dist.
         match dist {
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized } => {
                 // This is okay because we're only here if the prioritized dist

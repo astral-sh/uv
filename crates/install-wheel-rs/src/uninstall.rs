@@ -179,8 +179,8 @@ pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
         }
 
         // Remove as a `.py`, `.pyc`, or `.pyo` file.
-        for exten in &["py", "pyc", "pyo"] {
-            let path = path.with_extension(exten);
+        for extension in &["py", "pyc", "pyo"] {
+            let path = path.with_extension(extension);
             match fs_err::remove_file(&path) {
                 Ok(()) => {
                     debug!("Removed file: {}", path.display());

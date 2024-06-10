@@ -18,7 +18,7 @@
 
 ### Bug fixes
 
-- Fix `uv venv` handling when `VIRTUAL_ENV` refers to an non-existant environment ([#4073](https://github.com/astral-sh/uv/pull/4073))
+- Fix `uv venv` handling when `VIRTUAL_ENV` refers to an non-existent environment ([#4073](https://github.com/astral-sh/uv/pull/4073))
 
 ## 0.2.7
 
