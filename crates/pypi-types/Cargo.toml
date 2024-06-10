@@ -20,6 +20,7 @@ uv-git = { workspace = true }
 
 chrono = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true, features = ["serde"] }
+itertools = { workspace = true }
 mailparse = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
