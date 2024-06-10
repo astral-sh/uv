@@ -254,9 +254,16 @@ fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution
             }))
         }
         RequirementSource::Path {
-            path,
+            install_path,
+            lock_path,
             url,
             editable,
-        } => Dist::from_file_url(requirement.name.clone(), url.clone(), path, *editable)?,
+        } => Dist::from_file_url(
+            requirement.name.clone(),
+            url.clone(),
+            install_path,
+            lock_path,
+            *editable,
+        )?,
     }))
 }

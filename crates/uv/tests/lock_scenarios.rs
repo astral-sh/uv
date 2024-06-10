@@ -92,8 +92,8 @@ fn fork_basic() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+"
+        sdist = { path = "" }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -220,8 +220,8 @@ fn fork_marker_accrue() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+"
+        sdist = { path = "" }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -414,8 +414,8 @@ fn fork_marker_selection() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+"
+        sdist = { path = "" }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -578,8 +578,8 @@ fn fork_marker_track() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+"
+        sdist = { path = "" }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -715,8 +715,8 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+"
+        sdist = { path = "" }
 
         [[distribution.dependencies]]
         name = "package-a"

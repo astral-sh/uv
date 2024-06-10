@@ -68,7 +68,8 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         // Determine the last-modified time of the source distribution.
-        let modified = ArchiveTimestamp::from_file(&source_dist.path).map_err(Error::CacheRead)?;
+        let modified =
+            ArchiveTimestamp::from_file(&source_dist.install_path).map_err(Error::CacheRead)?;
 
         // If the distribution is stale, omit it from the index.
         if !pointer.is_up_to_date(modified) {
@@ -106,10 +107,12 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         // Determine the last-modified time of the source distribution.
-        let Some(modified) =
-            ArchiveTimestamp::from_source_tree(&source_dist.path).map_err(Error::CacheRead)?
+        let Some(modified) = ArchiveTimestamp::from_source_tree(&source_dist.install_path)
+            .map_err(Error::CacheRead)?
         else {
-            return Err(Error::DirWithoutEntrypoint(source_dist.path.clone()));
+            return Err(Error::DirWithoutEntrypoint(
+                source_dist.install_path.clone(),
+            ));
         };
 
         // If the distribution is stale, omit it from the index.

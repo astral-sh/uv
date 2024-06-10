@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::path::Path;
 
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
@@ -60,6 +61,7 @@ pub(crate) async fn sync(
     // Perform the sync operation.
     do_sync(
         project.project_name(),
+        project.workspace().root(),
         &venv,
         &lock,
         &index_locations,
@@ -77,7 +79,8 @@ pub(crate) async fn sync(
 /// Sync a lockfile with an environment.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn do_sync(
-    project: &PackageName,
+    project_name: &PackageName,
+    workspace_root: &Path,
     venv: &PythonEnvironment,
     lock: &Lock,
     index_locations: &IndexLocations,
@@ -108,7 +111,8 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(markers, tags, project, &extras, &dev)?;
+    let resolution =
+        lock.to_resolution(workspace_root, markers, tags, project_name, &extras, &dev)?;
 
     // Initialize the registry client.
     // TODO(zanieb): Support client options e.g. offline, tls, etc.

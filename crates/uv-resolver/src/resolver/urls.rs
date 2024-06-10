@@ -53,13 +53,15 @@ impl Urls {
                     }
                 }
                 RequirementSource::Path {
-                    path,
+                    install_path,
+                    lock_path,
                     editable,
                     url,
                 } => {
                     let url = VerbatimParsedUrl {
                         parsed_url: ParsedUrl::Path(ParsedPathUrl::from_source(
-                            path.clone(),
+                            install_path.clone(),
+                            lock_path.clone(),
                             *editable,
                             url.to_url(),
                         )),
@@ -140,7 +142,8 @@ impl Urls {
                 a.subdirectory == b.subdirectory && git.same_ref(&a.url, &b.url)
             }
             (ParsedUrl::Path(a), ParsedUrl::Path(b)) => {
-                a.path == b.path || is_same_file(&a.path, &b.path).unwrap_or(false)
+                a.install_path == b.install_path
+                    || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
             }
             _ => false,
         }

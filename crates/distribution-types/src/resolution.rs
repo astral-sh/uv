@@ -141,7 +141,8 @@ impl From<&ResolvedDist> for Requirement {
                     }
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
-                    path: wheel.path.clone(),
+                    install_path: wheel.path.clone(),
+                    lock_path: wheel.path.clone(),
                     url: wheel.url.clone(),
                     editable: false,
                 },
@@ -168,12 +169,14 @@ impl From<&ResolvedDist> for Requirement {
                     subdirectory: sdist.subdirectory.clone(),
                 },
                 Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
-                    path: sdist.path.clone(),
+                    install_path: sdist.install_path.clone(),
+                    lock_path: sdist.lock_path.clone(),
                     url: sdist.url.clone(),
                     editable: false,
                 },
                 Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Path {
-                    path: sdist.path.clone(),
+                    install_path: sdist.install_path.clone(),
+                    lock_path: sdist.lock_path.clone(),
                     url: sdist.url.clone(),
                     editable: sdist.editable,
                 },

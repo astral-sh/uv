@@ -259,8 +259,12 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone)]
 pub struct PathSourceDist {
     pub name: PackageName,
-    /// The path to the archive.
-    pub path: PathBuf,
+    /// The resolved, absolute path to the distribution which we use for installing.
+    pub install_path: PathBuf,
+    /// The absolute path or path relative to the workspace root pointing to the distribution
+    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+    pub lock_path: PathBuf,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -269,8 +273,12 @@ pub struct PathSourceDist {
 #[derive(Debug, Clone)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
-    /// The path to the directory.
-    pub path: PathBuf,
+    /// The resolved, absolute path to the distribution which we use for installing.
+    pub install_path: PathBuf,
+    /// The absolute path or path relative to the workspace root pointing to the distribution
+    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+    pub lock_path: PathBuf,
     /// Whether the package should be installed in editable mode.
     pub editable: bool,
     /// The URL as it was provided by the user.
@@ -319,11 +327,12 @@ impl Dist {
     pub fn from_file_url(
         name: PackageName,
         url: VerbatimUrl,
-        path: &Path,
+        install_path: &Path,
+        lock_path: &Path,
         editable: bool,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
-        let path = match path.canonicalize() {
+        let canonicalized_path = match install_path.canonicalize() {
             Ok(path) => path,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::NotFound(url.to_url()));
@@ -332,14 +341,15 @@ impl Dist {
         };
 
         // Determine whether the path represents an archive or a directory.
-        if path.is_dir() {
+        if canonicalized_path.is_dir() {
             Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
-                path,
+                install_path: canonicalized_path.clone(),
+                lock_path: lock_path.to_path_buf(),
                 editable,
                 url,
             })))
-        } else if path
+        } else if canonicalized_path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
@@ -359,7 +369,7 @@ impl Dist {
 
             Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                 filename,
-                path,
+                path: canonicalized_path,
                 url,
             })))
         } else {
@@ -369,7 +379,8 @@ impl Dist {
 
             Ok(Self::Source(SourceDist::Path(PathSourceDist {
                 name,
-                path,
+                install_path: canonicalized_path.clone(),
+                lock_path: canonicalized_path,
                 url,
             })))
         }
@@ -396,9 +407,13 @@ impl Dist {
             ParsedUrl::Archive(archive) => {
                 Self::from_http_url(name, url.verbatim, archive.url, archive.subdirectory)
             }
-            ParsedUrl::Path(file) => {
-                Self::from_file_url(name, url.verbatim, &file.path, file.editable)
-            }
+            ParsedUrl::Path(file) => Self::from_file_url(
+                name,
+                url.verbatim,
+                &file.install_path,
+                &file.lock_path,
+                file.editable,
+            ),
             ParsedUrl::Git(git) => {
                 Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)
             }
@@ -517,8 +532,8 @@ impl SourceDist {
     /// Returns the path to the source distribution, if it's a local distribution.
     pub fn as_path(&self) -> Option<&Path> {
         match self {
-            Self::Path(dist) => Some(&dist.path),
-            Self::Directory(dist) => Some(&dist.path),
+            Self::Path(dist) => Some(&dist.install_path),
+            Self::Directory(dist) => Some(&dist.install_path),
             _ => None,
         }
     }

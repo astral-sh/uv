@@ -165,7 +165,12 @@ pub(crate) fn lower_requirement(
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                 return Err(LoweringError::ConflictingUrls);
             }
-            path_source(path, project_dir, editable.unwrap_or(false))?
+            path_source(
+                path,
+                project_dir,
+                workspace.root(),
+                editable.unwrap_or(false),
+            )?
         }
         Source::Registry { index } => match requirement.version_or_url {
             None => {
@@ -199,7 +204,12 @@ pub(crate) fn lower_requirement(
                 .get(&requirement.name)
                 .ok_or(LoweringError::UndeclaredWorkspacePackage)?
                 .clone();
-            path_source(path.root(), workspace.root(), editable.unwrap_or(true))?
+            path_source(
+                path.root(),
+                workspace.root(),
+                workspace.root(),
+                editable.unwrap_or(true),
+            )?
         }
         Source::CatchAll { .. } => {
             // Emit a dedicated error message, which is an improvement over Serde's default error.
@@ -219,6 +229,7 @@ pub(crate) fn lower_requirement(
 fn path_source(
     path: impl AsRef<Path>,
     project_dir: &Path,
+    workspace_root: &Path,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let url = VerbatimUrl::parse_path(path.as_ref(), project_dir)?
@@ -228,8 +239,12 @@ fn path_source(
         .absolutize_from(project_dir)
         .map_err(|err| LoweringError::Absolutize(path.as_ref().to_path_buf(), err))?
         .to_path_buf();
+    let ascend_to_workspace = project_dir
+        .strip_prefix(workspace_root)
+        .expect("Project must be below workspace root");
     Ok(RequirementSource::Path {
-        path: path_buf,
+        install_path: path_buf,
+        lock_path: ascend_to_workspace.join(project_dir),
         url,
         editable,
     })

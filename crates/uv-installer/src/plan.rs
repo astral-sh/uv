@@ -272,13 +272,14 @@ impl<'a> Planner<'a> {
                         continue;
                     }
                 }
-                RequirementSource::Path { url, editable, .. } => {
+                RequirementSource::Path {
+                    url,
+                    editable,
+                    install_path,
+                    lock_path,
+                } => {
                     // Store the canonicalized path, which also serves to validate that it exists.
-                    let path = match url
-                        .to_file_path()
-                        .map_err(|()| Error::MissingFilePath(url.to_url()))?
-                        .canonicalize()
-                    {
+                    let path = match install_path.canonicalize() {
                         Ok(path) => path,
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                             return Err(Error::NotFound(url.to_url()).into());
@@ -291,7 +292,8 @@ impl<'a> Planner<'a> {
                         let sdist = DirectorySourceDist {
                             name: requirement.name.clone(),
                             url: url.clone(),
-                            path,
+                            install_path: path,
+                            lock_path: lock_path.clone(),
                             editable: *editable,
                         };
 
@@ -369,7 +371,8 @@ impl<'a> Planner<'a> {
                         let sdist = PathSourceDist {
                             name: requirement.name.clone(),
                             url: url.clone(),
-                            path,
+                            install_path: path,
+                            lock_path: lock_path.clone(),
                         };
 
                         // Find the most-compatible wheel from the cache, since we don't know
