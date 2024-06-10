@@ -2072,14 +2072,22 @@ fn lock_requires_python() -> Result<()> {
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
     Removing virtual environment at: [VENV]/
-    error: Requested Python executable `>=3.12` not found in PATH
+    Using Python 3.12.3 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
+    Creating virtualenv at: [VENV]/
+    Downloaded 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + attrs==23.2.0
+     + cattrs==23.2.3
+     + lsprotocol==2023.0.1
+     + project==0.1.0 (from file://private/var/folders/6p/k5sd5z7j31b31pq4lhn0l8d80000gn/T/.tmp2LoTc2)
+     + pygls==1.3.0
     "###);
 
     Ok(())

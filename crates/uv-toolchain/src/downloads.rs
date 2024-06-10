@@ -1,6 +1,5 @@
 use std::fmt::Display;
 use std::io;
-use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -26,7 +25,7 @@ pub enum Error {
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
     #[error("Invalid python version: {0}")]
-    InvalidPythonVersion(ParseIntError),
+    InvalidPythonVersion(String),
     #[error("Download failed")]
     NetworkError(#[from] BetterReqwestError),
     #[error("Download failed")]
@@ -215,7 +214,7 @@ impl PythonDownloadRequest {
 impl Display for PythonDownloadRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut parts = Vec::new();
-        if let Some(version) = self.version {
+        if let Some(version) = &self.version {
             parts.push(version.to_string());
         }
         if let Some(implementation) = self.implementation {
@@ -239,7 +238,8 @@ impl FromStr for PythonDownloadRequest {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO(zanieb): Implement parsing of additional request parts
-        let version = VersionRequest::from_str(s).map_err(Error::InvalidPythonVersion)?;
+        let version =
+            VersionRequest::from_str(s).map_err(|_| Error::InvalidPythonVersion(s.to_string()))?;
         Ok(Self::new(Some(version), None, None, None, None))
     }
 }
