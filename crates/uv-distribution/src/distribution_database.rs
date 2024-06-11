@@ -171,7 +171,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
-
                         return self
                             .load_wheel(path, &wheel.filename, cache_entry, dist, hashes)
                             .await;
@@ -184,6 +183,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
                 );
+
+                // If the URL is a file URL, load the wheel directly.
+                if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                    return self
+                        .load_wheel(&path, &wheel.filename, wheel_entry, dist, hashes)
+                        .await;
+                }
 
                 // Download and unzip.
                 match self

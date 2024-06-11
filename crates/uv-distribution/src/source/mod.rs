@@ -124,6 +124,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     }
                 };
 
+                // If the URL is a file URL, use the local path directly.
+                if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                    return self
+                        .archive(
+                            source,
+                            &PathSourceUrl {
+                                url: &url,
+                                path: Cow::Owned(path),
+                            },
+                            &cache_shard,
+                            tags,
+                            hashes,
+                        )
+                        .boxed_local()
+                        .await;
+                }
+
                 self.url(
                     source,
                     &dist.file.filename,
@@ -280,6 +300,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             .await;
                     }
                 };
+
+                // If the URL is a file URL, use the local path directly.
+                if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                    return self
+                        .archive_metadata(
+                            source,
+                            &PathSourceUrl {
+                                url: &url,
+                                path: Cow::Owned(path),
+                            },
+                            &cache_shard,
+                            hashes,
+                        )
+                        .boxed_local()
+                        .await;
+                }
 
                 self.url_metadata(
                     source,

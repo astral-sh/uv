@@ -8,6 +8,7 @@ use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
 use itertools::Itertools;
+use url::Url;
 
 use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
@@ -5303,6 +5304,55 @@ fn prefer_editable() -> Result<()> {
     // Validate that `black.pth` was created.
     let path = context.site_packages().join("black.pth");
     assert!(path.is_file());
+
+    Ok(())
+}
+
+/// Resolve against a local directory laid out as a PEP 503-compatible index.
+#[test]
+fn local_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root = context.temp_dir.child("simple-html");
+    fs_err::create_dir_all(&root)?;
+
+    let tqdm = root.child("tqdm");
+    fs_err::create_dir_all(&tqdm)?;
+
+    let index = tqdm.child("index.html");
+    index.write_str(&indoc::formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for example-a-961b4c22</h1>
+            <a
+              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              data-requires-python=">=3.8"
+            >
+              tqdm-1000.0.0-py3-none-any.whl
+            </a>
+          </body>
+        </html>
+    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+
+    uv_snapshot!(context.filters(), context.install_without_exclude_newer()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(Url::from_directory_path(root).unwrap().as_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "###
+    );
 
     Ok(())
 }
