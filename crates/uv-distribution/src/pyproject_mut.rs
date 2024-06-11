@@ -64,37 +64,40 @@ impl PyProjectTomlMut {
         Ok(())
     }
 
-    /// Removes a dependency.
-    pub fn remove_dependency(&mut self, req: &Requirement) -> Result<Option<Requirement>, Error> {
+    /// Removes all occurrences of dependencies with the given name.
+    pub fn remove_dependency(&mut self, req: &String) -> Result<Vec<Requirement>, Error> {
         let deps = &mut self.doc["project"]["dependencies"];
         if deps.is_none() {
-            return Ok(None);
+            return Ok(Vec::new());
         }
 
         let deps = deps.as_array_mut().ok_or(Error::MalformedDependencies)?;
 
-        // Try to find a matching dependency.
-        let mut to_remove = None;
+        // Try to find matching dependencies.
+        let mut to_remove = Vec::new();
         for (i, dep) in deps.iter().enumerate() {
             if let Some(dep) = dep.as_str().and_then(try_parse_requirement) {
-                if dep.name.as_ref().eq_ignore_ascii_case(req.name.as_ref()) {
-                    to_remove = Some(i);
-                    break;
+                if dep.name.as_ref().eq_ignore_ascii_case(req.as_ref()) {
+                    to_remove.push(i);
                 }
             }
         }
 
-        match to_remove {
-            Some(i) => {
-                let req = deps
-                    .remove(i)
+        let removed = to_remove
+            .into_iter()
+            .rev() // Reverse to preserve indices as we remove them.
+            .filter_map(|i| {
+                deps.remove(i)
                     .as_str()
-                    .and_then(|req| Requirement::from_str(req).ok());
-                reformat_array_multiline(deps);
-                Ok(req)
-            }
-            None => Ok(None),
+                    .and_then(|req| Requirement::from_str(req).ok())
+            })
+            .collect::<Vec<_>>();
+
+        if !removed.is_empty() {
+            reformat_array_multiline(deps);
         }
+
+        Ok(removed)
     }
 }
 
