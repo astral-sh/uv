@@ -33,6 +33,8 @@ pub enum VersionsResponse {
 pub enum MetadataResponse {
     /// The wheel metadata was found and parsed successfully.
     Found(ArchiveMetadata),
+    /// The wheel metadata was not found.
+    MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Box<pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
@@ -184,6 +186,9 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => match client.into_kind() {
                     uv_client::ErrorKind::Offline(_) => Ok(MetadataResponse::Offline),
+                    uv_client::ErrorKind::MetadataNotFound(_, _) => {
+                        Ok(MetadataResponse::MissingMetadata)
+                    }
                     uv_client::ErrorKind::MetadataParseError(_, _, err) => {
                         Ok(MetadataResponse::InvalidMetadata(err))
                     }

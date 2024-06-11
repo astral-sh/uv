@@ -4544,7 +4544,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sys-info",
- "tempfile",
  "thiserror",
  "tl",
  "tokio",
