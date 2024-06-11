@@ -605,8 +605,12 @@ impl Distribution {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let path_dist = PathBuiltDist {
                         filename,
-                        url: VerbatimUrl::from_path(workspace_root.join(path))
-                            .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
+                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                            LockErrorKind::VerbatimUrl {
+                                id: self.id.clone(),
+                                err,
+                            }
+                        })?,
                         path: path.clone(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
@@ -626,17 +630,17 @@ impl Distribution {
                     let built_dist = BuiltDist::DirectUrl(direct_dist);
                     Ok(Dist::Built(built_dist))
                 }
-                SourceKind::Git(_, _) => Err(LockErrorKind::InvalidWheelSource {
+                Source::Git(_, _) => Err(LockErrorKind::InvalidWheelSource {
                     id: self.id.clone(),
                     source_type: "Git",
                 }
                 .into()),
-                SourceKind::Directory => Err(LockErrorKind::InvalidWheelSource {
+                Source::Directory(_) => Err(LockErrorKind::InvalidWheelSource {
                     id: self.id.clone(),
                     source_type: "directory",
                 }
                 .into()),
-                SourceKind::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
+                Source::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
                     id: self.id.clone(),
                     source_type: "editable",
                 }
@@ -649,8 +653,12 @@ impl Distribution {
                 Source::Path(path) => {
                     let path_dist = PathSourceDist {
                         name: self.id.name.clone(),
-                        url: VerbatimUrl::from_path(workspace_root.join(path))
-                            .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
+                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                            LockErrorKind::VerbatimUrl {
+                                id: self.id.clone(),
+                                err,
+                            }
+                        })?,
                         install_path: workspace_root.join(path),
                         lock_path: path.clone(),
                     };
@@ -660,8 +668,12 @@ impl Distribution {
                 Source::Directory(path) => {
                     let dir_dist = DirectorySourceDist {
                         name: self.id.name.clone(),
-                        url: VerbatimUrl::from_path(workspace_root.join(path))
-                            .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
+                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                            LockErrorKind::VerbatimUrl {
+                                id: self.id.clone(),
+                                err,
+                            }
+                        })?,
                         install_path: workspace_root.join(path),
                         lock_path: path.clone(),
                         editable: false,
@@ -672,8 +684,12 @@ impl Distribution {
                 Source::Editable(path) => {
                     let dir_dist = DirectorySourceDist {
                         name: self.id.name.clone(),
-                        url: VerbatimUrl::from_path(workspace_root.join(path))
-                            .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
+                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                            LockErrorKind::VerbatimUrl {
+                                id: self.id.clone(),
+                                err,
+                            }
+                        })?,
                         install_path: workspace_root.join(path),
                         lock_path: path.clone(),
                         editable: true,
@@ -962,19 +978,18 @@ impl std::str::FromStr for Source {
         })?;
         match kind {
             "registry" => {
-                let url =
-                    Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
-            given: s.to_string(),
-            err,
-        })?;
+                let url = Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
+                    given: s.to_string(),
+                    err,
+                })?;
                 Ok(Source::Registry(url))
             }
             "git" => {
                 let mut url =
                     Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
-            given: s.to_string(),
-            err,
-        })?;
+                        given: s.to_string(),
+                        err,
+                    })?;
                 let git_source = GitSource::from_url(&mut url).map_err(|err| match err {
                     GitSourceError::InvalidSha => SourceParseError::InvalidSha {
                         given: s.to_string(),
@@ -988,9 +1003,9 @@ impl std::str::FromStr for Source {
             "direct" => {
                 let mut url =
                     Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
-            given: s.to_string(),
-            err,
-        })?;
+                        given: s.to_string(),
+                        err,
+                    })?;
                 let direct_source = DirectSource::from_url(&mut url);
                 Ok(Source::Direct(url, direct_source))
             }
@@ -1710,7 +1725,7 @@ impl<'de> serde::Deserialize<'de> for Hash {
     }
 }
 
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct LockError(Box<LockErrorKind>);
 
@@ -1729,7 +1744,7 @@ where
 /// For example, if there are two or more duplicative distributions given
 /// to `Lock::new`, then an error is returned. It's likely that the fault
 /// is with the caller somewhere in such cases.
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
     /// An error that occurs when multiple distributions with the same
     /// ID were found.
@@ -1810,7 +1825,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
-    #[error("since the distribution `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.kind.name(), expected = if *expected { "expected" } else { "not expected" })]
+    #[error("since the distribution `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     Hash {
         /// The ID of the distribution that has a missing hash.
         id: DistributionId,
@@ -1856,11 +1871,12 @@ enum LockErrorKind {
         id: DistributionId,
     },
     /// An error that occurs when converting between URLs and paths.
-    #[error("found dependency `{dependency}` for `{id}` with no locked distribution")]
+    #[error("found dependency `{id}` with no locked distribution")]
     VerbatimUrl {
         /// The ID of the distribution that has a missing base.
         id: DistributionId,
         /// The inner error we forward.
+        #[source]
         err: VerbatimUrlError,
     },
 }
