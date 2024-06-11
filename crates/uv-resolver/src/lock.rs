@@ -4,8 +4,7 @@
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::Deref;
+use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -608,7 +607,7 @@ impl Distribution {
                         filename,
                         url: VerbatimUrl::from_path(workspace_root.join(path))
                             .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
-                        path: path.clone().into(),
+                        path: path.clone(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
                     Ok(Dist::Built(built_dist))
@@ -653,7 +652,7 @@ impl Distribution {
                         url: VerbatimUrl::from_path(workspace_root.join(path))
                             .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
                         install_path: workspace_root.join(path),
-                        lock_path: path.clone().into(),
+                        lock_path: path.clone(),
                     };
                     let source_dist = distribution_types::SourceDist::Path(path_dist);
                     Ok(Dist::Source(source_dist))
@@ -664,7 +663,7 @@ impl Distribution {
                         url: VerbatimUrl::from_path(workspace_root.join(path))
                             .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
                         install_path: workspace_root.join(path),
-                        lock_path: path.clone().into(),
+                        lock_path: path.clone(),
                         editable: false,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
@@ -676,7 +675,7 @@ impl Distribution {
                         url: VerbatimUrl::from_path(workspace_root.join(path))
                             .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
                         install_path: workspace_root.join(path),
-                        lock_path: path.clone().into(),
+                        lock_path: path.clone(),
                         editable: true,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
@@ -823,9 +822,19 @@ enum Source {
     Registry(Url),
     Git(Url, GitSource),
     Direct(Url, DirectSource),
-    Path(PathWire),
-    Directory(PathWire),
-    Editable(PathWire),
+    Path(PathBuf),
+    Directory(PathBuf),
+    Editable(PathBuf),
+}
+
+/// A [`PathBuf`], but we show `.` instead of an empty path.
+fn serialize_path_with_dot(path: &Path) -> Cow<str> {
+    let path = path.to_string_lossy();
+    if path.is_empty() {
+        Cow::Borrowed(".")
+    } else {
+        path
+    }
 }
 
 impl Source {
@@ -900,18 +909,18 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist) -> Source {
-        Source::Path(PathWire::from(path_dist.path.clone()))
+        Source::Path(path_dist.path.clone())
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist) -> Source {
-        Source::Path(PathWire::from(path_dist.install_path.clone()))
+        Source::Path(path_dist.install_path.clone())
     }
 
     fn from_directory_source_dist(directory_dist: &DirectorySourceDist) -> Source {
         if directory_dist.editable {
-            Source::Editable(PathWire::from(directory_dist.lock_path.clone()))
+            Source::Editable(directory_dist.lock_path.clone())
         } else {
-            Source::Directory(PathWire::from(directory_dist.lock_path.clone()))
+            Source::Directory(directory_dist.lock_path.clone())
         }
     }
 
@@ -920,11 +929,11 @@ impl Source {
             IndexUrl::Pypi(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
             IndexUrl::Url(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
             // TODO(konsti): Retain path on index url without converting to URL.
-            IndexUrl::Path(ref verbatim_url) => Source::Path(PathWire::from(
+            IndexUrl::Path(ref verbatim_url) => Source::Path(
                 verbatim_url
                     .to_file_path()
                     .expect("Could not convert index url to path"),
-            )),
+            ),
         }
     }
 
@@ -985,11 +994,9 @@ impl std::str::FromStr for Source {
                 let direct_source = DirectSource::from_url(&mut url);
                 Ok(Source::Direct(url, direct_source))
             }
-            "path" => Ok(Source::Path(PathWire::from(PathBuf::from(url_or_path)))),
-            "directory" => Ok(Source::Directory(PathWire::from(PathBuf::from(
-                url_or_path,
-            )))),
-            "editable" => Ok(Source::Editable(PathWire::from(PathBuf::from(url_or_path)))),
+            "path" => Ok(Source::Path(PathBuf::from(url_or_path))),
+            "directory" => Ok(Source::Directory(PathBuf::from(url_or_path))),
+            "editable" => Ok(Source::Editable(PathBuf::from(url_or_path))),
             name => Err(SourceParseError::UnrecognizedSourceName {
                 given: s.to_string(),
                 name: name.to_string(),
@@ -1005,7 +1012,7 @@ impl std::fmt::Display for Source {
                 write!(f, "{}+{}", self.name(), url)
             }
             Source::Path(path) | Source::Directory(path) | Source::Editable(path) => {
-                write!(f, "{}+{}", self.name(), path)
+                write!(f, "{}+{}", self.name(), serialize_path_with_dot(path))
             }
         }
     }
@@ -1141,67 +1148,6 @@ struct SourceDistMetadata {
     size: Option<u64>,
 }
 
-/// A [`PathBuf`], but we show `.` instead of an empty path.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-struct PathWire(PathBuf);
-
-impl Display for PathWire {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let path = self.0.to_string_lossy();
-        if path.is_empty() {
-            f.write_str(".")
-        } else {
-            f.write_str(path.as_ref())
-        }
-    }
-}
-
-impl PathWire {
-    fn from_str(path: &str) -> Self {
-        if path == "." {
-            Self(PathBuf::new())
-        } else {
-            Self(PathBuf::from(path))
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for PathWire {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        Ok(Self::from_str(&string))
-    }
-}
-
-impl From<PathBuf> for PathWire {
-    fn from(value: PathBuf) -> Self {
-        Self(value)
-    }
-}
-
-impl From<PathWire> for PathBuf {
-    fn from(value: PathWire) -> Self {
-        value.0
-    }
-}
-
-impl AsRef<Path> for PathWire {
-    fn as_ref(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Deref for PathWire {
-    type Target = Path;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 /// A URL or file path where the source dist that was
 /// locked against was found. The location does not need to exist in the
 /// future, so this should be treated as only a hint to where to look
@@ -1215,10 +1161,24 @@ enum SourceDist {
         metadata: SourceDistMetadata,
     },
     Path {
-        path: PathWire,
+        #[serde(deserialize_with = "deserialize_path_with_dot")]
+        path: PathBuf,
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
+}
+
+/// A [`PathBuf`], but we show `.` instead of an empty path.
+fn deserialize_path_with_dot<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let path = String::deserialize(deserializer)?;
+    if path == "." {
+        Ok(PathBuf::new())
+    } else {
+        Ok(PathBuf::from(path))
+    }
 }
 
 impl SourceDist {
@@ -1254,7 +1214,7 @@ impl SourceDist {
                 table.insert("url", Value::from(url.as_str()));
             }
             SourceDist::Path { path, .. } => {
-                table.insert("path", Value::from(path.to_string()));
+                table.insert("path", Value::from(serialize_path_with_dot(path).as_ref()));
             }
         }
         if let Some(hash) = self.hash() {
@@ -1354,7 +1314,7 @@ impl SourceDist {
 
     fn from_path_dist(path_dist: &PathSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist::Path {
-            path: PathWire::from(path_dist.lock_path.clone()),
+            path: path_dist.lock_path.clone(),
             metadata: SourceDistMetadata {
                 hash: hashes.first().cloned().map(Hash::from),
                 size: None,
@@ -1367,7 +1327,7 @@ impl SourceDist {
         hashes: &[HashDigest],
     ) -> SourceDist {
         SourceDist::Path {
-            path: PathWire::from(directory_dist.lock_path.clone()),
+            path: directory_dist.lock_path.clone(),
             metadata: SourceDistMetadata {
                 hash: hashes.first().cloned().map(Hash::from),
                 size: None,
