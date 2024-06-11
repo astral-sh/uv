@@ -1,3 +1,5 @@
+use std::collections::Bound;
+
 use anstream::eprint;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
@@ -128,7 +130,7 @@ pub(super) async fn do_lock(
     //
     // For a workspace, we compute the union of all workspace requires-python values, ensuring we
     // keep track of `None` vs. a full range.
-    let requires_python_workspace =
+    let requires_python =
         RequiresPython::union(workspace.packages().values().filter_map(|member| {
             member
                 .pyproject_toml()
@@ -137,21 +139,32 @@ pub(super) async fn do_lock(
                 .and_then(|project| project.requires_python.as_ref())
         }))?;
 
-    let requires_python = if let Some(requires_python) = requires_python_workspace {
+    let requires_python = if let Some(requires_python) = requires_python {
+        if matches!(requires_python.bound(), Bound::Unbounded) {
+            let default =
+                RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
+            if let Some(root_project_name) = root_project_name.as_ref() {
+                warn_user!(
+                    "The `requires-python` field found in `{root_project_name}` does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).",
+                );
+            } else {
+                warn_user!(
+                    "The `requires-python` field does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).",
+                );
+            }
+        }
         requires_python
     } else {
-        let requires_python =
+        let default =
             RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
         if let Some(root_project_name) = root_project_name.as_ref() {
             warn_user!(
-                "No `requires-python` field found in `{root_project_name}`. Defaulting to `{requires_python}`.",
+                "No `requires-python` field found in `{root_project_name}`. Defaulting to `{default}`.",
             );
         } else {
-            warn_user!(
-                "No `requires-python` field found in workspace. Defaulting to `{requires_python}`.",
-            );
+            warn_user!("No `requires-python` field found in workspace. Defaulting to `{default}`.",);
         }
-        requires_python
+        default
     };
 
     // Initialize the registry client.
