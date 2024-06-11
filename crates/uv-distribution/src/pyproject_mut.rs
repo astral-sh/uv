@@ -107,9 +107,8 @@ impl fmt::Display for PyProjectTomlMut {
     }
 }
 
-#[allow(clippy::result_large_err)]
 fn try_parse_requirement(req: &str) -> Option<Requirement<VerbatimParsedUrl>> {
-    LenientRequirement::<VerbatimParsedUrl>::from_str(req)
+    LenientRequirement::from_str(req)
         .map(Requirement::from)
         .ok()
 }
