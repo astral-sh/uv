@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn ok_build_tag() {
         insta::assert_debug_snapshot!(WheelFilename::from_str(
-            "foo-1.2.3-12-python-abi-platform.whl"
+            "foo-1.2.3-202206090410-python-abi-platform.whl"
         ));
     }
 

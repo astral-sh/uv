@@ -34,7 +34,7 @@ pub enum BuildTagError {
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
-pub struct BuildTag(u32, Option<Arc<str>>);
+pub struct BuildTag(u64, Option<Arc<str>>);
 
 impl FromStr for BuildTag {
     type Err = BuildTagError;
@@ -58,6 +58,6 @@ impl FromStr for BuildTag {
             None => (s, None),
         };
 
-        Ok(BuildTag(prefix.parse::<u32>()?, suffix.map(Arc::from)))
+        Ok(BuildTag(prefix.parse::<u64>()?, suffix.map(Arc::from)))
     }
 }
