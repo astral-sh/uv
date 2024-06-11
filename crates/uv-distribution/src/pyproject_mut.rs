@@ -55,7 +55,7 @@ impl PyProjectTomlMut {
         }
 
         if to_replace.is_empty() {
-            deps.push(req.to_string())
+            deps.push(req.to_string());
         } else {
             // Replace the first occurrence of the dependency and remove the rest.
             deps.replace(to_replace[0], req.to_string());
@@ -65,7 +65,6 @@ impl PyProjectTomlMut {
         }
 
         reformat_array_multiline(deps);
-
         Ok(())
     }
 
