@@ -1344,7 +1344,7 @@ impl SourceDist {
 
     fn from_git_dist(git_dist: &GitSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist::Url {
-            url: git_dist.url.to_url(),
+            url: locked_git_url(git_dist),
             metadata: SourceDistMetadata {
                 hash: hashes.first().cloned().map(Hash::from),
                 size: None,
