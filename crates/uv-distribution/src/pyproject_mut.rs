@@ -5,7 +5,7 @@ use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, TomlError, Value};
 
 use pep508_rs::{PackageName, Requirement};
-use pypi_types::{LenientRequirement, VerbatimParsedUrl};
+use pypi_types::VerbatimParsedUrl;
 
 use crate::pyproject::PyProjectToml;
 
@@ -116,9 +116,7 @@ impl fmt::Display for PyProjectTomlMut {
 }
 
 fn try_parse_requirement(req: &str) -> Option<Requirement<VerbatimParsedUrl>> {
-    LenientRequirement::from_str(req)
-        .map(Requirement::from)
-        .ok()
+    Requirement::from_str(req).ok()
 }
 
 /// Reformats a TOML array to multi line while trying to preserve all comments

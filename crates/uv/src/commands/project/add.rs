@@ -4,7 +4,6 @@ use uv_distribution::pyproject_mut::PyProjectTomlMut;
 
 use distribution_types::IndexLocations;
 use pep508_rs::Requirement;
-use pypi_types::LenientRequirement;
 use uv_cache::Cache;
 use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::ProjectWorkspace;
@@ -31,7 +30,7 @@ pub(crate) async fn add(
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements {
-        let req = Requirement::from(LenientRequirement::from_str(&req)?);
+        let req = Requirement::from_str(&req)?;
         pyproject.add_dependency(&req)?;
     }
 
