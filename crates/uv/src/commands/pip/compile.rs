@@ -437,6 +437,7 @@ pub(crate) async fn pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
+                &dev,
                 &hasher,
                 &top_level_index,
                 DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),

@@ -12,6 +12,7 @@ use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_git::GitUrl;
+use uv_normalize::GroupName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
@@ -48,6 +49,8 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     constraints: &'a Constraints,
     /// The overrides for the project.
     overrides: &'a Overrides,
+    /// The development dependency groups for the project.
+    dev: &'a [GroupName],
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -63,6 +66,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
+        dev: &'a [GroupName],
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -71,6 +75,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             requirements,
             constraints,
             overrides,
+            dev,
             hasher,
             index,
             database,
@@ -149,7 +154,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         };
 
         // Fetch the metadata for the distribution.
-        let requires_dist = {
+        let metadata = {
             let id = dist.version_id();
             if let Some(archive) =
                 self.index
@@ -165,7 +170,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     })
             {
                 // If the metadata is already in the index, return it.
-                archive.metadata.requires_dist.clone()
+                archive.metadata.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
@@ -179,20 +184,34 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         }
                     })?;
 
-                let requires_dist = archive.metadata.requires_dist.clone();
+                let metadata = archive.metadata.clone();
 
                 // Insert the metadata into the index.
                 self.index
                     .distributions()
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                requires_dist
+                metadata
             }
         };
 
         // Respect recursive extras by propagating the source extras to the dependencies.
-        let requires_dist = requires_dist
+        let requires_dist = metadata
+            .requires_dist
             .into_iter()
+            .chain(
+                metadata
+                    .dev_dependencies
+                    .into_iter()
+                    .filter_map(|(group, dependencies)| {
+                        if self.dev.contains(&group) {
+                            Some(dependencies)
+                        } else {
+                            None
+                        }
+                    })
+                    .flatten(),
+            )
             .map(|dependency| {
                 if dependency.name == requirement.name {
                     Requirement {
