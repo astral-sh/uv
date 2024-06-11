@@ -45,7 +45,6 @@ pub(crate) async fn install(
         }
         request
     } else {
-        writeln!(printer.stderr(), "Using latest Python version")?;
         ToolchainRequest::default()
     };
 
@@ -58,11 +57,19 @@ pub(crate) async fn install(
             "Found installed toolchain '{}'",
             toolchain.key()
         )?;
-        writeln!(
-            printer.stderr(),
-            "Already installed at {}",
-            toolchain.path().user_display()
-        )?;
+
+        if matches!(request, ToolchainRequest::Any) {
+            writeln!(
+                printer.stderr(),
+                "A toolchain is already installed. Use `uv toolchain install <request>` to install a specific toolchain.",
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Already installed at {}",
+                toolchain.path().user_display()
+            )?;
+        }
         return Ok(ExitStatus::Success);
     }
 
