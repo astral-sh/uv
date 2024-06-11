@@ -1954,7 +1954,7 @@ pub(crate) struct AddArgs {
 pub(crate) struct RemoveArgs {
     /// The names of the packages to remove (e.g., `flask`).
     #[arg(required = true)]
-    pub(crate) requirements: Vec<String>,
+    pub(crate) requirements: Vec<PackageName>,
 
     /// The Python interpreter into which packages should be installed.
     ///

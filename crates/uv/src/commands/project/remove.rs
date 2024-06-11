@@ -14,7 +14,7 @@ use crate::printer::Printer;
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn remove(
-    requirements: Vec<String>,
+    requirements: Vec<PackageName>,
     python: Option<String>,
     preview: PreviewMode,
     cache: &Cache,
@@ -29,7 +29,6 @@ pub(crate) async fn remove(
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements {
-        let req = PackageName::new(req)?;
         if pyproject.remove_dependency(&req)?.is_empty() {
             anyhow::bail!(
                 "The dependency `{}` could not be found in `dependencies`",

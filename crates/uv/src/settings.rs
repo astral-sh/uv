@@ -415,7 +415,7 @@ impl AddSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
-    pub(crate) requirements: Vec<String>,
+    pub(crate) requirements: Vec<PackageName>,
     pub(crate) python: Option<String>,
 }
 
