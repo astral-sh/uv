@@ -20,3 +20,4 @@ mod middleware;
 mod registry_client;
 mod remote_metadata;
 mod rkyvutil;
+mod tls;

@@ -23,6 +23,7 @@ use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
+use crate::tls::read_identity;
 use crate::Connectivity;
 
 /// A builder for an [`BaseClient`].
@@ -159,6 +160,19 @@ impl<'a> BaseClientBuilder<'a> {
                 client_core.tls_built_in_native_certs(true)
             } else {
                 client_core.tls_built_in_webpki_certs(true)
+            };
+
+            // Configure mTLS.
+            let client_core = if let Some(ssl_client_cert) = env::var_os("SSL_CLIENT_CERT") {
+                match read_identity(&ssl_client_cert) {
+                    Ok(identity) => client_core.identity(identity),
+                    Err(err) => {
+                        warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
+                        client_core
+                    }
+                }
+            } else {
+                client_core
             };
 
             client_core.build().expect("Failed to build HTTP client.")
