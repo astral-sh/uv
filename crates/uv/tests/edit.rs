@@ -373,7 +373,7 @@ fn remove_registry() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio==3.7.0"]), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
