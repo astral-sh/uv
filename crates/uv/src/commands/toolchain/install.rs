@@ -23,7 +23,7 @@ pub(crate) async fn install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv toolchain fetch` is experimental and may change without warning.");
+        warn_user!("`uv toolchain install` is experimental and may change without warning.");
     }
 
     let toolchains = InstalledToolchains::from_settings()?.init()?;

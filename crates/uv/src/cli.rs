@@ -2014,7 +2014,7 @@ pub(crate) struct ToolchainListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolchainInstallArgs {
-    /// The toolchain to fetch.
+    /// The toolchain to install.
     ///
     /// If not provided, the latest available version will be installed.
     pub(crate) target: Option<String>,

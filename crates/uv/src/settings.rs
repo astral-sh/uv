@@ -266,7 +266,7 @@ impl ToolchainListSettings {
     }
 }
 
-/// The resolved settings to use for a `toolchain fetch` invocation.
+/// The resolved settings to use for a `toolchain install` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolchainInstallSettings {
