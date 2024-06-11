@@ -90,8 +90,8 @@ fn lock_wheel_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -173,8 +173,8 @@ fn lock_sdist_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "source-distribution"
@@ -232,8 +232,8 @@ fn lock_sdist_git() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
@@ -347,8 +347,8 @@ fn lock_wheel_url() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -472,8 +472,8 @@ fn lock_sdist_url() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -608,8 +608,8 @@ fn lock_project_extra() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -893,8 +893,8 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "flask"
@@ -1116,8 +1116,8 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "requests"
@@ -1210,7 +1210,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     fs_err::copy(lockfile, context_38.temp_dir.join("uv.lock"))?;
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context_38.sync(), @r###"
+    uv_snapshot!(context_38.filters(), context_38.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1277,8 +1277,8 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "iniconfig"
@@ -1330,8 +1330,8 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "iniconfig"
@@ -1372,8 +1372,8 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "iniconfig"
@@ -1426,8 +1426,8 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
@@ -1484,8 +1484,8 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
@@ -1527,8 +1527,8 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
@@ -1704,8 +1704,8 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "pygls"
@@ -1869,8 +1869,8 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "pygls"
@@ -2022,8 +2022,8 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "pygls"
@@ -2224,8 +2224,8 @@ fn lock_requires_python_star() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "linehaul"
@@ -2393,8 +2393,8 @@ fn lock_requires_python_pre() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "linehaul"
@@ -2477,8 +2477,8 @@ fn lock_dev() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+"
-        sdist = { path = "" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "iniconfig"
@@ -2578,8 +2578,8 @@ fn lock_conditional_unconditional() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "iniconfig"
@@ -2638,8 +2638,8 @@ fn lock_multiple_markers() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "iniconfig"

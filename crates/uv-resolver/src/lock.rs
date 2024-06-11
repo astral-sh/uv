@@ -4,6 +4,8 @@
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
+use std::fmt::{Debug, Display, Formatter};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -12,6 +14,7 @@ use either::Either;
 use indexmap::IndexMap;
 use petgraph::visit::EdgeRef;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Deserializer};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -605,7 +608,7 @@ impl Distribution {
                         filename,
                         url: VerbatimUrl::from_path(workspace_root.join(path))
                             .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
-                        path: path.clone(),
+                        path: path.clone().into(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
                     Ok(Dist::Built(built_dist))
@@ -650,7 +653,7 @@ impl Distribution {
                         url: VerbatimUrl::from_path(workspace_root.join(path))
                             .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
                         install_path: workspace_root.join(path),
-                        lock_path: path.clone(),
+                        lock_path: path.clone().into(),
                     };
                     let source_dist = distribution_types::SourceDist::Path(path_dist);
                     Ok(Dist::Source(source_dist))
@@ -661,7 +664,7 @@ impl Distribution {
                         url: VerbatimUrl::from_path(workspace_root.join(path))
                             .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
                         install_path: workspace_root.join(path),
-                        lock_path: path.clone(),
+                        lock_path: path.clone().into(),
                         editable: false,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
@@ -673,7 +676,7 @@ impl Distribution {
                         url: VerbatimUrl::from_path(workspace_root.join(path))
                             .map_err(|err| LockError::verbatim_url(self.id.clone(), err))?,
                         install_path: workspace_root.join(path),
-                        lock_path: path.clone(),
+                        lock_path: path.clone().into(),
                         editable: true,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
@@ -820,9 +823,9 @@ enum Source {
     Registry(Url),
     Git(Url, GitSource),
     Direct(Url, DirectSource),
-    Path(PathBuf),
-    Directory(PathBuf),
-    Editable(PathBuf),
+    Path(PathWire),
+    Directory(PathWire),
+    Editable(PathWire),
 }
 
 impl Source {
@@ -897,18 +900,18 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist) -> Source {
-        Source::Path(path_dist.path.clone())
+        Source::Path(PathWire::from(path_dist.path.clone()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist) -> Source {
-        Source::Path(path_dist.install_path.clone())
+        Source::Path(PathWire::from(path_dist.install_path.clone()))
     }
 
     fn from_directory_source_dist(directory_dist: &DirectorySourceDist) -> Source {
         if directory_dist.editable {
-            Source::Editable(directory_dist.lock_path.clone())
+            Source::Editable(PathWire::from(directory_dist.lock_path.clone()))
         } else {
-            Source::Directory(directory_dist.lock_path.clone())
+            Source::Directory(PathWire::from(directory_dist.lock_path.clone()))
         }
     }
 
@@ -917,11 +920,11 @@ impl Source {
             IndexUrl::Pypi(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
             IndexUrl::Url(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
             // TODO(konsti): Retain path on index url.
-            IndexUrl::Path(ref verbatim_url) => Source::Path(
+            IndexUrl::Path(ref verbatim_url) => Source::Path(PathWire::from(
                 verbatim_url
                     .to_file_path()
                     .expect("Could not convert index url to path"),
-            ),
+            )),
         }
     }
 
@@ -982,9 +985,11 @@ impl std::str::FromStr for Source {
                 let direct_source = DirectSource::from_url(&mut url);
                 Ok(Source::Direct(url, direct_source))
             }
-            "path" => Ok(Source::Path(PathBuf::from(url_or_path))),
-            "directory" => Ok(Source::Directory(PathBuf::from(url_or_path))),
-            "editable" => Ok(Source::Editable(PathBuf::from(url_or_path))),
+            "path" => Ok(Source::Path(PathWire::from(PathBuf::from(url_or_path)))),
+            "directory" => Ok(Source::Directory(PathWire::from(PathBuf::from(
+                url_or_path,
+            )))),
+            "editable" => Ok(Source::Editable(PathWire::from(PathBuf::from(url_or_path)))),
             name => Err(SourceParseError::UnrecognizedSourceName {
                 given: s.to_string(),
                 name: name.to_string(),
@@ -1000,7 +1005,7 @@ impl std::fmt::Display for Source {
                 write!(f, "{}+{}", self.name(), url)
             }
             Source::Path(path) | Source::Directory(path) | Source::Editable(path) => {
-                write!(f, "{}+{}", self.name(), path.display())
+                write!(f, "{}+{}", self.name(), path)
             }
         }
     }
@@ -1136,6 +1141,67 @@ struct SourceDistMetadata {
     size: Option<u64>,
 }
 
+/// A [`PathBuf`], but we show `.` instead of an empty path.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+struct PathWire(PathBuf);
+
+impl Display for PathWire {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let path = self.0.to_string_lossy();
+        if path.is_empty() {
+            f.write_str(".")
+        } else {
+            f.write_str(path.as_ref())
+        }
+    }
+}
+
+impl PathWire {
+    fn from_str(path: &str) -> Self {
+        if path == "." {
+            Self(PathBuf::new())
+        } else {
+            Self(PathBuf::from(path))
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PathWire {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        Ok(Self::from_str(&string))
+    }
+}
+
+impl From<PathBuf> for PathWire {
+    fn from(value: PathBuf) -> Self {
+        Self(value)
+    }
+}
+
+impl From<PathWire> for PathBuf {
+    fn from(value: PathWire) -> Self {
+        value.0
+    }
+}
+
+impl AsRef<Path> for PathWire {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Deref for PathWire {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// A URL or file path where the source dist that was
 /// locked against was found. The location does not need to exist in the
 /// future, so this should be treated as only a hint to where to look
@@ -1149,7 +1215,7 @@ enum SourceDist {
         metadata: SourceDistMetadata,
     },
     Path {
-        path: PathBuf,
+        path: PathWire,
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
@@ -1188,7 +1254,7 @@ impl SourceDist {
                 table.insert("url", Value::from(url.as_str()));
             }
             SourceDist::Path { path, .. } => {
-                table.insert("path", Value::from(path.to_string_lossy().as_ref()));
+                table.insert("path", Value::from(path.to_string()));
             }
         }
         if let Some(hash) = self.hash() {
@@ -1288,7 +1354,7 @@ impl SourceDist {
 
     fn from_path_dist(path_dist: &PathSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist::Path {
-            path: path_dist.lock_path.clone(),
+            path: PathWire::from(path_dist.lock_path.clone()),
             metadata: SourceDistMetadata {
                 hash: hashes.first().cloned().map(Hash::from),
                 size: None,
@@ -1301,7 +1367,7 @@ impl SourceDist {
         hashes: &[HashDigest],
     ) -> SourceDist {
         SourceDist::Path {
-            path: directory_dist.lock_path.clone(),
+            path: PathWire::from(directory_dist.lock_path.clone()),
             metadata: SourceDistMetadata {
                 hash: hashes.first().cloned().map(Hash::from),
                 size: None,
@@ -1887,7 +1953,7 @@ impl std::error::Error for HashParseError {}
 
 impl std::fmt::Display for HashParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.0.fmt(f)
+        Display::fmt(self.0, f)
     }
 }
 
