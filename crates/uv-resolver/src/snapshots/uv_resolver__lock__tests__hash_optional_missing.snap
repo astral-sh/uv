@@ -13,9 +13,7 @@ Ok(
                     ),
                     version: "4.3.0",
                     source: Path(
-                        PathWire(
-                            "file:///foo/bar",
-                        ),
+                        "file:///foo/bar",
                     ),
                 },
                 sdist: None,
@@ -72,9 +70,7 @@ Ok(
                 ),
                 version: "4.3.0",
                 source: Path(
-                    PathWire(
-                        "file:///foo/bar",
-                    ),
+                    "file:///foo/bar",
                 ),
             }: 0,
         },
