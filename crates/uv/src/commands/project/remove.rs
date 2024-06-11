@@ -1,4 +1,5 @@
 use anyhow::Result;
+use pep508_rs::PackageName;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 
 use distribution_types::IndexLocations;
@@ -28,6 +29,7 @@ pub(crate) async fn remove(
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements {
+        let req = PackageName::new(req)?;
         if pyproject.remove_dependency(&req)?.is_empty() {
             anyhow::bail!(
                 "The dependency `{}` could not be found in `dependencies`",

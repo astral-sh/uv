@@ -4,7 +4,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, TomlError, Value};
 
-use pep508_rs::Requirement;
+use pep508_rs::{PackageName, Requirement};
 use pypi_types::{LenientRequirement, VerbatimParsedUrl};
 
 use crate::pyproject::PyProjectToml;
@@ -21,7 +21,7 @@ pub struct PyProjectTomlMut {
 pub enum Error {
     #[error("Failed to parse `pyproject.toml`")]
     Parse(#[from] Box<TomlError>),
-    #[error("Dependencies in pyproject.toml are malformed")]
+    #[error("Dependencies in `pyproject.toml` are malformed")]
     MalformedDependencies,
 }
 
@@ -41,22 +41,27 @@ impl PyProjectTomlMut {
         }
         let deps = deps.as_array_mut().ok_or(Error::MalformedDependencies)?;
 
-        // Try to find a matching dependency.
-        let mut to_replace = None;
+        // Try to find matching dependencies.
+        let mut to_replace = Vec::new();
         for (i, dep) in deps.iter().enumerate() {
-            if let Some(dep) = dep.as_str().and_then(try_parse_requirement) {
-                if dep.name.as_ref().eq_ignore_ascii_case(req.name.as_ref()) {
-                    to_replace = Some(i);
-                    break;
-                }
+            if dep
+                .as_str()
+                .and_then(try_parse_requirement)
+                .filter(|dep| dep.name == req.name)
+                .is_some()
+            {
+                to_replace.push(i);
             }
         }
 
-        match to_replace {
-            Some(i) => {
-                deps.replace(i, req.to_string());
+        if to_replace.is_empty() {
+            deps.push(req.to_string())
+        } else {
+            // Replace the first occurrence of the dependency and remove the rest.
+            deps.replace(to_replace[0], req.to_string());
+            for &i in to_replace[1..].iter().rev() {
+                deps.remove(i);
             }
-            None => deps.push(req.to_string()),
         }
 
         reformat_array_multiline(deps);
@@ -65,7 +70,7 @@ impl PyProjectTomlMut {
     }
 
     /// Removes all occurrences of dependencies with the given name.
-    pub fn remove_dependency(&mut self, req: &String) -> Result<Vec<Requirement>, Error> {
+    pub fn remove_dependency(&mut self, req: &PackageName) -> Result<Vec<Requirement>, Error> {
         let deps = &mut self.doc["project"]["dependencies"];
         if deps.is_none() {
             return Ok(Vec::new());
@@ -76,10 +81,13 @@ impl PyProjectTomlMut {
         // Try to find matching dependencies.
         let mut to_remove = Vec::new();
         for (i, dep) in deps.iter().enumerate() {
-            if let Some(dep) = dep.as_str().and_then(try_parse_requirement) {
-                if dep.name.as_ref().eq_ignore_ascii_case(req.as_ref()) {
-                    to_remove.push(i);
-                }
+            if dep
+                .as_str()
+                .and_then(try_parse_requirement)
+                .filter(|dep| dep.name == *req)
+                .is_some()
+            {
+                to_remove.push(i);
             }
         }
 
@@ -115,7 +123,7 @@ fn try_parse_requirement(req: &str) -> Option<Requirement<VerbatimParsedUrl>> {
 
 /// Reformats a TOML array to multi line while trying to preserve all comments
 /// and move them around. This also formats the array to have a trailing comma.
-pub fn reformat_array_multiline(deps: &mut Array) {
+fn reformat_array_multiline(deps: &mut Array) {
     fn find_comments(s: Option<&RawString>) -> impl Iterator<Item = &str> {
         s.and_then(|x| x.as_str())
             .unwrap_or("")
