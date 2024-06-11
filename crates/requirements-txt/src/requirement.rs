@@ -29,7 +29,7 @@ pub enum EditableError {
 
 /// A requirement specifier in a `requirements.txt` file.
 ///
-/// Analog to `SpecifiedRequirement` but with `pep508_rs::Requirement` instead of
+/// Analog to `UnresolvedRequirement` but with `pep508_rs::Requirement` instead of
 /// `distribution_types::Requirement`.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 pub enum RequirementsTxtRequirement {
