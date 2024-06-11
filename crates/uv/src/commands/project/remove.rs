@@ -17,6 +17,7 @@ use crate::printer::Printer;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn remove(
     requirements: Vec<String>,
+    python: Option<String>,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -46,7 +47,13 @@ pub(crate) async fn remove(
     )?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(project.workspace(), preview, cache, printer)?;
+    let venv = project::init_environment(
+        project.workspace(),
+        python.as_deref(),
+        preview,
+        cache,
+        printer,
+    )?;
 
     let index_locations = IndexLocations::default();
     let upgrade = Upgrade::None;
@@ -79,7 +86,7 @@ pub(crate) async fn remove(
     let dev = true;
 
     project::sync::do_sync(
-        &project,
+        project.project_name(),
         &venv,
         &lock,
         &index_locations,

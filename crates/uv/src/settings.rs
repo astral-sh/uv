@@ -23,7 +23,7 @@ use uv_workspace::{Combine, PipOptions, Workspace};
 use crate::cli::{
     AddArgs, ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
     PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RemoveArgs, RunArgs,
-    SyncArgs, ToolRunArgs, ToolchainListArgs, VenvArgs,
+    SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -392,15 +392,22 @@ impl LockSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<String>,
+    pub(crate) python: Option<String>,
 }
 
 impl AddSettings {
     /// Resolve the [`AddSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: AddArgs, _workspace: Option<Workspace>) -> Self {
-        let AddArgs { requirements } = args;
+        let AddArgs {
+            requirements,
+            python,
+        } = args;
 
-        Self { requirements }
+        Self {
+            requirements,
+            python,
+        }
     }
 }
 
@@ -409,15 +416,22 @@ impl AddSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
     pub(crate) requirements: Vec<String>,
+    pub(crate) python: Option<String>,
 }
 
 impl RemoveSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RemoveArgs, _workspace: Option<Workspace>) -> Self {
-        let RemoveArgs { requirements } = args;
+        let RemoveArgs {
+            requirements,
+            python,
+        } = args;
 
-        Self { requirements }
+        Self {
+            requirements,
+            python,
+        }
     }
 }
 
