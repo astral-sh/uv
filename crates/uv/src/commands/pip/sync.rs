@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
@@ -8,7 +7,6 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
-use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -29,8 +27,8 @@ use uv_resolver::{
 use uv_toolchain::{Prefix, PythonEnvironment, PythonVersion, SystemPython, Target, Toolchain};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -173,41 +171,8 @@ pub(crate) async fn pip_sync(
 
     let interpreter = environment.interpreter();
 
-    // Determine the current environment markers.
-    let tags = match (python_platform, python_version.as_ref()) {
-        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
-            &python_platform.platform(),
-            (python_version.major(), python_version.minor()),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
-            &python_platform.platform(),
-            interpreter.python_tuple(),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
-            interpreter.platform(),
-            (python_version.major(), python_version.minor()),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (None, None) => Cow::Borrowed(interpreter.tags()?),
-    };
-
-    // Apply the platform tags to the markers.
-    let markers = match (python_platform, python_version) {
-        (Some(python_platform), Some(python_version)) => {
-            Cow::Owned(python_version.markers(&python_platform.markers(interpreter.markers())))
-        }
-        (Some(python_platform), None) => Cow::Owned(python_platform.markers(interpreter.markers())),
-        (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
-        (None, None) => Cow::Borrowed(interpreter.markers()),
-    };
+    // Determine the environment for the resolution.
+    let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
 
     // Collect the set of required hashes.
     let hasher = if require_hashes {
