@@ -49,10 +49,8 @@ pub(crate) async fn remove(
     let venv = project::init_environment(project.workspace(), preview, cache, printer)?;
 
     let index_locations = IndexLocations::default();
-    let upgrade = Upgrade::default();
-    let extras = ExtrasSpecification::default();
+    let upgrade = Upgrade::None;
     let exclude_newer = None;
-    let dev = false; // We only add regular dependencies currently.
 
     // Lock and sync the environment.
     let root_project_name = project
@@ -74,6 +72,11 @@ pub(crate) async fn remove(
         printer,
     )
     .await?;
+
+    // Perform a full sync, because we don't know what exactly is affected by the removal.
+    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
+    let extras = ExtrasSpecification::All;
+    let dev = true;
 
     project::sync::do_sync(
         &project,
