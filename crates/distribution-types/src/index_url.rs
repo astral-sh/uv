@@ -98,6 +98,8 @@ impl FromStr for IndexUrl {
         let url = VerbatimUrl::from_url(url).with_given(s.to_owned());
         if *url.raw() == *PYPI_URL {
             Ok(Self::Pypi(url))
+        } else if url.scheme() == "file" {
+            Ok(Self::Path(url))
         } else {
             Ok(Self::Url(url))
         }

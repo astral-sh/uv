@@ -1655,6 +1655,9 @@ pub(crate) struct VenvArgs {
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
+    ///
     /// The index given by this flag is given lower priority than all other
     /// indexes specified via the `--extra-index-url` flag.
     ///
@@ -1665,6 +1668,9 @@ pub(crate) struct VenvArgs {
     pub(crate) index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
     ///
     /// All indexes given via this flag take priority over the index
     /// in `--index-url` (which defaults to PyPI). And when multiple
@@ -2018,6 +2024,9 @@ pub(crate) struct ToolchainInstallArgs {
 pub(crate) struct IndexArgs {
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
+    ///
     /// The index given by this flag is given lower priority than all other
     /// indexes specified via the `--extra-index-url` flag.
     ///
@@ -2028,6 +2037,9 @@ pub(crate) struct IndexArgs {
     pub(crate) index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
     ///
     /// All indexes given via this flag take priority over the index
     /// in `--index-url` (which defaults to PyPI). And when multiple

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use tokio::task::JoinError;
+use url::Url;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
@@ -25,6 +26,8 @@ pub enum Error {
     RelativePath(PathBuf),
     #[error(transparent)]
     JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
+    #[error("Expected a file URL, but received: {0}")]
+    NonFileUrl(Url),
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]

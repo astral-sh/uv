@@ -128,15 +128,15 @@ impl From<ErrorKind> for Error {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErrorKind {
-    /// An invalid URL was provided.
     #[error(transparent)]
-    UrlParseError(#[from] url::ParseError),
+    UrlParse(#[from] url::ParseError),
 
-    /// A base URL could not be joined with a possibly relative URL.
     #[error(transparent)]
-    JoinRelativeError(#[from] pypi_types::JoinRelativeError),
+    JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
 
-    /// Dist-info error
+    #[error("Expected a file URL, but received: {0}")]
+    NonFileUrl(Url),
+
     #[error(transparent)]
     DistInfo(#[from] install_wheel_rs::Error),
 

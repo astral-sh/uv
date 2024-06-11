@@ -235,6 +235,7 @@ impl Pep508Url for VerbatimUrl {
                             .with_given(url.to_string()),
                     )
                 }
+
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
                     // Ex) `https://download.pytorch.org/whl/torch_stable.html`
