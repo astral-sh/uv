@@ -115,8 +115,8 @@ fn add_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -284,8 +284,8 @@ fn add_git() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -467,8 +467,8 @@ fn update_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+."
+        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -500,7 +500,7 @@ fn update_registry() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Audited 1 package in [TIME]
+    Audited 4 packages in [TIME]
     "###);
 
     Ok(())
@@ -589,8 +589,8 @@ fn remove_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+."
+        sdist = { path = "." }
         "###
         );
     });
@@ -695,8 +695,8 @@ fn remove_all_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+file://[TEMP_DIR]/"
-        sdist = { url = "file://[TEMP_DIR]/" }
+        source = "editable+."
+        sdist = { path = "." }
         "###
         );
     });
