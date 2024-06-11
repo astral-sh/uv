@@ -21,7 +21,7 @@ use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, Options, RequiresPython};
-use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest, VersionRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -125,15 +125,25 @@ pub(crate) fn init_environment(
         Err(e) => return Err(e.into()),
     }
 
-    // TODO(konsti): Extend `VersionRequest` to support `VersionSpecifiers`.
-    let requires_python_str = requires_python.map(ToString::to_string);
-    let interpreter = Toolchain::find(
-        python.or(requires_python_str.as_deref()),
-        // Otherwise we'll try to use the venv we just deleted.
-        SystemPython::Required,
-        preview,
-        cache,
-    )?
+    let interpreter = if let Some(request) = python.map(ToolchainRequest::parse).or(requires_python
+        .map(|specifiers| ToolchainRequest::Version(VersionRequest::Range(specifiers.clone()))))
+    {
+        Toolchain::find_requested(
+            &request,
+            // Otherwise we'll try to use the venv we just deleted.
+            SystemPython::Required,
+            preview,
+            cache,
+        )
+    } else {
+        Toolchain::find(
+            None,
+            // Otherwise we'll try to use the venv we just deleted.
+            SystemPython::Required,
+            preview,
+            cache,
+        )
+    }?
     .into_interpreter();
 
     if let Some(requires_python) = requires_python {
