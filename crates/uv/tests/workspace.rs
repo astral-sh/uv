@@ -420,7 +420,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: [VENV]/
-    Resolved 10 packages in [TIME]
+    Resolved 8 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -442,7 +442,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 8 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
@@ -480,7 +480,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: [VENV]/
-    Resolved 10 packages in [TIME]
+    Resolved 8 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -502,7 +502,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 8 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)

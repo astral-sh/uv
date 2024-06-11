@@ -8,7 +8,7 @@ use tracing::warn;
 
 use distribution_types::Verbatim;
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::{
     ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement, RequirementSource,
 };
@@ -39,6 +39,7 @@ impl PubGrubDependencies {
         locals: &Locals,
         git: &GitResolver,
         env: Option<&MarkerEnvironment>,
+        requires_python: Option<&MarkerTree>,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = Vec::default();
         let mut seen = FxHashSet::default();
@@ -55,6 +56,7 @@ impl PubGrubDependencies {
             locals,
             git,
             env,
+            requires_python,
             &mut dependencies,
             &mut seen,
         )?;
@@ -87,6 +89,7 @@ fn add_requirements(
     locals: &Locals,
     git: &GitResolver,
     env: Option<&MarkerEnvironment>,
+    requires_python: Option<&MarkerTree>,
     dependencies: &mut Vec<(PubGrubPackage, Range<Version>)>,
     seen: &mut FxHashSet<ExtraName>,
 ) -> Result<(), ResolveError> {
@@ -96,6 +99,11 @@ fn add_requirements(
     } else {
         Either::Right(requirements.iter())
     }) {
+        // If the requirement would not be selected with any Python version
+        // supported by the root, skip it.
+        if !satisfies_requires_python(requires_python, requirement) {
+            continue;
+        }
         // If the requirement isn't relevant for the current platform, skip it.
         match source_extra {
             Some(source_extra) => {
@@ -157,6 +165,7 @@ fn add_requirements(
                                 locals,
                                 git,
                                 env,
+                                requires_python,
                                 dependencies,
                                 seen,
                             )?;
@@ -170,6 +179,11 @@ fn add_requirements(
 
             // If the requirement was constrained, add those constraints.
             for constraint in constraints.get(&requirement.name).into_iter().flatten() {
+                // If the requirement would not be selected with any Python
+                // version supported by the root, skip it.
+                if !satisfies_requires_python(requires_python, constraint) {
+                    continue;
+                }
                 // If the requirement isn't relevant for the current platform, skip it.
                 match source_extra {
                     Some(source_extra) => {
@@ -380,4 +394,23 @@ impl PubGrubRequirement {
     ) -> Result<Self, ResolveError> {
         Self::from_requirement(constraint, None, urls, locals, git)
     }
+}
+
+/// Returns true if and only if the given requirement's marker expression has a
+/// possible true value given the `requires_python` specifier given.
+///
+/// While this is always called, a `requires_python` is only non-None when in
+/// universal resolution mode. In non-universal mode, `requires_python` is
+/// `None` and this always returns `true`.
+fn satisfies_requires_python(
+    requires_python: Option<&MarkerTree>,
+    requirement: &Requirement,
+) -> bool {
+    let Some(requires_python) = requires_python else {
+        return true;
+    };
+    let Some(marker) = requirement.marker.as_ref() else {
+        return true;
+    };
+    !crate::marker::is_disjoint(requires_python, marker)
 }

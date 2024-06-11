@@ -58,6 +58,12 @@ impl PythonRequirement {
     pub fn target(&self) -> Option<&PythonTarget> {
         self.target.as_ref()
     }
+
+    /// Return the target version of Python as a "requires python" type,
+    /// if available.
+    pub(crate) fn requires_python(&self) -> Option<&RequiresPython> {
+        self.target().and_then(|target| target.as_requires_python())
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
