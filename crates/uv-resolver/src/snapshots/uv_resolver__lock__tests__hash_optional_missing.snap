@@ -12,20 +12,9 @@ Ok(
                         "anyio",
                     ),
                     version: "4.3.0",
-                    source: Source {
-                        kind: Path,
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "/foo/bar",
-                            query: None,
-                            fragment: None,
-                        },
-                    },
+                    source: Path(
+                        "file:///foo/bar",
+                    ),
                 },
                 sdist: None,
                 wheels: [
@@ -80,20 +69,9 @@ Ok(
                     "anyio",
                 ),
                 version: "4.3.0",
-                source: Source {
-                    kind: Path,
-                    url: Url {
-                        scheme: "file",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: None,
-                        port: None,
-                        path: "/foo/bar",
-                        query: None,
-                        fragment: None,
-                    },
-                },
+                source: Path(
+                    "file:///foo/bar",
+                ),
             }: 0,
         },
     },

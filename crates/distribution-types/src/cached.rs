@@ -116,12 +116,14 @@ impl CachedDist {
             Self::Url(dist) => {
                 if dist.editable {
                     assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
+                    let path = dist
+                        .url
+                        .to_file_path()
+                        .map_err(|()| anyhow!("Invalid path in file URL"))?;
                     Ok(Some(ParsedUrl::Path(ParsedPathUrl {
                         url: dist.url.raw().clone(),
-                        path: dist
-                            .url
-                            .to_file_path()
-                            .map_err(|()| anyhow!("Invalid path in file URL"))?,
+                        install_path: path.clone(),
+                        lock_path: path,
                         editable: dist.editable,
                     })))
                 } else {

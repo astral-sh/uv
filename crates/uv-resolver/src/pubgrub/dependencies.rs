@@ -334,7 +334,8 @@ impl PubGrubRequirement {
             RequirementSource::Path {
                 editable,
                 url,
-                path,
+                install_path,
+                lock_path,
             } => {
                 let Some(expected) = urls.get(&requirement.name) else {
                     return Err(ResolveError::DisallowedUrl(
@@ -344,7 +345,8 @@ impl PubGrubRequirement {
                 };
 
                 let parsed_url = ParsedUrl::Path(ParsedPathUrl::from_source(
-                    path.clone(),
+                    install_path.clone(),
+                    lock_path.clone(),
                     *editable,
                     url.to_url(),
                 ));

@@ -139,15 +139,15 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
         let source = match &requirement.url.parsed_url {
             // If the path points to a directory, attempt to read the name from static metadata.
-            ParsedUrl::Path(parsed_path_url) if parsed_path_url.path.is_dir() => {
+            ParsedUrl::Path(parsed_path_url) if parsed_path_url.install_path.is_dir() => {
                 // Attempt to read a `PKG-INFO` from the directory.
-                if let Some(metadata) = fs_err::read(parsed_path_url.path.join("PKG-INFO"))
+                if let Some(metadata) = fs_err::read(parsed_path_url.install_path.join("PKG-INFO"))
                     .ok()
                     .and_then(|contents| Metadata10::parse_pkg_info(&contents).ok())
                 {
                     debug!(
                         "Found PKG-INFO metadata for {path} ({name})",
-                        path = parsed_path_url.path.display(),
+                        path = parsed_path_url.install_path.display(),
                         name = metadata.name
                     );
                     return Ok(pep508_rs::Requirement {
@@ -160,7 +160,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 }
 
                 // Attempt to read a `pyproject.toml` file.
-                let project_path = parsed_path_url.path.join("pyproject.toml");
+                let project_path = parsed_path_url.install_path.join("pyproject.toml");
                 if let Some(pyproject) = fs_err::read_to_string(project_path)
                     .ok()
                     .and_then(|contents| toml::from_str::<PyProjectToml>(&contents).ok())
@@ -169,7 +169,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     if let Some(project) = pyproject.project {
                         debug!(
                             "Found PEP 621 metadata for {path} in `pyproject.toml` ({name})",
-                            path = parsed_path_url.path.display(),
+                            path = parsed_path_url.install_path.display(),
                             name = project.name
                         );
                         return Ok(pep508_rs::Requirement {
@@ -187,7 +187,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             if let Some(name) = poetry.name {
                                 debug!(
                                     "Found Poetry metadata for {path} in `pyproject.toml` ({name})",
-                                    path = parsed_path_url.path.display(),
+                                    path = parsed_path_url.install_path.display(),
                                     name = name
                                 );
                                 return Ok(pep508_rs::Requirement {
@@ -204,7 +204,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
                 // Attempt to read a `setup.cfg` from the directory.
                 if let Some(setup_cfg) =
-                    fs_err::read_to_string(parsed_path_url.path.join("setup.cfg"))
+                    fs_err::read_to_string(parsed_path_url.install_path.join("setup.cfg"))
                         .ok()
                         .and_then(|contents| {
                             let mut ini = Ini::new_cs();
@@ -217,7 +217,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             if let Ok(name) = PackageName::from_str(name) {
                                 debug!(
                                     "Found setuptools metadata for {path} in `setup.cfg` ({name})",
-                                    path = parsed_path_url.path.display(),
+                                    path = parsed_path_url.install_path.display(),
                                     name = name
                                 );
                                 return Ok(pep508_rs::Requirement {
@@ -234,14 +234,14 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
                 SourceUrl::Directory(DirectorySourceUrl {
                     url: &requirement.url.verbatim,
-                    path: Cow::Borrowed(&parsed_path_url.path),
+                    path: Cow::Borrowed(&parsed_path_url.install_path),
                     editable: parsed_path_url.editable,
                 })
             }
             // If it's not a directory, assume it's a file.
             ParsedUrl::Path(parsed_path_url) => SourceUrl::Path(PathSourceUrl {
                 url: &requirement.url.verbatim,
-                path: Cow::Borrowed(&parsed_path_url.path),
+                path: Cow::Borrowed(&parsed_path_url.install_path),
             }),
             ParsedUrl::Archive(parsed_archive_url) => SourceUrl::Direct(DirectSourceUrl {
                 url: &parsed_archive_url.url,

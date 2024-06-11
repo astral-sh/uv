@@ -59,8 +59,9 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
     ) -> Result<Self, Self::Err> {
         let verbatim = VerbatimUrl::parse_path(&path, &working_dir)?;
         let parsed_path_url = ParsedPathUrl {
-            path: verbatim.as_path()?,
             url: verbatim.to_url(),
+            install_path: verbatim.as_path()?,
+            lock_path: path.as_ref().to_path_buf(),
             editable: false,
         };
         Ok(Self {
@@ -72,8 +73,9 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
         let verbatim = VerbatimUrl::parse_absolute_path(&path)?;
         let parsed_path_url = ParsedPathUrl {
-            path: verbatim.as_path()?,
             url: verbatim.to_url(),
+            install_path: verbatim.as_path()?,
+            lock_path: path.as_ref().to_path_buf(),
             editable: false,
         };
         Ok(Self {
@@ -171,16 +173,27 @@ impl ParsedUrl {
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedPathUrl {
     pub url: Url,
-    pub path: PathBuf,
+    /// The resolved, absolute path to the distribution which we use for installing.
+    pub install_path: PathBuf,
+    /// The absolute path or path relative to the workspace root pointing to the distribution
+    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+    pub lock_path: PathBuf,
     pub editable: bool,
 }
 
 impl ParsedPathUrl {
     /// Construct a [`ParsedPathUrl`] from a path requirement source.
-    pub fn from_source(path: PathBuf, editable: bool, url: Url) -> Self {
+    pub fn from_source(
+        install_path: PathBuf,
+        lock_path: PathBuf,
+        editable: bool,
+        url: Url,
+    ) -> Self {
         Self {
             url,
-            path,
+            install_path,
+            lock_path,
             editable,
         }
     }
@@ -311,7 +324,8 @@ impl TryFrom<Url> for ParsedUrl {
                 .map_err(|()| ParsedUrlError::InvalidFileUrl(url.clone()))?;
             Ok(Self::Path(ParsedPathUrl {
                 url,
-                path,
+                install_path: path.clone(),
+                lock_path: path,
                 editable: false,
             }))
         } else {

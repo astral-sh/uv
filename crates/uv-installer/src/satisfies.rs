@@ -149,9 +149,10 @@ impl RequirementSatisfaction {
                 Ok(Self::Satisfied)
             }
             RequirementSource::Path {
-                url: _,
-                path: requested_path,
+                install_path: requested_path,
+                lock_path: _,
                 editable: requested_editable,
+                url: _,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
                 else {

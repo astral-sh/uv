@@ -177,7 +177,12 @@ impl Workspace {
                     extras,
                     marker: None,
                     source: RequirementSource::Path {
-                        path: member.root.clone(),
+                        install_path: member.root.clone(),
+                        lock_path: member
+                            .root
+                            .strip_prefix(&self.root)
+                            .expect("Project must be below workspace root")
+                            .to_path_buf(),
                         editable: true,
                         url,
                     },

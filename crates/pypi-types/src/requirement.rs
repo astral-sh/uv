@@ -170,7 +170,12 @@ pub enum RequirementSource {
     /// `.tag.gz` file) or a source tree (a directory with a pyproject.toml in, or a legacy
     /// source distribution with only a setup.py but non pyproject.toml in it).
     Path {
-        path: PathBuf,
+        /// The resolved, absolute path to the distribution which we use for installing.
+        install_path: PathBuf,
+        /// The absolute path or path relative to the workspace root pointing to the distribution
+        /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+        /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+        lock_path: PathBuf,
         /// For a source tree (a directory), whether to install as an editable.
         editable: bool,
         /// The PEP 508 style URL in the format
@@ -185,7 +190,8 @@ impl RequirementSource {
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
             ParsedUrl::Path(local_file) => RequirementSource::Path {
-                path: local_file.path,
+                install_path: local_file.install_path.clone(),
+                lock_path: local_file.lock_path.clone(),
                 url,
                 editable: local_file.editable,
             },

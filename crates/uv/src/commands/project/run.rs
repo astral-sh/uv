@@ -91,6 +91,7 @@ pub(crate) async fn run(
         .await?;
         project::sync::do_sync(
             project.project_name(),
+            project.workspace().root(),
             &venv,
             &lock,
             &index_locations,
