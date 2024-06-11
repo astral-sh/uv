@@ -20,7 +20,7 @@ pub struct PyProjectTomlMut {
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed to parse `pyproject.toml`")]
-    Parse(#[from] TomlError),
+    Parse(#[from] Box<TomlError>),
     #[error("Dependencies in pyproject.toml are malformed")]
     MalformedDependencies,
 }
@@ -29,7 +29,7 @@ impl PyProjectTomlMut {
     /// Initialize a `PyProjectTomlMut` from a `PyProjectToml`.
     pub fn from_toml(pyproject: &PyProjectToml) -> Result<Self, Error> {
         Ok(Self {
-            doc: pyproject.raw.parse()?,
+            doc: pyproject.raw.parse().map_err(Box::new)?,
         })
     }
 
