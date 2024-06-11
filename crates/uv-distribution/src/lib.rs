@@ -14,6 +14,7 @@ mod index;
 mod locks;
 mod metadata;
 pub mod pyproject;
+pub mod pyproject_mut;
 mod reporter;
 mod source;
 mod workspace;

@@ -48,6 +48,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 toml =  { workspace = true }
+toml_edit =  { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true }

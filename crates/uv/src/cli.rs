@@ -153,6 +153,12 @@ pub(crate) enum Commands {
     /// Resolve the project requirements into a lockfile.
     #[clap(hide = true)]
     Lock(LockArgs),
+    /// Add one or more packages to the project requirements.
+    #[clap(hide = true)]
+    Add(AddArgs),
+    /// Remove one or more packages from the project requirements.
+    #[clap(hide = true)]
+    Remove(RemoveArgs),
     /// Display uv's version
     Version {
         #[arg(long, value_enum, default_value = "text")]
@@ -1922,16 +1928,48 @@ pub(crate) struct LockArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-struct AddArgs {
-    /// The name of the package to add (e.g., `Django==4.2.6`).
-    name: String,
+pub(crate) struct AddArgs {
+    /// The packages to remove, as PEP 508 requirements (e.g., `flask==2.2.3`).
+    #[arg(required = true)]
+    pub(crate) requirements: Vec<String>,
+
+    /// The Python interpreter into which packages should be installed.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    pub(crate) python: Option<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-struct RemoveArgs {
-    /// The name of the package to remove (e.g., `Django`).
-    name: PackageName,
+pub(crate) struct RemoveArgs {
+    /// The names of the packages to remove (e.g., `flask`).
+    #[arg(required = true)]
+    pub(crate) requirements: Vec<PackageName>,
+
+    /// The Python interpreter into which packages should be installed.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    pub(crate) python: Option<String>,
 }
 
 #[derive(Args)]

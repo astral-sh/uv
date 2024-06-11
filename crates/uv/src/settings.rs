@@ -21,9 +21,9 @@ use uv_toolchain::{Prefix, PythonVersion, Target};
 use uv_workspace::{Combine, PipOptions, Workspace};
 
 use crate::cli::{
-    ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
-    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, SyncArgs,
-    ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
+    AddArgs, ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
+    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RemoveArgs, RunArgs,
+    SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -382,6 +382,54 @@ impl LockSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             exclude_newer,
+            python,
+        }
+    }
+}
+
+/// The resolved settings to use for a `add` invocation.
+#[allow(clippy::struct_excessive_bools, dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct AddSettings {
+    pub(crate) requirements: Vec<String>,
+    pub(crate) python: Option<String>,
+}
+
+impl AddSettings {
+    /// Resolve the [`AddSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: AddArgs, _workspace: Option<Workspace>) -> Self {
+        let AddArgs {
+            requirements,
+            python,
+        } = args;
+
+        Self {
+            requirements,
+            python,
+        }
+    }
+}
+
+/// The resolved settings to use for a `remove` invocation.
+#[allow(clippy::struct_excessive_bools, dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct RemoveSettings {
+    pub(crate) requirements: Vec<PackageName>,
+    pub(crate) python: Option<String>,
+}
+
+impl RemoveSettings {
+    /// Resolve the [`RemoveSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: RemoveArgs, _workspace: Option<Workspace>) -> Self {
+        let RemoveArgs {
+            requirements,
+            python,
+        } = args;
+
+        Self {
+            requirements,
             python,
         }
     }

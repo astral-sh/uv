@@ -28,7 +28,9 @@ use uv_warnings::warn_user;
 use crate::commands::pip;
 use crate::printer::Printer;
 
+pub(crate) mod add;
 pub(crate) mod lock;
+pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
 

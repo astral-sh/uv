@@ -4681,6 +4681,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "toml",
+ "toml_edit",
  "tracing",
  "url",
  "uv-cache",
