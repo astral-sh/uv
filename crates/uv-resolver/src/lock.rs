@@ -919,7 +919,7 @@ impl Source {
         match *index_url {
             IndexUrl::Pypi(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
             IndexUrl::Url(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
-            // TODO(konsti): Retain path on index url.
+            // TODO(konsti): Retain path on index url without converting to URL.
             IndexUrl::Path(ref verbatim_url) => Source::Path(PathWire::from(
                 verbatim_url
                     .to_file_path()
