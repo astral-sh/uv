@@ -197,6 +197,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &requirements,
                 &constraints,
                 &overrides,
+                &dev,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
