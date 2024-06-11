@@ -1602,6 +1602,15 @@ pub(crate) struct AddArgs {
     #[arg(required = true)]
     pub(crate) requirements: Vec<String>,
 
+    #[command(flatten)]
+    pub(crate) resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub(crate) build: BuildArgs,
+
+    #[command(flatten)]
+    pub(crate) refresh: RefreshArgs,
+
     /// The Python interpreter into which packages should be installed.
     ///
     /// By default, `uv` installs into the virtual environment in the current working directory or
