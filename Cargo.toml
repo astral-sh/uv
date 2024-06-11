@@ -151,6 +151,8 @@ ignored = ["flate2"]
 # For pyproject-toml
 pep440_rs = { path = "crates/pep440-rs" }
 pep508_rs = { path = "crates/pep508-rs" }
+reqwest-middleware = { path = "../reqwest-middleware/reqwest-middleware" }
+reqwest-retry = { path = "../reqwest-middleware/reqwest-retry" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"

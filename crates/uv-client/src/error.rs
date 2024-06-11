@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::iter;
 use std::ops::Deref;
 
 use async_http_range_reader::AsyncHttpRangeReaderError;
@@ -235,12 +236,6 @@ pub enum ErrorKind {
     Offline(String),
 }
 
-impl From<reqwest::Error> for ErrorKind {
-    fn from(error: reqwest::Error) -> Self {
-        Self::ReqwestError(BetterReqwestError::from(error))
-    }
-}
-
 impl From<reqwest_middleware::Error> for ErrorKind {
     fn from(error: reqwest_middleware::Error) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = error {
@@ -248,41 +243,48 @@ impl From<reqwest_middleware::Error> for ErrorKind {
                 return Self::Offline(err.url().to_string());
             }
         }
+        Self::ReqwestError(BetterReqwestError::from(error))
+    }
+}
 
-        match error {
-            reqwest_middleware::Error::Middleware(err) => Self::ReqwestMiddlewareError(err),
-            reqwest_middleware::Error::Reqwest(err) => Self::from(err),
-        }
+impl From<reqwest::Error> for ErrorKind {
+    fn from(error: reqwest::Error) -> Self {
+        Self::ReqwestError(BetterReqwestError::from(error))
     }
 }
 
 /// Handle the case with no internet by explicitly telling the user instead of showing an obscure
 /// DNS error.
 #[derive(Debug)]
-pub struct BetterReqwestError(reqwest::Error);
+pub struct BetterReqwestError(reqwest_middleware::Error);
 
 impl BetterReqwestError {
     fn is_likely_offline(&self) -> bool {
         if !self.0.is_connect() {
             return false;
         }
-        // Self is "error sending request for url", the first source is "error trying to connect",
-        // the second source is "dns error". We have to check for the string because hyper errors
-        // are opaque.
-        std::error::Error::source(&self.0)
-            .and_then(|err| err.source())
-            .is_some_and(|err| err.to_string().starts_with("dns error: "))
+        // We have to check for the string because hyper errors are opaque.
+        iter::successors(Some(&self.0 as &dyn std::error::Error), |&err| {
+            std::error::Error::source(err)
+        })
+        .any(|err| err.to_string().starts_with("dns error: "))
+    }
+}
+
+impl From<reqwest_middleware::Error> for BetterReqwestError {
+    fn from(error: reqwest_middleware::Error) -> Self {
+        Self(error)
     }
 }
 
 impl From<reqwest::Error> for BetterReqwestError {
     fn from(error: reqwest::Error) -> Self {
-        Self(error)
+        Self(reqwest_middleware::Error::Reqwest(error))
     }
 }
 
 impl Deref for BetterReqwestError {
-    type Target = reqwest::Error;
+    type Target = reqwest_middleware::Error;
 
     fn deref(&self) -> &Self::Target {
         &self.0
