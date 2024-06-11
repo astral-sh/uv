@@ -32,7 +32,7 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
-    pub fn from_string(raw: String) -> anyhow::Result<Self> {
+    pub fn from_string(raw: String) -> Result<Self, toml::de::Error> {
         let pyproject = toml::from_str(&raw)?;
         Ok(PyProjectToml { raw, ..pyproject })
     }

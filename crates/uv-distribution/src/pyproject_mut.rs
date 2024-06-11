@@ -4,7 +4,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, TomlError, Value};
 
-use pep508_rs::{Pep508Error, Requirement};
+use pep508_rs::Requirement;
 use pypi_types::{LenientRequirement, VerbatimParsedUrl};
 
 use crate::pyproject::PyProjectToml;
@@ -44,7 +44,7 @@ impl PyProjectTomlMut {
         // Try to find a matching dependency.
         let mut to_replace = None;
         for (i, dep) in deps.iter().enumerate() {
-            if let Some(dep) = dep.as_str().and_then(|dep| parse_requirement(dep).ok()) {
+            if let Some(dep) = dep.as_str().and_then(try_parse_requirement) {
                 if dep.name.as_ref().eq_ignore_ascii_case(req.name.as_ref()) {
                     to_replace = Some(i);
                     break;
@@ -76,7 +76,7 @@ impl PyProjectTomlMut {
         // Try to find a matching dependency.
         let mut to_remove = None;
         for (i, dep) in deps.iter().enumerate() {
-            if let Some(dep) = dep.as_str().and_then(|dep| parse_requirement(dep).ok()) {
+            if let Some(dep) = dep.as_str().and_then(try_parse_requirement) {
                 if dep.name.as_ref().eq_ignore_ascii_case(req.name.as_ref()) {
                     to_remove = Some(i);
                     break;
@@ -89,7 +89,7 @@ impl PyProjectTomlMut {
                 let req = deps
                     .remove(i)
                     .as_str()
-                    .and_then(|x| Requirement::from_str(x).ok());
+                    .and_then(|req| Requirement::from_str(req).ok());
                 reformat_array_multiline(deps);
                 Ok(req)
             }
@@ -105,10 +105,10 @@ impl fmt::Display for PyProjectTomlMut {
 }
 
 #[allow(clippy::result_large_err)]
-fn parse_requirement(
-    req: &str,
-) -> Result<Requirement<VerbatimParsedUrl>, Pep508Error<VerbatimParsedUrl>> {
-    LenientRequirement::<VerbatimParsedUrl>::from_str(req).map(Requirement::from)
+fn try_parse_requirement(req: &str) -> Option<Requirement<VerbatimParsedUrl>> {
+    LenientRequirement::<VerbatimParsedUrl>::from_str(req)
+        .map(Requirement::from)
+        .ok()
 }
 
 /// Reformats a TOML array to multi line while trying to preserve all comments
