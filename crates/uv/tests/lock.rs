@@ -2428,6 +2428,69 @@ fn lock_requires_python_pre() -> Result<()> {
     Ok(())
 }
 
+/// Warn if `Requires-Python` does not include a lower bound.
+#[test]
+fn lock_requires_python_unbounded() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let lockfile = context.temp_dir.join("uv.lock");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "<=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    warning: The `requires-python` field found in `project` does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(lockfile)?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = "<=3.12"
+
+        [[distribution]]
+        name = "iniconfig"
+        version = "1.1.1"
+        source = "registry+https://pypi.org/simple"
+        sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 }]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+."
+        sdist = { path = "." }
+
+        [[distribution.dependencies]]
+        name = "iniconfig"
+        version = "1.1.1"
+        source = "registry+https://pypi.org/simple"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// Lock the development dependencies for a project.
 #[test]
 fn lock_dev() -> Result<()> {

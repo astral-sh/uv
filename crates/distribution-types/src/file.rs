@@ -11,7 +11,7 @@ use pypi_types::{CoreMetadata, HashDigest, Yanked};
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, thiserror::Error)]
 pub enum FileConversionError {
-    #[error("Failed to parse 'requires-python': `{0}`")]
+    #[error("Failed to parse `requires-python`: `{0}`")]
     RequiresPython(String, #[source] VersionSpecifiersParseError),
     #[error("Failed to parse URL: {0}")]
     Url(String, #[source] url::ParseError),
