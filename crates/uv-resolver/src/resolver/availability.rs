@@ -30,6 +30,8 @@ impl Display for UnavailableReason {
 pub(crate) enum UnavailableVersion {
     /// Version is incompatible because it has no usable distributions
     IncompatibleDist(IncompatibleDist),
+    /// The wheel metadata was not found.
+    MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata,
     /// The wheel metadata was found, but the metadata was inconsistent.
@@ -46,6 +48,9 @@ impl Display for UnavailableVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             UnavailableVersion::IncompatibleDist(invalid_dist) => Display::fmt(invalid_dist, f),
+            UnavailableVersion::MissingMetadata => {
+                f.write_str("does not include a `METADATA` file")
+            }
             UnavailableVersion::InvalidMetadata => f.write_str("has invalid metadata"),
             UnavailableVersion::InconsistentMetadata => f.write_str("has inconsistent metadata"),
             UnavailableVersion::InvalidStructure => f.write_str("has an invalid package format"),
@@ -66,6 +71,8 @@ pub(crate) enum UnavailablePackage {
     Offline,
     /// The package was not found in the registry.
     NotFound,
+    /// The package metadata was not found.
+    MissingMetadata,
     /// The package metadata was found, but could not be parsed.
     InvalidMetadata(String),
     /// The package has an invalid structure.
@@ -78,6 +85,7 @@ impl UnavailablePackage {
             UnavailablePackage::NoIndex => "was not found in the provided package locations",
             UnavailablePackage::Offline => "was not found in the cache",
             UnavailablePackage::NotFound => "was not found in the package registry",
+            UnavailablePackage::MissingMetadata => "does not include a `METADATA` file",
             UnavailablePackage::InvalidMetadata(_) => "has invalid metadata",
             UnavailablePackage::InvalidStructure(_) => "has an invalid package format",
         }
@@ -95,6 +103,8 @@ impl Display for UnavailablePackage {
 pub(crate) enum IncompletePackage {
     /// Network requests were disabled (i.e., `--offline`), and the wheel metadata was not found in the cache.
     Offline,
+    /// The wheel metadata was not found.
+    MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(String),
     /// The wheel metadata was found, but the metadata was inconsistent.

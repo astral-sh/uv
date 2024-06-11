@@ -749,6 +749,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .insert(name.clone(), UnavailablePackage::Offline);
                         return Ok(None);
                     }
+                    MetadataResponse::MissingMetadata => {
+                        self.unavailable_packages
+                            .insert(name.clone(), UnavailablePackage::MissingMetadata);
+                        return Ok(None);
+                    }
                     MetadataResponse::InvalidMetadata(err) => {
                         self.unavailable_packages.insert(
                             name.clone(),
@@ -1041,6 +1046,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .or_default()
                             .insert(version.clone(), IncompletePackage::Offline);
                         return Ok(Dependencies::Unavailable(UnavailableVersion::Offline));
+                    }
+                    MetadataResponse::MissingMetadata => {
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(version.clone(), IncompletePackage::MissingMetadata);
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::MissingMetadata,
+                        ));
                     }
                     MetadataResponse::InvalidMetadata(err) => {
                         warn!("Unable to extract metadata for {name}: {err}");
