@@ -80,6 +80,7 @@ fn add_registry() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.1"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "idna"
@@ -95,12 +96,12 @@ fn add_registry() -> Result<()> {
         name = "typing-extensions"
         version = "4.12.2"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.1"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/a0/65/d66b7fbaef021b3c954b3bbb196d21d8a4b97918ea524f82cfae474215af/exceptiongroup-1.2.1.tar.gz", hash = "sha256:a4785e48b045528f5bfe627b6ad554ff32def154f42372786903b7abcfe1aa16", size = 28717 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/01/90/79fe92dd413a9cab314ef5c591b5aa9b9ba787ae4cadab75055b0ae00b33/exceptiongroup-1.2.1-py3-none-any.whl", hash = "sha256:5258b9ed329c5bbdd31a309f53cbfb0b155341807f6ff7606a1e801a891b29ad", size = 16458 }]
 
@@ -133,7 +134,6 @@ fn add_registry() -> Result<()> {
         name = "typing-extensions"
         version = "4.12.2"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/df/db/f35a00659bc03fec321ba8bce9420de607a1d37f8342eee1863174c69557/typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8", size = 85321 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 }]
         "###
@@ -249,6 +249,7 @@ fn add_git() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "idna"
@@ -264,12 +265,12 @@ fn add_git() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
+        marker = "python_version < '3.8'"
 
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 }]
 
@@ -307,7 +308,6 @@ fn add_git() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = "registry+https://pypi.org/simple"
-        marker = "python_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [{ url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 }]
 
