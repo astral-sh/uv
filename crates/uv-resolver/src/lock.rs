@@ -732,14 +732,23 @@ impl Distribution {
                     Ok(Dist::Source(source_dist))
                 }
                 Source::Registry(url) => {
+                    let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
+                        id: self.id.clone(),
+                    })?;
+                    let filename =
+                        sdist
+                            .filename()
+                            .ok_or_else(|| LockErrorKind::MissingFilename {
+                                id: self.id.clone(),
+                            })?;
                     let file = Box::new(distribution_types::File {
                         dist_info_metadata: false,
-                        filename: sdist.filename().unwrap().to_string(),
+                        filename: filename.to_string(),
                         hashes: vec![],
                         requires_python: None,
                         size: sdist.size(),
                         upload_time_utc_ms: None,
-                        url: FileLocation::AbsoluteUrl(url.to_string()),
+                        url: FileLocation::AbsoluteUrl(file_url.to_string()),
                         yanked: None,
                     });
                     let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
@@ -1196,12 +1205,19 @@ where
 }
 
 impl SourceDist {
-    pub(crate) fn filename(&self) -> Option<Cow<str>> {
+    fn filename(&self) -> Option<Cow<str>> {
         match self {
             SourceDist::Url { url, .. } => url.filename().ok(),
             SourceDist::Path { path, .. } => {
                 path.file_name().map(|filename| filename.to_string_lossy())
             }
+        }
+    }
+
+    fn url(&self) -> Option<&Url> {
+        match &self {
+            SourceDist::Url { url, .. } => Some(url),
+            SourceDist::Path { .. } => None,
         }
     }
 
@@ -1856,6 +1872,20 @@ enum LockErrorKind {
         id: DistributionId,
         /// The kind of the invalid source.
         source_type: &'static str,
+    },
+    /// An error that occurs when a distribution indicates that it is sourced from a registry, but
+    /// is missing a URL.
+    #[error("found registry distribution {id} without a valid URL")]
+    MissingUrl {
+        /// The ID of the distribution that is missing a URL.
+        id: DistributionId,
+    },
+    /// An error that occurs when a distribution indicates that it is sourced from a registry, but
+    /// is missing a filename.
+    #[error("found registry distribution {id} without a valid filename")]
+    MissingFilename {
+        /// The ID of the distribution that is missing a filename.
+        id: DistributionId,
     },
     /// An error that occurs when a distribution is included with neither wheels nor a source
     /// distribution.

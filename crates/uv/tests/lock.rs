@@ -190,6 +190,20 @@ fn lock_sdist_registry() -> Result<()> {
         );
     });
 
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + source-distribution==0.0.1
+    "###);
+
     Ok(())
 }
 
