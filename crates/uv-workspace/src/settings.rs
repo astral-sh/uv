@@ -81,7 +81,6 @@ pub struct PipOptions {
     pub no_header: Option<bool>,
     pub custom_compile_command: Option<String>,
     pub generate_hashes: Option<bool>,
-    pub legacy_setup_py: Option<bool>,
     pub config_settings: Option<ConfigSettings>,
     pub python_version: Option<PythonVersion>,
     pub python_platform: Option<TargetTriple>,

@@ -410,12 +410,6 @@
             }
           ]
         },
-        "legacy-setup-py": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "link-mode": {
           "anyOf": [
             {

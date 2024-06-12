@@ -7,7 +7,6 @@ use uv_cache::Cache;
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
@@ -136,7 +135,6 @@ pub(super) async fn do_sync(
     let no_binary = NoBinary::default();
     let no_build = NoBuild::default();
     let reinstall = Reinstall::default();
-    let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -155,7 +153,6 @@ pub(super) async fn do_sync(
         &index,
         &git,
         &in_flight,
-        setup_py,
         &config_settings,
         build_isolation,
         link_mode,

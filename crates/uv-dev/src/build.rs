@@ -10,9 +10,7 @@ use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{
-    BuildKind, Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
-};
+use uv_configuration::{BuildKind, Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode};
 use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
 use uv_resolver::{FlatIndex, InMemoryIndex};
@@ -64,7 +62,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
     let index_urls = IndexLocations::default();
-    let setup_py = SetupPyStrategy::default();
     let toolchain = Toolchain::find_virtualenv(&cache)?;
 
     let build_dispatch = BuildDispatch::new(
@@ -76,7 +73,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &index,
         &git,
         &in_flight,
-        setup_py,
         &config_settings,
         BuildIsolation::Isolated,
         install_wheel_rs::linker::LinkMode::default(),
@@ -93,7 +89,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &build_dispatch,
         SourceBuildContext::default(),
         args.sdist.display().to_string(),
-        setup_py,
         config_settings.clone(),
         BuildIsolation::Isolated,
         build_kind,

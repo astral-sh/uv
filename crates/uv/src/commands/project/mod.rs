@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy, Upgrade,
+    Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::Workspace;
@@ -259,7 +259,6 @@ pub(crate) async fn update_environment(
     let options = Options::default();
     let preferences = Vec::default();
     let reinstall = Reinstall::default();
-    let setup_py = SetupPyStrategy::default();
     let upgrade = Upgrade::default();
 
     // Create a build dispatch.
@@ -272,7 +271,6 @@ pub(crate) async fn update_environment(
         &index,
         &git,
         &in_flight,
-        setup_py,
         &config_settings,
         build_isolation,
         link_mode,
@@ -332,7 +330,6 @@ pub(crate) async fn update_environment(
             &index,
             &git,
             &in_flight,
-            setup_py,
             &config_settings,
             build_isolation,
             link_mode,

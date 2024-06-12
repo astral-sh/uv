@@ -97,7 +97,6 @@ impl Combine for PipOptions {
                 .custom_compile_command
                 .combine(other.custom_compile_command),
             generate_hashes: self.generate_hashes.combine(other.generate_hashes),
-            legacy_setup_py: self.legacy_setup_py.combine(other.legacy_setup_py),
             config_settings: self.config_settings.combine(other.config_settings),
             python_version: self.python_version.combine(other.python_version),
             python_platform: self.python_platform.combine(other.python_platform),

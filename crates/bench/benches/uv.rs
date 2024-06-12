@@ -80,9 +80,7 @@ mod resolver {
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{
-        Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
-    };
+    use uv_configuration::{Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode};
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
     use uv_git::GitResolver;
@@ -147,7 +145,6 @@ mod resolver {
             &index,
             &git,
             &in_flight,
-            SetupPyStrategy::default(),
             &config_settings,
             build_isolation,
             LinkMode::default(),

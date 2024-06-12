@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary, NoBuild,
-    PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+    PreviewMode, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -44,7 +44,6 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
@@ -247,7 +246,6 @@ pub(crate) async fn pip_sync(
         &index,
         &git,
         &in_flight,
-        setup_py,
         config_settings,
         build_isolation,
         link_mode,
@@ -324,7 +322,6 @@ pub(crate) async fn pip_sync(
             &index,
             &git,
             &in_flight,
-            setup_py,
             config_settings,
             build_isolation,
             link_mode,

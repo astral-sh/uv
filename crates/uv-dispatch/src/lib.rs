@@ -16,7 +16,7 @@ use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
+use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall};
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
@@ -36,7 +36,6 @@ pub struct BuildDispatch<'a> {
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
     in_flight: &'a InFlight,
-    setup_py: SetupPyStrategy,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
     no_build: &'a NoBuild,
@@ -60,7 +59,6 @@ impl<'a> BuildDispatch<'a> {
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
         in_flight: &'a InFlight,
-        setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
         link_mode: install_wheel_rs::linker::LinkMode,
@@ -78,7 +76,6 @@ impl<'a> BuildDispatch<'a> {
             index,
             git,
             in_flight,
-            setup_py,
             config_settings,
             build_isolation,
             link_mode,
@@ -143,10 +140,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn index_locations(&self) -> &IndexLocations {
         self.index_locations
-    }
-
-    fn setup_py_strategy(&self) -> SetupPyStrategy {
-        self.setup_py
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
@@ -341,7 +334,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self,
             self.source_build_context.clone(),
             version_id.to_string(),
-            self.setup_py,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,

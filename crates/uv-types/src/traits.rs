@@ -7,7 +7,7 @@ use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, 
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{BuildKind, NoBinary, NoBuild};
 use uv_git::GitResolver;
 use uv_toolchain::{Interpreter, PythonEnvironment};
 
@@ -76,9 +76,6 @@ pub trait BuildContext {
 
     /// The index locations being searched.
     fn index_locations(&self) -> &IndexLocations;
-
-    /// The strategy to use when building source distributions that lack a `pyproject.toml`.
-    fn setup_py_strategy(&self) -> SetupPyStrategy;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(

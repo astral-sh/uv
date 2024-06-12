@@ -503,14 +503,6 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, overrides_with("generate_hashes"), hide = true)]
     pub(crate) no_generate_hashes: bool,
 
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub(crate) legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub(crate) no_legacy_setup_py: bool,
-
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -785,14 +777,6 @@ pub(crate) struct PipSyncArgs {
     /// non-portable.
     #[arg(long, conflicts_with = "target")]
     pub(crate) prefix: Option<PathBuf>,
-
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub(crate) legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub(crate) no_legacy_setup_py: bool,
 
     /// Disable isolation when building source distributions.
     ///
@@ -1159,14 +1143,6 @@ pub(crate) struct PipInstallArgs {
     /// non-portable.
     #[arg(long, conflicts_with = "target")]
     pub(crate) prefix: Option<PathBuf>,
-
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub(crate) legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub(crate) no_legacy_setup_py: bool,
 
     /// Disable isolation when building source distributions.
     ///

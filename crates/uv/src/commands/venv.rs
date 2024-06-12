@@ -16,7 +16,7 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, KeyringProviderType, PreviewMode};
-use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
@@ -219,7 +219,6 @@ async fn venv_impl(
             &index,
             &git,
             &in_flight,
-            SetupPyStrategy::default(),
             &config_settings,
             BuildIsolation::Isolated,
             link_mode,
