@@ -591,6 +591,8 @@ uv accepts the following command-line arguments as environment variables:
   concurrently at any given time.
 - `UV_CONCURRENT_INSTALLS`: Used to control the number of threads used when installing and unzipping
   packages.
+- `UV_EXCLUDE_NEWER`: Equivalent to the `--exclude-newer` command-line argument. If set, uv will
+  exclude distributions published after the specified date.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
