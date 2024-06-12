@@ -1,0 +1,15 @@
+[project]
+name = "b11"
+version = "0.1.0"
+dependencies = [
+  "tqdm==4.66.1 ; sys_platform == 'linux'",
+  "tqdm==4.66.2 ; sys_platform == 'win32'",
+  "anyio==4.3.0 ; sys_platform == 'linux'",
+  "anyio==4.4.0 ; sys_platform == 'win32'",
+]
+requires-python = ">=3.11,<3.13"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

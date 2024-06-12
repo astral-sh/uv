@@ -11,6 +11,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{
     ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement, RequirementSource,
+    VerbatimParsedUrl,
 };
 use uv_configuration::{Constraints, Overrides};
 use uv_git::GitResolver;
@@ -275,13 +276,19 @@ impl PubGrubRequirement {
                     location.clone(),
                     subdirectory.clone(),
                 ));
-                if !Urls::same_resource(&expected.parsed_url, &parsed_url, git) {
+                let Some(expected) = expected
+                    .values()
+                    .find(|expected| Urls::same_resource(&expected.parsed_url, &parsed_url, git))
+                else {
                     return Err(ResolveError::ConflictingUrlsTransitive(
                         requirement.name.clone(),
-                        expected.verbatim.verbatim().to_string(),
+                        expected
+                            .iter()
+                            .map(|(_, expected)| expected.verbatim.verbatim().to_string())
+                            .collect(),
                         url.verbatim().to_string(),
                     ));
-                }
+                };
 
                 Ok(Self {
                     package: PubGrubPackage::from_url(
@@ -313,13 +320,19 @@ impl PubGrubRequirement {
                     *precise,
                     subdirectory.clone(),
                 ));
-                if !Urls::same_resource(&expected.parsed_url, &parsed_url, git) {
+                let Some(expected) = expected
+                    .values()
+                    .find(|expected| Urls::same_resource(&expected.parsed_url, &parsed_url, git))
+                else {
                     return Err(ResolveError::ConflictingUrlsTransitive(
                         requirement.name.clone(),
-                        expected.verbatim.verbatim().to_string(),
+                        expected
+                            .iter()
+                            .map(|(_, expected)| expected.verbatim.verbatim().to_string())
+                            .collect(),
                         url.verbatim().to_string(),
                     ));
-                }
+                };
 
                 Ok(Self {
                     package: PubGrubPackage::from_url(
@@ -350,13 +363,19 @@ impl PubGrubRequirement {
                     *editable,
                     url.to_url(),
                 ));
-                if !Urls::same_resource(&expected.parsed_url, &parsed_url, git) {
+                let Some(expected) = expected
+                    .values()
+                    .find(|expected| Urls::same_resource(&expected.parsed_url, &parsed_url, git))
+                else {
                     return Err(ResolveError::ConflictingUrlsTransitive(
                         requirement.name.clone(),
-                        expected.verbatim.verbatim().to_string(),
+                        expected
+                            .iter()
+                            .map(|(_, expected)| expected.verbatim.verbatim().to_string())
+                            .collect(),
                         url.verbatim().to_string(),
                     ));
-                }
+                };
 
                 Ok(Self {
                     package: PubGrubPackage::from_url(

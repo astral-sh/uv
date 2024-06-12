@@ -2,12 +2,12 @@ use std::{collections::VecDeque, sync::Arc};
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::trace;
 
 use distribution_types::{BuiltDist, Dist, DistributionMetadata, GitSourceDist, SourceDist};
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
@@ -132,7 +132,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                             queue.push_back(requirement.clone());
                         }
                     }
-                    results.push(lookahead);
+                    results.entry(lookahead);
                 }
             }
         }

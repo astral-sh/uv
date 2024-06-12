@@ -138,7 +138,9 @@ impl PubGrubPackage {
         mut marker: Option<MarkerTree>,
         urls: &Urls,
     ) -> Self {
-        let url = urls.get(&name).cloned();
+        let url = urls
+            .get(&name)
+            .and_then(|urls| urls.iter().next().map(|url| url.1.clone()));
         // Remove all extra expressions from the marker, since we track extras
         // separately. This also avoids an issue where packages added via
         // extras end up having two distinct marker expressions, which in turn

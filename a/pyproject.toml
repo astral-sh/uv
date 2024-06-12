@@ -1,0 +1,21 @@
+[project]
+name = "a"
+version = "0.1.0"
+dependencies = [
+  #"anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl ; python_version < '3.12'",
+  #"anyio @ https://files.pythonhosted.org/packages/4b/5e/b13e2ead3653dc6866de329260911457769f6b5dc2c84f56b87793ac4e05/anyio-4.0.0rc1-py3-none-any.whl ; python_version >= '3.12'",
+  #"anyio == 4.0.0 ; python_version < '3.12'",
+  #"anyio == 4.0.0rc1 ; python_version >= '3.12'",
+  "b11 ; python_version == '3.11' ",
+  "b12 ; python_version == '3.12' ",
+]
+requires-python = ">=3.11,<3.13"
+license = {text = "MIT"}
+
+[tool.uv.sources]
+b11 = { path = "/home/konsti/projects/uv/a/b11" }
+b12 = { path = "/home/konsti/projects/uv/a/b12" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

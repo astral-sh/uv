@@ -4,7 +4,7 @@ use tracing::debug;
 
 use cache_key::CanonicalUrl;
 use distribution_types::Verbatim;
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::{
     ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, RequirementSource, VerbatimParsedUrl,
 };
@@ -15,7 +15,7 @@ use crate::{DependencyMode, Manifest, ResolveError};
 
 /// A map of package names to their associated, required URLs.
 #[derive(Debug, Default)]
-pub(crate) struct Urls(FxHashMap<PackageName, VerbatimParsedUrl>);
+pub(crate) struct Urls(FxHashMap<PackageName, FxHashMap<MarkerTree, VerbatimParsedUrl>>);
 
 impl Urls {
     pub(crate) fn from_manifest(
@@ -24,10 +24,20 @@ impl Urls {
         git: &GitResolver,
         dependencies: DependencyMode,
     ) -> Result<Self, ResolveError> {
-        let mut urls: FxHashMap<PackageName, VerbatimParsedUrl> = FxHashMap::default();
+        let mut urls: FxHashMap<PackageName, FxHashMap<MarkerTree, VerbatimParsedUrl>> =
+            FxHashMap::default();
 
         // Add all direct requirements and constraints. If there are any conflicts, return an error.
         for requirement in manifest.requirements(markers, dependencies) {
+            let package_urls = urls.entry(requirement.name.clone()).or_default();
+
+            let markers = requirement
+                .marker
+                .clone()
+                .unwrap_or(MarkerTree::And(Vec::new()));
+
+            dbg!(requirement.to_string());
+
             match &requirement.source {
                 RequirementSource::Registry { .. } => {}
                 RequirementSource::Url {
@@ -42,7 +52,8 @@ impl Urls {
                         )),
                         verbatim: url.clone(),
                     };
-                    if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
+
+                    if let Some(previous) = package_urls.insert(markers, url.clone()) {
                         if !Self::same_resource(&previous.parsed_url, &url.parsed_url, git) {
                             return Err(ResolveError::ConflictingUrlsDirect(
                                 requirement.name.clone(),
@@ -67,7 +78,7 @@ impl Urls {
                         )),
                         verbatim: url.clone(),
                     };
-                    match urls.entry(requirement.name.clone()) {
+                    match package_urls.entry(markers) {
                         std::collections::hash_map::Entry::Occupied(mut entry) => {
                             let previous = entry.get();
                             if Self::same_resource(&previous.parsed_url, &url.parsed_url, git) {
@@ -110,7 +121,7 @@ impl Urls {
                         )),
                         verbatim: url.clone(),
                     };
-                    if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
+                    if let Some(previous) = package_urls.insert(markers, url.clone()) {
                         if !Self::same_resource(&previous.parsed_url, &url.parsed_url, git) {
                             return Err(ResolveError::ConflictingUrlsDirect(
                                 requirement.name.clone(),
@@ -127,7 +138,10 @@ impl Urls {
     }
 
     /// Return the [`VerbatimUrl`] associated with the given package name, if any.
-    pub(crate) fn get(&self, package: &PackageName) -> Option<&VerbatimParsedUrl> {
+    pub(crate) fn get(
+        &self,
+        package: &PackageName,
+    ) -> Option<&FxHashMap<MarkerTree, VerbatimParsedUrl>> {
         self.0.get(package)
     }
 
