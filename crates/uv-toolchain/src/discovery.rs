@@ -1237,6 +1237,9 @@ impl FromStr for VersionRequest {
             Ok(selector)
         // e.g. `>=3.12.1,<3.12`
         } else if let Ok(specifiers) = VersionSpecifiers::from_str(s) {
+            if specifiers.is_empty() {
+                return Err(Error::InvalidVersionRequest(s.to_string()));
+            }
             Ok(Self::Range(specifiers))
         } else {
             Err(Error::InvalidVersionRequest(s.to_string()))
