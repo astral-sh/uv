@@ -1860,7 +1860,11 @@ impl MarkerTree {
             _ => {}
         }
         if let MarkerTree::And(ref mut exprs) = *self {
-            exprs.push(tree);
+            if let MarkerTree::And(tree) = tree {
+                exprs.extend(tree);
+            } else {
+                exprs.push(tree);
+            }
         }
     }
 
@@ -1878,7 +1882,11 @@ impl MarkerTree {
             _ => {}
         }
         if let MarkerTree::Or(ref mut exprs) = *self {
-            exprs.push(tree);
+            if let MarkerTree::Or(tree) = tree {
+                exprs.extend(tree);
+            } else {
+                exprs.push(tree);
+            }
         }
     }
 }
