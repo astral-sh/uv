@@ -1065,6 +1065,20 @@ fn install_local_wheel() -> Result<()> {
     "###
     );
 
+    // Reinstall into the same virtual environment. The wheel should _not_ be reinstalled.
+    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###
+    );
+
     context.assert_command("import tomli").success();
 
     Ok(())

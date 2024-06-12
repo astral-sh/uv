@@ -200,12 +200,14 @@ impl RequirementSatisfaction {
                     requested_path,
                     ArchiveTarget::Install(distribution),
                 )? {
-                    trace!("Out of date");
+                    trace!("Installed package is out of date");
                     return Ok(Self::OutOfDate);
                 }
 
                 // Does the package have dynamic metadata?
-                if is_dynamic(requested_path) {
+                // TODO(charlie): Separate `RequirementSource` into `Path` and `Directory`.
+                if requested_path.is_dir() && is_dynamic(requested_path) {
+                    trace!("Dependency is dynamic");
                     return Ok(Self::Dynamic);
                 }
 
