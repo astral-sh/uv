@@ -2,14 +2,15 @@ use anyhow::Result;
 use pep508_rs::PackageName;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 
-use distribution_types::IndexLocations;
 use uv_cache::Cache;
-use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
+use uv_client::Connectivity;
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::ProjectWorkspace;
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::InstallerSettings;
 
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::too_many_arguments)]
@@ -17,6 +18,9 @@ pub(crate) async fn remove(
     requirements: Vec<PackageName>,
     python: Option<String>,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -46,9 +50,9 @@ pub(crate) async fn remove(
     // Discover or create the virtual environment.
     let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
 
-    let index_locations = IndexLocations::default();
-    let upgrade = Upgrade::None;
-    let exclude_newer = None;
+    // Use the default settings.
+    let settings = InstallerSettings::default();
+    let upgrade = Upgrade::default();
 
     // Lock and sync the environment.
     let root_project_name = project
@@ -62,10 +66,12 @@ pub(crate) async fn remove(
         root_project_name,
         project.workspace(),
         venv.interpreter(),
-        &index_locations,
         upgrade,
-        exclude_newer,
+        &settings,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )
@@ -81,10 +87,13 @@ pub(crate) async fn remove(
         project.workspace().root(),
         &venv,
         &lock,
-        &index_locations,
         extras,
         dev,
+        &settings,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )

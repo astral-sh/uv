@@ -18,12 +18,13 @@ use uv_configuration::{
 use uv_normalize::PackageName;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::{Prefix, PythonVersion, Target};
-use uv_workspace::{Combine, PipOptions, Workspace};
+use uv_workspace::{Combine, InstallerOptions, PipOptions, Workspace};
 
 use crate::cli::{
-    AddArgs, ColorChoice, GlobalArgs, IndexArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs,
-    PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs,
-    RemoveArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
+    AddArgs, ColorChoice, CompilerArgs, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe,
+    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
+    PipSyncArgs, PipUninstallArgs, RemoveArgs, RunArgs, SyncArgs, SyncerArgs, ToolRunArgs,
+    ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -64,10 +65,10 @@ impl GlobalSettings {
                 args.color
             },
             native_tls: flag(args.native_tls, args.no_native_tls)
-                .combine(workspace.and_then(|workspace| workspace.options.native_tls))
+                .combine(workspace.and_then(|workspace| workspace.options.globals.native_tls))
                 .unwrap_or(false),
             connectivity: if flag(args.offline, args.no_offline)
-                .combine(workspace.and_then(|workspace| workspace.options.offline))
+                .combine(workspace.and_then(|workspace| workspace.options.globals.offline))
                 .unwrap_or(false)
             {
                 Connectivity::Offline
@@ -77,7 +78,7 @@ impl GlobalSettings {
             isolated: args.isolated,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
-                    .combine(workspace.and_then(|workspace| workspace.options.preview))
+                    .combine(workspace.and_then(|workspace| workspace.options.globals.preview))
                     .unwrap_or(false),
             ),
         }
@@ -98,11 +99,11 @@ impl CacheSettings {
         Self {
             no_cache: args.no_cache
                 || workspace
-                    .and_then(|workspace| workspace.options.no_cache)
+                    .and_then(|workspace| workspace.options.globals.no_cache)
                     .unwrap_or(false),
-            cache_dir: args
-                .cache_dir
-                .or_else(|| workspace.and_then(|workspace| workspace.options.cache_dir.clone())),
+            cache_dir: args.cache_dir.or_else(|| {
+                workspace.and_then(|workspace| workspace.options.globals.cache_dir.clone())
+            }),
         }
     }
 }
@@ -111,7 +112,6 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
-    pub(crate) index_locations: IndexLocations,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) target: Option<String>,
@@ -120,14 +120,14 @@ pub(crate) struct RunSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) package: Option<PackageName>,
+    pub(crate) installer: InstallerSettings,
 }
 
 impl RunSettings {
     /// Resolve the [`RunSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: RunArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: RunArgs, workspace: Option<Workspace>) -> Self {
         let RunArgs {
             extra,
             all_extras,
@@ -143,14 +143,12 @@ impl RunSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
-            index_args,
+            install,
             python,
-            exclude_newer,
             package,
         } = args;
 
         Self {
-            index_locations: IndexLocations::from(index_args),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             extras: ExtrasSpecification::from_args(
@@ -162,8 +160,8 @@ impl RunSettings {
             args,
             with,
             python,
-            exclude_newer,
             package,
+            installer: InstallerSettings::combine(InstallerOptions::from(install), workspace),
         }
     }
 }
@@ -172,34 +170,34 @@ impl RunSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolRunSettings {
-    pub(crate) index_locations: IndexLocations,
     pub(crate) target: String,
     pub(crate) args: Vec<OsString>,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) installer: InstallerSettings,
 }
 
 impl ToolRunSettings {
     /// Resolve the [`ToolRunSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolRunArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: ToolRunArgs, workspace: Option<Workspace>) -> Self {
         let ToolRunArgs {
             target,
             args,
             from,
             with,
-            index_args,
+            install,
             python,
         } = args;
 
         Self {
-            index_locations: IndexLocations::from(index_args),
             target,
             args,
             from,
             with,
             python,
+            installer: InstallerSettings::combine(InstallerOptions::from(install), workspace),
         }
     }
 }
@@ -261,17 +259,17 @@ impl ToolchainInstallSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    pub(crate) index_locations: IndexLocations,
     pub(crate) refresh: Refresh,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) python: Option<String>,
+    pub(crate) installer: InstallerSettings,
 }
 
 impl SyncSettings {
     /// Resolve the [`SyncSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: SyncArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: SyncArgs, workspace: Option<Workspace>) -> Self {
         let SyncArgs {
             extra,
             all_extras,
@@ -281,12 +279,11 @@ impl SyncSettings {
             refresh,
             no_refresh,
             refresh_package,
-            index_args,
+            sync,
             python,
         } = args;
 
         Self {
-            index_locations: IndexLocations::from(index_args),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
@@ -294,6 +291,7 @@ impl SyncSettings {
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
             python,
+            installer: InstallerSettings::combine(InstallerOptions::from(sync), workspace),
         }
     }
 }
@@ -302,17 +300,16 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
-    pub(crate) index_locations: IndexLocations,
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) python: Option<String>,
+    pub(crate) installer: InstallerSettings,
 }
 
 impl LockSettings {
     /// Resolve the [`LockSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: LockArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: LockArgs, workspace: Option<Workspace>) -> Self {
         let LockArgs {
             refresh,
             no_refresh,
@@ -320,17 +317,15 @@ impl LockSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
-            index_args,
-            exclude_newer,
+            compile,
             python,
         } = args;
 
         Self {
-            index_locations: IndexLocations::from(index_args),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
-            exclude_newer,
             python,
+            installer: InstallerSettings::combine(InstallerOptions::from(compile), workspace),
         }
     }
 }
@@ -408,9 +403,6 @@ impl PipCompileSettings {
             no_all_extras,
             no_deps,
             deps,
-            resolution,
-            prerelease,
-            pre,
             output_file,
             no_strip_extras,
             strip_extras,
@@ -423,10 +415,7 @@ impl PipCompileSettings {
             refresh,
             no_refresh,
             refresh_package,
-            link_mode,
-            index_args,
-            index_strategy,
-            keyring_provider,
+            compile,
             python,
             system,
             no_system,
@@ -443,10 +432,8 @@ impl PipCompileSettings {
             build,
             no_binary,
             only_binary,
-            config_setting,
             python_version,
             python_platform,
-            exclude_newer,
             no_emit_package,
             emit_index_url,
             no_emit_index_url,
@@ -488,17 +475,6 @@ impl PipCompileSettings {
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-                    index_url: index_args.index_url.and_then(Maybe::into_option),
-                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    }),
-                    no_index: Some(index_args.no_index),
-                    find_links: index_args.find_links,
-                    index_strategy,
-                    keyring_provider,
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
@@ -506,12 +482,6 @@ impl PipCompileSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
                     no_deps: flag(no_deps, deps),
-                    resolution,
-                    prerelease: if pre {
-                        Some(PreReleaseMode::Allow)
-                    } else {
-                        prerelease
-                    },
                     output_file,
                     no_strip_extras: flag(no_strip_extras, strip_extras),
                     no_annotate: flag(no_annotate, annotate),
@@ -519,23 +489,18 @@ impl PipCompileSettings {
                     custom_compile_command,
                     generate_hashes: flag(generate_hashes, no_generate_hashes),
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
-                    config_settings: config_setting.map(|config_settings| {
-                        config_settings.into_iter().collect::<ConfigSettings>()
-                    }),
                     python_version,
                     python_platform,
-                    exclude_newer,
                     no_emit_package,
                     emit_index_url: flag(emit_index_url, no_emit_index_url),
                     emit_find_links: flag(emit_find_links, no_emit_find_links),
                     emit_marker_expression: flag(emit_marker_expression, no_emit_marker_expression),
                     emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
                     annotation_style,
-                    link_mode,
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::default()
+                    ..PipOptions::from(compile)
                 },
                 workspace,
             ),
@@ -561,18 +526,15 @@ impl PipSyncSettings {
         let PipSyncArgs {
             src_file,
             constraint,
+            sync,
             reinstall,
             no_reinstall,
             reinstall_package,
             refresh,
             no_refresh,
             refresh_package,
-            link_mode,
-            index_args,
-            index_strategy,
             require_hashes,
             no_require_hashes,
-            keyring_provider,
             python,
             system,
             no_system,
@@ -588,14 +550,10 @@ impl PipSyncSettings {
             build,
             no_binary,
             only_binary,
-            compile_bytecode,
-            no_compile_bytecode,
-            config_setting,
             python_version,
             python_platform,
             strict,
             no_strict,
-            exclude_newer,
             dry_run,
             compat_args: _,
         } = args;
@@ -616,36 +574,19 @@ impl PipSyncSettings {
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
                     prefix,
-                    index_url: index_args.index_url.and_then(Maybe::into_option),
-                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    }),
-                    no_index: Some(index_args.no_index),
-                    find_links: index_args.find_links,
-                    index_strategy,
-                    keyring_provider,
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
                     no_build_isolation: flag(no_build_isolation, build_isolation),
                     strict: flag(strict, no_strict),
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
-                    config_settings: config_setting.map(|config_settings| {
-                        config_settings.into_iter().collect::<ConfigSettings>()
-                    }),
                     python_version,
                     python_platform,
-                    exclude_newer,
-                    link_mode,
-                    compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::default()
+                    ..PipOptions::from(sync)
                 },
                 workspace,
             ),
@@ -693,15 +634,9 @@ impl PipInstallSettings {
             refresh_package,
             no_deps,
             deps,
-            link_mode,
-            resolution,
-            prerelease,
-            pre,
-            index_args,
-            index_strategy,
             require_hashes,
             no_require_hashes,
-            keyring_provider,
+            install,
             python,
             system,
             no_system,
@@ -717,14 +652,10 @@ impl PipInstallSettings {
             build,
             no_binary,
             only_binary,
-            compile_bytecode,
-            no_compile_bytecode,
-            config_setting,
             python_version,
             python_platform,
             strict,
             no_strict,
-            exclude_newer,
             dry_run,
             compat_args: _,
         } = args;
@@ -765,17 +696,6 @@ impl PipInstallSettings {
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
                     prefix,
-                    index_url: index_args.index_url.and_then(Maybe::into_option),
-                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    }),
-                    no_index: Some(index_args.no_index),
-                    find_links: index_args.find_links,
-                    index_strategy,
-                    keyring_provider,
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
@@ -784,26 +704,14 @@ impl PipInstallSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
                     no_deps: flag(no_deps, deps),
-                    resolution,
-                    prerelease: if pre {
-                        Some(PreReleaseMode::Allow)
-                    } else {
-                        prerelease
-                    },
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
-                    config_settings: config_setting.map(|config_settings| {
-                        config_settings.into_iter().collect::<ConfigSettings>()
-                    }),
                     python_version,
                     python_platform,
-                    exclude_newer,
-                    link_mode,
-                    compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::default()
+                    ..PipOptions::from(install)
                 },
                 workspace,
             ),
@@ -974,7 +882,7 @@ impl PipShowSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCheckSettings {
-    pub(crate) shared: PipSettings,
+    pub(crate) pip: PipSettings,
 }
 
 impl PipCheckSettings {
@@ -987,7 +895,7 @@ impl PipCheckSettings {
         } = args;
 
         Self {
-            shared: PipSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -1023,13 +931,11 @@ impl VenvSettings {
             name,
             prompt,
             system_site_packages,
-            link_mode,
-            index_url,
-            extra_index_url,
-            no_index,
+            index_args,
             index_strategy,
             keyring_provider,
             exclude_newer,
+            link_mode,
             compat_args: _,
         } = args;
 
@@ -1043,19 +949,11 @@ impl VenvSettings {
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-                    index_url: index_url.and_then(Maybe::into_option),
-                    extra_index_url: extra_index_url.map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    }),
-                    no_index: Some(no_index),
                     index_strategy,
                     keyring_provider,
                     exclude_newer,
                     link_mode,
-                    ..PipOptions::default()
+                    ..PipOptions::from(index_args)
                 },
                 workspace,
             ),
@@ -1063,9 +961,81 @@ impl VenvSettings {
     }
 }
 
+/// The resolved settings to use for an invocation of the `uv` CLI.
+///
+/// Represents the shared settings that are used across all `uv` commands outside the `pip` API.
+/// Analogous to the settings contained in the `[tool.uv]` table.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct InstallerSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) resolution: ResolutionMode,
+    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) config_setting: ConfigSettings,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) compile_bytecode: bool,
+}
+
+impl InstallerSettings {
+    /// Resolve the [`InstallerSettings`] from the CLI and workspace configuration.
+    pub(crate) fn combine(args: InstallerOptions, workspace: Option<Workspace>) -> Self {
+        let InstallerOptions {
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            config_settings,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+        } = workspace
+            .map(|workspace| workspace.options.installer)
+            .unwrap_or_default();
+
+        Self {
+            index_locations: IndexLocations::new(
+                args.index_url.combine(index_url),
+                args.extra_index_url
+                    .combine(extra_index_url)
+                    .unwrap_or_default(),
+                args.find_links.combine(find_links).unwrap_or_default(),
+                args.no_index.combine(no_index).unwrap_or_default(),
+            ),
+            resolution: args.resolution.combine(resolution).unwrap_or_default(),
+            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            index_strategy: args
+                .index_strategy
+                .combine(index_strategy)
+                .unwrap_or_default(),
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+            config_setting: args
+                .config_settings
+                .combine(config_settings)
+                .unwrap_or_default(),
+            exclude_newer: args.exclude_newer.combine(exclude_newer),
+            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            compile_bytecode: args
+                .compile_bytecode
+                .combine(compile_bytecode)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// The resolved settings to use for an invocation of the `pip` CLI.
 ///
-/// Represents the shared settings that are used across all `pip` commands.
+/// Represents the shared settings that are used across all `pip` commands. Analogous to the
+/// settings contained in the `[tool.uv.pip]` table.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipSettings {
@@ -1157,7 +1127,7 @@ impl PipSettings {
             concurrent_downloads,
             concurrent_installs,
         } = workspace
-            .and_then(|workspace| workspace.options.pip)
+            .map(|workspace| workspace.options.pip())
             .unwrap_or_default();
 
         Self {
@@ -1336,20 +1306,265 @@ fn flag(yes: bool, no: bool) -> Option<bool> {
     }
 }
 
-impl From<IndexArgs> for IndexLocations {
+impl From<CompilerArgs> for PipOptions {
+    fn from(args: CompilerArgs) -> Self {
+        let CompilerArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            exclude_newer,
+            link_mode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease: if pre {
+                Some(PreReleaseMode::Allow)
+            } else {
+                prerelease
+            },
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+            ..PipOptions::default()
+        }
+    }
+}
+
+impl From<CompilerArgs> for InstallerOptions {
+    fn from(args: CompilerArgs) -> Self {
+        let CompilerArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            exclude_newer,
+            link_mode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease: if pre {
+                Some(PreReleaseMode::Allow)
+            } else {
+                prerelease
+            },
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+            ..InstallerOptions::default()
+        }
+    }
+}
+
+impl From<SyncerArgs> for PipOptions {
+    fn from(args: SyncerArgs) -> Self {
+        let SyncerArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            config_setting,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            ..PipOptions::default()
+        }
+    }
+}
+
+impl From<SyncerArgs> for InstallerOptions {
+    fn from(args: SyncerArgs) -> Self {
+        let SyncerArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            config_setting,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            ..InstallerOptions::default()
+        }
+    }
+}
+
+impl From<InstallerArgs> for PipOptions {
+    fn from(args: InstallerArgs) -> Self {
+        let InstallerArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease: if pre {
+                Some(PreReleaseMode::Allow)
+            } else {
+                prerelease
+            },
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            ..PipOptions::default()
+        }
+    }
+}
+
+impl From<InstallerArgs> for InstallerOptions {
+    fn from(args: InstallerArgs) -> Self {
+        let InstallerArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease: if pre {
+                Some(PreReleaseMode::Allow)
+            } else {
+                prerelease
+            },
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+        }
+    }
+}
+
+impl From<IndexArgs> for PipOptions {
     fn from(args: IndexArgs) -> Self {
-        IndexLocations::new(
-            args.index_url.and_then(Maybe::into_option),
-            args.extra_index_url
-                .map(|extra_index_urls| {
-                    extra_index_urls
-                        .into_iter()
-                        .filter_map(Maybe::into_option)
-                        .collect()
-                })
-                .unwrap_or_default(),
-            args.find_links.unwrap_or_default(),
-            args.no_index,
-        )
+        let IndexArgs {
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+        } = args;
+
+        Self {
+            index_url: index_url.and_then(Maybe::into_option),
+            extra_index_url: extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(no_index),
+            find_links,
+            ..PipOptions::default()
+        }
     }
 }

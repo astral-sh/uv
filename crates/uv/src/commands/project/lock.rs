@@ -2,20 +2,19 @@ use std::collections::Bound;
 
 use anstream::eprint;
 
-use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
-use install_wheel_rs::linker::LinkMode;
+use distribution_types::UnresolvedRequirementSpecification;
 use uv_cache::Cache;
-use uv_client::{FlatIndexClient, RegistryClientBuilder};
+use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, PreviewMode, Reinstall,
-    SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy,
+    Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
+use uv_resolver::{FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
 use uv_toolchain::Interpreter;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -23,15 +22,18 @@ use uv_warnings::warn_user;
 use crate::commands::project::{find_requires_python, ProjectError};
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::InstallerSettings;
 
 /// Resolve the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
-    index_locations: IndexLocations,
     upgrade: Upgrade,
-    exclude_newer: Option<ExcludeNewer>,
     python: Option<String>,
+    settings: InstallerSettings,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
@@ -57,10 +59,12 @@ pub(crate) async fn lock(
         root_project_name,
         &workspace,
         &interpreter,
-        &index_locations,
         upgrade,
-        exclude_newer,
+        &settings,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )
@@ -85,13 +89,28 @@ pub(super) async fn do_lock(
     root_project_name: Option<PackageName>,
     workspace: &Workspace,
     interpreter: &Interpreter,
-    index_locations: &IndexLocations,
     upgrade: Upgrade,
-    exclude_newer: Option<ExcludeNewer>,
+    settings: &InstallerSettings,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<Lock, ProjectError> {
+    // Extract the project settings.
+    let InstallerSettings {
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease,
+        config_setting,
+        exclude_newer,
+        link_mode,
+        compile_bytecode: _,
+    } = settings;
+
     // When locking, include the project itself (as editable).
     let requirements = workspace
         .members_as_requirements()
@@ -137,27 +156,35 @@ pub(super) async fn do_lock(
     };
 
     // Initialize the registry client.
-    // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
-    // TODO(charlie): Respect project configuration.
-    let build_isolation = BuildIsolation::default();
-    let concurrency = Concurrency::default();
-    let config_settings = ConfigSettings::default();
-    let extras = ExtrasSpecification::default();
+    let options = OptionsBuilder::new()
+        .resolution_mode(*resolution)
+        .prerelease_mode(*prerelease)
+        .exclude_newer(*exclude_newer)
+        .index_strategy(*index_strategy)
+        .build();
+    let hasher = HashStrategy::Generate;
+
+    // Initialize any shared state.
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let link_mode = LinkMode::default();
+
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let build_isolation = BuildIsolation::default();
     let build_options = BuildOptions::default();
+    let extras = ExtrasSpecification::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
-
-    let hasher = HashStrategy::Generate;
-    let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -183,9 +210,9 @@ pub(super) async fn do_lock(
         &git,
         &in_flight,
         setup_py,
-        &config_settings,
+        config_setting,
         build_isolation,
-        link_mode,
+        *link_mode,
         &build_options,
         concurrency,
         preview,

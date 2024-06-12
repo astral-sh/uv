@@ -12,6 +12,7 @@ use tracing::{debug, instrument};
 
 use cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
 use uv_cache::Cache;
+use uv_configuration::Concurrency;
 use uv_requirements::RequirementsSource;
 use uv_workspace::Combine;
 
@@ -123,6 +124,8 @@ async fn run() -> Result<ExitStatus> {
     } else if cli.global_args.isolated {
         None
     } else {
+        // TODO(charlie): This needs to discover settings from the workspace _root_. Right now, it
+        // discovers the closest `pyproject.toml`, which could be a workspace _member_.
         let project = uv_workspace::Workspace::find(env::current_dir()?)?;
         let user = uv_workspace::Workspace::user()?;
         project.combine(user)
@@ -502,8 +505,8 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::pip_check(
-                args.shared.python.as_deref(),
-                args.shared.system,
+                args.pip.python.as_deref(),
+                args.pip.system,
                 globals.preview,
                 &cache,
                 printer,
@@ -588,7 +591,6 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
-                args.index_locations,
                 args.extras,
                 args.dev,
                 args.target,
@@ -596,11 +598,13 @@ async fn run() -> Result<ExitStatus> {
                 requirements,
                 args.python,
                 args.upgrade,
-                args.exclude_newer,
                 args.package,
+                args.installer,
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -614,11 +618,14 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::sync(
-                args.index_locations,
                 args.extras,
                 args.dev,
                 args.python,
+                args.installer,
                 globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -632,11 +639,13 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::lock(
-                args.index_locations,
                 args.upgrade,
-                args.exclude_newer,
                 args.python,
+                args.installer,
                 globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -653,6 +662,9 @@ async fn run() -> Result<ExitStatus> {
                 args.requirements,
                 args.python,
                 globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -669,6 +681,9 @@ async fn run() -> Result<ExitStatus> {
                 args.requirements,
                 args.python,
                 globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -701,10 +716,12 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.from,
                 args.with,
+                args.installer,
                 globals.isolated,
                 globals.preview,
-                args.index_locations,
                 globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )

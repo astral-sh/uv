@@ -7,7 +7,7 @@ use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, Targe
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
 
-use crate::{Options, PipOptions, Workspace};
+use crate::{GlobalOptions, InstallerOptions, Options, PipOptions, Workspace};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.
@@ -41,15 +41,43 @@ impl Combine for Option<Workspace> {
 impl Combine for Options {
     fn combine(self, other: Options) -> Options {
         Options {
-            native_tls: self.native_tls.combine(other.native_tls),
-            offline: self.offline.combine(other.offline),
-            no_cache: self.no_cache.combine(other.no_cache),
-            preview: self.preview.combine(other.preview),
-            cache_dir: self.cache_dir.combine(other.cache_dir),
+            globals: self.globals.combine(other.globals),
+            installer: self.installer.combine(other.installer),
             pip: self.pip.combine(other.pip),
             override_dependencies: self
                 .override_dependencies
                 .combine(other.override_dependencies),
+        }
+    }
+}
+
+impl Combine for GlobalOptions {
+    fn combine(self, other: GlobalOptions) -> GlobalOptions {
+        GlobalOptions {
+            native_tls: self.native_tls.combine(other.native_tls),
+            offline: self.offline.combine(other.offline),
+            no_cache: self.no_cache.combine(other.no_cache),
+            cache_dir: self.cache_dir.combine(other.cache_dir),
+            preview: self.preview.combine(other.preview),
+        }
+    }
+}
+
+impl Combine for InstallerOptions {
+    fn combine(self, other: InstallerOptions) -> InstallerOptions {
+        InstallerOptions {
+            index_url: self.index_url.combine(other.index_url),
+            extra_index_url: self.extra_index_url.combine(other.extra_index_url),
+            no_index: self.no_index.combine(other.no_index),
+            find_links: self.find_links.combine(other.find_links),
+            index_strategy: self.index_strategy.combine(other.index_strategy),
+            keyring_provider: self.keyring_provider.combine(other.keyring_provider),
+            resolution: self.resolution.combine(other.resolution),
+            prerelease: self.prerelease.combine(other.prerelease),
+            config_settings: self.config_settings.combine(other.config_settings),
+            exclude_newer: self.exclude_newer.combine(other.exclude_newer),
+            link_mode: self.link_mode.combine(other.link_mode),
+            compile_bytecode: self.compile_bytecode.combine(other.compile_bytecode),
         }
     }
 }
