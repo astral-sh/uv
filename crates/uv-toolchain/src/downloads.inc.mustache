@@ -6,14 +6,18 @@
 pub(crate) const PYTHON_DOWNLOADS: &[PythonDownload] = &[
     {{#versions}}
     PythonDownload {
-        key: "{{key}}",
         major: {{value.major}},
         minor: {{value.minor}},
         patch: {{value.patch}},
         implementation: ImplementationName::{{value.name}},
-        arch: Arch::{{value.arch}},
-        os: Os::{{value.os}},
-        libc: Libc::{{value.libc}},
+        arch: Arch(target_lexicon::Architecture::{{value.arch}}),
+        os: Os(target_lexicon::OperatingSystem::{{value.os}}),
+        {{#value.libc}}
+        libc: Libc::Some(target_lexicon::Environment::{{.}}),
+        {{/value.libc}}
+        {{^value.libc}}
+        libc: Libc::None,
+        {{/value.libc}}
         url: "{{value.url}}",
         {{#value.sha256}}
         sha256: Some("{{.}}")
