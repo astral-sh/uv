@@ -1936,7 +1936,7 @@ pub(crate) struct LockArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct AddArgs {
-    /// The packages to remove, as PEP 508 requirements (e.g., `flask==2.2.3`).
+    /// The packages to add, as PEP 508 requirements (e.g., `flask==2.2.3`).
     #[arg(required = true)]
     pub(crate) requirements: Vec<String>,
 
