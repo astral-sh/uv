@@ -3,7 +3,6 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -173,7 +172,7 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
                 Self::NoSolution(NoSolutionError {
                     derivation_tree,
                     // The following should be populated before display for the best error messages
-                    available_versions: IndexMap::default(),
+                    available_versions: FxHashMap::default(),
                     selector: None,
                     python_requirement: None,
                     index_locations: None,
@@ -195,7 +194,7 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
 #[derive(Debug)]
 pub struct NoSolutionError {
     derivation_tree: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
-    available_versions: IndexMap<PubGrubPackage, BTreeSet<Version>>,
+    available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
     selector: Option<CandidateSelector>,
     python_requirement: Option<PythonRequirement>,
     index_locations: Option<IndexLocations>,
@@ -241,7 +240,7 @@ impl NoSolutionError {
         visited: &FxHashSet<PackageName>,
         package_versions: &FxOnceMap<PackageName, Arc<VersionsResponse>>,
     ) -> Self {
-        let mut available_versions = IndexMap::default();
+        let mut available_versions = FxHashMap::default();
         for package in self.derivation_tree.packages() {
             match &**package {
                 PubGrubPackageInner::Root { .. } => {}

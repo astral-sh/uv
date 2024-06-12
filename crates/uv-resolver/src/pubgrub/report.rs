@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
 
 use derivative::Derivative;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 use owo_colors::OwoColorize;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
@@ -26,7 +26,7 @@ use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
-    pub(crate) available_versions: &'a IndexMap<PubGrubPackage, BTreeSet<Version>>,
+    pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, BTreeSet<Version>>,
 
     /// The versions that were available for each package
     pub(crate) python_requirement: Option<&'a PythonRequirement>,
