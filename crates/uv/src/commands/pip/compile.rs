@@ -21,8 +21,8 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -253,11 +253,15 @@ pub(crate) async fn pip_compile(
     let preferences = read_requirements_txt(output_file, &upgrade).await?;
     let git = GitResolver::default();
 
+    // Combine the `--no-build` flags.
+    let no_build = no_build.combine(specified_no_build);
+    let build_options = BuildOptions::new(NoBinary::default(), no_build);
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &no_build, &NoBinary::None)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -272,9 +276,6 @@ pub(crate) async fn pip_compile(
         BuildIsolation::Isolated
     };
 
-    // Combine the `--no-build` flags.
-    let no_build = no_build.combine(specified_no_build);
-
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -288,8 +289,7 @@ pub(crate) async fn pip_compile(
         &config_settings,
         build_isolation,
         link_mode,
-        &no_build,
-        &NoBinary::None,
+        &build_options,
         concurrency,
         preview,
     )

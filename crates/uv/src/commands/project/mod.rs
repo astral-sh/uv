@@ -11,7 +11,7 @@ use pep440_rs::{Version, VersionSpecifiers};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, PreviewMode, Reinstall,
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -306,8 +306,7 @@ pub(crate) async fn update_environment(
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
     let link_mode = LinkMode::default();
-    let no_binary = NoBinary::default();
-    let no_build = NoBuild::default();
+    let build_options = BuildOptions::default();
     let options = Options::default();
     let preferences = Vec::default();
     let reinstall = Reinstall::default();
@@ -328,8 +327,7 @@ pub(crate) async fn update_environment(
         &config_settings,
         build_isolation,
         link_mode,
-        &no_build,
-        &no_binary,
+        &build_options,
         concurrency,
         preview,
     );
@@ -388,8 +386,7 @@ pub(crate) async fn update_environment(
             &config_settings,
             build_isolation,
             link_mode,
-            &no_build,
-            &no_binary,
+            &build_options,
             concurrency,
             preview,
         )
@@ -401,8 +398,7 @@ pub(crate) async fn update_environment(
         site_packages,
         pip::operations::Modifications::Sufficient,
         &reinstall,
-        &no_binary,
-        &no_build,
+        &build_options,
         link_mode,
         compile,
         index_locations,

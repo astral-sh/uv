@@ -15,7 +15,7 @@ use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::{TagCompatibility, Tags};
 use pypi_types::{HashDigest, Yanked};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
-use uv_configuration::{NoBinary, NoBuild};
+use uv_configuration::BuildOptions;
 use uv_normalize::PackageName;
 use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
@@ -51,8 +51,7 @@ impl VersionMap {
         hasher: &HashStrategy,
         exclude_newer: Option<&ExcludeNewer>,
         flat_index: Option<FlatDistributions>,
-        no_binary: &NoBinary,
-        no_build: &NoBuild,
+        build_options: &BuildOptions,
     ) -> Self {
         let mut map = BTreeMap::new();
         // Create stubs for each entry in simple metadata. The full conversion
@@ -96,28 +95,6 @@ impl VersionMap {
                 },
             }
         }
-        let (no_binary, no_build) = (
-            // Check if binaries are allowed for this package.
-            match no_binary {
-                NoBinary::None => false,
-                NoBinary::All => match no_build {
-                    // Allow `all` to be overridden by specific build exclusions
-                    NoBuild::Packages(packages) => !packages.contains(package_name),
-                    _ => true,
-                },
-                NoBinary::Packages(packages) => packages.contains(package_name),
-            },
-            // Check if source distributions are allowed for this package.
-            match no_build {
-                NoBuild::None => false,
-                NoBuild::All => match no_binary {
-                    // Allow `all` to be overridden by specific binary exclusions
-                    NoBinary::Packages(packages) => !packages.contains(package_name),
-                    _ => true,
-                },
-                NoBuild::Packages(packages) => packages.contains(package_name),
-            },
-        );
         let allowed_yanks = allowed_yanks
             .allowed_versions(package_name)
             .cloned()
@@ -127,8 +104,8 @@ impl VersionMap {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
                 simple_metadata,
-                no_binary,
-                no_build,
+                no_binary: build_options.no_binary_package(package_name),
+                no_build: build_options.no_build_package(package_name),
                 index: index.clone(),
                 tags: tags.cloned(),
                 python_requirement: python_requirement.clone(),

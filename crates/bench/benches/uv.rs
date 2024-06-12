@@ -81,7 +81,7 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+        BuildOptions, Concurrency, ConfigSettings, PreviewMode, SetupPyStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -137,6 +137,7 @@ mod resolver {
         let installed_packages = EmptyInstalledPackages;
         let interpreter = venv.interpreter();
         let python_requirement = PythonRequirement::from_interpreter(interpreter);
+        let build_options = BuildOptions::default();
 
         let build_context = BuildDispatch::new(
             client,
@@ -151,8 +152,7 @@ mod resolver {
             &config_settings,
             build_isolation,
             LinkMode::default(),
-            &NoBuild::None,
-            &NoBinary::None,
+            &build_options,
             concurrency,
             PreviewMode::Disabled,
         );

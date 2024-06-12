@@ -15,8 +15,10 @@ use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, KeyringProviderType, PreviewMode};
-use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{
+    BuildOptions, Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary,
+    NoBuild, PreviewMode, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
@@ -193,8 +195,7 @@ async fn venv_impl(
                 entries,
                 Some(tags),
                 &HashStrategy::None,
-                &NoBuild::All,
-                &NoBinary::None,
+                &BuildOptions::new(NoBinary::None, NoBuild::All),
             )
         };
 
@@ -208,6 +209,9 @@ async fn venv_impl(
         // For seed packages, assume the default settings and concurrency is sufficient.
         let config_settings = ConfigSettings::default();
         let concurrency = Concurrency::default();
+
+        // Do not allow builds
+        let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
 
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
@@ -223,8 +227,7 @@ async fn venv_impl(
             &config_settings,
             BuildIsolation::Isolated,
             link_mode,
-            &NoBuild::All,
-            &NoBinary::None,
+            &build_options,
             concurrency,
             preview,
         )

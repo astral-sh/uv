@@ -7,7 +7,7 @@ use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, PreviewMode, Reinstall,
     SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -162,8 +162,7 @@ pub(super) async fn do_lock(
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
     let link_mode = LinkMode::default();
-    let no_binary = NoBinary::default();
-    let no_build = NoBuild::default();
+    let build_options = BuildOptions::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
 
@@ -174,7 +173,7 @@ pub(super) async fn do_lock(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, None, &hasher, &build_options)
     };
 
     // If an existing lockfile exists, build up a set of preferences.
@@ -197,8 +196,7 @@ pub(super) async fn do_lock(
         &config_settings,
         build_isolation,
         link_mode,
-        &no_build,
-        &no_binary,
+        &build_options,
         concurrency,
         preview,
     );
