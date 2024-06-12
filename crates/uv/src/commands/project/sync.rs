@@ -43,13 +43,7 @@ pub(crate) async fn sync(
     let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(
-        project.workspace(),
-        python.as_deref(),
-        preview,
-        cache,
-        printer,
-    )?;
+    let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
 
     // Read the lockfile.
     let lock: Lock = {

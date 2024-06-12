@@ -16,7 +16,7 @@ use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
-use uv_toolchain::{Interpreter, SystemPython, Toolchain, ToolchainRequest};
+use uv_toolchain::Interpreter;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -43,28 +43,7 @@ pub(crate) async fn lock(
     let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
 
     // Find an interpreter for the project
-    let interpreter = match project::find_environment(&workspace, cache) {
-        Ok(environment) => {
-            let interpreter = environment.into_interpreter();
-            if let Some(python) = python.as_deref() {
-                let request = ToolchainRequest::parse(python);
-                if request.satisfied(&interpreter, cache) {
-                    interpreter
-                } else {
-                    let request = ToolchainRequest::parse(python);
-                    Toolchain::find_requested(&request, SystemPython::Allowed, preview, cache)?
-                        .into_interpreter()
-                }
-            } else {
-                interpreter
-            }
-        }
-        Err(uv_toolchain::Error::NotFound(_)) => {
-            Toolchain::find(python.as_deref(), SystemPython::Allowed, preview, cache)?
-                .into_interpreter()
-        }
-        Err(err) => return Err(err.into()),
-    };
+    let interpreter = project::find_interpreter(&workspace, python.as_deref(), cache, printer)?;
 
     // Perform the lock operation.
     let root_project_name = workspace.root_member().and_then(|member| {
