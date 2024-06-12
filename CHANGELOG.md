@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.11
+
+### Enhancements
+
+- Add support for local directories with `--index-url` ([#4226](https://github.com/astral-sh/uv/pull/4226))
+- Add mTLS support ([#4171](https://github.com/astral-sh/uv/pull/4171))
+- Allow version specifiers to be used in Python version requests ([#4214](https://github.com/astral-sh/uv/pull/4214))
+
+### Bug fixes
+
+- Always install as editable when duplicate dependencies are requested ([#4208](https://github.com/astral-sh/uv/pull/4208))
+- Avoid crash with `XDG_CONFIG_HOME=/dev/null` ([#4200](https://github.com/astral-sh/uv/pull/4200))
+- Improve handling of missing interpreters during discovery ([#4218](https://github.com/astral-sh/uv/pull/4218))
+- Make missing `METADATA` file a recoverable error ([#4247](https://github.com/astral-sh/uv/pull/4247))
+- Represent build tag as `u64` ([#4253](https://github.com/astral-sh/uv/pull/4253))
+
+### Documentation
+
+- Document Windows 10 requirement ([#4210](https://github.com/astral-sh/uv/pull/4210))
+
+### Release
+
+- Re-add `aarch64-unknown-linux-gnu` binary to release assets ([#4254](https://github.com/astral-sh/uv/pull/4254))
+
 ## 0.2.10
 
 ### Enhancements
@@ -168,7 +192,7 @@ requested version, skipping interpreters that are broken or do not satisfy the r
 
 Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
 the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
-also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept *any* interpreter implementation.
 
 In summary, the following Python interpreter requests are now allowed:
 
@@ -186,7 +210,7 @@ To align the user expectations, uv now respects the interpreter that starts it. 
 now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
 
 We now check if discovered interpreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
-installation directory that is _not_ a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
+installation directory that is *not* a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
 to request the interpreter.
 
 ### Enhancements
