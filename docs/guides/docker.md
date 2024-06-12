@@ -1,8 +1,16 @@
 # Using uv in Docker
 
+## Running in Docker
+
+A Docker image is published with a built version of uv available. To run a uv command in a container:
+
+```bash
+docker run ghcr.io/astral-sh/uv --help
+```
+
 ## Installing uv
 
-uv can be installed by copying from our Docker image:
+uv can be installed by copying from the official Docker image:
 
 ```dockerfile
 FROM ghcr.io/astral-sh/uv:latest as uv
@@ -10,13 +18,14 @@ FROM python:3.12-slim-bullseye
 COPY --from=uv /uv /bin/uv
 ```
 
-Or with our standalone installer:
+Or with the standalone installer:
 
 ```dockerfile
 FROM python:3.12-slim-bullseye
 RUN apt-get update && apt-get install -y curl --no-install-recommends
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin/:$PATH"
+ENV PATH="/root/.cargo/bin/:
+$PATH"
 ```
 
 Note this requires `curl` to be available.

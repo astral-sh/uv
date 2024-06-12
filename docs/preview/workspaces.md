@@ -1,17 +1,18 @@
-**Warning: this documentation applies to a future version of uv. Please refer to
-[README.md](../README.md) for documentation for the latest release.**
+**Warning: This documentation refers to experimental features that may change.**
 
-Workspaces help you organize large codebases by splitting them into multiple packages with
+# Workspaces
+
+Workspaces help organize large codebases by splitting them into multiple packages with
 independent dependencies.
 
 When using the `uv pip` interface, workspace dependencies behave like automatic editable path
-dependencies. Using the `uv` interface, all your workspace packages are locked together. `uv run`
-installs only the current package (unless overridden with `--package`) and its workspace and
+dependencies. Using the `uv` project interface, all of the workspace packages are locked together.
+`uv run` installs only the current package (unless overridden with `--package`) and its workspace and
 non-workspace dependencies.
 
 ## Configuration
 
-You can create a workspace by adding a `tool.uv.workspace` to a pyproject.toml that is the workspace
+A workspace can be created by adding a `tool.uv.workspace` to a pyproject.toml that is the workspace
 root. This table contains `members` (mandatory) and `exclude` (optional), with lists of globs of
 directories:
 
@@ -21,7 +22,7 @@ members = ["packages/*", "examples/*"]
 exclude = ["example/excluded_example"]
 ```
 
-If you define `tool.uv.sources` in your workspace root, it applies to all packages, unless
+If `tool.uv.sources` is defined in the workspace root, it applies to all packages, unless
 overridden in the `tool.uv.sources` of a specific project.
 
 ## Common usage
