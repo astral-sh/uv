@@ -148,7 +148,7 @@ pub enum Source {
         subdirectory: Option<String>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
-    /// `.tag.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
+    /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
     /// `setup.py` file in the root).
     Path {
         path: String,

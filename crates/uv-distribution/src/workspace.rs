@@ -176,7 +176,7 @@ impl Workspace {
                     name: project.name.clone(),
                     extras,
                     marker: None,
-                    source: RequirementSource::Path {
+                    source: RequirementSource::Directory {
                         install_path: member.root.clone(),
                         lock_path: member
                             .root

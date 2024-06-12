@@ -44,10 +44,10 @@ impl Pep508Url for VerbatimParsedUrl {
     type Err = ParsedUrlError;
 
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err> {
-        let verbatim_url = <VerbatimUrl as Pep508Url>::parse_url(url, working_dir)?;
+        let verbatim = <VerbatimUrl as Pep508Url>::parse_url(url, working_dir)?;
         Ok(Self {
-            parsed_url: ParsedUrl::try_from(verbatim_url.to_url())?,
-            verbatim: verbatim_url,
+            parsed_url: ParsedUrl::try_from(verbatim.to_url())?,
+            verbatim,
         })
     }
 }
@@ -58,28 +58,56 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, Self::Err> {
         let verbatim = VerbatimUrl::parse_path(&path, &working_dir)?;
-        let parsed_path_url = ParsedPathUrl {
-            url: verbatim.to_url(),
-            install_path: verbatim.as_path()?,
-            lock_path: path.as_ref().to_path_buf(),
-            editable: false,
+        let verbatim_path = verbatim.as_path()?;
+        let is_dir = if let Ok(metadata) = verbatim_path.metadata() {
+            metadata.is_dir()
+        } else {
+            verbatim_path.extension().is_none()
+        };
+        let parsed_url = if is_dir {
+            ParsedUrl::Directory(ParsedDirectoryUrl {
+                url: verbatim.to_url(),
+                install_path: verbatim.as_path()?,
+                lock_path: path.as_ref().to_path_buf(),
+                editable: false,
+            })
+        } else {
+            ParsedUrl::Path(ParsedPathUrl {
+                url: verbatim.to_url(),
+                install_path: verbatim.as_path()?,
+                lock_path: path.as_ref().to_path_buf(),
+            })
         };
         Ok(Self {
-            parsed_url: ParsedUrl::Path(parsed_path_url),
+            parsed_url,
             verbatim,
         })
     }
 
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
         let verbatim = VerbatimUrl::parse_absolute_path(&path)?;
-        let parsed_path_url = ParsedPathUrl {
-            url: verbatim.to_url(),
-            install_path: verbatim.as_path()?,
-            lock_path: path.as_ref().to_path_buf(),
-            editable: false,
+        let verbatim_path = verbatim.as_path()?;
+        let is_dir = if let Ok(metadata) = verbatim_path.metadata() {
+            metadata.is_dir()
+        } else {
+            verbatim_path.extension().is_none()
+        };
+        let parsed_url = if is_dir {
+            ParsedUrl::Directory(ParsedDirectoryUrl {
+                url: verbatim.to_url(),
+                install_path: verbatim.as_path()?,
+                lock_path: path.as_ref().to_path_buf(),
+                editable: false,
+            })
+        } else {
+            ParsedUrl::Path(ParsedPathUrl {
+                url: verbatim.to_url(),
+                install_path: verbatim.as_path()?,
+                lock_path: path.as_ref().to_path_buf(),
+            })
         };
         Ok(Self {
-            parsed_url: ParsedUrl::Path(parsed_path_url),
+            parsed_url,
             verbatim,
         })
     }
@@ -150,8 +178,10 @@ impl<'de> serde::de::Deserialize<'de> for VerbatimParsedUrl {
 /// A URL in a requirement `foo @ <url>` must be one of the above.
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub enum ParsedUrl {
-    /// The direct URL is a path to a local directory or file.
+    /// The direct URL is a path to a local file.
     Path(ParsedPathUrl),
+    /// The direct URL is a path to a local directory.
+    Directory(ParsedDirectoryUrl),
     /// The direct URL is path to a Git repository.
     Git(ParsedGitUrl),
     /// The direct URL is a URL to a source archive (e.g., a `.tar.gz` file) or built archive
@@ -162,16 +192,46 @@ pub enum ParsedUrl {
 impl ParsedUrl {
     /// Returns `true` if the URL is editable.
     pub fn is_editable(&self) -> bool {
-        matches!(self, Self::Path(ParsedPathUrl { editable: true, .. }))
+        matches!(
+            self,
+            Self::Directory(ParsedDirectoryUrl { editable: true, .. })
+        )
     }
 }
 
-/// A local path url
+/// A local path URL for a file (i.e., a built or source distribution).
+///
+/// Examples:
+/// * `file:///home/ferris/my_project/my_project-0.1.0.tar.gz`
+/// * `file:///home/ferris/my_project/my_project-0.1.0-py3-none-any.whl`
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+pub struct ParsedPathUrl {
+    pub url: Url,
+    /// The resolved, absolute path to the distribution which we use for installing.
+    pub install_path: PathBuf,
+    /// The absolute path or path relative to the workspace root pointing to the distribution
+    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+    pub lock_path: PathBuf,
+}
+
+impl ParsedPathUrl {
+    /// Construct a [`ParsedPathUrl`] from a path requirement source.
+    pub fn from_source(install_path: PathBuf, lock_path: PathBuf, url: Url) -> Self {
+        Self {
+            url,
+            install_path,
+            lock_path,
+        }
+    }
+}
+
+/// A local path URL for a source directory.
 ///
 /// Examples:
 /// * `file:///home/ferris/my_project`
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
-pub struct ParsedPathUrl {
+pub struct ParsedDirectoryUrl {
     pub url: Url,
     /// The resolved, absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
@@ -182,8 +242,8 @@ pub struct ParsedPathUrl {
     pub editable: bool,
 }
 
-impl ParsedPathUrl {
-    /// Construct a [`ParsedPathUrl`] from a path requirement source.
+impl ParsedDirectoryUrl {
+    /// Construct a [`ParsedDirectoryUrl`] from a path requirement source.
     pub fn from_source(
         install_path: PathBuf,
         lock_path: PathBuf,
@@ -322,12 +382,25 @@ impl TryFrom<Url> for ParsedUrl {
             let path = url
                 .to_file_path()
                 .map_err(|()| ParsedUrlError::InvalidFileUrl(url.clone()))?;
-            Ok(Self::Path(ParsedPathUrl {
-                url,
-                install_path: path.clone(),
-                lock_path: path,
-                editable: false,
-            }))
+            let is_dir = if let Ok(metadata) = path.metadata() {
+                metadata.is_dir()
+            } else {
+                path.extension().is_none()
+            };
+            if is_dir {
+                Ok(Self::Directory(ParsedDirectoryUrl {
+                    url,
+                    install_path: path.clone(),
+                    lock_path: path,
+                    editable: false,
+                }))
+            } else {
+                Ok(Self::Path(ParsedPathUrl {
+                    url,
+                    install_path: path.clone(),
+                    lock_path: path,
+                }))
+            }
         } else {
             Ok(Self::Archive(ParsedArchiveUrl::from(url)))
         }
@@ -340,6 +413,7 @@ impl TryFrom<&ParsedUrl> for DirectUrl {
     fn try_from(value: &ParsedUrl) -> Result<Self, Self::Error> {
         match value {
             ParsedUrl::Path(value) => Self::try_from(value),
+            ParsedUrl::Directory(value) => Self::try_from(value),
             ParsedUrl::Git(value) => Self::try_from(value),
             ParsedUrl::Archive(value) => Self::try_from(value),
         }
@@ -350,6 +424,21 @@ impl TryFrom<&ParsedPathUrl> for DirectUrl {
     type Error = ParsedUrlError;
 
     fn try_from(value: &ParsedPathUrl) -> Result<Self, Self::Error> {
+        Ok(Self::ArchiveUrl {
+            url: value.url.to_string(),
+            archive_info: ArchiveInfo {
+                hash: None,
+                hashes: None,
+            },
+            subdirectory: None,
+        })
+    }
+}
+
+impl TryFrom<&ParsedDirectoryUrl> for DirectUrl {
+    type Error = ParsedUrlError;
+
+    fn try_from(value: &ParsedDirectoryUrl) -> Result<Self, Self::Error> {
         Ok(Self::LocalDirectory {
             url: value.url.to_string(),
             dir_info: DirInfo {
@@ -394,6 +483,7 @@ impl From<ParsedUrl> for Url {
     fn from(value: ParsedUrl) -> Self {
         match value {
             ParsedUrl::Path(value) => value.into(),
+            ParsedUrl::Directory(value) => value.into(),
             ParsedUrl::Git(value) => value.into(),
             ParsedUrl::Archive(value) => value.into(),
         }
@@ -402,6 +492,12 @@ impl From<ParsedUrl> for Url {
 
 impl From<ParsedPathUrl> for Url {
     fn from(value: ParsedPathUrl) -> Self {
+        value.url
+    }
+}
+
+impl From<ParsedDirectoryUrl> for Url {
+    fn from(value: ParsedDirectoryUrl) -> Self {
         value.url
     }
 }

@@ -151,6 +151,52 @@ impl RequirementSatisfaction {
             RequirementSource::Path {
                 install_path: requested_path,
                 lock_path: _,
+                url: _,
+            } => {
+                let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+                else {
+                    return Ok(Self::Mismatch);
+                };
+                let DirectUrl::ArchiveUrl {
+                    url: installed_url,
+                    archive_info: _,
+                    subdirectory: None,
+                } = direct_url.as_ref()
+                else {
+                    return Ok(Self::Mismatch);
+                };
+
+                let Some(installed_path) = Url::parse(installed_url)
+                    .ok()
+                    .and_then(|url| url.to_file_path().ok())
+                else {
+                    return Ok(Self::Mismatch);
+                };
+
+                if !(*requested_path == installed_path
+                    || is_same_file(requested_path, &installed_path).unwrap_or(false))
+                {
+                    trace!(
+                        "Path mismatch: {:?} vs. {:?}",
+                        requested_path,
+                        installed_path
+                    );
+                    return Ok(Self::Satisfied);
+                }
+
+                if !ArchiveTimestamp::up_to_date_with(
+                    requested_path,
+                    ArchiveTarget::Install(distribution),
+                )? {
+                    trace!("Installed package is out of date");
+                    return Ok(Self::OutOfDate);
+                }
+
+                Ok(Self::Satisfied)
+            }
+            RequirementSource::Directory {
+                install_path: requested_path,
+                lock_path: _,
                 editable: requested_editable,
                 url: _,
             } => {
@@ -205,13 +251,11 @@ impl RequirementSatisfaction {
                 }
 
                 // Does the package have dynamic metadata?
-                // TODO(charlie): Separate `RequirementSource` into `Path` and `Directory`.
-                if requested_path.is_dir() && is_dynamic(requested_path) {
+                if is_dynamic(requested_path) {
                     trace!("Dependency is dynamic");
                     return Ok(Self::Dynamic);
                 }
 
-                // Otherwise, assume the requirement is up-to-date.
                 Ok(Self::Satisfied)
             }
         }

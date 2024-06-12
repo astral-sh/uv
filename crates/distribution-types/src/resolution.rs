@@ -144,7 +144,6 @@ impl From<&ResolvedDist> for Requirement {
                     install_path: wheel.path.clone(),
                     lock_path: wheel.path.clone(),
                     url: wheel.url.clone(),
-                    editable: false,
                 },
                 Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
                     specifier: pep440_rs::VersionSpecifiers::from(
@@ -172,9 +171,8 @@ impl From<&ResolvedDist> for Requirement {
                     install_path: sdist.install_path.clone(),
                     lock_path: sdist.lock_path.clone(),
                     url: sdist.url.clone(),
-                    editable: false,
                 },
-                Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Path {
+                Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Directory {
                     install_path: sdist.install_path.clone(),
                     lock_path: sdist.lock_path.clone(),
                     url: sdist.url.clone(),

@@ -3,7 +3,7 @@ use std::path::Path;
 use pep508_rs::{
     Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
 };
-use pypi_types::{ParsedPathUrl, ParsedUrl, VerbatimParsedUrl};
+use pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_normalize::PackageName;
 
 #[derive(Debug, thiserror::Error)]
@@ -14,11 +14,17 @@ pub enum EditableError {
     #[error("Editable `{0}` must refer to a local directory, not a versioned package")]
     Versioned(PackageName),
 
+    #[error("Editable `{0}` must refer to a local directory, not an archive: `{1}`")]
+    File(PackageName, String),
+
     #[error("Editable `{0}` must refer to a local directory, not an HTTPS URL: `{1}`")]
     Https(PackageName, String),
 
     #[error("Editable `{0}` must refer to a local directory, not a Git URL: `{1}`")]
     Git(PackageName, String),
+
+    #[error("Editable must refer to a local directory, not an archive: `{0}`")]
+    UnnamedFile(String),
 
     #[error("Editable must refer to a local directory, not an HTTPS URL: `{0}`")]
     UnnamedHttps(String),
@@ -68,7 +74,10 @@ impl RequirementsTxtRequirement {
                 };
 
                 let parsed_url = match url.parsed_url {
-                    ParsedUrl::Path(parsed_url) => parsed_url,
+                    ParsedUrl::Directory(parsed_url) => parsed_url,
+                    ParsedUrl::Path(_) => {
+                        return Err(EditableError::File(requirement.name, url.to_string()))
+                    }
                     ParsedUrl::Archive(_) => {
                         return Err(EditableError::Https(requirement.name, url.to_string()))
                     }
@@ -80,7 +89,7 @@ impl RequirementsTxtRequirement {
                 Ok(Self::Named(pep508_rs::Requirement {
                     version_or_url: Some(pep508_rs::VersionOrUrl::Url(VerbatimParsedUrl {
                         verbatim: url.verbatim,
-                        parsed_url: ParsedUrl::Path(ParsedPathUrl {
+                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
                             editable: true,
                             ..parsed_url
                         }),
@@ -90,7 +99,10 @@ impl RequirementsTxtRequirement {
             }
             RequirementsTxtRequirement::Unnamed(requirement) => {
                 let parsed_url = match requirement.url.parsed_url {
-                    ParsedUrl::Path(parsed_url) => parsed_url,
+                    ParsedUrl::Directory(parsed_url) => parsed_url,
+                    ParsedUrl::Path(_) => {
+                        return Err(EditableError::UnnamedFile(requirement.to_string()))
+                    }
                     ParsedUrl::Archive(_) => {
                         return Err(EditableError::UnnamedHttps(requirement.to_string()))
                     }
@@ -102,7 +114,7 @@ impl RequirementsTxtRequirement {
                 Ok(Self::Unnamed(UnnamedRequirement {
                     url: VerbatimParsedUrl {
                         verbatim: requirement.url.verbatim,
-                        parsed_url: ParsedUrl::Path(ParsedPathUrl {
+                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
                             editable: true,
                             ..parsed_url
                         }),

@@ -831,6 +831,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<Revision, Error> {
+        // Verify that the archive exists.
+        if !resource.path.is_file() {
+            return Err(Error::NotFound(resource.url.clone()));
+        }
+
         // Determine the last-modified time of the source distribution.
         let modified = ArchiveTimestamp::from_file(&resource.path).map_err(Error::CacheRead)?;
 
@@ -1036,6 +1041,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &DirectorySourceUrl<'_>,
         cache_shard: &CacheShard,
     ) -> Result<Revision, Error> {
+        // Verify that the source tree exists.
+        if !resource.path.is_dir() {
+            return Err(Error::NotFound(resource.url.clone()));
+        }
+
         // Determine the last-modified time of the source distribution.
         let Some(modified) =
             ArchiveTimestamp::from_source_tree(&resource.path).map_err(Error::CacheRead)?

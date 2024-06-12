@@ -42,6 +42,8 @@ pub enum LoweringError {
     WorkspaceFalse,
     #[error("`tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it")]
     MissingPreview,
+    #[error("Editable must refer to a local directory, not a file: `{0}`")]
+    EditableFile(String),
 }
 
 /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
@@ -204,7 +206,7 @@ pub(crate) fn lower_requirement(
                 .get(&requirement.name)
                 .ok_or(LoweringError::UndeclaredWorkspacePackage)?
                 .clone();
-            path_source(
+            directory_source(
                 path.root(),
                 workspace.root(),
                 workspace.root(),
@@ -225,7 +227,7 @@ pub(crate) fn lower_requirement(
     })
 }
 
-/// Convert a path string to a path section.
+/// Convert a path string to a file or directory source.
 fn path_source(
     path: impl AsRef<Path>,
     project_dir: &Path,
@@ -242,7 +244,48 @@ fn path_source(
     let ascend_to_workspace = project_dir
         .strip_prefix(workspace_root)
         .expect("Project must be below workspace root");
-    Ok(RequirementSource::Path {
+    let is_dir = if let Ok(metadata) = path_buf.metadata() {
+        metadata.is_dir()
+    } else {
+        path_buf.extension().is_none()
+    };
+    if is_dir {
+        Ok(RequirementSource::Directory {
+            install_path: path_buf,
+            lock_path: ascend_to_workspace.join(project_dir),
+            url,
+            editable,
+        })
+    } else {
+        if editable {
+            return Err(LoweringError::EditableFile(url.to_string()));
+        }
+        Ok(RequirementSource::Path {
+            install_path: path_buf,
+            lock_path: ascend_to_workspace.join(project_dir),
+            url,
+        })
+    }
+}
+
+/// Convert a path string to a directory source.
+fn directory_source(
+    path: impl AsRef<Path>,
+    project_dir: &Path,
+    workspace_root: &Path,
+    editable: bool,
+) -> Result<RequirementSource, LoweringError> {
+    let url = VerbatimUrl::parse_path(path.as_ref(), project_dir)?
+        .with_given(path.as_ref().to_string_lossy());
+    let path_buf = path.as_ref().to_path_buf();
+    let path_buf = path_buf
+        .absolutize_from(project_dir)
+        .map_err(|err| LoweringError::Absolutize(path.as_ref().to_path_buf(), err))?
+        .to_path_buf();
+    let ascend_to_workspace = project_dir
+        .strip_prefix(workspace_root)
+        .expect("Project must be below workspace root");
+    Ok(RequirementSource::Directory {
         install_path: path_buf,
         lock_path: ascend_to_workspace.join(project_dir),
         url,

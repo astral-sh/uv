@@ -6,7 +6,8 @@ use cache_key::CanonicalUrl;
 use distribution_types::Verbatim;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{
-    ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, RequirementSource, VerbatimParsedUrl,
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
+    RequirementSource, VerbatimParsedUrl,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -55,11 +56,34 @@ impl Urls {
                 RequirementSource::Path {
                     install_path,
                     lock_path,
-                    editable,
                     url,
                 } => {
                     let url = VerbatimParsedUrl {
                         parsed_url: ParsedUrl::Path(ParsedPathUrl::from_source(
+                            install_path.clone(),
+                            lock_path.clone(),
+                            url.to_url(),
+                        )),
+                        verbatim: url.clone(),
+                    };
+                    if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
+                        if !Self::same_resource(&previous.parsed_url, &url.parsed_url, git) {
+                            return Err(ResolveError::ConflictingUrlsDirect(
+                                requirement.name.clone(),
+                                previous.verbatim.verbatim().to_string(),
+                                url.verbatim.verbatim().to_string(),
+                            ));
+                        }
+                    }
+                }
+                RequirementSource::Directory {
+                    install_path,
+                    lock_path,
+                    editable,
+                    url,
+                } => {
+                    let url = VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                             install_path.clone(),
                             lock_path.clone(),
                             *editable,
@@ -142,6 +166,10 @@ impl Urls {
                 a.subdirectory == b.subdirectory && git.same_ref(&a.url, &b.url)
             }
             (ParsedUrl::Path(a), ParsedUrl::Path(b)) => {
+                a.install_path == b.install_path
+                    || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
+            }
+            (ParsedUrl::Directory(a), ParsedUrl::Directory(b)) => {
                 a.install_path == b.install_path
                     || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
             }

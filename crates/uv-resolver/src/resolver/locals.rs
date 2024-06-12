@@ -196,6 +196,7 @@ fn iter_locals(source: &RequirementSource) -> Box<dyn Iterator<Item = Version> +
                 .into_iter()
                 .filter(pep440_rs::Version::is_local),
         ),
+        RequirementSource::Directory { .. } => Box::new(iter::empty()),
     }
 }
 
