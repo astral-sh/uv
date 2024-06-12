@@ -274,9 +274,7 @@ pub fn create_bare_venv(
         && interpreter.markers().os_name() == "posix"
         && interpreter.markers().sys_platform() != "darwin"
     {
-        let lib64 = location.join("lib64");
-        let lib = location.join("lib");
-        match std::os::unix::fs::symlink(lib, lib64) {
+        match std::os::unix::fs::symlink("lib", location.join("lib64")) {
             Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
             Err(err) => {
