@@ -11,7 +11,7 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
-    BuildKind, Concurrency, ConfigSettings, NoBinary, NoBuild, PreviewMode, SetupPyStrategy,
+    BuildKind, BuildOptions, Concurrency, ConfigSettings, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
@@ -66,6 +66,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let index_urls = IndexLocations::default();
     let setup_py = SetupPyStrategy::default();
     let toolchain = Toolchain::find_virtualenv(&cache)?;
+    let build_options = BuildOptions::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -80,8 +81,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &config_settings,
         BuildIsolation::Isolated,
         install_wheel_rs::linker::LinkMode::default(),
-        &NoBuild::None,
-        &NoBinary::None,
+        &build_options,
         concurrency,
         PreviewMode::Enabled,
     );

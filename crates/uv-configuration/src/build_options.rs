@@ -33,6 +33,67 @@ impl Display for BuildKind {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct BuildOptions {
+    no_binary: NoBinary,
+    no_build: NoBuild,
+}
+
+impl BuildOptions {
+    pub fn new(no_binary: NoBinary, no_build: NoBuild) -> Self {
+        Self {
+            no_binary,
+            no_build,
+        }
+    }
+
+    pub fn no_binary_package(&self, package_name: &PackageName) -> bool {
+        match &self.no_binary {
+            NoBinary::None => false,
+            NoBinary::All => match &self.no_build {
+                // Allow `all` to be overridden by specific build exclusions
+                NoBuild::Packages(packages) => !packages.contains(package_name),
+                _ => true,
+            },
+            NoBinary::Packages(packages) => packages.contains(package_name),
+        }
+    }
+
+    pub fn no_build_package(&self, package_name: &PackageName) -> bool {
+        match &self.no_build {
+            NoBuild::All => match &self.no_binary {
+                // Allow `all` to be overridden by specific binary exclusions
+                NoBinary::Packages(packages) => !packages.contains(package_name),
+                _ => true,
+            },
+            NoBuild::None => false,
+            NoBuild::Packages(packages) => packages.contains(package_name),
+        }
+    }
+
+    pub fn no_build(&self, package_name: Option<&PackageName>) -> bool {
+        match package_name {
+            Some(name) => self.no_build_package(name),
+            None => self.no_build_all(),
+        }
+    }
+
+    pub fn no_binary(&self, package_name: Option<&PackageName>) -> bool {
+        match package_name {
+            Some(name) => self.no_binary_package(name),
+            None => self.no_binary_all(),
+        }
+    }
+
+    pub fn no_build_all(&self) -> bool {
+        matches!(self.no_build, NoBuild::All)
+    }
+
+    pub fn no_binary_all(&self) -> bool {
+        matches!(self.no_binary, NoBinary::All)
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum NoBinary {
     /// Allow installation of any wheel.
     #[default]

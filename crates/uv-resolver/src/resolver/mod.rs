@@ -156,8 +156,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
-            build_context.no_binary(),
-            build_context.no_build(),
+            build_context.build_options(),
         );
 
         Self::new_custom_io(

@@ -2,7 +2,7 @@ use std::future::Future;
 
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-use uv_configuration::{NoBinary, NoBuild};
+use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
 use uv_types::{BuildContext, HashStrategy};
@@ -81,8 +81,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
-    no_binary: NoBinary,
-    no_build: NoBuild,
+    build_options: &'a BuildOptions,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -96,8 +95,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
-        no_binary: &'a NoBinary,
-        no_build: &'a NoBuild,
+        build_options: &'a BuildOptions,
     ) -> Self {
         Self {
             fetcher,
@@ -107,8 +105,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
-            no_binary: no_binary.clone(),
-            no_build: no_build.clone(),
+            build_options,
         }
     }
 }
@@ -140,8 +137,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                             &self.hasher,
                             self.exclude_newer.as_ref(),
                             self.flat_index.get(package_name).cloned(),
-                            &self.no_binary,
-                            &self.no_build,
+                            self.build_options,
                         )
                     })
                     .collect(),

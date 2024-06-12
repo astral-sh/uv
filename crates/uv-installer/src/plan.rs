@@ -16,7 +16,7 @@ use distribution_types::{
 use platform_tags::Tags;
 use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
-use uv_configuration::{NoBinary, NoBuild, Reinstall};
+use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
@@ -56,8 +56,7 @@ impl<'a> Planner<'a> {
         self,
         mut site_packages: SitePackages,
         reinstall: &Reinstall,
-        no_binary: &NoBinary,
-        no_build: &NoBuild,
+        build_options: &BuildOptions,
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
         cache: &Cache,
@@ -108,15 +107,7 @@ impl<'a> Planner<'a> {
             };
 
             // Check if installation of a binary version of the package should be allowed.
-            let no_binary = match no_binary {
-                NoBinary::None => false,
-                NoBinary::All => match no_build {
-                    // Allow `all` to be overridden by specific build exclusions
-                    NoBuild::Packages(packages) => !packages.contains(&requirement.name),
-                    _ => true,
-                },
-                NoBinary::Packages(packages) => packages.contains(&requirement.name),
-            };
+            let no_binary = build_options.no_binary_package(&requirement.name);
 
             let installed_dists = site_packages.remove_packages(&requirement.name);
 
