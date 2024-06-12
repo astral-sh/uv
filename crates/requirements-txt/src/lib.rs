@@ -1830,8 +1830,8 @@ mod test {
                         requirement: Unnamed(
                             UnnamedRequirement {
                                 url: VerbatimParsedUrl {
-                                    parsed_url: Path(
-                                        ParsedPathUrl {
+                                    parsed_url: Directory(
+                                        ParsedDirectoryUrl {
                                             url: Url {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,

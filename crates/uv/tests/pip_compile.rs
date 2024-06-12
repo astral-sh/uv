@@ -4791,9 +4791,9 @@ fn missing_path_requirement() -> Result<()> {
     Ok(())
 }
 
-/// Attempt to resolve an editable requirement at a path that doesn't exist.
+/// Attempt to resolve an editable requirement at a file path that doesn't exist.
 #[test]
-fn missing_editable_requirement() -> Result<()> {
+fn missing_editable_file() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e foo/anyio-3.7.0.tar.gz")?;
@@ -4805,7 +4805,28 @@ fn missing_editable_requirement() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Distribution not found at: file://[TEMP_DIR]/foo/anyio-3.7.0.tar.gz
+    error: Unsupported editable requirement in `requirements.in`
+      Caused by: Editable must refer to a local directory, not an archive: `file://[TEMP_DIR]/foo/anyio-3.7.0.tar.gz`
+    "###);
+
+    Ok(())
+}
+
+/// Attempt to resolve an editable requirement at a directory path that doesn't exist.
+#[test]
+fn missing_editable_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("-e foo/bar")?;
+
+    uv_snapshot!(context.filters(), context.compile()
+            .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Distribution not found at: file://[TEMP_DIR]/foo/bar
     "###);
 
     Ok(())

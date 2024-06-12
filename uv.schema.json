@@ -714,7 +714,7 @@
           "additionalProperties": false
         },
         {
-          "description": "The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or `.tag.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or `setup.py` file in the root).",
+          "description": "The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or `setup.py` file in the root).",
           "type": "object",
           "required": [
             "path"

@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 
 use distribution_filename::WheelFilename;
 use pep508_rs::VerbatimUrl;
-use pypi_types::{HashDigest, ParsedPathUrl};
+use pypi_types::{HashDigest, ParsedDirectoryUrl};
 use uv_normalize::PackageName;
 
 use crate::{
@@ -120,7 +120,7 @@ impl CachedDist {
                         .url
                         .to_file_path()
                         .map_err(|()| anyhow!("Invalid path in file URL"))?;
-                    Ok(Some(ParsedUrl::Path(ParsedPathUrl {
+                    Ok(Some(ParsedUrl::Directory(ParsedDirectoryUrl {
                         url: dist.url.raw().clone(),
                         install_path: path.clone(),
                         lock_path: path,

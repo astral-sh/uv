@@ -150,7 +150,8 @@ fn uv_requirement_to_package_id(requirement: &Requirement) -> Result<PackageId, 
         }
         RequirementSource::Url { url, .. }
         | RequirementSource::Git { url, .. }
-        | RequirementSource::Path { url, .. } => PackageId::from_url(url),
+        | RequirementSource::Path { url, .. }
+        | RequirementSource::Directory { url, .. } => PackageId::from_url(url),
     })
 }
 

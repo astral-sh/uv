@@ -10,7 +10,8 @@ use distribution_types::Verbatim;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::{
-    ParsedArchiveUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement, RequirementSource,
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
+    RequirementSource,
 };
 use uv_configuration::{Constraints, Overrides};
 use uv_git::GitResolver;
@@ -346,7 +347,6 @@ impl PubGrubRequirement {
                 })
             }
             RequirementSource::Path {
-                editable,
                 url,
                 install_path,
                 lock_path,
@@ -359,6 +359,42 @@ impl PubGrubRequirement {
                 };
 
                 let parsed_url = ParsedUrl::Path(ParsedPathUrl::from_source(
+                    install_path.clone(),
+                    lock_path.clone(),
+                    url.to_url(),
+                ));
+                if !Urls::same_resource(&expected.parsed_url, &parsed_url, git) {
+                    return Err(ResolveError::ConflictingUrlsTransitive(
+                        requirement.name.clone(),
+                        expected.verbatim.verbatim().to_string(),
+                        url.verbatim().to_string(),
+                    ));
+                }
+
+                Ok(Self {
+                    package: PubGrubPackage::from_url(
+                        requirement.name.clone(),
+                        extra,
+                        requirement.marker.clone(),
+                        expected.clone(),
+                    ),
+                    version: Range::full(),
+                })
+            }
+            RequirementSource::Directory {
+                editable,
+                url,
+                install_path,
+                lock_path,
+            } => {
+                let Some(expected) = urls.get(&requirement.name) else {
+                    return Err(ResolveError::DisallowedUrl(
+                        requirement.name.clone(),
+                        url.to_string(),
+                    ));
+                };
+
+                let parsed_url = ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                     install_path.clone(),
                     lock_path.clone(),
                     *editable,

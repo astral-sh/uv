@@ -329,7 +329,6 @@ impl Dist {
         url: VerbatimUrl,
         install_path: &Path,
         lock_path: &Path,
-        editable: bool,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
         let canonicalized_path = match install_path.canonicalize() {
@@ -340,16 +339,8 @@ impl Dist {
             Err(err) => return Err(err.into()),
         };
 
-        // Determine whether the path represents an archive or a directory.
-        if canonicalized_path.is_dir() {
-            Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path: canonicalized_path.clone(),
-                lock_path: lock_path.to_path_buf(),
-                editable,
-                url,
-            })))
-        } else if canonicalized_path
+        // Determine whether the path represents a built or source distribution.
+        if canonicalized_path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
@@ -362,28 +353,46 @@ impl Dist {
                     url.verbatim().to_string(),
                 ));
             }
-
-            if editable {
-                return Err(Error::EditableFile(url));
-            }
-
             Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                 filename,
                 path: canonicalized_path,
                 url,
             })))
         } else {
-            if editable {
-                return Err(Error::EditableFile(url));
-            }
-
             Ok(Self::Source(SourceDist::Path(PathSourceDist {
                 name,
                 install_path: canonicalized_path.clone(),
-                lock_path: canonicalized_path,
+                lock_path: lock_path.to_path_buf(),
                 url,
             })))
         }
+    }
+
+    /// A local source tree from a `file://` URL.
+    pub fn from_directory_url(
+        name: PackageName,
+        url: VerbatimUrl,
+        install_path: &Path,
+        lock_path: &Path,
+        editable: bool,
+    ) -> Result<Dist, Error> {
+        // Store the canonicalized path, which also serves to validate that it exists.
+        let canonicalized_path = match install_path.canonicalize() {
+            Ok(path) => path,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::NotFound(url.to_url()));
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        // Determine whether the path represents an archive or a directory.
+        Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
+            name,
+            install_path: canonicalized_path.clone(),
+            lock_path: lock_path.to_path_buf(),
+            editable,
+            url,
+        })))
     }
 
     /// A remote source distribution from a `git+https://` or `git+ssh://` url.
@@ -407,12 +416,15 @@ impl Dist {
             ParsedUrl::Archive(archive) => {
                 Self::from_http_url(name, url.verbatim, archive.url, archive.subdirectory)
             }
-            ParsedUrl::Path(file) => Self::from_file_url(
+            ParsedUrl::Path(file) => {
+                Self::from_file_url(name, url.verbatim, &file.install_path, &file.lock_path)
+            }
+            ParsedUrl::Directory(directory) => Self::from_directory_url(
                 name,
                 url.verbatim,
-                &file.install_path,
-                &file.lock_path,
-                file.editable,
+                &directory.install_path,
+                &directory.lock_path,
+                directory.editable,
             ),
             ParsedUrl::Git(git) => {
                 Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)

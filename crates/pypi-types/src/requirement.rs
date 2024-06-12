@@ -114,6 +114,9 @@ impl Display for Requirement {
             RequirementSource::Path { url, .. } => {
                 write!(f, " @ {url}")?;
             }
+            RequirementSource::Directory { url, .. } => {
+                write!(f, " @ {url}")?;
+            }
         }
         if let Some(marker) = &self.marker {
             write!(f, " ; {marker}")?;
@@ -166,10 +169,22 @@ pub enum RequirementSource {
         url: VerbatimUrl,
     },
     /// A local built or source distribution, either from a path or a `file://` URL. It can either
-    /// be a binary distribution (a `.whl` file), a source distribution archive (a `.zip` or
-    /// `.tag.gz` file) or a source tree (a directory with a pyproject.toml in, or a legacy
-    /// source distribution with only a setup.py but non pyproject.toml in it).
+    /// be a binary distribution (a `.whl` file) or a source distribution archive (a `.zip` or
+    /// `.tar.gz` file).
     Path {
+        /// The resolved, absolute path to the distribution which we use for installing.
+        install_path: PathBuf,
+        /// The absolute path or path relative to the workspace root pointing to the distribution
+        /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+        /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+        lock_path: PathBuf,
+        /// The PEP 508 style URL in the format
+        /// `file:///<path>#subdirectory=<subdirectory>`.
+        url: VerbatimUrl,
+    },
+    /// A local source tree (a directory with a pyproject.toml in, or a legacy
+    /// source distribution with only a setup.py but non pyproject.toml in it).
+    Directory {
         /// The resolved, absolute path to the distribution which we use for installing.
         install_path: PathBuf,
         /// The absolute path or path relative to the workspace root pointing to the distribution
@@ -193,7 +208,12 @@ impl RequirementSource {
                 install_path: local_file.install_path.clone(),
                 lock_path: local_file.lock_path.clone(),
                 url,
-                editable: local_file.editable,
+            },
+            ParsedUrl::Directory(directory) => RequirementSource::Directory {
+                install_path: directory.install_path.clone(),
+                lock_path: directory.lock_path.clone(),
+                editable: directory.editable,
+                url,
             },
             ParsedUrl::Git(git) => RequirementSource::Git {
                 url,
@@ -212,6 +232,6 @@ impl RequirementSource {
 
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
-        matches!(self, Self::Path { editable: true, .. })
+        matches!(self, Self::Directory { editable: true, .. })
     }
 }

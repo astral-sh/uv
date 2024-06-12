@@ -272,7 +272,8 @@ impl<'a> Planner<'a> {
                         continue;
                     }
                 }
-                RequirementSource::Path {
+
+                RequirementSource::Directory {
                     url,
                     editable,
                     install_path,
@@ -287,25 +288,40 @@ impl<'a> Planner<'a> {
                         Err(err) => return Err(err.into()),
                     };
 
-                    // Check if we have a wheel or a source distribution.
-                    if path.is_dir() {
-                        let sdist = DirectorySourceDist {
-                            name: requirement.name.clone(),
-                            url: url.clone(),
-                            install_path: path,
-                            lock_path: lock_path.clone(),
-                            editable: *editable,
-                        };
+                    let sdist = DirectorySourceDist {
+                        name: requirement.name.clone(),
+                        url: url.clone(),
+                        install_path: path,
+                        lock_path: lock_path.clone(),
+                        editable: *editable,
+                    };
 
-                        // Find the most-compatible wheel from the cache, since we don't know
-                        // the filename in advance.
-                        if let Some(wheel) = built_index.directory(&sdist)? {
-                            let cached_dist = wheel.into_url_dist(url.clone());
-                            debug!("Path source requirement already cached: {cached_dist}");
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
+                    // Find the most-compatible wheel from the cache, since we don't know
+                    // the filename in advance.
+                    if let Some(wheel) = built_index.directory(&sdist)? {
+                        let cached_dist = wheel.into_url_dist(url.clone());
+                        debug!("Directory source requirement already cached: {cached_dist}");
+                        cached.push(CachedDist::Url(cached_dist));
+                        continue;
+                    }
+                }
+
+                RequirementSource::Path {
+                    url,
+                    install_path,
+                    lock_path,
+                } => {
+                    // Store the canonicalized path, which also serves to validate that it exists.
+                    let path = match install_path.canonicalize() {
+                        Ok(path) => path,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                            return Err(Error::NotFound(url.to_url()).into());
                         }
-                    } else if path
+                        Err(err) => return Err(err.into()),
+                    };
+
+                    // Check if we have a wheel or a source distribution.
+                    if path
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
                     {

@@ -1081,6 +1081,25 @@ fn install_local_wheel() -> Result<()> {
 
     context.assert_command("import tomli").success();
 
+    // Reinstall without the package name.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("{}", Url::from_file_path(archive.path()).unwrap()))?;
+
+    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    context.assert_command("import tomli").success();
+
     Ok(())
 }
 
