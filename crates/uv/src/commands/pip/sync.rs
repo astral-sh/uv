@@ -343,6 +343,7 @@ pub(crate) async fn pip_sync(
         Modifications::Exact,
         reinstall,
         &no_binary,
+        &no_build,
         link_mode,
         compile,
         &index_locations,

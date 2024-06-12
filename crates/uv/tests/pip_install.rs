@@ -1830,6 +1830,201 @@ fn reinstall_no_binary() {
     context.assert_command("import anyio").success();
 }
 
+/// Overlapping usage of `--no-binary` and `--only-binary`
+#[test]
+fn install_no_binary_overrides_only_binary_all() {
+    let context = TestContext::new("3.12");
+
+    // The specific `--no-binary` should override the less specific `--only-binary`
+    let mut command = context.install();
+    command
+        .arg("anyio")
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("--no-binary")
+        .arg("idna")
+        .arg("--strict");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Overlapping usage of `--no-binary` and `--only-binary`
+#[test]
+fn install_only_binary_overrides_no_binary_all() {
+    let context = TestContext::new("3.12");
+
+    // The specific `--only-binary` should override the less specific `--no-binary`
+    let mut command = context.install();
+    command
+        .arg("anyio")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--only-binary")
+        .arg("idna")
+        .arg("--strict");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Overlapping usage of `--no-binary` and `--only-binary`
+// TODO(zanieb): We should have a better error message here
+#[test]
+fn install_only_binary_all_and_no_binary_all() {
+    let context = TestContext::new("3.12");
+
+    // With both as `:all:` we can't install
+    let mut command = context.install();
+    command
+        .arg("anyio")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("--strict");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of anyio are available:
+              anyio>=1.0.0,<=1.4.0
+              anyio>=2.0.0,<=2.2.0
+              anyio>=3.0.0,<=3.6.2
+              anyio>=3.7.0,<=3.7.1
+              anyio>=4.0.0
+          and anyio==1.0.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<1.1.0
+              anyio>1.4.0,<2.0.0
+              anyio>2.2.0,<3.0.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==1.1.0 has no usable wheels and building from source is disabled and anyio==1.2.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<1.2.1
+              anyio>1.4.0,<2.0.0
+              anyio>2.2.0,<3.0.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==1.2.1 has no usable wheels and building from source is disabled and anyio==1.2.2 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<1.2.3
+              anyio>1.4.0,<2.0.0
+              anyio>2.2.0,<3.0.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==1.2.3 has no usable wheels and building from source is disabled and anyio==1.3.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<1.3.1
+              anyio>1.4.0,<2.0.0
+              anyio>2.2.0,<3.0.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==1.3.1 has no usable wheels and building from source is disabled and anyio==1.4.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<2.0.0
+              anyio>2.2.0,<3.0.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==2.0.0 has no usable wheels and building from source is disabled and anyio==2.0.1 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<2.0.2
+              anyio>2.2.0,<3.0.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==2.0.2 has no usable wheels and building from source is disabled and anyio==2.1.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<2.2.0
+              anyio>2.2.0,<3.0.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==2.2.0 has no usable wheels and building from source is disabled and anyio==3.0.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<3.0.1
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==3.0.1 has no usable wheels and building from source is disabled and anyio==3.1.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<3.2.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==3.2.0 has no usable wheels and building from source is disabled and anyio==3.2.1 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<3.3.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==3.3.0 has no usable wheels and building from source is disabled and anyio==3.3.1 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<3.3.2
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==3.3.2 has no usable wheels and building from source is disabled and anyio==3.3.3 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<3.3.4
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==3.3.4 has no usable wheels and building from source is disabled and anyio==3.4.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<3.5.0
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==3.5.0 has no usable wheels and building from source is disabled and anyio==3.6.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<3.6.1
+              anyio>3.6.2,<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==3.6.1 has no usable wheels and building from source is disabled and anyio==3.6.2 has no usable wheels and building from source is disabled, we can conclude that any of:
+              anyio<3.7.0
+              anyio>3.7.1,<4.0.0
+           cannot be used.
+          And because anyio==3.7.0 has no usable wheels and building from source is disabled and anyio==3.7.1 has no usable wheels and building from source is disabled, we can conclude that anyio<4.0.0 cannot be used.
+          And because anyio==4.0.0 has no usable wheels and building from source is disabled and anyio==4.1.0 has no usable wheels and building from source is disabled, we can conclude that anyio<4.2.0 cannot be used.
+          And because anyio==4.2.0 has no usable wheels and building from source is disabled and anyio==4.3.0 has no usable wheels and building from source is disabled, we can conclude that anyio<4.4.0 cannot be used.
+          And because anyio==4.4.0 has no usable wheels and building from source is disabled and you require anyio, we can conclude that the requirements are unsatisfiable.
+
+          hint: Pre-releases are available for anyio in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    "###
+    );
+
+    context.assert_command("import anyio").failure();
+}
+
 /// Respect `--only-binary` flags in `requirements.txt`
 #[test]
 fn only_binary_requirements_txt() {

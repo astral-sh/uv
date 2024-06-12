@@ -78,8 +78,14 @@ impl FlatIndex {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
 
-                let compatibility =
-                    Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, no_binary);
+                let compatibility = Self::wheel_compatibility(
+                    &filename,
+                    &file.hashes,
+                    tags,
+                    hasher,
+                    no_binary,
+                    no_build,
+                );
                 let dist = RegistryBuiltWheel {
                     filename,
                     file: Box::new(file),
@@ -95,8 +101,13 @@ impl FlatIndex {
                 }
             }
             DistFilename::SourceDistFilename(filename) => {
-                let compatibility =
-                    Self::source_dist_compatibility(&filename, &file.hashes, hasher, no_build);
+                let compatibility = Self::source_dist_compatibility(
+                    &filename,
+                    &file.hashes,
+                    hasher,
+                    no_build,
+                    no_binary,
+                );
                 let dist = RegistrySourceDist {
                     name: filename.name.clone(),
                     version: filename.version.clone(),
@@ -121,11 +132,16 @@ impl FlatIndex {
         hashes: &[HashDigest],
         hasher: &HashStrategy,
         no_build: &NoBuild,
+        no_binary: &NoBinary,
     ) -> SourceDistCompatibility {
         // Check if source distributions are allowed for this package.
         let no_build = match no_build {
             NoBuild::None => false,
-            NoBuild::All => true,
+            NoBuild::All => match no_binary {
+                // Allow `all` to be overridden by specific binary exclusions
+                NoBinary::Packages(packages) => !packages.contains(&filename.name),
+                _ => true,
+            },
             NoBuild::Packages(packages) => packages.contains(&filename.name),
         };
 
@@ -155,11 +171,16 @@ impl FlatIndex {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         no_binary: &NoBinary,
+        no_build: &NoBuild,
     ) -> WheelCompatibility {
         // Check if binaries are allowed for this package.
         let no_binary = match no_binary {
             NoBinary::None => false,
-            NoBinary::All => true,
+            NoBinary::All => match no_build {
+                // Allow `all` to be overridden by specific build exclusions
+                NoBuild::Packages(packages) => !packages.contains(&filename.name),
+                _ => true,
+            },
             NoBinary::Packages(packages) => packages.contains(&filename.name),
         };
 

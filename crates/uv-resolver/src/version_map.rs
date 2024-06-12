@@ -96,18 +96,28 @@ impl VersionMap {
                 },
             }
         }
-        // Check if binaries are allowed for this package.
-        let no_binary = match no_binary {
-            NoBinary::None => false,
-            NoBinary::All => true,
-            NoBinary::Packages(packages) => packages.contains(package_name),
-        };
-        // Check if source distributions are allowed for this package.
-        let no_build = match no_build {
-            NoBuild::None => false,
-            NoBuild::All => true,
-            NoBuild::Packages(packages) => packages.contains(package_name),
-        };
+        let (no_binary, no_build) = (
+            // Check if binaries are allowed for this package.
+            match no_binary {
+                NoBinary::None => false,
+                NoBinary::All => match no_build {
+                    // Allow `all` to be overridden by specific build exclusions
+                    NoBuild::Packages(packages) => !packages.contains(package_name),
+                    _ => true,
+                },
+                NoBinary::Packages(packages) => packages.contains(package_name),
+            },
+            // Check if source distributions are allowed for this package.
+            match no_build {
+                NoBuild::None => false,
+                NoBuild::All => match no_binary {
+                    // Allow `all` to be overridden by specific binary exclusions
+                    NoBinary::Packages(packages) => !packages.contains(package_name),
+                    _ => true,
+                },
+                NoBuild::Packages(packages) => packages.contains(package_name),
+            },
+        );
         let allowed_yanks = allowed_yanks
             .allowed_versions(package_name)
             .cloned()

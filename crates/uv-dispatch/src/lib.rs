@@ -218,6 +218,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             site_packages,
             &Reinstall::default(),
             &NoBinary::default(),
+            &NoBuild::default(),
             &HashStrategy::default(),
             self.index_locations,
             self.cache(),
@@ -316,7 +317,17 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     ) -> Result<SourceBuild> {
         match self.no_build {
             NoBuild::All => debug_assert!(
-                matches!(build_kind, BuildKind::Editable),
+                match self.no_binary {
+                    // Allow `all` to be overridden by specific binary exclusions
+                    NoBinary::Packages(packages) => {
+                        if let Some(dist) = dist {
+                            packages.contains(dist.name())
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                } || matches!(build_kind, BuildKind::Editable),
                 "Only editable builds are exempt from 'no build' checks"
             ),
             NoBuild::None => {}

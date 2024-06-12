@@ -168,6 +168,7 @@ pub(super) async fn do_sync(
         Modifications::Sufficient,
         &reinstall,
         &no_binary,
+        &no_build,
         link_mode,
         compile,
         index_locations,
