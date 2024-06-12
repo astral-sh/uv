@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.11
+
+### Preview features
+
+- Add changelog for preview changes ([#4251](https://github.com/astral-sh/uv/pull/4251))
+- Allow direct URLs for dev dependencies ([#4233](https://github.com/astral-sh/uv/pull/4233))
+- Create temporary environments in dedicated cache bucket ([#4223](https://github.com/astral-sh/uv/pull/4223))
+- Improve output when an older toolchain version is already installed ([#4248](https://github.com/astral-sh/uv/pull/4248))
+- Initial implementation of `uv add` and `uv remove` ([#4193](https://github.com/astral-sh/uv/pull/4193))
+- Refactor project interpreter request for `requires-python` specifiers ([#4216](https://github.com/astral-sh/uv/pull/4216))
+- Replace `toolchain fetch` with `toolchain install` ([#4228](https://github.com/astral-sh/uv/pull/4228))
+- Support locking relative paths ([#4205](https://github.com/astral-sh/uv/pull/4205))
+- Warn when 'requires-python' does not include a lower bound ([#4234](https://github.com/astral-sh/uv/pull/4234))
+
 ## 0.2.10
 
 ### Preview features
@@ -76,6 +90,7 @@
 
 <!-- No changes -->
 
+
 ## 0.2.3
 
 ### Preview features
@@ -85,6 +100,7 @@
 ## 0.2.2
 
 <!-- No changes -->
+
 
 ## 0.2.1
 
@@ -122,6 +138,7 @@
 
 <!-- No changes -->
 
+
 ## 0.1.43
 
 ### Preview features
@@ -142,6 +159,7 @@
 ## 0.1.41
 
 <!-- No changes -->
+
 
 ## 0.1.40
 
