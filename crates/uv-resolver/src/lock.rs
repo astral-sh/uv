@@ -10,7 +10,6 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use either::Either;
-use indexmap::IndexMap;
 use petgraph::visit::EdgeRef;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer};
@@ -59,7 +58,7 @@ pub struct Lock {
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolutionGraph`].
     pub fn from_resolution_graph(graph: &ResolutionGraph) -> Result<Self, LockError> {
-        let mut locked_dists = IndexMap::with_capacity(graph.petgraph.node_count());
+        let mut locked_dists = BTreeMap::new();
 
         // Lock all base packages.
         for node_index in graph.petgraph.node_indices() {
@@ -531,10 +530,10 @@ pub struct Distribution {
     wheels: Vec<Wheel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     dependencies: Vec<Dependency>,
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    optional_dependencies: IndexMap<ExtraName, Vec<Dependency>>,
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    dev_dependencies: IndexMap<GroupName, Vec<Dependency>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
 }
 
 impl Distribution {
@@ -547,8 +546,8 @@ impl Distribution {
             sdist,
             wheels,
             dependencies: vec![],
-            optional_dependencies: IndexMap::default(),
-            dev_dependencies: IndexMap::default(),
+            optional_dependencies: BTreeMap::default(),
+            dev_dependencies: BTreeMap::default(),
         })
     }
 
