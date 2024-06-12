@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use assert_fs::prelude::*;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 
 use common::{uv_snapshot, TestContext};
@@ -2402,6 +2403,133 @@ fn lock_multiple_markers() -> Result<()> {
         version = "2.0.0"
         source = "registry+https://pypi.org/simple"
         marker = "implementation_name == 'cpython'"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Check relative and absolute path handling in lockfiles.
+#[test]
+fn relative_and_absolute_paths() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = ["b", "c"]
+
+        [tool.uv.sources]
+        b = {{ path = "b" }}
+        c = {{ path = '{}' }}
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+        context.temp_dir.join("c").display()
+    })?;
+    context.temp_dir.child("a/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("b/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.11,<3.13"
+        license = {text = "MIT"}
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context.temp_dir.child("b/b/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("c/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "c"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.11,<3.13"
+        license = {text = "MIT"}
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context.temp_dir.child("c/c/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    // In this particular test, Windows paths with \ are written to the TOML
+    // lock file, but because the \ starts an escape sequence in TOML strings,
+    // this causes the TOML serializer to use single quoted strings. But
+    // everywhere else, / is used and thus double quoted strings are used.
+    //
+    // Making matters more confusing, we have filters that normalize Windows
+    // paths to Unix paths, which makes it *look* like the TOML in the snapshot
+    // is needlessly using single quoted strings.
+    //
+    // So we add a filter here (that runs after all other filters) that
+    // replaces single quoted strings with double quoted strings. This isn't
+    // correct in general, but works for this specific test.
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"'([^']+)'", r#""$1""#)])
+        .collect::<Vec<_>>();
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.11, <3.13"
+
+        [[distribution]]
+        name = "a"
+        version = "0.1.0"
+        source = "editable+."
+        sdist = { path = "." }
+
+        [[distribution.dependencies]]
+        name = "b"
+        version = "0.1.0"
+        source = "directory+b"
+
+        [[distribution.dependencies]]
+        name = "c"
+        version = "0.1.0"
+        source = "directory+[TEMP_DIR]/c"
+
+        [[distribution]]
+        name = "b"
+        version = "0.1.0"
+        source = "directory+b"
+        sdist = { path = "b" }
+
+        [[distribution]]
+        name = "c"
+        version = "0.1.0"
+        source = "directory+[TEMP_DIR]/c"
+        sdist = { path = "[TEMP_DIR]/c" }
         "###
         );
     });

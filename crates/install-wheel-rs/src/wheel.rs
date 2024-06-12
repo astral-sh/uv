@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use std::{env, io, iter};
+use std::{env, io};
 
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
@@ -15,7 +15,7 @@ use zip::write::FileOptions;
 use zip::ZipWriter;
 
 use pypi_types::DirectUrl;
-use uv_fs::Simplified;
+use uv_fs::{relative_to, Simplified};
 
 use crate::record::RecordEntry;
 use crate::script::Script;
@@ -366,38 +366,6 @@ pub(crate) fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
         );
     }
     Ok(lib_kind)
-}
-
-/// Give the path relative to the base directory
-///
-/// lib/python/site-packages/foo/__init__.py and lib/python/site-packages -> foo/__init__.py
-/// lib/marker.txt and lib/python/site-packages -> ../../marker.txt
-/// `bin/foo_launcher` and lib/python/site-packages -> ../../../`bin/foo_launcher`
-pub(crate) fn relative_to(path: &Path, base: &Path) -> Result<PathBuf, Error> {
-    // Find the longest common prefix, and also return the path stripped from that prefix
-    let (stripped, common_prefix) = base
-        .ancestors()
-        .find_map(|ancestor| {
-            path.strip_prefix(ancestor)
-                .ok()
-                .map(|stripped| (stripped, ancestor))
-        })
-        .ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Trivial strip failed: {} vs. {}",
-                    path.simplified_display(),
-                    base.simplified_display()
-                ),
-            ))
-        })?;
-
-    // go as many levels up as required
-    let levels_up = base.components().count() - common_prefix.components().count();
-    let up = iter::repeat("..").take(levels_up).collect::<PathBuf>();
-
-    Ok(up.join(stripped))
 }
 
 /// Moves the files and folders in src to dest, updating the RECORD in the process
@@ -759,7 +727,7 @@ mod test {
     use crate::wheel::format_shebang;
     use crate::Error;
 
-    use super::{parse_key_value_file, parse_wheel_file, read_record_file, relative_to, Script};
+    use super::{parse_key_value_file, parse_wheel_file, read_record_file, Script};
 
     #[test]
     fn test_parse_key_value_file() {
@@ -814,34 +782,6 @@ mod test {
             .map(|entry| entry.path)
             .collect::<Vec<String>>();
         assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn test_relative_to() {
-        assert_eq!(
-            relative_to(
-                Path::new("/home/ferris/carcinization/lib/python/site-packages/foo/__init__.py"),
-                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
-            )
-            .unwrap(),
-            Path::new("foo/__init__.py")
-        );
-        assert_eq!(
-            relative_to(
-                Path::new("/home/ferris/carcinization/lib/marker.txt"),
-                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
-            )
-            .unwrap(),
-            Path::new("../../marker.txt")
-        );
-        assert_eq!(
-            relative_to(
-                Path::new("/home/ferris/carcinization/bin/foo_launcher"),
-                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
-            )
-            .unwrap(),
-            Path::new("../../../bin/foo_launcher")
-        );
     }
 
     #[test]
