@@ -15,7 +15,9 @@ use uv_cache::Cache;
 use uv_requirements::RequirementsSource;
 use uv_workspace::Combine;
 
-use crate::cli::{CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace};
+use crate::cli::{
+    CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand,
+};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace};
 use crate::commands::ExitStatus;
@@ -555,7 +557,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Run(args) => {
+        Commands::Project(ProjectCommand::Run(args)) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::RunSettings::resolve(args, workspace);
 
@@ -601,7 +603,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Sync(args) => {
+        Commands::Project(ProjectCommand::Sync(args)) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::SyncSettings::resolve(args, workspace);
 
@@ -619,7 +621,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Lock(args) => {
+        Commands::Project(ProjectCommand::Lock(args)) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::LockSettings::resolve(args, workspace);
 
@@ -637,7 +639,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Add(args) => {
+        Commands::Project(ProjectCommand::Add(args)) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::AddSettings::resolve(args, workspace);
 
@@ -653,7 +655,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Remove(args) => {
+        Commands::Project(ProjectCommand::Remove(args)) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::RemoveSettings::resolve(args, workspace);
 
