@@ -14,7 +14,7 @@ cd "$project_root"
 uv tool run --from 'rooster-blue>=0.0.7' --isolated -- \
     rooster release "$@" \
     --only-sections preview \
-    --changelog-file CHANGELOG-PREVIEW.md \
+    --changelog-file PREVIEW-CHANGELOG.md \
     --no-update-pyproject --no-update-version-files
 
 # Update the real changelog
