@@ -8,7 +8,7 @@ use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
 use uv_cache::Cache;
@@ -171,6 +171,8 @@ async fn run() -> Result<ExitStatus> {
                 .build(),
         )
     }))?;
+
+    debug!("uv {}", version::version());
 
     // Resolve the cache settings.
     let cache = CacheSettings::resolve(cli.cache_args, workspace.as_ref());
