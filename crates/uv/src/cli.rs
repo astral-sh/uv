@@ -132,6 +132,9 @@ pub(crate) enum Commands {
     Tool(ToolNamespace),
     /// Manage Python installations.
     Toolchain(ToolchainNamespace),
+    /// Manage Python projects.
+    #[command(flatten)]
+    Project(ProjectCommand),
     /// Create a virtual environment.
     #[command(alias = "virtualenv", alias = "v")]
     Venv(VenvArgs),
@@ -144,21 +147,6 @@ pub(crate) enum Commands {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(hide = true)]
     Clean(CleanArgs),
-    /// Run a command in the project environment.
-    #[clap(hide = true)]
-    Run(RunArgs),
-    /// Sync the project's dependencies with the environment.
-    #[clap(hide = true)]
-    Sync(SyncArgs),
-    /// Resolve the project requirements into a lockfile.
-    #[clap(hide = true)]
-    Lock(LockArgs),
-    /// Add one or more packages to the project requirements.
-    #[clap(hide = true)]
-    Add(AddArgs),
-    /// Remove one or more packages from the project requirements.
-    #[clap(hide = true)]
-    Remove(RemoveArgs),
     /// Display uv's version
     Version {
         #[arg(long, value_enum, default_value = "text")]
@@ -230,6 +218,25 @@ pub(crate) enum PipCommand {
     Show(PipShowArgs),
     /// Verify installed packages have compatible dependencies.
     Check(PipCheckArgs),
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ProjectCommand {
+    /// Run a command in the project environment.
+    #[clap(hide = true)]
+    Run(RunArgs),
+    /// Sync the project's dependencies with the environment.
+    #[clap(hide = true)]
+    Sync(SyncArgs),
+    /// Resolve the project requirements into a lockfile.
+    #[clap(hide = true)]
+    Lock(LockArgs),
+    /// Add one or more packages to the project requirements.
+    #[clap(hide = true)]
+    Add(AddArgs),
+    /// Remove one or more packages from the project requirements.
+    #[clap(hide = true)]
+    Remove(RemoveArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
