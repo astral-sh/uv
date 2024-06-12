@@ -45,6 +45,9 @@ fn {{module_name}}() -> Result<()> {
           '''{{requirement}}''',
           {{/root.requires}}
         ]
+        {{#root.requires_python}}
+        requires-python = "{{.}}"
+        {{/root.requires_python}}
         "###
     )?;
 
