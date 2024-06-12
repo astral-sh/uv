@@ -387,16 +387,12 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
-    // CLI-only settings.
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
-    // Override dependencies from workspace.
+    pub(crate) pip: PipSettings,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
 }
 
@@ -462,7 +458,7 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace: Vec<Requirement> = if let Some(workspace) = &workspace {
+        let overrides_from_workspace = if let Some(workspace) = &workspace {
             workspace
                 .options
                 .override_dependencies
@@ -478,7 +474,6 @@ impl PipCompileSettings {
         };
 
         Self {
-            // CLI-only settings.
             src_file,
             constraint: constraint
                 .into_iter()
@@ -488,9 +483,7 @@ impl PipCompileSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             overrides_from_workspace,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -552,15 +545,12 @@ impl PipCompileSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipSyncSettings {
-    // CLI-only settings.
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) reinstall: Reinstall,
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) pip: PipSettings,
 }
 
 impl PipSyncSettings {
@@ -609,7 +599,6 @@ impl PipSyncSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             src_file,
             constraint: constraint
                 .into_iter()
@@ -618,9 +607,7 @@ impl PipSyncSettings {
             reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -668,7 +655,6 @@ impl PipSyncSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipInstallSettings {
-    // CLI-only settings.
     pub(crate) package: Vec<String>,
     pub(crate) requirement: Vec<PathBuf>,
     pub(crate) editable: Vec<String>,
@@ -679,9 +665,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) pip: PipSettings,
 }
 
 impl PipInstallSettings {
@@ -743,7 +727,7 @@ impl PipInstallSettings {
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace: Vec<Requirement> = if let Some(workspace) = &workspace {
+        let overrides_from_workspace = if let Some(workspace) = &workspace {
             workspace
                 .options
                 .override_dependencies
@@ -759,7 +743,6 @@ impl PipInstallSettings {
         };
 
         Self {
-            // CLI-only settings.
             package,
             requirement,
             editable,
@@ -773,9 +756,7 @@ impl PipInstallSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
             overrides_from_workspace,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -832,11 +813,9 @@ impl PipInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipUninstallSettings {
-    // CLI-only settings.
     pub(crate) package: Vec<String>,
     pub(crate) requirement: Vec<PathBuf>,
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) pip: PipSettings,
 }
 
 impl PipUninstallSettings {
@@ -856,12 +835,9 @@ impl PipUninstallSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             package,
             requirement,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -881,10 +857,8 @@ impl PipUninstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
-    // CLI-only settings.
     pub(crate) exclude_editable: bool,
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) pip: PipSettings,
 }
 
 impl PipFreezeSettings {
@@ -900,11 +874,8 @@ impl PipFreezeSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             exclude_editable,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -921,14 +892,11 @@ impl PipFreezeSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipListSettings {
-    // CLI-only settings.
     pub(crate) editable: bool,
     pub(crate) exclude_editable: bool,
     pub(crate) exclude: Vec<PackageName>,
     pub(crate) format: ListFormat,
-
-    // CLI-only settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) pip: PipSettings,
 }
 
 impl PipListSettings {
@@ -948,14 +916,11 @@ impl PipListSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             editable,
             exclude_editable,
             exclude,
             format,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -972,11 +937,8 @@ impl PipListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipShowSettings {
-    // CLI-only settings.
     pub(crate) package: Vec<PackageName>,
-
-    // CLI-only settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) pip: PipSettings,
 }
 
 impl PipShowSettings {
@@ -992,11 +954,8 @@ impl PipShowSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             package,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -1013,10 +972,7 @@ impl PipShowSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCheckSettings {
-    // CLI-only settings.
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) shared: PipSettings,
 }
 
 impl PipCheckSettings {
@@ -1029,8 +985,7 @@ impl PipCheckSettings {
         } = args;
 
         Self {
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            shared: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -1046,15 +1001,12 @@ impl PipCheckSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct VenvSettings {
-    // CLI-only settings.
     pub(crate) seed: bool,
     pub(crate) allow_existing: bool,
     pub(crate) name: PathBuf,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
-
-    // CLI-only settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) pip: PipSettings,
 }
 
 impl VenvSettings {
@@ -1075,21 +1027,17 @@ impl VenvSettings {
             no_index,
             index_strategy,
             keyring_provider,
-
             exclude_newer,
             compat_args: _,
         } = args;
 
         Self {
-            // CLI-only settings.
             seed,
             allow_existing,
             name,
             prompt,
             system_site_packages,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            pip: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -1118,7 +1066,7 @@ impl VenvSettings {
 /// Represents the shared settings that are used across all `pip` commands.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct PipSharedSettings {
+pub(crate) struct PipSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) python: Option<String>,
     pub(crate) system: bool,
@@ -1158,8 +1106,8 @@ pub(crate) struct PipSharedSettings {
     pub(crate) concurrency: Concurrency,
 }
 
-impl PipSharedSettings {
-    /// Resolve the [`PipSharedSettings`] from the CLI and workspace configuration.
+impl PipSettings {
+    /// Resolve the [`PipSettings`] from the CLI and workspace configuration.
     pub(crate) fn combine(args: PipOptions, workspace: Option<Workspace>) -> Self {
         let PipOptions {
             python,
@@ -1363,7 +1311,6 @@ where
         Err(VarError::NotPresent) => return None,
         Err(VarError::NotUnicode(_)) => parse_failure(name, expected),
     };
-
     Some(
         val.parse()
             .unwrap_or_else(|_| parse_failure(name, expected)),
