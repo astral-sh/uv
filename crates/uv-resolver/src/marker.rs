@@ -123,8 +123,8 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
                             .fold(PubGrubRange::full(), |acc, range| acc.intersection(range))
                     });
 
-                    reduced.dedup();
                     reduced.sort();
+                    reduced.dedup();
 
                     *tree = match reduced.len() {
                         1 => reduced.remove(0),
@@ -138,8 +138,8 @@ pub(crate) fn normalize(tree: &mut MarkerTree) {
                             .fold(PubGrubRange::empty(), |acc, range| acc.union(range))
                     });
 
-                    reduced.dedup();
                     reduced.sort();
+                    reduced.dedup();
 
                     *tree = match reduced.len() {
                         1 => reduced.remove(0),
