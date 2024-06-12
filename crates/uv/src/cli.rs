@@ -578,7 +578,7 @@ pub(crate) struct PipCompileArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long)]
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     /// Specify a package to omit from the output resolution. Its dependencies will still be
@@ -911,7 +911,7 @@ pub(crate) struct PipSyncArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long)]
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
@@ -1285,7 +1285,7 @@ pub(crate) struct PipInstallArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long)]
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
@@ -1722,7 +1722,7 @@ pub(crate) struct VenvArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long)]
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     #[command(flatten)]
@@ -1812,7 +1812,7 @@ pub(crate) struct RunArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long)]
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     /// Run the command in a different package in the workspace.
@@ -1929,7 +1929,7 @@ pub(crate) struct LockArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long)]
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub(crate) exclude_newer: Option<ExcludeNewer>,
 }
 
