@@ -27,11 +27,9 @@ Usage:
 
         Override the uv package index and update the tests
 
-        $ UV_INDEX_URL="http://localhost:3141" ./scripts/scenarios/generate.py <path to scenarios>
+        $ UV_TEST_INDEX_URL="http://localhost:3141/simple/" ./scripts/scenarios/generate.py <path to scenarios>
 
         If an editable version of packse is installed, this script will use its bundled scenarios by default.
-
-    Use
 
 """
 
@@ -194,7 +192,10 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             f"https://raw.githubusercontent.com/astral-sh/packse/{ref}/vendor/links.html"
         )
 
-        data["index_url"] = f"https://astral-sh.github.io/packse/{ref}/simple-html/"
+        data["index_url"] = os.environ.get(
+            "UV_TEST_INDEX_URL",
+            f"https://astral-sh.github.io/packse/{ref}/simple-html/",
+        )
 
         # Render the template
         logging.info(f"Rendering template {template.name}")
