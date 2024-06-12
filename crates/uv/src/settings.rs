@@ -21,9 +21,9 @@ use uv_toolchain::{Prefix, PythonVersion, Target};
 use uv_workspace::{Combine, PipOptions, Workspace};
 
 use crate::cli::{
-    AddArgs, ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
-    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RemoveArgs, RunArgs,
-    SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
+    AddArgs, ColorChoice, GlobalArgs, IndexArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs,
+    PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs,
+    RemoveArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -150,20 +150,7 @@ impl RunSettings {
         } = args;
 
         Self {
-            index_locations: IndexLocations::new(
-                index_args.index_url.and_then(Maybe::into_option),
-                index_args
-                    .extra_index_url
-                    .map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                index_args.find_links.unwrap_or_default(),
-                index_args.no_index,
-            ),
+            index_locations: IndexLocations::from(index_args),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             extras: ExtrasSpecification::from_args(
@@ -207,20 +194,7 @@ impl ToolRunSettings {
         } = args;
 
         Self {
-            index_locations: IndexLocations::new(
-                index_args.index_url.and_then(Maybe::into_option),
-                index_args
-                    .extra_index_url
-                    .map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                index_args.find_links.unwrap_or_default(),
-                index_args.no_index,
-            ),
+            index_locations: IndexLocations::from(index_args),
             target,
             args,
             from,
@@ -312,20 +286,7 @@ impl SyncSettings {
         } = args;
 
         Self {
-            index_locations: IndexLocations::new(
-                index_args.index_url.and_then(Maybe::into_option),
-                index_args
-                    .extra_index_url
-                    .map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                index_args.find_links.unwrap_or_default(),
-                index_args.no_index,
-            ),
+            index_locations: IndexLocations::from(index_args),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
@@ -365,20 +326,7 @@ impl LockSettings {
         } = args;
 
         Self {
-            index_locations: IndexLocations::new(
-                index_args.index_url.and_then(Maybe::into_option),
-                index_args
-                    .extra_index_url
-                    .map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                index_args.find_links.unwrap_or_default(),
-                index_args.no_index,
-            ),
+            index_locations: IndexLocations::from(index_args),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             exclude_newer,
@@ -1145,7 +1093,6 @@ impl VenvSettings {
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -1437,5 +1384,23 @@ fn flag(yes: bool, no: bool) -> Option<bool> {
         (false, true) => Some(false),
         (false, false) => None,
         (..) => unreachable!("Clap should make this impossible"),
+    }
+}
+
+impl From<IndexArgs> for IndexLocations {
+    fn from(args: IndexArgs) -> Self {
+        IndexLocations::new(
+            args.index_url.and_then(Maybe::into_option),
+            args.extra_index_url
+                .map(|extra_index_urls| {
+                    extra_index_urls
+                        .into_iter()
+                        .filter_map(Maybe::into_option)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            args.find_links.unwrap_or_default(),
+            args.no_index,
+        )
     }
 }
