@@ -1626,12 +1626,7 @@ impl Dependency {
     ) -> Dependency {
         let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.clone();
-        let mut marker = marker.cloned();
-        // Markers can be combined in an unpredictable order, so normalize them
-        // such that the lock file output is consistent and deterministic.
-        if let Some(ref mut marker) = marker {
-            crate::marker::normalize(marker);
-        }
+        let marker = marker.cloned().and_then(crate::marker::normalize);
         Dependency {
             distribution_id,
             extra,
