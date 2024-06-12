@@ -26,12 +26,9 @@ impl Resolution {
 
     /// Return the remote distribution for the given package name, if it exists.
     pub fn get_remote(&self, package_name: &PackageName) -> Option<&Dist> {
-        match self.packages.get(package_name) {
-            Some(dist) => match dist {
-                ResolvedDist::Installable(dist) => Some(dist),
-                ResolvedDist::Installed(_) => None,
-            },
-            None => None,
+        match self.packages.get(package_name)? {
+            ResolvedDist::Installable(dist) => Some(dist),
+            ResolvedDist::Installed(_) => None,
         }
     }
 

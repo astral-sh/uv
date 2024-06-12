@@ -5,18 +5,19 @@ use std::path::Path;
 use itertools::Itertools;
 
 use distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
-use pep508_rs::{split_scheme, Scheme};
+use pep508_rs::{MarkerTree, Scheme, split_scheme};
 use pypi_types::HashDigest;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolution::AnnotatedDist;
 
-/// A pinned package with its resolved distribution and all the extras that were pinned for it.
 #[derive(Debug, Clone)]
+/// A pinned package with its resolved distribution and all the extras that were pinned for it.
 pub(crate) struct RequirementsTxtDist {
     pub(crate) dist: ResolvedDist,
     pub(crate) extras: Vec<ExtraName>,
     pub(crate) hashes: Vec<HashDigest>,
+    pub(crate) markers: Option<MarkerTree>,
 }
 
 impl RequirementsTxtDist {
@@ -82,17 +83,31 @@ impl RequirementsTxtDist {
         }
 
         if self.extras.is_empty() || !include_extras {
-            self.dist.verbatim()
+            if let Some(markers) = &self.markers {
+                Cow::Owned(format!("{} ; {}", self.dist.verbatim(), markers,))
+            } else {
+                self.dist.verbatim()
+            }
         } else {
             let mut extras = self.extras.clone();
             extras.sort_unstable();
             extras.dedup();
-            Cow::Owned(format!(
-                "{}[{}]{}",
-                self.name(),
-                extras.into_iter().join(", "),
-                self.version_or_url().verbatim()
-            ))
+            if let Some(markers) = &self.markers {
+                Cow::Owned(format!(
+                    "{}[{}]{} ; {}",
+                    self.name(),
+                    extras.into_iter().join(", "),
+                    self.version_or_url().verbatim(),
+                    markers,
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "{}[{}]{}",
+                    self.name(),
+                    extras.into_iter().join(", "),
+                    self.version_or_url().verbatim()
+                ))
+            }
         }
     }
 
@@ -117,6 +132,7 @@ impl From<&AnnotatedDist> for RequirementsTxtDist {
                 vec![]
             },
             hashes: annotated.hashes.clone(),
+            markers: None,
         }
     }
 }
