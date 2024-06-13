@@ -9,7 +9,7 @@ use pep440_rs::{Version, VersionSpecifiers};
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
-use which::which;
+use which::{which, which_all};
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
@@ -361,69 +361,89 @@ fn python_interpreters<'a>(
     sources: &ToolchainSources,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a {
-    python_executables(version, implementation, sources)
-        .map(|result| match result {
-            Ok((source, path)) => Interpreter::query(&path, cache)
-                .map(|interpreter| (source, interpreter))
-                .inspect(|(source, interpreter)| {
+    // TODO(zanieb): Move filtering to callers
+    filter_by_system_python(
+        python_interpreters_from_executables(
+            python_executables(version, implementation, sources),
+            cache,
+        ),
+        system,
+    )
+}
+
+/// Lazily convert Python executables into interpreters.
+fn python_interpreters_from_executables<'a>(
+    executables: impl Iterator<Item = Result<(ToolchainSource, PathBuf), Error>> + 'a,
+    cache: &'a Cache,
+) -> impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a {
+    executables.map(|result| match result {
+        Ok((source, path)) => Interpreter::query(&path, cache)
+            .map(|interpreter| (source, interpreter))
+            .inspect(|(source, interpreter)| {
+                debug!(
+                    "Found {} {} at `{}` ({source})",
+                    LenientImplementationName::from(interpreter.implementation_name()),
+                    interpreter.python_full_version(),
+                    path.display()
+                );
+            })
+            .map_err(Error::from)
+            .inspect_err(|err| debug!("{err}")),
+        Err(err) => Err(err),
+    })
+}
+
+fn filter_by_system_python<'a>(
+    interpreters: impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a,
+    system: SystemPython,
+) -> impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a {
+    interpreters.filter(move |result| match result {
+        // Filter the returned interpreters to conform to the system request
+        Ok((source, interpreter)) => match (
+            system,
+            // Conda environments are not conformant virtual environments but we should not treat them as system interpreters
+            interpreter.is_virtualenv() || matches!(source, ToolchainSource::CondaPrefix),
+        ) {
+            (SystemPython::Allowed, _) => true,
+            (SystemPython::Explicit, false) => {
+                if matches!(
+                    source,
+                    ToolchainSource::ProvidedPath | ToolchainSource::ParentInterpreter
+                ) {
                     debug!(
-                        "Found {} {} at `{}` ({source})",
-                        LenientImplementationName::from(interpreter.implementation_name()),
-                        interpreter.python_full_version(),
-                        path.display()
+                        "Allowing system Python interpreter at `{}`",
+                        interpreter.sys_executable().display()
                     );
-                })
-                .map_err(Error::from)
-                .inspect_err(|err| debug!("{err}")),
-            Err(err) => Err(err),
-        })
-        .filter(move |result| match result {
-            // Filter the returned interpreters to conform to the system request
-            Ok((source, interpreter)) => match (
-                system,
-                // Conda environments are not conformant virtual environments but we should not treat them as system interpreters
-                interpreter.is_virtualenv() || matches!(source, ToolchainSource::CondaPrefix),
-            ) {
-                (SystemPython::Allowed, _) => true,
-                (SystemPython::Explicit, false) => {
-                    if matches!(
-                        source,
-                        ToolchainSource::ProvidedPath | ToolchainSource::ParentInterpreter
-                    ) {
-                        debug!(
-                            "Allowing system Python interpreter at `{}`",
-                            interpreter.sys_executable().display()
-                        );
-                        true
-                    } else {
-                        debug!(
-                            "Ignoring Python interpreter at `{}`: system interpreter not explicit",
-                            interpreter.sys_executable().display()
-                        );
-                        false
-                    }
-                }
-                (SystemPython::Explicit, true) => true,
-                (SystemPython::Disallowed, false) => {
+                    true
+                } else {
                     debug!(
-                        "Ignoring Python interpreter at `{}`: system interpreter not allowed",
+                        "Ignoring Python interpreter at `{}`: system interpreter not explicit",
                         interpreter.sys_executable().display()
                     );
                     false
                 }
-                (SystemPython::Disallowed, true) => true,
-                (SystemPython::Required, true) => {
-                    debug!(
-                        "Ignoring Python interpreter at `{}`: system interpreter required",
-                        interpreter.sys_executable().display()
-                    );
-                    false
-                }
-                (SystemPython::Required, false) => true,
-            },
-            // Do not drop any errors
-            Err(_) => true,
-        })
+            }
+            (SystemPython::Explicit, true) => true,
+            (SystemPython::Disallowed, false) => {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: system interpreter not allowed",
+                    interpreter.sys_executable().display()
+                );
+                false
+            }
+            (SystemPython::Disallowed, true) => true,
+            (SystemPython::Required, true) => {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: system interpreter required",
+                    interpreter.sys_executable().display()
+                );
+                false
+            }
+            (SystemPython::Required, false) => true,
+        },
+        // Do not drop any errors
+        Err(_) => true,
+    })
 }
 
 /// Check if an encountered error should stop discovery.
@@ -482,19 +502,17 @@ fn find_toolchain_at_directory(path: &PathBuf, cache: &Cache) -> Result<Toolchai
     }))
 }
 
-fn find_toolchain_with_executable_name(
-    name: &str,
-    cache: &Cache,
-) -> Result<ToolchainResult, Error> {
-    let Some(executable) = which(name).ok() else {
-        return Ok(ToolchainResult::Err(
-            ToolchainNotFound::ExecutableNotFoundInSearchPath(name.to_string()),
-        ));
-    };
-    Ok(ToolchainResult::Ok(Toolchain {
-        source: ToolchainSource::SearchPath,
-        interpreter: Interpreter::query(executable, cache)?,
-    }))
+/// Lazily iterate over all Python interpreters on the path with the given executable name.
+fn python_interpreters_with_executable_name<'a>(
+    name: &'a str,
+    cache: &'a Cache,
+) -> impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a {
+    python_interpreters_from_executables(
+        which_all(name)
+            .into_iter()
+            .flat_map(|inner| inner.map(|path| Ok((ToolchainSource::SearchPath, path)))),
+        cache,
+    )
 }
 
 /// Iterate over all toolchains that satisfy the given request.
@@ -530,19 +548,22 @@ pub fn find_toolchains<'a>(
                 ))
             }
         })),
-        ToolchainRequest::ExecutableName(name) => Box::new(std::iter::once({
+        ToolchainRequest::ExecutableName(name) => {
             debug!("Searching for Python interpreter with {request}");
             if sources.contains(ToolchainSource::SearchPath) {
                 debug!("Checking for Python interpreter at {request}");
-                find_toolchain_with_executable_name(name, cache)
+                Box::new(
+                    python_interpreters_with_executable_name(name, cache)
+                        .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok)),
+                )
             } else {
-                Err(Error::SourceNotSelected(
+                Box::new(std::iter::once(Err(Error::SourceNotSelected(
                     request.clone(),
                     ToolchainSource::SearchPath,
                     sources.clone(),
-                ))
+                ))))
             }
-        })),
+        }
         ToolchainRequest::Any => Box::new({
             debug!("Searching for Python interpreter in {sources}");
             python_interpreters(None, None, system, sources, cache)
@@ -614,13 +635,13 @@ pub(crate) fn find_toolchain(
             ToolchainRequest::Version(version) => {
                 ToolchainNotFound::NoMatchingVersion(sources.clone(), version.clone())
             }
+            ToolchainRequest::ExecutableName(name) => {
+                ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone())
+            }
             // TODO(zanieb): As currently implemented, these are unreachable as they are handled in `find_toolchains`
             // We should avoid this duplication
             ToolchainRequest::Directory(path) => ToolchainNotFound::DirectoryNotFound(path.clone()),
             ToolchainRequest::File(path) => ToolchainNotFound::FileNotFound(path.clone()),
-            ToolchainRequest::ExecutableName(name) => {
-                ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone())
-            }
             ToolchainRequest::Any => ToolchainNotFound::NoPythonInstallation(sources.clone(), None),
         };
         Ok(ToolchainResult::Err(err))
