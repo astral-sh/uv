@@ -35,7 +35,7 @@ pub struct Options {
     #[serde(flatten)]
     pub globals: GlobalOptions,
     #[serde(flatten)]
-    pub installer: InstallerOptions,
+    pub top_level: CompleteOptions,
     pub pip: Option<PipOptions>,
     #[cfg_attr(
         feature = "schemars",
@@ -60,12 +60,49 @@ pub struct GlobalOptions {
     pub preview: Option<bool>,
 }
 
-/// Shared settings, relevant to all dependency management operations.
+/// Settings relevant to all installer operations.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct InstallerOptions {
+    pub index_url: Option<IndexUrl>,
+    pub extra_index_url: Option<Vec<IndexUrl>>,
+    pub no_index: Option<bool>,
+    pub find_links: Option<Vec<FlatIndexLocation>>,
+    pub index_strategy: Option<IndexStrategy>,
+    pub keyring_provider: Option<KeyringProviderType>,
+    pub config_settings: Option<ConfigSettings>,
+    pub link_mode: Option<LinkMode>,
+    pub compile_bytecode: Option<bool>,
+}
+
+/// Settings relevant to all resolver operations.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ResolverOptions {
+    pub index_url: Option<IndexUrl>,
+    pub extra_index_url: Option<Vec<IndexUrl>>,
+    pub no_index: Option<bool>,
+    pub find_links: Option<Vec<FlatIndexLocation>>,
+    pub index_strategy: Option<IndexStrategy>,
+    pub keyring_provider: Option<KeyringProviderType>,
+    pub resolution: Option<ResolutionMode>,
+    pub prerelease: Option<PreReleaseMode>,
+    pub config_settings: Option<ConfigSettings>,
+    pub exclude_newer: Option<ExcludeNewer>,
+    pub link_mode: Option<LinkMode>,
+}
+
+/// Shared settings, relevant to all operations that must resolve and install dependencies. The
+/// union of [`InstallerOptions`] and [`ResolverOptions`].
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct CompleteOptions {
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
     pub no_index: Option<bool>,
@@ -185,20 +222,20 @@ impl Options {
             concurrent_installs,
         } = self.pip.unwrap_or_default();
 
-        let InstallerOptions {
-            index_url: resolver_index_url,
-            extra_index_url: resolver_extra_index_url,
-            no_index: resolver_no_index,
-            find_links: resolver_find_links,
-            index_strategy: resolver_index_strategy,
-            keyring_provider: resolver_keyring_provider,
-            resolution: resolver_resolution,
-            prerelease: resolver_prerelease,
-            config_settings: resolver_config_settings,
-            exclude_newer: resolver_exclude_newer,
-            link_mode: resolver_link_mode,
-            compile_bytecode: resolver_compile_bytecode,
-        } = self.installer;
+        let CompleteOptions {
+            index_url: top_level_index_url,
+            extra_index_url: top_level_extra_index_url,
+            no_index: top_level_no_index,
+            find_links: top_level_find_links,
+            index_strategy: top_level_index_strategy,
+            keyring_provider: top_level_keyring_provider,
+            resolution: top_level_resolution,
+            prerelease: top_level_prerelease,
+            config_settings: top_level_config_settings,
+            exclude_newer: top_level_exclude_newer,
+            link_mode: top_level_link_mode,
+            compile_bytecode: top_level_compile_bytecode,
+        } = self.top_level;
 
         PipOptions {
             python,
@@ -206,12 +243,12 @@ impl Options {
             break_system_packages,
             target,
             prefix,
-            index_url: index_url.or(resolver_index_url),
-            extra_index_url: extra_index_url.or(resolver_extra_index_url),
-            no_index: no_index.or(resolver_no_index),
-            find_links: find_links.or(resolver_find_links),
-            index_strategy: index_strategy.or(resolver_index_strategy),
-            keyring_provider: keyring_provider.or(resolver_keyring_provider),
+            index_url: index_url.or(top_level_index_url),
+            extra_index_url: extra_index_url.or(top_level_extra_index_url),
+            no_index: no_index.or(top_level_no_index),
+            find_links: find_links.or(top_level_find_links),
+            index_strategy: index_strategy.or(top_level_index_strategy),
+            keyring_provider: keyring_provider.or(top_level_keyring_provider),
             no_build,
             no_binary,
             only_binary,
@@ -220,8 +257,8 @@ impl Options {
             extra,
             all_extras,
             no_deps,
-            resolution: resolution.or(resolver_resolution),
-            prerelease: prerelease.or(resolver_prerelease),
+            resolution: resolution.or(top_level_resolution),
+            prerelease: prerelease.or(top_level_prerelease),
             output_file,
             no_strip_extras,
             no_annotate,
@@ -229,18 +266,18 @@ impl Options {
             custom_compile_command,
             generate_hashes,
             legacy_setup_py,
-            config_settings: config_settings.or(resolver_config_settings),
+            config_settings: config_settings.or(top_level_config_settings),
             python_version,
             python_platform,
-            exclude_newer: exclude_newer.or(resolver_exclude_newer),
+            exclude_newer: exclude_newer.or(top_level_exclude_newer),
             no_emit_package,
             emit_index_url,
             emit_find_links,
             emit_marker_expression,
             emit_index_annotation,
             annotation_style,
-            link_mode: link_mode.or(resolver_link_mode),
-            compile_bytecode: compile_bytecode.or(resolver_compile_bytecode),
+            link_mode: link_mode.or(top_level_link_mode),
+            compile_bytecode: compile_bytecode.or(top_level_compile_bytecode),
             require_hashes,
             concurrent_builds,
             concurrent_downloads,

@@ -17,7 +17,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::InstallerSettings;
+use crate::settings::CompleteSettings;
 
 /// Run a command.
 #[allow(clippy::too_many_arguments)]
@@ -30,7 +30,7 @@ pub(crate) async fn run(
     python: Option<String>,
     upgrade: Upgrade,
     package: Option<PackageName>,
-    settings: InstallerSettings,
+    settings: CompleteSettings,
     isolated: bool,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -75,7 +75,14 @@ pub(crate) async fn run(
             project.workspace(),
             venv.interpreter(),
             upgrade,
-            &settings,
+            &settings.index_locations,
+            &settings.index_strategy,
+            &settings.keyring_provider,
+            &settings.resolution,
+            &settings.prerelease,
+            &settings.config_setting,
+            settings.exclude_newer.as_ref(),
+            &settings.link_mode,
             preview,
             connectivity,
             concurrency,
@@ -91,7 +98,12 @@ pub(crate) async fn run(
             &lock,
             extras,
             dev,
-            &settings,
+            &settings.index_locations,
+            &settings.index_strategy,
+            &settings.keyring_provider,
+            &settings.config_setting,
+            &settings.link_mode,
+            &settings.compile_bytecode,
             preview,
             connectivity,
             concurrency,
@@ -111,23 +123,9 @@ pub(crate) async fn run(
     } else {
         debug!("Syncing ephemeral environment.");
 
-        // Extract the project settings.
-        let InstallerSettings {
-            index_locations: _,
-            index_strategy: _,
-            keyring_provider,
-            resolution: _,
-            prerelease: _,
-            config_setting: _,
-            exclude_newer: _,
-            link_mode: _,
-            compile_bytecode: _,
-        } = &settings;
-
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls)
-            .keyring(*keyring_provider);
+            .native_tls(native_tls);
 
         // Discover an interpreter.
         let interpreter = if let Some(project_env) = &project_env {

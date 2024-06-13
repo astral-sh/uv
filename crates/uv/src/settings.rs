@@ -18,12 +18,14 @@ use uv_configuration::{
 use uv_normalize::PackageName;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::{Prefix, PythonVersion, Target};
-use uv_workspace::{Combine, InstallerOptions, PipOptions, Workspace};
+use uv_workspace::{
+    Combine, CompleteOptions, InstallerOptions, PipOptions, ResolverOptions, Workspace,
+};
 
 use crate::cli::{
-    AddArgs, ColorChoice, CompilerArgs, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe,
+    AddArgs, ColorChoice, CompleteArgs, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipUninstallArgs, RemoveArgs, RunArgs, SyncArgs, SyncerArgs, ToolRunArgs,
+    PipSyncArgs, PipUninstallArgs, RemoveArgs, ResolverArgs, RunArgs, SyncArgs, ToolRunArgs,
     ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
@@ -121,7 +123,7 @@ pub(crate) struct RunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
     pub(crate) package: Option<PackageName>,
-    pub(crate) installer: InstallerSettings,
+    pub(crate) settings: CompleteSettings,
 }
 
 impl RunSettings {
@@ -143,7 +145,7 @@ impl RunSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
-            install,
+            installer,
             python,
             package,
         } = args;
@@ -161,7 +163,7 @@ impl RunSettings {
             with,
             python,
             package,
-            installer: InstallerSettings::combine(InstallerOptions::from(install), workspace),
+            settings: CompleteSettings::combine(CompleteOptions::from(installer), workspace),
         }
     }
 }
@@ -175,7 +177,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
-    pub(crate) installer: InstallerSettings,
+    pub(crate) settings: CompleteSettings,
 }
 
 impl ToolRunSettings {
@@ -187,7 +189,7 @@ impl ToolRunSettings {
             args,
             from,
             with,
-            install,
+            installer,
             python,
         } = args;
 
@@ -197,7 +199,7 @@ impl ToolRunSettings {
             from,
             with,
             python,
-            installer: InstallerSettings::combine(InstallerOptions::from(install), workspace),
+            settings: CompleteSettings::combine(CompleteOptions::from(installer), workspace),
         }
     }
 }
@@ -263,7 +265,7 @@ pub(crate) struct SyncSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) python: Option<String>,
-    pub(crate) installer: InstallerSettings,
+    pub(crate) settings: InstallerSettings,
 }
 
 impl SyncSettings {
@@ -279,7 +281,7 @@ impl SyncSettings {
             refresh,
             no_refresh,
             refresh_package,
-            sync,
+            installer,
             python,
         } = args;
 
@@ -291,7 +293,7 @@ impl SyncSettings {
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
             python,
-            installer: InstallerSettings::combine(InstallerOptions::from(sync), workspace),
+            settings: InstallerSettings::combine(InstallerOptions::from(installer), workspace),
         }
     }
 }
@@ -303,7 +305,7 @@ pub(crate) struct LockSettings {
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
     pub(crate) python: Option<String>,
-    pub(crate) installer: InstallerSettings,
+    pub(crate) settings: ResolverSettings,
 }
 
 impl LockSettings {
@@ -317,7 +319,7 @@ impl LockSettings {
             upgrade,
             no_upgrade,
             upgrade_package,
-            compile,
+            resolver,
             python,
         } = args;
 
@@ -325,7 +327,7 @@ impl LockSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             python,
-            installer: InstallerSettings::combine(InstallerOptions::from(compile), workspace),
+            settings: ResolverSettings::combine(ResolverOptions::from(resolver), workspace),
         }
     }
 }
@@ -387,8 +389,8 @@ pub(crate) struct PipCompileSettings {
     pub(crate) r#override: Vec<PathBuf>,
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
-    pub(crate) pip: PipSettings,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipCompileSettings {
@@ -415,7 +417,7 @@ impl PipCompileSettings {
             refresh,
             no_refresh,
             refresh_package,
-            compile,
+            resolver,
             python,
             system,
             no_system,
@@ -471,7 +473,7 @@ impl PipCompileSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             overrides_from_workspace,
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -500,7 +502,7 @@ impl PipCompileSettings {
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::from(compile)
+                    ..PipOptions::from(resolver)
                 },
                 workspace,
             ),
@@ -517,7 +519,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) reinstall: Reinstall,
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
-    pub(crate) pip: PipSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipSyncSettings {
@@ -526,7 +528,8 @@ impl PipSyncSettings {
         let PipSyncArgs {
             src_file,
             constraint,
-            sync,
+            installer,
+            exclude_newer,
             reinstall,
             no_reinstall,
             reinstall_package,
@@ -567,11 +570,12 @@ impl PipSyncSettings {
             reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    exclude_newer,
                     target,
                     prefix,
                     no_build: flag(no_build, build),
@@ -586,7 +590,7 @@ impl PipSyncSettings {
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::from(sync)
+                    ..PipOptions::from(installer)
                 },
                 workspace,
             ),
@@ -608,7 +612,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-    pub(crate) pip: PipSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipInstallSettings {
@@ -636,7 +640,7 @@ impl PipInstallSettings {
             deps,
             require_hashes,
             no_require_hashes,
-            install,
+            installer,
             python,
             system,
             no_system,
@@ -689,7 +693,7 @@ impl PipInstallSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
             overrides_from_workspace,
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -711,7 +715,7 @@ impl PipInstallSettings {
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::from(install)
+                    ..PipOptions::from(installer)
                 },
                 workspace,
             ),
@@ -725,7 +729,7 @@ impl PipInstallSettings {
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirement: Vec<PathBuf>,
-    pub(crate) pip: PipSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipUninstallSettings {
@@ -747,7 +751,7 @@ impl PipUninstallSettings {
         Self {
             package,
             requirement,
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -768,7 +772,7 @@ impl PipUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
     pub(crate) exclude_editable: bool,
-    pub(crate) pip: PipSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipFreezeSettings {
@@ -785,7 +789,7 @@ impl PipFreezeSettings {
 
         Self {
             exclude_editable,
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -806,7 +810,7 @@ pub(crate) struct PipListSettings {
     pub(crate) exclude_editable: bool,
     pub(crate) exclude: Vec<PackageName>,
     pub(crate) format: ListFormat,
-    pub(crate) pip: PipSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipListSettings {
@@ -830,7 +834,7 @@ impl PipListSettings {
             exclude_editable,
             exclude,
             format,
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -848,7 +852,7 @@ impl PipListSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipShowSettings {
     pub(crate) package: Vec<PackageName>,
-    pub(crate) pip: PipSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipShowSettings {
@@ -865,7 +869,7 @@ impl PipShowSettings {
 
         Self {
             package,
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -882,7 +886,7 @@ impl PipShowSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCheckSettings {
-    pub(crate) pip: PipSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipCheckSettings {
@@ -895,7 +899,7 @@ impl PipCheckSettings {
         } = args;
 
         Self {
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -916,7 +920,7 @@ pub(crate) struct VenvSettings {
     pub(crate) name: PathBuf,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
-    pub(crate) pip: PipSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl VenvSettings {
@@ -945,7 +949,7 @@ impl VenvSettings {
             name,
             prompt,
             system_site_packages,
-            pip: PipSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -961,13 +965,145 @@ impl VenvSettings {
     }
 }
 
-/// The resolved settings to use for an invocation of the `uv` CLI.
+/// The resolved settings to use for an invocation of the `uv` CLI when installing dependencies.
 ///
-/// Represents the shared settings that are used across all `uv` commands outside the `pip` API.
-/// Analogous to the settings contained in the `[tool.uv]` table.
+/// Combines the `[tool.uv]` persistent configuration with the command-line arguments
+/// ([`InstallerArgs`], represented as [`InstallerOptions`]).
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
 pub(crate) struct InstallerSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) config_setting: ConfigSettings,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) compile_bytecode: bool,
+}
+
+impl InstallerSettings {
+    /// Resolve the [`InstallerSettings`] from the CLI and workspace configuration.
+    pub(crate) fn combine(args: InstallerOptions, workspace: Option<Workspace>) -> Self {
+        let CompleteOptions {
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            resolution: _,
+            prerelease: _,
+            config_settings,
+            exclude_newer: _,
+            link_mode,
+            compile_bytecode,
+        } = workspace
+            .map(|workspace| workspace.options.top_level)
+            .unwrap_or_default();
+
+        Self {
+            index_locations: IndexLocations::new(
+                args.index_url.combine(index_url),
+                args.extra_index_url
+                    .combine(extra_index_url)
+                    .unwrap_or_default(),
+                args.find_links.combine(find_links).unwrap_or_default(),
+                args.no_index.combine(no_index).unwrap_or_default(),
+            ),
+            index_strategy: args
+                .index_strategy
+                .combine(index_strategy)
+                .unwrap_or_default(),
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+            config_setting: args
+                .config_settings
+                .combine(config_settings)
+                .unwrap_or_default(),
+            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            compile_bytecode: args
+                .compile_bytecode
+                .combine(compile_bytecode)
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv` CLI when resolving dependencies.
+///
+/// Combines the `[tool.uv]` persistent configuration with the command-line arguments
+/// ([`ResolverArgs`], represented as [`ResolverOptions`]).
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ResolverSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) resolution: ResolutionMode,
+    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) config_setting: ConfigSettings,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) link_mode: LinkMode,
+}
+
+impl ResolverSettings {
+    /// Resolve the [`ResolverSettings`] from the CLI and workspace configuration.
+    pub(crate) fn combine(args: ResolverOptions, workspace: Option<Workspace>) -> Self {
+        let CompleteOptions {
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            config_settings,
+            exclude_newer,
+            link_mode,
+            compile_bytecode: _,
+        } = workspace
+            .map(|workspace| workspace.options.top_level)
+            .unwrap_or_default();
+
+        Self {
+            index_locations: IndexLocations::new(
+                args.index_url.combine(index_url),
+                args.extra_index_url
+                    .combine(extra_index_url)
+                    .unwrap_or_default(),
+                args.find_links.combine(find_links).unwrap_or_default(),
+                args.no_index.combine(no_index).unwrap_or_default(),
+            ),
+            resolution: args.resolution.combine(resolution).unwrap_or_default(),
+            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            index_strategy: args
+                .index_strategy
+                .combine(index_strategy)
+                .unwrap_or_default(),
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+            config_setting: args
+                .config_settings
+                .combine(config_settings)
+                .unwrap_or_default(),
+            exclude_newer: args.exclude_newer.combine(exclude_newer),
+            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv` CLI with both resolver and installer
+/// capabilities.
+///
+/// Represents the shared settings that are used across all `uv` commands outside the `pip` API.
+/// Analogous to the settings contained in the `[tool.uv]` table, combined with [`CompleteArgs`].
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CompleteSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
@@ -979,10 +1115,10 @@ pub(crate) struct InstallerSettings {
     pub(crate) compile_bytecode: bool,
 }
 
-impl InstallerSettings {
-    /// Resolve the [`InstallerSettings`] from the CLI and workspace configuration.
-    pub(crate) fn combine(args: InstallerOptions, workspace: Option<Workspace>) -> Self {
-        let InstallerOptions {
+impl CompleteSettings {
+    /// Resolve the [`CompleteSettings`] from the CLI and workspace configuration.
+    pub(crate) fn combine(args: CompleteOptions, workspace: Option<Workspace>) -> Self {
+        let CompleteOptions {
             index_url,
             extra_index_url,
             no_index,
@@ -996,7 +1132,7 @@ impl InstallerSettings {
             link_mode,
             compile_bytecode,
         } = workspace
-            .map(|workspace| workspace.options.installer)
+            .map(|workspace| workspace.options.top_level)
             .unwrap_or_default();
 
         Self {
@@ -1306,9 +1442,9 @@ fn flag(yes: bool, no: bool) -> Option<bool> {
     }
 }
 
-impl From<CompilerArgs> for PipOptions {
-    fn from(args: CompilerArgs) -> Self {
-        let CompilerArgs {
+impl From<ResolverArgs> for PipOptions {
+    fn from(args: ResolverArgs) -> Self {
+        let ResolverArgs {
             index_args,
             index_strategy,
             keyring_provider,
@@ -1343,117 +1479,6 @@ impl From<CompilerArgs> for PipOptions {
             exclude_newer,
             link_mode,
             ..PipOptions::default()
-        }
-    }
-}
-
-impl From<CompilerArgs> for InstallerOptions {
-    fn from(args: CompilerArgs) -> Self {
-        let CompilerArgs {
-            index_args,
-            index_strategy,
-            keyring_provider,
-            resolution,
-            prerelease,
-            pre,
-            config_setting,
-            exclude_newer,
-            link_mode,
-        } = args;
-
-        Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
-            index_strategy,
-            keyring_provider,
-            resolution,
-            prerelease: if pre {
-                Some(PreReleaseMode::Allow)
-            } else {
-                prerelease
-            },
-            config_settings: config_setting
-                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            exclude_newer,
-            link_mode,
-            ..InstallerOptions::default()
-        }
-    }
-}
-
-impl From<SyncerArgs> for PipOptions {
-    fn from(args: SyncerArgs) -> Self {
-        let SyncerArgs {
-            index_args,
-            index_strategy,
-            keyring_provider,
-            config_setting,
-            exclude_newer,
-            link_mode,
-            compile_bytecode,
-            no_compile_bytecode,
-        } = args;
-
-        Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
-            index_strategy,
-            keyring_provider,
-            config_settings: config_setting
-                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            exclude_newer,
-            link_mode,
-            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
-            ..PipOptions::default()
-        }
-    }
-}
-
-impl From<SyncerArgs> for InstallerOptions {
-    fn from(args: SyncerArgs) -> Self {
-        let SyncerArgs {
-            index_args,
-            index_strategy,
-            keyring_provider,
-            config_setting,
-            exclude_newer,
-            link_mode,
-            compile_bytecode,
-            no_compile_bytecode,
-        } = args;
-
-        Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
-            index_strategy,
-            keyring_provider,
-            config_settings: config_setting
-                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            exclude_newer,
-            link_mode,
-            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
-            ..InstallerOptions::default()
         }
     }
 }
@@ -1461,6 +1486,39 @@ impl From<SyncerArgs> for InstallerOptions {
 impl From<InstallerArgs> for PipOptions {
     fn from(args: InstallerArgs) -> Self {
         let InstallerArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            config_setting,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            link_mode,
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            ..PipOptions::default()
+        }
+    }
+}
+
+impl From<CompleteArgs> for PipOptions {
+    fn from(args: CompleteArgs) -> Self {
+        let CompleteArgs {
             index_args,
             index_strategy,
             keyring_provider,
@@ -1505,6 +1563,78 @@ impl From<InstallerArgs> for PipOptions {
 impl From<InstallerArgs> for InstallerOptions {
     fn from(args: InstallerArgs) -> Self {
         let InstallerArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            config_setting,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            link_mode,
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+        }
+    }
+}
+
+impl From<ResolverArgs> for ResolverOptions {
+    fn from(args: ResolverArgs) -> Self {
+        let ResolverArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            exclude_newer,
+            link_mode,
+        } = args;
+
+        Self {
+            index_url: index_args.index_url.and_then(Maybe::into_option),
+            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: Some(index_args.no_index),
+            find_links: index_args.find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease: if pre {
+                Some(PreReleaseMode::Allow)
+            } else {
+                prerelease
+            },
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+        }
+    }
+}
+
+impl From<CompleteArgs> for CompleteOptions {
+    fn from(args: CompleteArgs) -> Self {
+        let CompleteArgs {
             index_args,
             index_strategy,
             keyring_provider,

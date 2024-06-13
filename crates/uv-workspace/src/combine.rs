@@ -7,7 +7,7 @@ use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, Targe
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
 
-use crate::{GlobalOptions, InstallerOptions, Options, PipOptions, Workspace};
+use crate::{CompleteOptions, GlobalOptions, Options, PipOptions, Workspace};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.
@@ -42,7 +42,7 @@ impl Combine for Options {
     fn combine(self, other: Options) -> Options {
         Options {
             globals: self.globals.combine(other.globals),
-            installer: self.installer.combine(other.installer),
+            top_level: self.top_level.combine(other.top_level),
             pip: self.pip.combine(other.pip),
             override_dependencies: self
                 .override_dependencies
@@ -63,9 +63,9 @@ impl Combine for GlobalOptions {
     }
 }
 
-impl Combine for InstallerOptions {
-    fn combine(self, other: InstallerOptions) -> InstallerOptions {
-        InstallerOptions {
+impl Combine for CompleteOptions {
+    fn combine(self, other: CompleteOptions) -> CompleteOptions {
+        CompleteOptions {
             index_url: self.index_url.combine(other.index_url),
             extra_index_url: self.extra_index_url.combine(other.extra_index_url),
             no_index: self.no_index.combine(other.no_index),

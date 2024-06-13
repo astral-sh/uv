@@ -5,11 +5,10 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-
 use distribution_types::Resolution;
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::Version;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy,
     Upgrade,
@@ -29,7 +28,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip;
 use crate::printer::Printer;
-use crate::settings::InstallerSettings;
+use crate::settings::CompleteSettings;
 
 pub(crate) mod add;
 pub(crate) mod lock;
@@ -261,7 +260,7 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
-    settings: &InstallerSettings,
+    settings: &CompleteSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -270,7 +269,7 @@ pub(crate) async fn update_environment(
     printer: Printer,
 ) -> Result<PythonEnvironment> {
     // Extract the project settings.
-    let InstallerSettings {
+    let CompleteSettings {
         index_locations,
         index_strategy,
         keyring_provider,
@@ -352,12 +351,18 @@ pub(crate) async fn update_environment(
     let dev = Vec::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
-    let flat_index = FlatIndex::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
     let upgrade = Upgrade::default();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
+    };
 
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(

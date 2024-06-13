@@ -1,11 +1,14 @@
 use std::path::Path;
 
 use anyhow::Result;
+use distribution_types::IndexLocations;
+use install_wheel_rs::linker::LinkMode;
 
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
+    KeyringProviderType, PreviewMode, Reinstall, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
@@ -62,7 +65,12 @@ pub(crate) async fn sync(
         &lock,
         extras,
         dev,
-        &settings,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.config_setting,
+        &settings.link_mode,
+        &settings.compile_bytecode,
         preview,
         connectivity,
         concurrency,
@@ -84,7 +92,12 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: ExtrasSpecification,
     dev: bool,
-    settings: &InstallerSettings,
+    index_locations: &IndexLocations,
+    index_strategy: &IndexStrategy,
+    keyring_provider: &KeyringProviderType,
+    config_setting: &ConfigSettings,
+    link_mode: &LinkMode,
+    compile_bytecode: &bool,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -92,19 +105,6 @@ pub(super) async fn do_sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
-    // Extract the project settings.
-    let InstallerSettings {
-        index_locations,
-        index_strategy,
-        keyring_provider,
-        resolution: _,
-        prerelease: _,
-        config_setting,
-        exclude_newer: _,
-        link_mode,
-        compile_bytecode,
-    } = settings;
-
     // Validate that the Python version is supported by the lockfile.
     if let Some(requires_python) = lock.requires_python() {
         if !requires_python.contains(venv.interpreter().python_version()) {

@@ -10,7 +10,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::InstallerSettings;
+use crate::settings::{InstallerSettings, ResolverSettings};
 
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::too_many_arguments)]
@@ -51,7 +51,7 @@ pub(crate) async fn remove(
     let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
 
     // Use the default settings.
-    let settings = InstallerSettings::default();
+    let settings = ResolverSettings::default();
     let upgrade = Upgrade::default();
 
     // Lock and sync the environment.
@@ -67,7 +67,14 @@ pub(crate) async fn remove(
         project.workspace(),
         venv.interpreter(),
         upgrade,
-        &settings,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.resolution,
+        &settings.prerelease,
+        &settings.config_setting,
+        settings.exclude_newer.as_ref(),
+        &settings.link_mode,
         preview,
         connectivity,
         concurrency,
@@ -79,6 +86,7 @@ pub(crate) async fn remove(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
+    let settings = InstallerSettings::default();
     let extras = ExtrasSpecification::All;
     let dev = true;
 
@@ -89,7 +97,12 @@ pub(crate) async fn remove(
         &lock,
         extras,
         dev,
-        &settings,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.config_setting,
+        &settings.link_mode,
+        &settings.compile_bytecode,
         preview,
         connectivity,
         concurrency,

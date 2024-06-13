@@ -343,7 +343,7 @@ pub(crate) struct PipCompileArgs {
     pub(crate) no_all_extras: bool,
 
     #[command(flatten)]
-    pub(crate) compile: CompilerArgs,
+    pub(crate) resolver: ResolverArgs,
 
     /// Ignore package dependencies, instead only add those packages explicitly listed
     /// on the command line to the resulting the requirements file.
@@ -607,7 +607,14 @@ pub(crate) struct PipSyncArgs {
     pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     #[command(flatten)]
-    pub(crate) sync: SyncerArgs,
+    pub(crate) installer: InstallerArgs,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
@@ -884,7 +891,7 @@ pub(crate) struct PipInstallArgs {
     pub(crate) no_all_extras: bool,
 
     #[command(flatten)]
-    pub(crate) install: InstallerArgs,
+    pub(crate) installer: CompleteArgs,
 
     /// Allow package upgrades.
     #[arg(long, short = 'U', overrides_with("no_upgrade"))]
@@ -1591,7 +1598,7 @@ pub(crate) struct RunArgs {
     pub(crate) upgrade_package: Vec<PackageName>,
 
     #[command(flatten)]
-    pub(crate) install: InstallerArgs,
+    pub(crate) installer: CompleteArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1653,7 +1660,7 @@ pub(crate) struct SyncArgs {
     pub(crate) refresh_package: Vec<PackageName>,
 
     #[command(flatten)]
-    pub(crate) sync: SyncerArgs,
+    pub(crate) installer: InstallerArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1701,7 +1708,7 @@ pub(crate) struct LockArgs {
     pub(crate) upgrade_package: Vec<PackageName>,
 
     #[command(flatten)]
-    pub(crate) compile: CompilerArgs,
+    pub(crate) resolver: ResolverArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1797,7 +1804,7 @@ pub(crate) struct ToolRunArgs {
     pub(crate) with: Vec<String>,
 
     #[command(flatten)]
-    pub(crate) install: InstallerArgs,
+    pub(crate) installer: CompleteArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1859,10 +1866,6 @@ pub(crate) struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other
     /// indexes specified via the `--extra-index-url` flag.
-    ///
-    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
-    /// as it finds it in an index. That is, it isn't possible for `uv` to
-    /// consider versions of the same package across multiple indexes.
     #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
     pub(crate) index_url: Option<Maybe<IndexUrl>>,
 
@@ -1874,10 +1877,6 @@ pub(crate) struct IndexArgs {
     /// All indexes given via this flag take priority over the index
     /// in `--index-url` (which defaults to PyPI). And when multiple
     /// `--extra-index-url` flags are given, earlier values take priority.
-    ///
-    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
-    /// as it finds it in an index. That is, it isn't possible for `uv` to
-    /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
     pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
@@ -1898,7 +1897,7 @@ pub(crate) struct IndexArgs {
 
 /// Arguments that are used by commands that need to install (but not resolve) packages.
 #[derive(Args)]
-pub(crate) struct SyncerArgs {
+pub(crate) struct InstallerArgs {
     #[command(flatten)]
     pub(crate) index_args: IndexArgs,
 
@@ -1923,13 +1922,6 @@ pub(crate) struct SyncerArgs {
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
     pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
-
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -1961,7 +1953,7 @@ pub(crate) struct SyncerArgs {
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
 #[derive(Args)]
-pub(crate) struct CompilerArgs {
+pub(crate) struct ResolverArgs {
     #[command(flatten)]
     pub(crate) index_args: IndexArgs,
 
@@ -2024,7 +2016,7 @@ pub(crate) struct CompilerArgs {
 
 /// Arguments that are used by commands that need to resolve and install packages.
 #[derive(Args)]
-pub(crate) struct InstallerArgs {
+pub(crate) struct CompleteArgs {
     #[command(flatten)]
     pub(crate) index_args: IndexArgs,
 
