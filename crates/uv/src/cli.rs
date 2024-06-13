@@ -481,7 +481,7 @@ pub(crate) struct PipCompileArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
@@ -750,7 +750,7 @@ pub(crate) struct PipSyncArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -1124,7 +1124,7 @@ pub(crate) struct PipInstallArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -1349,7 +1349,7 @@ pub(crate) struct PipUninstallArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -1424,7 +1424,7 @@ pub(crate) struct PipFreezeArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 }
 
@@ -1486,7 +1486,7 @@ pub(crate) struct PipListArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 
     #[command(flatten)]
@@ -1527,7 +1527,7 @@ pub(crate) struct PipCheckArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 }
 
@@ -1576,7 +1576,7 @@ pub(crate) struct PipShowArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 }
 
@@ -1612,7 +1612,7 @@ pub(crate) struct VenvArgs {
     )]
     pub(crate) system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
