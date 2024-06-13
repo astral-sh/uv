@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use anyhow::Result;
+
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
-
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -65,6 +65,7 @@ pub(crate) async fn sync(
         &lock,
         extras,
         dev,
+        &settings.reinstall,
         &settings.index_locations,
         &settings.index_strategy,
         &settings.keyring_provider,
@@ -92,6 +93,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: ExtrasSpecification,
     dev: bool,
+    reinstall: &Reinstall,
     index_locations: &IndexLocations,
     index_strategy: &IndexStrategy,
     keyring_provider: &KeyringProviderType,
@@ -151,7 +153,6 @@ pub(super) async fn do_sync(
     let build_options = BuildOptions::default();
     let dry_run = false;
     let hasher = HashStrategy::default();
-    let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
@@ -187,7 +188,7 @@ pub(super) async fn do_sync(
         &resolution,
         site_packages,
         Modifications::Sufficient,
-        &reinstall,
+        reinstall,
         &build_options,
         *link_mode,
         *compile_bytecode,

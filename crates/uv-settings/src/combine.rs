@@ -77,6 +77,10 @@ impl Combine for ResolverInstallerOptions {
             exclude_newer: self.exclude_newer.combine(other.exclude_newer),
             link_mode: self.link_mode.combine(other.link_mode),
             compile_bytecode: self.compile_bytecode.combine(other.compile_bytecode),
+            upgrade: self.upgrade.combine(other.upgrade),
+            upgrade_package: self.upgrade_package.combine(other.upgrade_package),
+            reinstall: self.reinstall.combine(other.reinstall),
+            reinstall_package: self.reinstall_package.combine(other.reinstall_package),
         }
     }
 }
@@ -142,6 +146,10 @@ impl Combine for PipOptions {
             link_mode: self.link_mode.combine(other.link_mode),
             compile_bytecode: self.compile_bytecode.combine(other.compile_bytecode),
             require_hashes: self.require_hashes.combine(other.require_hashes),
+            upgrade: self.upgrade.combine(other.upgrade),
+            upgrade_package: self.upgrade_package.combine(other.upgrade_package),
+            reinstall: self.reinstall.combine(other.reinstall),
+            reinstall_package: self.reinstall_package.combine(other.reinstall_package),
             concurrent_downloads: self
                 .concurrent_downloads
                 .combine(other.concurrent_downloads),

@@ -31,7 +31,6 @@ use crate::settings::ResolverSettings;
 /// Resolve the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
-    upgrade: Upgrade,
     python: Option<String>,
     settings: ResolverSettings,
     preview: PreviewMode,
@@ -63,7 +62,7 @@ pub(crate) async fn lock(
         root_project_name,
         &workspace,
         &interpreter,
-        upgrade,
+        &settings.upgrade,
         &settings.index_locations,
         &settings.index_strategy,
         &settings.keyring_provider,
@@ -100,7 +99,7 @@ pub(super) async fn do_lock(
     root_project_name: Option<PackageName>,
     workspace: &Workspace,
     interpreter: &Interpreter,
-    upgrade: Upgrade,
+    upgrade: &Upgrade,
     index_locations: &IndexLocations,
     index_strategy: &IndexStrategy,
     keyring_provider: &KeyringProviderType,
@@ -188,7 +187,6 @@ pub(super) async fn do_lock(
     let build_isolation = BuildIsolation::default();
     let build_options = BuildOptions::default();
     let extras = ExtrasSpecification::default();
-    let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
@@ -199,7 +197,7 @@ pub(super) async fn do_lock(
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = read_lockfile(workspace, &upgrade).await?;
+    let LockedRequirements { preferences, git } = read_lockfile(workspace, upgrade).await?;
 
     // Create the Git resolver.
     let git = GitResolver::from_refs(git);
@@ -235,8 +233,8 @@ pub(super) async fn do_lock(
         preferences,
         EmptyInstalledPackages,
         &hasher,
-        &reinstall,
-        &upgrade,
+        &Reinstall::default(),
+        upgrade,
         interpreter,
         None,
         None,

@@ -10,8 +10,7 @@ use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy,
-    Upgrade,
+    BuildOptions, Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::Workspace;
@@ -279,6 +278,8 @@ pub(crate) async fn update_environment(
         exclude_newer,
         link_mode,
         compile_bytecode,
+        upgrade,
+        reinstall,
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
@@ -353,9 +354,7 @@ pub(crate) async fn update_environment(
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
-    let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
-    let upgrade = Upgrade::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -395,8 +394,8 @@ pub(crate) async fn update_environment(
         preferences,
         site_packages.clone(),
         &hasher,
-        &reinstall,
-        &upgrade,
+        reinstall,
+        upgrade,
         interpreter,
         Some(tags),
         Some(markers),
@@ -448,7 +447,7 @@ pub(crate) async fn update_environment(
         &resolution,
         site_packages,
         pip::operations::Modifications::Sufficient,
-        &reinstall,
+        reinstall,
         &build_options,
         *link_mode,
         *compile_bytecode,
