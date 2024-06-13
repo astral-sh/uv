@@ -719,7 +719,15 @@ async fn run() -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::toolchain_list(args.includes, globals.preview, &cache, printer).await
+            commands::toolchain_list(
+                args.kinds,
+                args.all_versions,
+                args.all_platforms,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
         }
         Commands::Toolchain(ToolchainNamespace {
             command: ToolchainCommand::Install(args),

@@ -279,6 +279,10 @@ impl PythonDownload {
         )
     }
 
+    pub fn os(&self) -> &Os {
+        &self.os
+    }
+
     pub fn sha256(&self) -> Option<&str> {
         self.sha256
     }
