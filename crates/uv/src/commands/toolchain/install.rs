@@ -5,7 +5,7 @@ use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_toolchain::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
-use uv_toolchain::managed::InstalledToolchains;
+use uv_toolchain::managed::{InstalledToolchain, InstalledToolchains};
 use uv_toolchain::ToolchainRequest;
 use uv_warnings::warn_user;
 
@@ -96,10 +96,13 @@ pub(crate) async fn install(
         DownloadResult::Fetched(path) => path,
     };
 
+    let installed = InstalledToolchain::new(path)?;
+    installed.ensure_externally_managed()?;
+
     writeln!(
         printer.stderr(),
         "Installed Python {version} to {}",
-        path.user_display()
+        installed.path().user_display()
     )?;
 
     Ok(ExitStatus::Success)
