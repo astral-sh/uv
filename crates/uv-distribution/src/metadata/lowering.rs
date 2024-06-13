@@ -10,7 +10,7 @@ use pep440_rs::VersionSpecifiers;
 use pep508_rs::{VerbatimUrl, VersionOrUrl};
 use pypi_types::{Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_configuration::PreviewMode;
-use uv_fs::Simplified;
+use uv_fs::{relative_to, Simplified};
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
@@ -44,6 +44,8 @@ pub enum LoweringError {
     MissingPreview,
     #[error("Editable must refer to a local directory, not a file: `{0}`")]
     EditableFile(String),
+    #[error(transparent)] // Function attaches the context
+    RelativeTo(io::Error),
 }
 
 /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
@@ -234,25 +236,30 @@ fn path_source(
     workspace_root: &Path,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
-    let url = VerbatimUrl::parse_path(path.as_ref(), project_dir)?
-        .with_given(path.as_ref().to_string_lossy());
-    let path_buf = path.as_ref().to_path_buf();
-    let path_buf = path_buf
+    let path = path.as_ref();
+    let url = VerbatimUrl::parse_path(path, project_dir)?.with_given(path.to_string_lossy());
+    let absolute_path = path
+        .to_path_buf()
         .absolutize_from(project_dir)
-        .map_err(|err| LoweringError::Absolutize(path.as_ref().to_path_buf(), err))?
+        .map_err(|err| LoweringError::Absolutize(path.to_path_buf(), err))?
         .to_path_buf();
-    let ascend_to_workspace = project_dir
-        .strip_prefix(workspace_root)
-        .expect("Project must be below workspace root");
-    let is_dir = if let Ok(metadata) = path_buf.metadata() {
+    let relative_to_workspace = if path.is_relative() {
+        // Relative paths in a project are relative to the project root, but the lockfile is
+        // relative to the workspace root.
+        relative_to(&absolute_path, workspace_root).map_err(LoweringError::RelativeTo)?
+    } else {
+        // If the user gave us an absolute path, we respect that.
+        path.to_path_buf()
+    };
+    let is_dir = if let Ok(metadata) = absolute_path.metadata() {
         metadata.is_dir()
     } else {
-        path_buf.extension().is_none()
+        absolute_path.extension().is_none()
     };
     if is_dir {
         Ok(RequirementSource::Directory {
-            install_path: path_buf,
-            lock_path: ascend_to_workspace.join(project_dir),
+            install_path: absolute_path,
+            lock_path: relative_to_workspace,
             url,
             editable,
         })
@@ -261,8 +268,8 @@ fn path_source(
             return Err(LoweringError::EditableFile(url.to_string()));
         }
         Ok(RequirementSource::Path {
-            install_path: path_buf,
-            lock_path: ascend_to_workspace.join(project_dir),
+            install_path: absolute_path,
+            lock_path: relative_to_workspace,
             url,
         })
     }
@@ -275,19 +282,24 @@ fn directory_source(
     workspace_root: &Path,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
-    let url = VerbatimUrl::parse_path(path.as_ref(), project_dir)?
-        .with_given(path.as_ref().to_string_lossy());
-    let path_buf = path.as_ref().to_path_buf();
-    let path_buf = path_buf
+    let path = path.as_ref();
+    let url = VerbatimUrl::parse_path(path, project_dir)?.with_given(path.to_string_lossy());
+    let absolute_path = path
+        .to_path_buf()
         .absolutize_from(project_dir)
-        .map_err(|err| LoweringError::Absolutize(path.as_ref().to_path_buf(), err))?
+        .map_err(|err| LoweringError::Absolutize(path.to_path_buf(), err))?
         .to_path_buf();
-    let ascend_to_workspace = project_dir
-        .strip_prefix(workspace_root)
-        .expect("Project must be below workspace root");
+    let relative_to_workspace = if path.is_relative() {
+        // Relative paths in a project are relative to the project root, but the lockfile is
+        // relative to the workspace root.
+        relative_to(&absolute_path, workspace_root).map_err(LoweringError::RelativeTo)?
+    } else {
+        // If the user gave us an absolute path, we respect that.
+        path.to_path_buf()
+    };
     Ok(RequirementSource::Directory {
-        install_path: path_buf,
-        lock_path: ascend_to_workspace.join(project_dir),
+        install_path: absolute_path,
+        lock_path: relative_to_workspace,
         url,
         editable,
     })
