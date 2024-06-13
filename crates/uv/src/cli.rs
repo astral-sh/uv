@@ -425,7 +425,7 @@ pub(crate) struct PipCompileArgs {
 
     /// The method to use when installing packages from the global cache.
     ///
-    /// This option is only used when creating build environments for source distributions.
+    /// This option is only used when building source distributions.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
@@ -446,8 +446,8 @@ pub(crate) struct PipCompileArgs {
 
     /// Attempt to use `keyring` for authentication for index URLs.
     ///
-    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
-    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    /// At present, only `--keyring-provider subprocess` is supported, which configures `uv` to
+    /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
@@ -1086,8 +1086,8 @@ pub(crate) struct PipInstallArgs {
 
     /// Attempt to use `keyring` for authentication for index URLs.
     ///
-    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
-    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    /// At present, only `--keyring-provider subprocess` is supported, which configures `uv` to
+    /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
@@ -1326,8 +1326,8 @@ pub(crate) struct PipUninstallArgs {
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
     ///
-    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
-    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    /// At present, only `--keyring-provider subprocess` is supported, which configures `uv` to
+    /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
@@ -1711,8 +1711,8 @@ pub(crate) struct VenvArgs {
 
     /// Attempt to use `keyring` for authentication for index URLs.
     ///
-    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
-    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    /// At present, only `--keyring-provider subprocess` is supported, which configures `uv` to
+    /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
