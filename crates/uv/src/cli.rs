@@ -2081,8 +2081,12 @@ pub(crate) struct ToolchainListArgs {
 pub(crate) struct ToolchainInstallArgs {
     /// The toolchain to install.
     ///
-    /// If not provided, the latest available version will be installed.
+    /// If not provided, the latest available version will be installed unless a toolchain was previously installed.
     pub(crate) target: Option<String>,
+
+    /// Force the installation of the toolchain, even if it is already installed.
+    #[arg(long, short)]
+    pub(crate) force: bool,
 }
 
 #[derive(Args)]

@@ -249,15 +249,16 @@ impl ToolchainListSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct ToolchainInstallSettings {
     pub(crate) target: Option<String>,
+    pub(crate) force: bool,
 }
 
 impl ToolchainInstallSettings {
     /// Resolve the [`ToolchainInstallSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolchainInstallArgs, _workspace: Option<Workspace>) -> Self {
-        let ToolchainInstallArgs { target } = args;
+        let ToolchainInstallArgs { target, force } = args;
 
-        Self { target }
+        Self { target, force }
     }
 }
 

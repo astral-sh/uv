@@ -740,6 +740,7 @@ async fn run() -> Result<ExitStatus> {
 
             commands::toolchain_install(
                 args.target,
+                args.force,
                 globals.native_tls,
                 globals.connectivity,
                 globals.preview,
