@@ -20,7 +20,7 @@ use uv_toolchain::Interpreter;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::project::ProjectError;
+use crate::commands::project::{find_requires_python, ProjectError};
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
 
@@ -106,17 +106,7 @@ pub(super) async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    //
-    // For a workspace, we compute the union of all workspace requires-python values, ensuring we
-    // keep track of `None` vs. a full range.
-    let requires_python =
-        RequiresPython::union(workspace.packages().values().filter_map(|member| {
-            member
-                .pyproject_toml()
-                .project
-                .as_ref()
-                .and_then(|project| project.requires_python.as_ref())
-        }))?;
+    let requires_python = find_requires_python(workspace)?;
 
     let requires_python = if let Some(requires_python) = requires_python {
         if matches!(requires_python.bound(), Bound::Unbounded) {
