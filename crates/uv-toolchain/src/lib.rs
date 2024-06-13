@@ -2,8 +2,8 @@
 use thiserror::Error;
 
 pub use crate::discovery::{
-    Error as DiscoveryError, SystemPython, ToolchainNotFound, ToolchainRequest, ToolchainSource,
-    ToolchainSources, VersionRequest,
+    find_toolchains, Error as DiscoveryError, SystemPython, ToolchainNotFound, ToolchainRequest,
+    ToolchainSource, ToolchainSources, VersionRequest,
 };
 pub use crate::environment::PythonEnvironment;
 pub use crate::interpreter::Interpreter;

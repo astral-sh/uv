@@ -205,10 +205,9 @@ impl ToolRunSettings {
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) enum ToolchainListIncludes {
+pub(crate) enum ToolchainListKinds {
     #[default]
     Default,
-    All,
     Installed,
 }
 
@@ -216,7 +215,9 @@ pub(crate) enum ToolchainListIncludes {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolchainListSettings {
-    pub(crate) includes: ToolchainListIncludes,
+    pub(crate) kinds: ToolchainListKinds,
+    pub(crate) all_platforms: bool,
+    pub(crate) all_versions: bool,
 }
 
 impl ToolchainListSettings {
@@ -224,19 +225,22 @@ impl ToolchainListSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolchainListArgs, _workspace: Option<Workspace>) -> Self {
         let ToolchainListArgs {
-            all,
+            all_versions,
+            all_platforms,
             only_installed,
         } = args;
 
-        let includes = if all {
-            ToolchainListIncludes::All
-        } else if only_installed {
-            ToolchainListIncludes::Installed
+        let kinds = if only_installed {
+            ToolchainListKinds::Installed
         } else {
-            ToolchainListIncludes::default()
+            ToolchainListKinds::default()
         };
 
-        Self { includes }
+        Self {
+            kinds,
+            all_platforms,
+            all_versions,
+        }
     }
 }
 

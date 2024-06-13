@@ -452,6 +452,137 @@ fn should_stop_discovery(err: &Error) -> bool {
     }
 }
 
+fn find_toolchain_at_file(path: &PathBuf, cache: &Cache) -> Result<ToolchainResult, Error> {
+    if !path.try_exists()? {
+        return Ok(ToolchainResult::Err(ToolchainNotFound::FileNotFound(
+            path.clone(),
+        )));
+    }
+    Ok(ToolchainResult::Ok(Toolchain {
+        source: ToolchainSource::ProvidedPath,
+        interpreter: Interpreter::query(path, cache)?,
+    }))
+}
+
+fn find_toolchain_at_directory(path: &PathBuf, cache: &Cache) -> Result<ToolchainResult, Error> {
+    if !path.try_exists()? {
+        return Ok(ToolchainResult::Err(ToolchainNotFound::FileNotFound(
+            path.clone(),
+        )));
+    }
+    let executable = virtualenv_python_executable(path);
+    if !executable.try_exists()? {
+        return Ok(ToolchainResult::Err(
+            ToolchainNotFound::ExecutableNotFoundInDirectory(path.clone(), executable),
+        ));
+    }
+    Ok(ToolchainResult::Ok(Toolchain {
+        source: ToolchainSource::ProvidedPath,
+        interpreter: Interpreter::query(executable, cache)?,
+    }))
+}
+
+fn find_toolchain_with_executable_name(
+    name: &str,
+    cache: &Cache,
+) -> Result<ToolchainResult, Error> {
+    let Some(executable) = which(name).ok() else {
+        return Ok(ToolchainResult::Err(
+            ToolchainNotFound::ExecutableNotFoundInSearchPath(name.to_string()),
+        ));
+    };
+    Ok(ToolchainResult::Ok(Toolchain {
+        source: ToolchainSource::SearchPath,
+        interpreter: Interpreter::query(executable, cache)?,
+    }))
+}
+
+/// Iterate over all toolchains that satisfy the given request.
+pub fn find_toolchains<'a>(
+    request: &'a ToolchainRequest,
+    system: SystemPython,
+    sources: &'a ToolchainSources,
+    cache: &'a Cache,
+) -> Box<dyn Iterator<Item = Result<ToolchainResult, Error>> + 'a> {
+    match request {
+        ToolchainRequest::File(path) => Box::new(std::iter::once({
+            if sources.contains(ToolchainSource::ProvidedPath) {
+                debug!("Checking for Python interpreter at {request}");
+                find_toolchain_at_file(path, cache)
+            } else {
+                Err(Error::SourceNotSelected(
+                    request.clone(),
+                    ToolchainSource::ProvidedPath,
+                    sources.clone(),
+                ))
+            }
+        })),
+        ToolchainRequest::Directory(path) => Box::new(std::iter::once({
+            debug!("Checking for Python interpreter in {request}");
+            if sources.contains(ToolchainSource::ProvidedPath) {
+                debug!("Checking for Python interpreter at {request}");
+                find_toolchain_at_directory(path, cache)
+            } else {
+                Err(Error::SourceNotSelected(
+                    request.clone(),
+                    ToolchainSource::ProvidedPath,
+                    sources.clone(),
+                ))
+            }
+        })),
+        ToolchainRequest::ExecutableName(name) => Box::new(std::iter::once({
+            debug!("Searching for Python interpreter with {request}");
+            if sources.contains(ToolchainSource::SearchPath) {
+                debug!("Checking for Python interpreter at {request}");
+                find_toolchain_with_executable_name(name, cache)
+            } else {
+                Err(Error::SourceNotSelected(
+                    request.clone(),
+                    ToolchainSource::SearchPath,
+                    sources.clone(),
+                ))
+            }
+        })),
+        ToolchainRequest::Any => Box::new({
+            debug!("Searching for Python interpreter in {sources}");
+            python_interpreters(None, None, system, sources, cache)
+                .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
+        }),
+        ToolchainRequest::Version(version) => Box::new({
+            debug!("Searching for {request} in {sources}");
+            python_interpreters(Some(version), None, system, sources, cache)
+                .filter(|result| match result {
+                    Err(_) => true,
+                    Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
+                })
+                .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
+        }),
+        ToolchainRequest::Implementation(implementation) => Box::new({
+            debug!("Searching for a {request} interpreter in {sources}");
+            python_interpreters(None, Some(implementation), system, sources, cache)
+                .filter(|result| match result {
+                    Err(_) => true,
+                    Ok((_source, interpreter)) => {
+                        interpreter.implementation_name() == implementation.as_str()
+                    }
+                })
+                .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
+        }),
+        ToolchainRequest::ImplementationVersion(implementation, version) => Box::new({
+            debug!("Searching for {request} in {sources}");
+            python_interpreters(Some(version), Some(implementation), system, sources, cache)
+                .filter(|result| match result {
+                    Err(_) => true,
+                    Ok((_source, interpreter)) => {
+                        version.matches_interpreter(interpreter)
+                            && interpreter.implementation_name() == implementation.as_str()
+                    }
+                })
+                .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
+        }),
+    }
+}
+
 /// Find a toolchain that satisfies the given request.
 ///
 /// If an error is encountered while locating or inspecting a candidate toolchain,
@@ -462,175 +593,38 @@ pub(crate) fn find_toolchain(
     sources: &ToolchainSources,
     cache: &Cache,
 ) -> Result<ToolchainResult, Error> {
-    let result = match request {
-        ToolchainRequest::File(path) => {
-            debug!("Checking for Python interpreter at {request}");
-            if !sources.contains(ToolchainSource::ProvidedPath) {
-                return Err(Error::SourceNotSelected(
-                    request.clone(),
-                    ToolchainSource::ProvidedPath,
+    let mut toolchains = find_toolchains(request, system, sources, cache);
+    if let Some(result) = toolchains.find(|result| {
+        // Return the first critical discovery error or toolchain result
+        result.as_ref().err().map_or(true, should_stop_discovery)
+    }) {
+        result
+    } else {
+        let err = match request {
+            ToolchainRequest::Implementation(implementation) => {
+                ToolchainNotFound::NoMatchingImplementation(sources.clone(), *implementation)
+            }
+            ToolchainRequest::ImplementationVersion(implementation, version) => {
+                ToolchainNotFound::NoMatchingImplementationVersion(
                     sources.clone(),
-                ));
+                    *implementation,
+                    version.clone(),
+                )
             }
-            if !path.try_exists()? {
-                return Ok(ToolchainResult::Err(ToolchainNotFound::FileNotFound(
-                    path.clone(),
-                )));
+            ToolchainRequest::Version(version) => {
+                ToolchainNotFound::NoMatchingVersion(sources.clone(), version.clone())
             }
-            Toolchain {
-                source: ToolchainSource::ProvidedPath,
-                interpreter: Interpreter::query(path, cache)?,
+            // TODO(zanieb): As currently implemented, these are unreachable as they are handled in `find_toolchains`
+            // We should avoid this duplication
+            ToolchainRequest::Directory(path) => ToolchainNotFound::DirectoryNotFound(path.clone()),
+            ToolchainRequest::File(path) => ToolchainNotFound::FileNotFound(path.clone()),
+            ToolchainRequest::ExecutableName(name) => {
+                ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone())
             }
-        }
-        ToolchainRequest::Directory(path) => {
-            debug!("Checking for Python interpreter in {request}");
-            if !sources.contains(ToolchainSource::ProvidedPath) {
-                return Err(Error::SourceNotSelected(
-                    request.clone(),
-                    ToolchainSource::ProvidedPath,
-                    sources.clone(),
-                ));
-            }
-            if !path.try_exists()? {
-                return Ok(ToolchainResult::Err(ToolchainNotFound::FileNotFound(
-                    path.clone(),
-                )));
-            }
-            let executable = virtualenv_python_executable(path);
-            if !executable.try_exists()? {
-                return Ok(ToolchainResult::Err(
-                    ToolchainNotFound::ExecutableNotFoundInDirectory(path.clone(), executable),
-                ));
-            }
-            Toolchain {
-                source: ToolchainSource::ProvidedPath,
-                interpreter: Interpreter::query(executable, cache)?,
-            }
-        }
-        ToolchainRequest::ExecutableName(name) => {
-            debug!("Searching for Python interpreter with {request}");
-            if !sources.contains(ToolchainSource::SearchPath) {
-                return Err(Error::SourceNotSelected(
-                    request.clone(),
-                    ToolchainSource::SearchPath,
-                    sources.clone(),
-                ));
-            }
-            let Some(executable) = which(name).ok() else {
-                return Ok(ToolchainResult::Err(
-                    ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone()),
-                ));
-            };
-            Toolchain {
-                source: ToolchainSource::SearchPath,
-                interpreter: Interpreter::query(executable, cache)?,
-            }
-        }
-        ToolchainRequest::Implementation(implementation) => {
-            debug!("Searching for a {request} interpreter in {sources}");
-            let Some((source, interpreter)) =
-                python_interpreters(None, Some(implementation), system, sources, cache)
-                    .find(|result| {
-                        match result {
-                            // Return the first critical error or matching interpreter
-                            Err(err) => should_stop_discovery(err),
-                            Ok((_source, interpreter)) => {
-                                interpreter.implementation_name() == implementation.as_str()
-                            }
-                        }
-                    })
-                    .transpose()?
-            else {
-                return Ok(ToolchainResult::Err(
-                    ToolchainNotFound::NoMatchingImplementation(sources.clone(), *implementation),
-                ));
-            };
-            Toolchain {
-                source,
-                interpreter,
-            }
-        }
-        ToolchainRequest::ImplementationVersion(implementation, version) => {
-            debug!("Searching for {request} in {sources}");
-            let Some((source, interpreter)) =
-                python_interpreters(Some(version), Some(implementation), system, sources, cache)
-                    .find(|result| {
-                        match result {
-                            // Return the first critical error or matching interpreter
-                            Err(err) => should_stop_discovery(err),
-                            Ok((_source, interpreter)) => {
-                                version.matches_interpreter(interpreter)
-                                    && interpreter.implementation_name() == implementation.as_str()
-                            }
-                        }
-                    })
-                    .transpose()?
-            else {
-                // TODO(zanieb): Peek if there are any interpreters with the requested implementation
-                //               to improve the error message e.g. using `NoMatchingImplementation` instead
-                return Ok(ToolchainResult::Err(
-                    ToolchainNotFound::NoMatchingImplementationVersion(
-                        sources.clone(),
-                        *implementation,
-                        version.clone(),
-                    ),
-                ));
-            };
-            Toolchain {
-                source,
-                interpreter,
-            }
-        }
-        ToolchainRequest::Any => {
-            debug!("Searching for Python interpreter in {sources}");
-            let Some((source, interpreter)) =
-                python_interpreters(None, None, system, sources, cache)
-                    .find(|result| {
-                        match result {
-                            // Return the first critical error or interpreter
-                            Err(err) => should_stop_discovery(err),
-                            Ok(_) => true,
-                        }
-                    })
-                    .transpose()?
-            else {
-                return Ok(ToolchainResult::Err(
-                    ToolchainNotFound::NoPythonInstallation(sources.clone(), None),
-                ));
-            };
-            Toolchain {
-                source,
-                interpreter,
-            }
-        }
-        ToolchainRequest::Version(version) => {
-            debug!("Searching for {request} in {sources}");
-            let Some((source, interpreter)) =
-                python_interpreters(Some(version), None, system, sources, cache)
-                    .find(|result| {
-                        match result {
-                            // Return the first critical error or matching interpreter
-                            Err(err) => should_stop_discovery(err),
-                            Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
-                        }
-                    })
-                    .transpose()?
-            else {
-                let err = if matches!(version, VersionRequest::Any) {
-                    ToolchainNotFound::NoPythonInstallation(sources.clone(), Some(version.clone()))
-                } else {
-                    ToolchainNotFound::NoMatchingVersion(sources.clone(), version.clone())
-                };
-                return Ok(ToolchainResult::Err(err));
-            };
-            Toolchain {
-                source,
-                interpreter,
-            }
-        }
-    };
-
-    Ok(ToolchainResult::Ok(result))
+            ToolchainRequest::Any => ToolchainNotFound::NoPythonInstallation(sources.clone(), None),
+        };
+        Ok(ToolchainResult::Err(err))
+    }
 }
 
 /// Find the default Python toolchain on the system.

@@ -18,7 +18,7 @@ pub enum ImplementationName {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub(crate) enum LenientImplementationName {
+pub enum LenientImplementationName {
     Known(ImplementationName),
     Unknown(String),
 }

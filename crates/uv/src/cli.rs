@@ -2047,12 +2047,16 @@ pub(crate) enum ToolchainCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolchainListArgs {
-    /// List all available toolchains, including those that do not match the current platform.
-    #[arg(long, conflicts_with = "only_installed")]
-    pub(crate) all: bool,
+    /// List all toolchain versions, including outdated patch versions.
+    #[arg(long)]
+    pub(crate) all_versions: bool,
 
-    /// Only list installed toolchains.
-    #[arg(long, conflicts_with = "all")]
+    /// List toolchains for all platforms.
+    #[arg(long)]
+    pub(crate) all_platforms: bool,
+
+    /// Only show installed toolchains, exclude available downloads.
+    #[arg(long)]
     pub(crate) only_installed: bool,
 }
 
