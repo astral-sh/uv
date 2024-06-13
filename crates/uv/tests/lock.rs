@@ -1453,7 +1453,7 @@ fn lock_requires_python() -> Result<()> {
               pygls>1.3.0
            cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because project==0.1.0 depends on pygls>=1.1.0, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and project depends on project, we can conclude that the requirements are unsatisfiable.
+          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
 
           hint: The `Requires-Python` requirement (>=3.7) defined in your `pyproject.toml` includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `Requires-Python` requirement (like >=3.7.9, <4).
     "###);
@@ -2149,7 +2149,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning.
-    warning: The `requires-python` field found in `project` does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
+    warning: The workspace `requires-python` field does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
     Resolved 2 packages in [TIME]
     "###);
 

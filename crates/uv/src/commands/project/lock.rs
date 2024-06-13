@@ -13,7 +13,6 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
-use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{
     ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode, RequiresPython,
@@ -52,15 +51,7 @@ pub(crate) async fn lock(
     let interpreter = project::find_interpreter(&workspace, python.as_deref(), cache, printer)?;
 
     // Perform the lock operation.
-    let root_project_name = workspace.root_member().and_then(|member| {
-        member
-            .pyproject_toml()
-            .project
-            .as_ref()
-            .map(|project| project.name.clone())
-    });
     match do_lock(
-        root_project_name,
         &workspace,
         &interpreter,
         upgrade,
@@ -97,7 +88,6 @@ pub(crate) async fn lock(
 /// Lock the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn do_lock(
-    root_project_name: Option<PackageName>,
     workspace: &Workspace,
     interpreter: &Interpreter,
     upgrade: Upgrade,
@@ -136,27 +126,13 @@ pub(super) async fn do_lock(
         if matches!(requires_python.bound(), Bound::Unbounded) {
             let default =
                 RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
-            if let Some(root_project_name) = root_project_name.as_ref() {
-                warn_user!(
-                    "The `requires-python` field found in `{root_project_name}` does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).",
-                );
-            } else {
-                warn_user!(
-                    "The `requires-python` field does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).",
-                );
-            }
+            warn_user!("The workspace `requires-python` field does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
         }
         requires_python
     } else {
         let default =
             RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
-        if let Some(root_project_name) = root_project_name.as_ref() {
-            warn_user!(
-                "No `requires-python` field found in `{root_project_name}`. Defaulting to `{default}`.",
-            );
-        } else {
-            warn_user!("No `requires-python` field found in workspace. Defaulting to `{default}`.",);
-        }
+        warn_user!("No `requires-python` field found in the workspace. Defaulting to `{default}`.");
         default
     };
 
@@ -230,7 +206,7 @@ pub(super) async fn do_lock(
         overrides,
         dev,
         source_trees,
-        root_project_name,
+        None,
         &extras,
         preferences,
         EmptyInstalledPackages,

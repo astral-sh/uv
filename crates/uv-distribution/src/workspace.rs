@@ -192,13 +192,6 @@ impl Workspace {
             .collect()
     }
 
-    /// If there is a package at the workspace root, return it.
-    pub fn root_member(&self) -> Option<&WorkspaceMember> {
-        self.packages
-            .values()
-            .find(|package| package.root == self.root)
-    }
-
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn root(&self) -> &PathBuf {
