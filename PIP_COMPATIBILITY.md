@@ -367,3 +367,17 @@ occasionally found in Docker images and Conda environments) and (2) legacy edita
 Specifically, uv does not support installing new `.egg-info`- or `.egg-link`-style distributions,
 but will respect any such existing distributions during resolution, list them with `uv pip list` and
 `uv pip freeze`, and uninstall them with `uv pip uninstall`.
+
+## `pip compile`
+
+There are a few small but notable differences in the default behaviors of `pip compile` and
+`pip-tools`.
+
+uv does not write the compiled requirements to file by default. Use the `-o` or `--output-file`
+option.
+
+Currently, `pip-compile` defaults to `--no-strip-extras`, though this is scheduled to change in the
+next major release.
+
+If your requirements file includes an `--extra-index-url` directive, uv will not emit it by
+default. Use the `--emit-index-url` option. uv will also include its default `--index-url`.
