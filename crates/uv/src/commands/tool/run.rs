@@ -16,7 +16,7 @@ use uv_warnings::warn_user;
 use crate::commands::project::update_environment;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::CompleteSettings;
+use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
 #[allow(clippy::too_many_arguments)]
@@ -26,7 +26,7 @@ pub(crate) async fn run(
     python: Option<String>,
     from: Option<String>,
     with: Vec<String>,
-    settings: CompleteSettings,
+    settings: ResolverInstallerSettings,
     _isolated: bool,
     preview: PreviewMode,
     connectivity: Connectivity,

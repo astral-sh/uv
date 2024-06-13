@@ -35,7 +35,7 @@ pub struct Options {
     #[serde(flatten)]
     pub globals: GlobalOptions,
     #[serde(flatten)]
-    pub top_level: CompleteOptions,
+    pub top_level: ResolverInstallerOptions,
     pub pip: Option<PipOptions>,
     #[cfg_attr(
         feature = "schemars",
@@ -102,7 +102,7 @@ pub struct ResolverOptions {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct CompleteOptions {
+pub struct ResolverInstallerOptions {
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
     pub no_index: Option<bool>,
@@ -222,7 +222,7 @@ impl Options {
             concurrent_installs,
         } = self.pip.unwrap_or_default();
 
-        let CompleteOptions {
+        let ResolverInstallerOptions {
             index_url: top_level_index_url,
             extra_index_url: top_level_extra_index_url,
             no_index: top_level_no_index,

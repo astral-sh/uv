@@ -891,7 +891,7 @@ pub(crate) struct PipInstallArgs {
     pub(crate) no_all_extras: bool,
 
     #[command(flatten)]
-    pub(crate) installer: CompleteArgs,
+    pub(crate) installer: ResolverInstallerArgs,
 
     /// Allow package upgrades.
     #[arg(long, short = 'U', overrides_with("no_upgrade"))]
@@ -1598,7 +1598,7 @@ pub(crate) struct RunArgs {
     pub(crate) upgrade_package: Vec<PackageName>,
 
     #[command(flatten)]
-    pub(crate) installer: CompleteArgs,
+    pub(crate) installer: ResolverInstallerArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1804,7 +1804,7 @@ pub(crate) struct ToolRunArgs {
     pub(crate) with: Vec<String>,
 
     #[command(flatten)]
-    pub(crate) installer: CompleteArgs,
+    pub(crate) installer: ResolverInstallerArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -2016,7 +2016,7 @@ pub(crate) struct ResolverArgs {
 
 /// Arguments that are used by commands that need to resolve and install packages.
 #[derive(Args)]
-pub(crate) struct CompleteArgs {
+pub(crate) struct ResolverInstallerArgs {
     #[command(flatten)]
     pub(crate) index_args: IndexArgs,
 

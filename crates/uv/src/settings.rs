@@ -19,14 +19,14 @@ use uv_normalize::PackageName;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::{Prefix, PythonVersion, Target};
 use uv_workspace::{
-    Combine, CompleteOptions, InstallerOptions, PipOptions, ResolverOptions, Workspace,
+    Combine, InstallerOptions, PipOptions, ResolverInstallerOptions, ResolverOptions, Workspace,
 };
 
 use crate::cli::{
-    AddArgs, ColorChoice, CompleteArgs, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipUninstallArgs, RemoveArgs, ResolverArgs, RunArgs, SyncArgs, ToolRunArgs,
-    ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
+    AddArgs, ColorChoice, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe, PipCheckArgs,
+    PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs,
+    PipUninstallArgs, RemoveArgs, ResolverArgs, ResolverInstallerArgs, RunArgs, SyncArgs,
+    ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -123,7 +123,7 @@ pub(crate) struct RunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) upgrade: Upgrade,
     pub(crate) package: Option<PackageName>,
-    pub(crate) settings: CompleteSettings,
+    pub(crate) settings: ResolverInstallerSettings,
 }
 
 impl RunSettings {
@@ -163,7 +163,10 @@ impl RunSettings {
             with,
             python,
             package,
-            settings: CompleteSettings::combine(CompleteOptions::from(installer), workspace),
+            settings: ResolverInstallerSettings::combine(
+                ResolverInstallerOptions::from(installer),
+                workspace,
+            ),
         }
     }
 }
@@ -177,7 +180,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
-    pub(crate) settings: CompleteSettings,
+    pub(crate) settings: ResolverInstallerSettings,
 }
 
 impl ToolRunSettings {
@@ -199,7 +202,10 @@ impl ToolRunSettings {
             from,
             with,
             python,
-            settings: CompleteSettings::combine(CompleteOptions::from(installer), workspace),
+            settings: ResolverInstallerSettings::combine(
+                ResolverInstallerOptions::from(installer),
+                workspace,
+            ),
         }
     }
 }
@@ -983,7 +989,7 @@ pub(crate) struct InstallerSettings {
 impl InstallerSettings {
     /// Resolve the [`InstallerSettings`] from the CLI and workspace configuration.
     pub(crate) fn combine(args: InstallerOptions, workspace: Option<Workspace>) -> Self {
-        let CompleteOptions {
+        let ResolverInstallerOptions {
             index_url,
             extra_index_url,
             no_index,
@@ -1050,7 +1056,7 @@ pub(crate) struct ResolverSettings {
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI and workspace configuration.
     pub(crate) fn combine(args: ResolverOptions, workspace: Option<Workspace>) -> Self {
-        let CompleteOptions {
+        let ResolverInstallerOptions {
             index_url,
             extra_index_url,
             no_index,
@@ -1100,10 +1106,10 @@ impl ResolverSettings {
 /// capabilities.
 ///
 /// Represents the shared settings that are used across all `uv` commands outside the `pip` API.
-/// Analogous to the settings contained in the `[tool.uv]` table, combined with [`CompleteArgs`].
+/// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
-pub(crate) struct CompleteSettings {
+pub(crate) struct ResolverInstallerSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
@@ -1115,10 +1121,10 @@ pub(crate) struct CompleteSettings {
     pub(crate) compile_bytecode: bool,
 }
 
-impl CompleteSettings {
-    /// Resolve the [`CompleteSettings`] from the CLI and workspace configuration.
-    pub(crate) fn combine(args: CompleteOptions, workspace: Option<Workspace>) -> Self {
-        let CompleteOptions {
+impl ResolverInstallerSettings {
+    /// Resolve the [`ResolverInstallerSettings`] from the CLI and workspace configuration.
+    pub(crate) fn combine(args: ResolverInstallerOptions, workspace: Option<Workspace>) -> Self {
+        let ResolverInstallerOptions {
             index_url,
             extra_index_url,
             no_index,
@@ -1516,9 +1522,9 @@ impl From<InstallerArgs> for PipOptions {
     }
 }
 
-impl From<CompleteArgs> for PipOptions {
-    fn from(args: CompleteArgs) -> Self {
-        let CompleteArgs {
+impl From<ResolverInstallerArgs> for PipOptions {
+    fn from(args: ResolverInstallerArgs) -> Self {
+        let ResolverInstallerArgs {
             index_args,
             index_strategy,
             keyring_provider,
@@ -1632,9 +1638,9 @@ impl From<ResolverArgs> for ResolverOptions {
     }
 }
 
-impl From<CompleteArgs> for CompleteOptions {
-    fn from(args: CompleteArgs) -> Self {
-        let CompleteArgs {
+impl From<ResolverInstallerArgs> for ResolverInstallerOptions {
+    fn from(args: ResolverInstallerArgs) -> Self {
+        let ResolverInstallerArgs {
             index_args,
             index_strategy,
             keyring_provider,

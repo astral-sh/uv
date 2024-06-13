@@ -28,7 +28,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip;
 use crate::printer::Printer;
-use crate::settings::CompleteSettings;
+use crate::settings::ResolverInstallerSettings;
 
 pub(crate) mod add;
 pub(crate) mod lock;
@@ -260,7 +260,7 @@ pub(crate) fn init_environment(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
-    settings: &CompleteSettings,
+    settings: &ResolverInstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -269,7 +269,7 @@ pub(crate) async fn update_environment(
     printer: Printer,
 ) -> Result<PythonEnvironment> {
     // Extract the project settings.
-    let CompleteSettings {
+    let ResolverInstallerSettings {
         index_locations,
         index_strategy,
         keyring_provider,
