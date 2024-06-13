@@ -4427,11 +4427,11 @@ dependencies = [
  "uv-normalize",
  "uv-requirements",
  "uv-resolver",
+ "uv-settings",
  "uv-toolchain",
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
- "uv-workspace",
 ]
 
 [[package]]
@@ -4618,9 +4618,9 @@ dependencies = [
  "uv-git",
  "uv-installer",
  "uv-resolver",
+ "uv-settings",
  "uv-toolchain",
  "uv-types",
- "uv-workspace",
  "walkdir",
 ]
 
@@ -4887,6 +4887,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-settings"
+version = "0.0.1"
+dependencies = [
+ "dirs-sys",
+ "distribution-types",
+ "fs-err",
+ "install-wheel-rs",
+ "pep508_rs",
+ "pypi-types",
+ "schemars",
+ "serde",
+ "thiserror",
+ "toml",
+ "tracing",
+ "uv-configuration",
+ "uv-fs",
+ "uv-normalize",
+ "uv-resolver",
+ "uv-toolchain",
+]
+
+[[package]]
 name = "uv-state"
 version = "0.0.1"
 dependencies = [
@@ -4988,29 +5010,6 @@ dependencies = [
  "once_cell",
  "owo-colors",
  "rustc-hash",
-]
-
-[[package]]
-name = "uv-workspace"
-version = "0.0.1"
-dependencies = [
- "dirs-sys",
- "distribution-types",
- "fs-err",
- "install-wheel-rs",
- "pep508_rs",
- "pypi-types",
- "schemars",
- "serde",
- "thiserror",
- "toml",
- "tracing",
- "uv-configuration",
- "uv-fs",
- "uv-normalize",
- "uv-resolver",
- "uv-toolchain",
- "uv-warnings",
 ]
 
 [[package]]
