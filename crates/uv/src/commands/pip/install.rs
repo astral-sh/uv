@@ -159,13 +159,13 @@ pub(crate) async fn pip_install(
         } else {
             return if let Some(error) = externally_managed.into_error() {
                 Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv environment`.",
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
                 ))
             } else {
                 Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv environment`.",
+                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
                     environment.root().user_display().cyan()
                 ))
             };
