@@ -23,7 +23,10 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
-use uv_toolchain::{request_from_version_file, SystemPython, Toolchain, ToolchainRequest};
+use uv_toolchain::{
+    request_from_version_file, EnvironmentPreference, Toolchain, ToolchainPreference,
+    ToolchainRequest,
+};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::{pip, ExitStatus};
@@ -133,8 +136,8 @@ async fn venv_impl(
     // Locate the Python interpreter to use in the environment
     let interpreter = Toolchain::find_or_fetch(
         interpreter_request,
-        SystemPython::Required,
-        preview,
+        EnvironmentPreference::OnlySystem,
+        ToolchainPreference::from_settings(preview),
         client_builder,
         cache,
     )

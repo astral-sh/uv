@@ -16,7 +16,7 @@ fn toolchain_find() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No Python interpreters found in provided path, active virtual environment, or search path
+    error: No Python interpreters found in system toolchains
     "###);
 
     // We find the first interpreter on the path
@@ -101,7 +101,7 @@ fn toolchain_find() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for PyPy in provided path, active virtual environment, or search path
+    error: No interpreter found for PyPy in system toolchains
     "###);
 
     // Swap the order of the Python versions
