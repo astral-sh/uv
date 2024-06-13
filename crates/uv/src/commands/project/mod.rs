@@ -7,7 +7,7 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{
@@ -75,6 +75,22 @@ pub(crate) enum ProjectError {
     RequiresPython(#[from] uv_resolver::RequiresPythonError),
 }
 
+/// Compute the `Requires-Python` bound for the [`Workspace`].
+///
+/// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
+/// `Requires-Python` bounds of all the packages.
+pub(crate) fn find_requires_python(
+    workspace: &Workspace,
+) -> Result<Option<RequiresPython>, uv_resolver::RequiresPythonError> {
+    RequiresPython::union(workspace.packages().values().filter_map(|member| {
+        member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.requires_python.as_ref())
+    }))
+}
+
 /// Find the virtual environment for the current project.
 pub(crate) fn find_environment(
     workspace: &Workspace,
@@ -87,7 +103,7 @@ pub(crate) fn find_environment(
 pub(crate) fn interpreter_meets_requirements(
     interpreter: &Interpreter,
     requested_python: Option<&str>,
-    requires_python: Option<&VersionSpecifiers>,
+    requires_python: Option<&RequiresPython>,
     cache: &Cache,
 ) -> bool {
     // `--python` has highest precedence, after that we check `requires_python` from
@@ -108,16 +124,12 @@ pub(crate) fn interpreter_meets_requirements(
 
     if let Some(requires_python) = requires_python {
         if requires_python.contains(interpreter.python_version()) {
-            debug!(
-                "Interpreter meets the project `Requires-Python` constraint {}",
-                requires_python
-            );
+            debug!("Interpreter meets the project `Requires-Python` constraint {requires_python}");
             return true;
         }
 
         debug!(
-            "Interpreter does not meet the project `Requires-Python` constraint {}",
-            requires_python
+            "Interpreter does not meet the project `Requires-Python` constraint {requires_python}"
         );
         return false;
     };
@@ -133,14 +145,17 @@ pub(crate) fn find_interpreter(
     cache: &Cache,
     printer: Printer,
 ) -> Result<Interpreter, ProjectError> {
-    let requires_python = workspace
-        .root_member()
-        .and_then(|root| root.project().requires_python.as_ref());
+    let requires_python = find_requires_python(workspace)?;
 
     // Read from the virtual environment first
     match find_environment(workspace, cache) {
         Ok(venv) => {
-            if interpreter_meets_requirements(venv.interpreter(), python, requires_python, cache) {
+            if interpreter_meets_requirements(
+                venv.interpreter(),
+                python,
+                requires_python.as_ref(),
+                cache,
+            ) {
                 return Ok(venv.into_interpreter());
             }
         }
@@ -150,6 +165,8 @@ pub(crate) fn find_interpreter(
 
     // Otherwise, find a system interpreter to use
     let interpreter = if let Some(request) = python.map(ToolchainRequest::parse).or(requires_python
+        .as_ref()
+        .map(RequiresPython::specifiers)
         .map(|specifiers| ToolchainRequest::Version(VersionRequest::Range(specifiers.clone()))))
     {
         Toolchain::find_requested(
@@ -163,7 +180,7 @@ pub(crate) fn find_interpreter(
     }?
     .into_interpreter();
 
-    if let Some(requires_python) = requires_python {
+    if let Some(requires_python) = requires_python.as_ref() {
         if !requires_python.contains(interpreter.python_version()) {
             warn_user!(
                 "The Python {} you requested with {} is incompatible with the requirement of the \
@@ -192,14 +209,17 @@ pub(crate) fn init_environment(
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
-    let requires_python = workspace
-        .root_member()
-        .and_then(|root| root.project().requires_python.as_ref());
+    let requires_python = find_requires_python(workspace)?;
 
     // Check if the environment exists and is sufficient
     match find_environment(workspace, cache) {
         Ok(venv) => {
-            if interpreter_meets_requirements(venv.interpreter(), python, requires_python, cache) {
+            if interpreter_meets_requirements(
+                venv.interpreter(),
+                python,
+                requires_python.as_ref(),
+                cache,
+            ) {
                 return Ok(venv);
             }
 
