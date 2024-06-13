@@ -35,6 +35,9 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"(\s|\()(\d+m )?(\d+\.)?\d+(ms|s)", "$1[TIME]"),
     // File sizes
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
+    // Timestamps
+    (r"tv_sec: \d+", "tv_sec: [TIME]"),
+    (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
     (r"uv.exe", "uv"),
