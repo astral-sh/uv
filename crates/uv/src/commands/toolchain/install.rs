@@ -16,6 +16,7 @@ use crate::printer::Printer;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     target: Option<String>,
+    force: bool,
     native_tls: bool,
     connectivity: Connectivity,
     preview: PreviewMode,
@@ -58,19 +59,23 @@ pub(crate) async fn install(
             toolchain.key()
         )?;
 
-        if matches!(request, ToolchainRequest::Any) {
-            writeln!(
-                printer.stderr(),
-                "A toolchain is already installed. Use `uv toolchain install <request>` to install a specific toolchain.",
-            )?;
+        if force {
+            writeln!(printer.stderr(), "Forcing reinstallation...")?;
         } else {
-            writeln!(
-                printer.stderr(),
-                "Already installed at {}",
-                toolchain.path().user_display()
-            )?;
+            if matches!(request, ToolchainRequest::Any) {
+                writeln!(
+                    printer.stderr(),
+                    "A toolchain is already installed. Use `uv toolchain install <request>` to install a specific toolchain.",
+                )?;
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "Already installed at {}",
+                    toolchain.path().user_display()
+                )?;
+            }
+            return Ok(ExitStatus::Success);
         }
-        return Ok(ExitStatus::Success);
     }
 
     // Fill platform information missing from the request
