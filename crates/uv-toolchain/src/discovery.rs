@@ -357,17 +357,12 @@ fn python_executables_from_search_path<'a>(
 fn python_interpreters<'a>(
     version: Option<&'a VersionRequest>,
     implementation: Option<&'a ImplementationName>,
-    system: SystemPython,
     sources: &ToolchainSources,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a {
-    // TODO(zanieb): Move filtering to callers
-    filter_by_system_python(
-        python_interpreters_from_executables(
-            python_executables(version, implementation, sources),
-            cache,
-        ),
-        system,
+    python_interpreters_from_executables(
+        python_executables(version, implementation, sources),
+        cache,
     )
 }
 
@@ -393,56 +388,63 @@ fn python_interpreters_from_executables<'a>(
     })
 }
 
-fn filter_by_system_python<'a>(
-    interpreters: impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a,
+/// Returns true if a interpreter matches the system Python policy.
+fn satisfies_system_python(
+    source: ToolchainSource,
+    interpreter: &Interpreter,
     system: SystemPython,
-) -> impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a {
-    interpreters.filter(move |result| match result {
-        // Filter the returned interpreters to conform to the system request
-        Ok((source, interpreter)) => match (
-            system,
-            // Conda environments are not conformant virtual environments but we should not treat them as system interpreters
-            interpreter.is_virtualenv() || matches!(source, ToolchainSource::CondaPrefix),
-        ) {
-            (SystemPython::Allowed, _) => true,
-            (SystemPython::Explicit, false) => {
-                if matches!(
-                    source,
-                    ToolchainSource::ProvidedPath | ToolchainSource::ParentInterpreter
-                ) {
-                    debug!(
-                        "Allowing system Python interpreter at `{}`",
-                        interpreter.sys_executable().display()
-                    );
-                    true
-                } else {
-                    debug!(
-                        "Ignoring Python interpreter at `{}`: system interpreter not explicit",
-                        interpreter.sys_executable().display()
-                    );
-                    false
-                }
-            }
-            (SystemPython::Explicit, true) => true,
-            (SystemPython::Disallowed, false) => {
+) -> bool {
+    match (
+        system,
+        // Conda environments are not conformant virtual environments but we should not treat them as system interpreters
+        interpreter.is_virtualenv() || matches!(source, ToolchainSource::CondaPrefix),
+    ) {
+        (SystemPython::Allowed, _) => true,
+        (SystemPython::Explicit, false) => {
+            if matches!(
+                source,
+                ToolchainSource::ProvidedPath | ToolchainSource::ParentInterpreter
+            ) {
                 debug!(
-                    "Ignoring Python interpreter at `{}`: system interpreter not allowed",
+                    "Allowing system Python interpreter at `{}`",
+                    interpreter.sys_executable().display()
+                );
+                true
+            } else {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: system interpreter not explicit",
                     interpreter.sys_executable().display()
                 );
                 false
             }
-            (SystemPython::Disallowed, true) => true,
-            (SystemPython::Required, true) => {
-                debug!(
-                    "Ignoring Python interpreter at `{}`: system interpreter required",
-                    interpreter.sys_executable().display()
-                );
-                false
-            }
-            (SystemPython::Required, false) => true,
-        },
-        // Do not drop any errors
-        Err(_) => true,
+        }
+        (SystemPython::Explicit, true) => true,
+        (SystemPython::Disallowed, false) => {
+            debug!(
+                "Ignoring Python interpreter at `{}`: system interpreter not allowed",
+                interpreter.sys_executable().display()
+            );
+            false
+        }
+        (SystemPython::Disallowed, true) => true,
+        (SystemPython::Required, true) => {
+            debug!(
+                "Ignoring Python interpreter at `{}`: system interpreter required",
+                interpreter.sys_executable().display()
+            );
+            false
+        }
+        (SystemPython::Required, false) => true,
+    }
+}
+
+/// Utility for applying [`satisfies_system_python`] to a result type.
+fn result_satisfies_system_python(
+    result: &Result<(ToolchainSource, Interpreter), Error>,
+    system: SystemPython,
+) -> bool {
+    result.as_ref().ok().map_or(true, |(source, interpreter)| {
+        satisfies_system_python(*source, interpreter, system)
     })
 }
 
@@ -566,12 +568,14 @@ pub fn find_toolchains<'a>(
         }
         ToolchainRequest::Any => Box::new({
             debug!("Searching for Python interpreter in {sources}");
-            python_interpreters(None, None, system, sources, cache)
+            python_interpreters(None, None, sources, cache)
+                .filter(move |result| result_satisfies_system_python(result, system))
                 .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
         ToolchainRequest::Version(version) => Box::new({
             debug!("Searching for {request} in {sources}");
-            python_interpreters(Some(version), None, system, sources, cache)
+            python_interpreters(Some(version), None, sources, cache)
+                .filter(move |result| result_satisfies_system_python(result, system))
                 .filter(|result| match result {
                     Err(_) => true,
                     Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
@@ -580,7 +584,8 @@ pub fn find_toolchains<'a>(
         }),
         ToolchainRequest::Implementation(implementation) => Box::new({
             debug!("Searching for a {request} interpreter in {sources}");
-            python_interpreters(None, Some(implementation), system, sources, cache)
+            python_interpreters(None, Some(implementation), sources, cache)
+                .filter(move |result| result_satisfies_system_python(result, system))
                 .filter(|result| match result {
                     Err(_) => true,
                     Ok((_source, interpreter)) => {
@@ -591,7 +596,8 @@ pub fn find_toolchains<'a>(
         }),
         ToolchainRequest::ImplementationVersion(implementation, version) => Box::new({
             debug!("Searching for {request} in {sources}");
-            python_interpreters(Some(version), Some(implementation), system, sources, cache)
+            python_interpreters(Some(version), Some(implementation), sources, cache)
+                .filter(move |result| result_satisfies_system_python(result, system))
                 .filter(|result| match result {
                     Err(_) => true,
                     Ok((_source, interpreter)) => {
