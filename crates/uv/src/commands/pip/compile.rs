@@ -81,6 +81,7 @@ pub(crate) async fn pip_compile(
     connectivity: Connectivity,
     no_build_isolation: bool,
     no_build: NoBuild,
+    no_binary: NoBinary,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     exclude_newer: Option<ExcludeNewer>,
@@ -122,7 +123,7 @@ pub(crate) async fn pip_compile(
         extra_index_urls,
         no_index,
         find_links,
-        no_binary: _,
+        no_binary: specified_no_binary,
         no_build: specified_no_build,
     } = RequirementsSpecification::from_sources(
         requirements,
@@ -253,9 +254,10 @@ pub(crate) async fn pip_compile(
     let preferences = read_requirements_txt(output_file, &upgrade).await?;
     let git = GitResolver::default();
 
-    // Combine the `--no-build` flags.
+    // Combine the `--no-binary` and `--no-build` flags.
+    let no_binary = no_binary.combine(specified_no_binary);
     let no_build = no_build.combine(specified_no_build);
-    let build_options = BuildOptions::new(NoBinary::default(), no_build);
+    let build_options = BuildOptions::new(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

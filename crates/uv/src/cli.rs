@@ -532,16 +532,32 @@ pub(crate) struct PipCompileArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[arg(long, conflicts_with = "only_binary", overrides_with = "build")]
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("build")
+    )]
     pub(crate) no_build: bool,
 
     #[arg(
         long,
+        conflicts_with = "no_binary",
         conflicts_with = "only_binary",
         overrides_with("no_build"),
         hide = true
     )]
     pub(crate) build: bool,
+
+    /// Don't install pre-built wheels.
+    ///
+    /// The given packages will be installed from a source distribution. The resolver
+    /// will still use pre-built wheels for metadata.
+    ///
+    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
+    /// Clear previously specified packages with `:none:`.
+    #[arg(long, conflicts_with = "no_build")]
+    pub(crate) no_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
