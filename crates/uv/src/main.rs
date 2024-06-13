@@ -241,6 +241,7 @@ async fn run() -> Result<ExitStatus> {
                 globals.connectivity,
                 args.pip.no_build_isolation,
                 args.pip.no_build,
+                args.pip.no_binary,
                 args.pip.python_version,
                 args.pip.python_platform,
                 args.pip.exclude_newer,
