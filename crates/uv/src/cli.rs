@@ -99,9 +99,13 @@ pub(crate) struct GlobalArgs {
     /// parent directories.
     #[arg(global = true, long, hide = true)]
     pub(crate) isolated: bool,
+
+    /// Show the resolved settings for the current command.
+    #[arg(global = true, long, hide = true)]
+    pub(crate) show_settings: bool,
 }
 
-#[derive(Debug, Clone, clap::ValueEnum)]
+#[derive(Debug, Copy, Clone, clap::ValueEnum)]
 pub(crate) enum ColorChoice {
     /// Enables colored output only when the output is going to a terminal or TTY with support.
     Auto,
@@ -188,7 +192,7 @@ pub(crate) enum CacheCommand {
     Dir,
 }
 
-#[derive(Args)]
+#[derive(Args, Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct CleanArgs {
     /// The packages to remove from the cache.
