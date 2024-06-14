@@ -24,7 +24,7 @@ fn add_registry() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"], false), @r###"
+    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -167,7 +167,7 @@ fn add_git() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"], false), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -297,7 +297,7 @@ fn add_unnamed() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage@0.0.1"], false), @r###"
+    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -388,7 +388,7 @@ fn add_dev() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"], true), @r###"
+    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -538,7 +538,7 @@ fn update_registry() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==4.3.0"], false), @r###"
+    uv_snapshot!(context.filters(), context.add(&["anyio==4.3.0"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -681,7 +681,7 @@ fn remove_registry() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"], false), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -787,7 +787,7 @@ fn remove_dev() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"], false), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -798,7 +798,7 @@ fn remove_dev() -> Result<()> {
     error: The dependency `anyio` could not be found in `dependencies`
     "###);
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"], true), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -907,7 +907,7 @@ fn remove_all_registry() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"], false), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
