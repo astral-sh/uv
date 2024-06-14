@@ -5,14 +5,13 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, Resolution};
-use install_wheel_rs::linker::LinkMode;
+use distribution_types::Resolution;
 use pep440_rs::Version;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, PreviewMode, Reinstall,
-    SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy,
+    Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::Workspace;
@@ -20,7 +19,7 @@ use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, Options, RequiresPython};
+use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, RequiresPython};
 use uv_toolchain::{
     Interpreter, PythonEnvironment, SystemPython, Toolchain, ToolchainRequest, VersionRequest,
 };
@@ -29,6 +28,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip;
 use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 pub(crate) mod add;
 pub(crate) mod lock;
@@ -256,17 +256,35 @@ pub(crate) fn init_environment(
 }
 
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],
-    index_locations: &IndexLocations,
+    settings: &ResolverInstallerSettings,
+    preview: PreviewMode,
     connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
 ) -> Result<PythonEnvironment> {
-    // TODO(zanieb): Support client configuration
-    let client_builder = BaseClientBuilder::default().connectivity(connectivity);
+    // Extract the project settings.
+    let ResolverInstallerSettings {
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease,
+        config_setting,
+        exclude_newer,
+        link_mode,
+        compile_bytecode,
+    } = settings;
+
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls)
+        .keyring(*keyring_provider);
 
     // Read all requirements from the provided sources.
     // TODO(zanieb): Consider allowing constraints and extras
@@ -304,34 +322,47 @@ pub(crate) async fn update_environment(
     let markers = venv.interpreter().markers();
 
     // Initialize the registry client.
-    // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
         .markers(markers)
-        .platform(venv.interpreter().platform())
+        .platform(interpreter.platform())
         .build();
 
-    // TODO(charlie): Respect project configuration.
-    let build_isolation = BuildIsolation::default();
-    let compile = false;
-    let concurrency = Concurrency::default();
-    let config_settings = ConfigSettings::default();
-    let dry_run = false;
-    let extras = ExtrasSpecification::default();
-    let flat_index = FlatIndex::default();
+    let options = OptionsBuilder::new()
+        .resolution_mode(*resolution)
+        .prerelease_mode(*prerelease)
+        .exclude_newer(*exclude_newer)
+        .index_strategy(*index_strategy)
+        .build();
+
+    // Initialize any shared state.
     let git = GitResolver::default();
-    let dev = Vec::default();
-    let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let link_mode = LinkMode::default();
+
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let build_isolation = BuildIsolation::default();
     let build_options = BuildOptions::default();
-    let options = Options::default();
+    let dev = Vec::default();
+    let dry_run = false;
+    let extras = ExtrasSpecification::default();
+    let hasher = HashStrategy::default();
     let preferences = Vec::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
     let upgrade = Upgrade::default();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
+    };
 
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
@@ -344,9 +375,9 @@ pub(crate) async fn update_environment(
         &git,
         &in_flight,
         setup_py,
-        &config_settings,
+        config_setting,
         build_isolation,
-        link_mode,
+        *link_mode,
         &build_options,
         concurrency,
         preview,
@@ -403,9 +434,9 @@ pub(crate) async fn update_environment(
             &git,
             &in_flight,
             setup_py,
-            &config_settings,
+            config_setting,
             build_isolation,
-            link_mode,
+            *link_mode,
             &build_options,
             concurrency,
             preview,
@@ -419,8 +450,8 @@ pub(crate) async fn update_environment(
         pip::operations::Modifications::Sufficient,
         &reinstall,
         &build_options,
-        link_mode,
-        compile,
+        *link_mode,
+        *compile_bytecode,
         index_locations,
         &hasher,
         tags,

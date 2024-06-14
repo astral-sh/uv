@@ -2,14 +2,15 @@ use anyhow::Result;
 use pep508_rs::PackageName;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 
-use distribution_types::IndexLocations;
 use uv_cache::Cache;
-use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
+use uv_client::Connectivity;
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::ProjectWorkspace;
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::{InstallerSettings, ResolverSettings};
 
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::too_many_arguments)]
@@ -17,6 +18,9 @@ pub(crate) async fn remove(
     requirements: Vec<PackageName>,
     python: Option<String>,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -46,9 +50,9 @@ pub(crate) async fn remove(
     // Discover or create the virtual environment.
     let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
 
-    let index_locations = IndexLocations::default();
-    let upgrade = Upgrade::None;
-    let exclude_newer = None;
+    // Use the default settings.
+    let settings = ResolverSettings::default();
+    let upgrade = Upgrade::default();
 
     // Lock and sync the environment.
     let root_project_name = project
@@ -62,10 +66,19 @@ pub(crate) async fn remove(
         root_project_name,
         project.workspace(),
         venv.interpreter(),
-        &index_locations,
         upgrade,
-        exclude_newer,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.resolution,
+        &settings.prerelease,
+        &settings.config_setting,
+        settings.exclude_newer.as_ref(),
+        &settings.link_mode,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )
@@ -73,6 +86,7 @@ pub(crate) async fn remove(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
+    let settings = InstallerSettings::default();
     let extras = ExtrasSpecification::All;
     let dev = true;
 
@@ -81,10 +95,18 @@ pub(crate) async fn remove(
         project.workspace().root(),
         &venv,
         &lock,
-        &index_locations,
         extras,
         dev,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.config_setting,
+        &settings.link_mode,
+        &settings.compile_bytecode,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )

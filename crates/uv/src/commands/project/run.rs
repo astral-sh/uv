@@ -2,28 +2,26 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use distribution_types::IndexLocations;
 use itertools::Itertools;
 use tokio::process::Command;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Upgrade};
 use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
-use uv_resolver::ExcludeNewer;
 use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
-    index_locations: IndexLocations,
     extras: ExtrasSpecification,
     dev: bool,
     target: Option<String>,
@@ -31,16 +29,16 @@ pub(crate) async fn run(
     requirements: Vec<RequirementsSource>,
     python: Option<String>,
     upgrade: Upgrade,
-    exclude_newer: Option<ExcludeNewer>,
     package: Option<PackageName>,
+    settings: ResolverInstallerSettings,
     isolated: bool,
     preview: PreviewMode,
     connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let client_builder = BaseClientBuilder::new().connectivity(connectivity);
-
     if preview.is_disabled() {
         warn_user!("`uv run` is experimental and may change without warning.");
     }
@@ -76,10 +74,19 @@ pub(crate) async fn run(
             root_project_name,
             project.workspace(),
             venv.interpreter(),
-            &index_locations,
             upgrade,
-            exclude_newer,
+            &settings.index_locations,
+            &settings.index_strategy,
+            &settings.keyring_provider,
+            &settings.resolution,
+            &settings.prerelease,
+            &settings.config_setting,
+            settings.exclude_newer.as_ref(),
+            &settings.link_mode,
             preview,
+            connectivity,
+            concurrency,
+            native_tls,
             cache,
             printer,
         )
@@ -89,10 +96,18 @@ pub(crate) async fn run(
             project.workspace().root(),
             &venv,
             &lock,
-            &index_locations,
             extras,
             dev,
+            &settings.index_locations,
+            &settings.index_strategy,
+            &settings.keyring_provider,
+            &settings.config_setting,
+            &settings.link_mode,
+            &settings.compile_bytecode,
             preview,
+            connectivity,
+            concurrency,
+            native_tls,
             cache,
             printer,
         )
@@ -107,6 +122,10 @@ pub(crate) async fn run(
         None
     } else {
         debug!("Syncing ephemeral environment.");
+
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
 
         // Discover an interpreter.
         let interpreter = if let Some(project_env) = &project_env {
@@ -144,11 +163,13 @@ pub(crate) async fn run(
             project::update_environment(
                 venv,
                 &requirements,
-                &index_locations,
+                &settings,
+                preview,
                 connectivity,
+                concurrency,
+                native_tls,
                 cache,
                 printer,
-                preview,
             )
             .await?,
         )

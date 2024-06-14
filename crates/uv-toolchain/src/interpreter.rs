@@ -471,7 +471,6 @@ pub enum Error {
         stderr: String,
         path: PathBuf,
     },
-
     #[error("Querying Python at `{}` failed with exit status {code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
     StatusCode {
         code: ExitStatus,

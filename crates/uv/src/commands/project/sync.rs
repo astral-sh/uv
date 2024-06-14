@@ -1,13 +1,14 @@
-use anyhow::Result;
 use std::path::Path;
 
+use anyhow::Result;
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
+
 use uv_cache::Cache;
-use uv_client::{FlatIndexClient, RegistryClientBuilder};
+use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, PreviewMode, Reinstall,
-    SetupPyStrategy,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
+    KeyringProviderType, PreviewMode, Reinstall, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
@@ -23,15 +24,19 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::ProjectError;
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::InstallerSettings;
 
 /// Sync the project environment.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync(
-    index_locations: IndexLocations,
     extras: ExtrasSpecification,
     dev: bool,
     python: Option<String>,
+    settings: InstallerSettings,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -58,10 +63,18 @@ pub(crate) async fn sync(
         project.workspace().root(),
         &venv,
         &lock,
-        &index_locations,
         extras,
         dev,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.config_setting,
+        &settings.link_mode,
+        &settings.compile_bytecode,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )
@@ -77,10 +90,18 @@ pub(super) async fn do_sync(
     workspace_root: &Path,
     venv: &PythonEnvironment,
     lock: &Lock,
-    index_locations: &IndexLocations,
     extras: ExtrasSpecification,
     dev: bool,
+    index_locations: &IndexLocations,
+    index_strategy: &IndexStrategy,
+    keyring_provider: &KeyringProviderType,
+    config_setting: &ConfigSettings,
+    link_mode: &LinkMode,
+    compile_bytecode: &bool,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
@@ -109,25 +130,27 @@ pub(super) async fn do_sync(
         lock.to_resolution(workspace_root, markers, tags, project_name, &extras, &dev)?;
 
     // Initialize the registry client.
-    // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
 
-    // TODO(charlie): Respect project configuration.
-    let build_isolation = BuildIsolation::default();
-    let compile = false;
-    let concurrency = Concurrency::default();
-    let config_settings = ConfigSettings::default();
-    let dry_run = false;
+    // Initialize any shared state.
     let git = GitResolver::default();
-    let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let link_mode = LinkMode::default();
+
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let build_isolation = BuildIsolation::default();
     let build_options = BuildOptions::default();
+    let dry_run = false;
+    let hasher = HashStrategy::default();
     let reinstall = Reinstall::default();
     let setup_py = SetupPyStrategy::default();
 
@@ -149,9 +172,9 @@ pub(super) async fn do_sync(
         &git,
         &in_flight,
         setup_py,
-        &config_settings,
+        config_setting,
         build_isolation,
-        link_mode,
+        *link_mode,
         &build_options,
         concurrency,
         preview,
@@ -166,8 +189,8 @@ pub(super) async fn do_sync(
         Modifications::Sufficient,
         &reinstall,
         &build_options,
-        link_mode,
-        compile,
+        *link_mode,
+        *compile_bytecode,
         index_locations,
         &hasher,
         tags,

@@ -1,16 +1,18 @@
-use anyhow::Result;
 use std::str::FromStr;
-use uv_distribution::pyproject_mut::PyProjectTomlMut;
 
-use distribution_types::IndexLocations;
+use anyhow::Result;
+
 use pep508_rs::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{ExtrasSpecification, PreviewMode, Upgrade};
+use uv_client::Connectivity;
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Upgrade};
+use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::ProjectWorkspace;
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::{InstallerSettings, ResolverSettings};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::too_many_arguments)]
@@ -18,6 +20,9 @@ pub(crate) async fn add(
     requirements: Vec<String>,
     python: Option<String>,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -43,9 +48,9 @@ pub(crate) async fn add(
     // Discover or create the virtual environment.
     let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
 
-    let index_locations = IndexLocations::default();
+    // Use the default settings.
+    let settings = ResolverSettings::default();
     let upgrade = Upgrade::default();
-    let exclude_newer = None;
 
     // Lock and sync the environment.
     let root_project_name = project
@@ -59,10 +64,19 @@ pub(crate) async fn add(
         root_project_name,
         project.workspace(),
         venv.interpreter(),
-        &index_locations,
         upgrade,
-        exclude_newer,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.resolution,
+        &settings.prerelease,
+        &settings.config_setting,
+        settings.exclude_newer.as_ref(),
+        &settings.link_mode,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )
@@ -70,6 +84,7 @@ pub(crate) async fn add(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
+    let settings = InstallerSettings::default();
     let extras = ExtrasSpecification::All;
     let dev = true;
 
@@ -78,10 +93,18 @@ pub(crate) async fn add(
         project.workspace().root(),
         &venv,
         &lock,
-        &index_locations,
         extras,
         dev,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.config_setting,
+        &settings.link_mode,
+        &settings.compile_bytecode,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )

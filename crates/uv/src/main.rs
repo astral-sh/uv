@@ -12,6 +12,7 @@ use tracing::{debug, instrument};
 
 use cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
 use uv_cache::Cache;
+use uv_configuration::Concurrency;
 use uv_requirements::RequirementsSource;
 use uv_workspace::Combine;
 
@@ -123,6 +124,8 @@ async fn run() -> Result<ExitStatus> {
     } else if cli.global_args.isolated {
         None
     } else {
+        // TODO(charlie): This needs to discover settings from the workspace _root_. Right now, it
+        // discovers the closest `pyproject.toml`, which could be a workspace _member_.
         let project = uv_workspace::Workspace::find(env::current_dir()?)?;
         let user = uv_workspace::Workspace::user()?;
         project.combine(user)
@@ -189,7 +192,7 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, workspace);
             rayon::ThreadPoolBuilder::new()
-                .num_threads(args.pip.concurrency.installs)
+                .num_threads(args.settings.concurrency.installs)
                 .build_global()
                 .expect("failed to initialize global rayon pool");
 
@@ -217,39 +220,39 @@ async fn run() -> Result<ExitStatus> {
                 &constraints,
                 &overrides,
                 args.overrides_from_workspace,
-                args.pip.extras,
-                args.pip.output_file.as_deref(),
-                args.pip.resolution,
-                args.pip.prerelease,
-                args.pip.dependency_mode,
+                args.settings.extras,
+                args.settings.output_file.as_deref(),
+                args.settings.resolution,
+                args.settings.prerelease,
+                args.settings.dependency_mode,
                 args.upgrade,
-                args.pip.generate_hashes,
-                args.pip.no_emit_package,
-                args.pip.no_strip_extras,
-                !args.pip.no_annotate,
-                !args.pip.no_header,
-                args.pip.custom_compile_command,
-                args.pip.emit_index_url,
-                args.pip.emit_find_links,
-                args.pip.emit_marker_expression,
-                args.pip.emit_index_annotation,
-                args.pip.index_locations,
-                args.pip.index_strategy,
-                args.pip.keyring_provider,
-                args.pip.setup_py,
-                args.pip.config_setting,
+                args.settings.generate_hashes,
+                args.settings.no_emit_package,
+                args.settings.no_strip_extras,
+                !args.settings.no_annotate,
+                !args.settings.no_header,
+                args.settings.custom_compile_command,
+                args.settings.emit_index_url,
+                args.settings.emit_find_links,
+                args.settings.emit_marker_expression,
+                args.settings.emit_index_annotation,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
+                args.settings.setup_py,
+                args.settings.config_setting,
                 globals.connectivity,
-                args.pip.no_build_isolation,
-                args.pip.no_build,
-                args.pip.no_binary,
-                args.pip.python_version,
-                args.pip.python_platform,
-                args.pip.exclude_newer,
-                args.pip.annotation_style,
-                args.pip.link_mode,
-                args.pip.python,
-                args.pip.system,
-                args.pip.concurrency,
+                args.settings.no_build_isolation,
+                args.settings.no_build,
+                args.settings.no_binary,
+                args.settings.python_version,
+                args.settings.python_platform,
+                args.settings.exclude_newer,
+                args.settings.annotation_style,
+                args.settings.link_mode,
+                args.settings.python,
+                args.settings.system,
+                args.settings.concurrency,
                 globals.native_tls,
                 globals.quiet,
                 globals.preview,
@@ -266,7 +269,7 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, workspace);
             rayon::ThreadPoolBuilder::new()
-                .num_threads(args.pip.concurrency.installs)
+                .num_threads(args.settings.concurrency.installs)
                 .build_global()
                 .expect("failed to initialize global rayon pool");
 
@@ -288,28 +291,28 @@ async fn run() -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &args.reinstall,
-                args.pip.link_mode,
-                args.pip.compile_bytecode,
-                args.pip.require_hashes,
-                args.pip.index_locations,
-                args.pip.index_strategy,
-                args.pip.keyring_provider,
-                args.pip.setup_py,
+                args.settings.link_mode,
+                args.settings.compile_bytecode,
+                args.settings.require_hashes,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
+                args.settings.setup_py,
                 globals.connectivity,
-                &args.pip.config_setting,
-                args.pip.no_build_isolation,
-                args.pip.no_build,
-                args.pip.no_binary,
-                args.pip.python_version,
-                args.pip.python_platform,
-                args.pip.strict,
-                args.pip.exclude_newer,
-                args.pip.python,
-                args.pip.system,
-                args.pip.break_system_packages,
-                args.pip.target,
-                args.pip.prefix,
-                args.pip.concurrency,
+                &args.settings.config_setting,
+                args.settings.no_build_isolation,
+                args.settings.no_build,
+                args.settings.no_binary,
+                args.settings.python_version,
+                args.settings.python_platform,
+                args.settings.strict,
+                args.settings.exclude_newer,
+                args.settings.python,
+                args.settings.system,
+                args.settings.break_system_packages,
+                args.settings.target,
+                args.settings.prefix,
+                args.settings.concurrency,
                 globals.native_tls,
                 globals.preview,
                 cache,
@@ -326,7 +329,7 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, workspace);
             rayon::ThreadPoolBuilder::new()
-                .num_threads(args.pip.concurrency.installs)
+                .num_threads(args.settings.concurrency.installs)
                 .build_global()
                 .expect("failed to initialize global rayon pool");
 
@@ -359,34 +362,34 @@ async fn run() -> Result<ExitStatus> {
                 &constraints,
                 &overrides,
                 args.overrides_from_workspace,
-                &args.pip.extras,
-                args.pip.resolution,
-                args.pip.prerelease,
-                args.pip.dependency_mode,
+                &args.settings.extras,
+                args.settings.resolution,
+                args.settings.prerelease,
+                args.settings.dependency_mode,
                 args.upgrade,
-                args.pip.index_locations,
-                args.pip.index_strategy,
-                args.pip.keyring_provider,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
                 args.reinstall,
-                args.pip.link_mode,
-                args.pip.compile_bytecode,
-                args.pip.require_hashes,
-                args.pip.setup_py,
+                args.settings.link_mode,
+                args.settings.compile_bytecode,
+                args.settings.require_hashes,
+                args.settings.setup_py,
                 globals.connectivity,
-                &args.pip.config_setting,
-                args.pip.no_build_isolation,
-                args.pip.no_build,
-                args.pip.no_binary,
-                args.pip.python_version,
-                args.pip.python_platform,
-                args.pip.strict,
-                args.pip.exclude_newer,
-                args.pip.python,
-                args.pip.system,
-                args.pip.break_system_packages,
-                args.pip.target,
-                args.pip.prefix,
-                args.pip.concurrency,
+                &args.settings.config_setting,
+                args.settings.no_build_isolation,
+                args.settings.no_build,
+                args.settings.no_binary,
+                args.settings.python_version,
+                args.settings.python_platform,
+                args.settings.strict,
+                args.settings.exclude_newer,
+                args.settings.python,
+                args.settings.system,
+                args.settings.break_system_packages,
+                args.settings.target,
+                args.settings.prefix,
+                args.settings.concurrency,
                 globals.native_tls,
                 globals.preview,
                 cache,
@@ -416,16 +419,16 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
             commands::pip_uninstall(
                 &sources,
-                args.pip.python,
-                args.pip.system,
-                args.pip.break_system_packages,
-                args.pip.target,
-                args.pip.prefix,
+                args.settings.python,
+                args.settings.system,
+                args.settings.break_system_packages,
+                args.settings.target,
+                args.settings.prefix,
                 cache,
                 globals.connectivity,
                 globals.native_tls,
                 globals.preview,
-                args.pip.keyring_provider,
+                args.settings.keyring_provider,
                 printer,
             )
             .await
@@ -441,9 +444,9 @@ async fn run() -> Result<ExitStatus> {
 
             commands::pip_freeze(
                 args.exclude_editable,
-                args.pip.strict,
-                args.pip.python.as_deref(),
-                args.pip.system,
+                args.settings.strict,
+                args.settings.python.as_deref(),
+                args.settings.system,
                 globals.preview,
                 &cache,
                 printer,
@@ -465,9 +468,9 @@ async fn run() -> Result<ExitStatus> {
                 args.exclude_editable,
                 &args.exclude,
                 &args.format,
-                args.pip.strict,
-                args.pip.python.as_deref(),
-                args.pip.system,
+                args.settings.strict,
+                args.settings.python.as_deref(),
+                args.settings.system,
                 globals.preview,
                 &cache,
                 printer,
@@ -484,9 +487,9 @@ async fn run() -> Result<ExitStatus> {
 
             commands::pip_show(
                 args.package,
-                args.pip.strict,
-                args.pip.python.as_deref(),
-                args.pip.system,
+                args.settings.strict,
+                args.settings.python.as_deref(),
+                args.settings.system,
                 globals.preview,
                 &cache,
                 printer,
@@ -502,8 +505,8 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::pip_check(
-                args.shared.python.as_deref(),
-                args.shared.system,
+                args.settings.python.as_deref(),
+                args.settings.system,
                 globals.preview,
                 &cache,
                 printer,
@@ -542,17 +545,17 @@ async fn run() -> Result<ExitStatus> {
 
             commands::venv(
                 &args.name,
-                args.pip.python.as_deref(),
-                args.pip.link_mode,
-                &args.pip.index_locations,
-                args.pip.index_strategy,
-                args.pip.keyring_provider,
+                args.settings.python.as_deref(),
+                args.settings.link_mode,
+                &args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 globals.connectivity,
                 args.seed,
                 args.allow_existing,
-                args.pip.exclude_newer,
+                args.settings.exclude_newer,
                 globals.native_tls,
                 globals.preview,
                 &cache,
@@ -588,7 +591,6 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
-                args.index_locations,
                 args.extras,
                 args.dev,
                 args.target,
@@ -596,11 +598,13 @@ async fn run() -> Result<ExitStatus> {
                 requirements,
                 args.python,
                 args.upgrade,
-                args.exclude_newer,
                 args.package,
+                args.settings,
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -614,11 +618,14 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::sync(
-                args.index_locations,
                 args.extras,
                 args.dev,
                 args.python,
+                args.settings,
                 globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -632,11 +639,13 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::lock(
-                args.index_locations,
                 args.upgrade,
-                args.exclude_newer,
                 args.python,
+                args.settings,
                 globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -653,6 +662,9 @@ async fn run() -> Result<ExitStatus> {
                 args.requirements,
                 args.python,
                 globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -669,6 +681,9 @@ async fn run() -> Result<ExitStatus> {
                 args.requirements,
                 args.python,
                 globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )
@@ -701,10 +716,12 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.from,
                 args.with,
+                args.settings,
                 globals.isolated,
                 globals.preview,
-                args.index_locations,
                 globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
                 &cache,
                 printer,
             )

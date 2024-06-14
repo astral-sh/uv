@@ -10,6 +10,22 @@
         "null"
       ]
     },
+    "compile-bytecode": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "config-settings": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ConfigSettings"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "dev-dependencies": {
       "description": "PEP 508-style requirements, e.g., `flask==3.0.0`, or `black @ https://...`.",
       "type": [
@@ -20,6 +36,74 @@
         "type": "string"
       }
     },
+    "exclude-newer": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ExcludeNewer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "extra-index-url": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/IndexUrl"
+      }
+    },
+    "find-links": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/FlatIndexLocation"
+      }
+    },
+    "index-strategy": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IndexStrategy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "index-url": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IndexUrl"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "keyring-provider": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/KeyringProviderType"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "link-mode": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/LinkMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "native-tls": {
       "type": [
         "boolean",
@@ -27,6 +111,12 @@
       ]
     },
     "no-cache": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-index": {
       "type": [
         "boolean",
         "null"
@@ -58,10 +148,30 @@
         }
       ]
     },
+    "prerelease": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PreReleaseMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "preview": {
       "type": [
         "boolean",
         "null"
+      ]
+    },
+    "resolution": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ResolutionMode"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "sources": {
