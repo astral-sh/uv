@@ -22,6 +22,7 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
+    dev: bool,
     python: Option<String>,
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
@@ -122,8 +123,12 @@ pub(crate) async fn add(
 
     // Add the requirements to the `pyproject.toml`.
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
-    for req in requirements {
-        pyproject.add_dependency(&pep508_rs::Requirement::from(req))?;
+    for req in requirements.into_iter().map(pep508_rs::Requirement::from) {
+        if dev {
+            pyproject.add_dev_dependency(&req)?;
+        } else {
+            pyproject.add_dependency(&req)?;
+        }
     }
 
     // Save the modified `pyproject.toml`.

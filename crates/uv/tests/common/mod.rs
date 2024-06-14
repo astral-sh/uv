@@ -349,7 +349,7 @@ impl TestContext {
     }
 
     /// Create a `uv add` command for the given requirements.
-    pub fn add(&self, reqs: &[&str]) -> std::process::Command {
+    pub fn add(&self, reqs: &[&str], dev: bool) -> std::process::Command {
         let mut command = std::process::Command::new(get_bin());
         command
             .arg("add")
@@ -359,6 +359,10 @@ impl TestContext {
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
             .current_dir(&self.temp_dir);
+
+        if dev {
+            command.arg("--dev");
+        }
 
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
@@ -370,7 +374,7 @@ impl TestContext {
     }
 
     /// Create a `uv remove` command for the given requirements.
-    pub fn remove(&self, reqs: &[&str]) -> std::process::Command {
+    pub fn remove(&self, reqs: &[&str], dev: bool) -> std::process::Command {
         let mut command = std::process::Command::new(get_bin());
         command
             .arg("remove")
@@ -380,6 +384,10 @@ impl TestContext {
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
             .current_dir(&self.temp_dir);
+
+        if dev {
+            command.arg("--dev");
+        }
 
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the

@@ -693,6 +693,7 @@ async fn run() -> Result<ExitStatus> {
 
             commands::add(
                 requirements,
+                args.dev,
                 args.python,
                 args.settings,
                 globals.preview,
@@ -714,6 +715,7 @@ async fn run() -> Result<ExitStatus> {
 
             commands::remove(
                 args.requirements,
+                args.dev,
                 args.python,
                 globals.preview,
                 globals.connectivity,

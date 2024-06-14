@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use thiserror::Error;
-use toml_edit::{Array, DocumentMut, Item, RawString, TomlError, Value};
+use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 
 use pep508_rs::{PackageName, Requirement};
 use pypi_types::VerbatimParsedUrl;
@@ -33,79 +33,102 @@ impl PyProjectTomlMut {
         })
     }
 
-    /// Adds a dependency.
+    /// Adds a dependency to `project.dependencies`.
     pub fn add_dependency(&mut self, req: &Requirement) -> Result<(), Error> {
-        let deps = &mut self.doc["project"]["dependencies"];
-        if deps.is_none() {
-            *deps = Item::Value(Value::Array(Array::new()));
-        }
-        let deps = deps.as_array_mut().ok_or(Error::MalformedDependencies)?;
+        add_dependency(req, &mut self.doc["project"]["dependencies"])
+    }
 
-        // Try to find matching dependencies.
-        let mut to_replace = Vec::new();
-        for (i, dep) in deps.iter().enumerate() {
-            if dep
-                .as_str()
-                .and_then(try_parse_requirement)
-                .filter(|dep| dep.name == req.name)
-                .is_some()
-            {
-                to_replace.push(i);
-            }
-        }
+    /// Adds a development dependency to `tool.uv.dev-dependencies`.
+    pub fn add_dev_dependency(&mut self, req: &Requirement) -> Result<(), Error> {
+        let tool = self.doc["tool"].or_insert({
+            let mut tool = Table::new();
+            tool.set_implicit(true);
+            Item::Table(tool)
+        });
+        let tool_uv = tool["uv"].or_insert(Item::Table(Table::new()));
 
-        if to_replace.is_empty() {
-            deps.push(req.to_string());
-        } else {
-            // Replace the first occurrence of the dependency and remove the rest.
-            deps.replace(to_replace[0], req.to_string());
-            for &i in to_replace[1..].iter().rev() {
-                deps.remove(i);
-            }
-        }
-
-        reformat_array_multiline(deps);
-        Ok(())
+        add_dependency(req, &mut tool_uv["dev-dependencies"])
     }
 
     /// Removes all occurrences of dependencies with the given name.
     pub fn remove_dependency(&mut self, req: &PackageName) -> Result<Vec<Requirement>, Error> {
-        let deps = &mut self.doc["project"]["dependencies"];
-        if deps.is_none() {
-            return Ok(Vec::new());
-        }
-
-        let deps = deps.as_array_mut().ok_or(Error::MalformedDependencies)?;
-
-        // Try to find matching dependencies.
-        let mut to_remove = Vec::new();
-        for (i, dep) in deps.iter().enumerate() {
-            if dep
-                .as_str()
-                .and_then(try_parse_requirement)
-                .filter(|dep| dep.name == *req)
-                .is_some()
-            {
-                to_remove.push(i);
-            }
-        }
-
-        let removed = to_remove
-            .into_iter()
-            .rev() // Reverse to preserve indices as we remove them.
-            .filter_map(|i| {
-                deps.remove(i)
-                    .as_str()
-                    .and_then(|req| Requirement::from_str(req).ok())
-            })
-            .collect::<Vec<_>>();
-
-        if !removed.is_empty() {
-            reformat_array_multiline(deps);
-        }
-
-        Ok(removed)
+        remove_dependency(req, &mut self.doc["project"]["dependencies"])
     }
+
+    /// Removes all occurrences of development dependencies with the given name.
+    pub fn remove_dev_dependency(&mut self, req: &PackageName) -> Result<Vec<Requirement>, Error> {
+        let Some(tool_uv) = self.doc.get_mut("tool").and_then(|tool| tool.get_mut("uv")) else {
+            return Ok(Vec::new());
+        };
+
+        remove_dependency(req, &mut tool_uv["dev-dependencies"])
+    }
+}
+
+/// Adds a dependency to the given `deps` array.
+pub fn add_dependency(req: &Requirement, deps: &mut Item) -> Result<(), Error> {
+    let deps = deps
+        .or_insert(Item::Value(Value::Array(Array::new())))
+        .as_array_mut()
+        .ok_or(Error::MalformedDependencies)?;
+
+    // Find matching dependencies.
+    let to_replace = find_dependencies(&req.name, deps);
+
+    if to_replace.is_empty() {
+        deps.push(req.to_string());
+    } else {
+        // Replace the first occurrence of the dependency and remove the rest.
+        deps.replace(to_replace[0], req.to_string());
+        for &i in to_replace[1..].iter().rev() {
+            deps.remove(i);
+        }
+    }
+
+    reformat_array_multiline(deps);
+    Ok(())
+}
+
+/// Removes all occurrences of dependencies with the given name from the given `deps` array.
+fn remove_dependency(req: &PackageName, deps: &mut Item) -> Result<Vec<Requirement>, Error> {
+    if deps.is_none() {
+        return Ok(Vec::new());
+    }
+
+    let deps = deps.as_array_mut().ok_or(Error::MalformedDependencies)?;
+
+    // Remove matching dependencies.
+    let removed = find_dependencies(req, deps)
+        .into_iter()
+        .rev() // Reverse to preserve indices as we remove them.
+        .filter_map(|i| {
+            deps.remove(i)
+                .as_str()
+                .and_then(|req| Requirement::from_str(req).ok())
+        })
+        .collect::<Vec<_>>();
+
+    if !removed.is_empty() {
+        reformat_array_multiline(deps);
+    }
+
+    Ok(removed)
+}
+
+// Returns a `Vec` containing the indices of all dependencies with the given name.
+fn find_dependencies(name: &PackageName, deps: &Array) -> Vec<usize> {
+    let mut to_replace = Vec::new();
+    for (i, dep) in deps.iter().enumerate() {
+        if dep
+            .as_str()
+            .and_then(try_parse_requirement)
+            .filter(|dep| dep.name == *name)
+            .is_some()
+        {
+            to_replace.push(i);
+        }
+    }
+    to_replace
 }
 
 impl fmt::Display for PyProjectTomlMut {
