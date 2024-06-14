@@ -8,7 +8,6 @@ use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::Result;
 use either::Either;
 use petgraph::visit::EdgeRef;
 use rustc_hash::FxHashMap;
@@ -259,7 +258,7 @@ impl From<Lock> for LockWire {
 
 impl Lock {
     /// Returns the TOML representation of this lock file.
-    pub fn to_toml(&self) -> Result<String> {
+    pub fn to_toml(&self) -> anyhow::Result<String> {
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
@@ -332,7 +331,7 @@ impl Lock {
 
                         Ok(table)
                     })
-                    .collect::<Result<Array>>()?;
+                    .collect::<anyhow::Result<Array>>()?;
                 table.insert("wheels", value(wheels));
             }
 
@@ -1237,7 +1236,7 @@ impl SourceDist {
 
 impl SourceDist {
     /// Returns the TOML representation of this source distribution.
-    fn to_toml(&self) -> Result<InlineTable> {
+    fn to_toml(&self) -> anyhow::Result<InlineTable> {
         let mut table = InlineTable::new();
         match &self {
             SourceDist::Url { url, .. } => {
@@ -1589,7 +1588,7 @@ struct WheelWire {
 
 impl Wheel {
     /// Returns the TOML representation of this wheel.
-    fn to_toml(&self) -> Result<InlineTable> {
+    fn to_toml(&self) -> anyhow::Result<InlineTable> {
         let mut table = InlineTable::new();
         table.insert("url", Value::from(self.url.to_string()));
         if let Some(ref hash) = self.hash {
