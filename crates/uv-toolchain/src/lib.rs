@@ -6,6 +6,7 @@ pub use crate::discovery::{
     ToolchainSource, ToolchainSources, VersionRequest,
 };
 pub use crate::environment::PythonEnvironment;
+pub use crate::implementation::ImplementationName;
 pub use crate::interpreter::Interpreter;
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;

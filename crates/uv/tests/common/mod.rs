@@ -4,7 +4,7 @@
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{ChildPath, PathChild};
 use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
@@ -276,6 +276,34 @@ impl TestContext {
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
             .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
+    }
+
+    pub fn toolchains_dir(&self) -> ChildPath {
+        self.temp_dir.child("toolchains")
+    }
+
+    /// Create a `uv toolchain find` command with options shared across scenarios.
+    pub fn toolchain_find(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("toolchain")
+            .arg("find")
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
+            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_PREVIEW", "1")
+            .env("UV_TOOLCHAIN_DIR", self.toolchains_dir().as_os_str())
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {

@@ -797,6 +797,17 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::Find(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolchainFindSettings::resolve(args, filesystem);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::toolchain_find(args.request, globals.preview, &cache, printer).await
+        }
     }
 }
 
