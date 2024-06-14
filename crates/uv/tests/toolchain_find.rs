@@ -1,6 +1,7 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
 use common::{python_path_with_versions, uv_snapshot, TestContext};
+use uv_toolchain::platform::{Arch, Os};
 
 mod common;
 
@@ -94,6 +95,33 @@ fn toolchain_find() {
     uv_snapshot!(filters, context.toolchain_find()
         .arg("cpython@3.12")
         .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-PATH-3.12]
+
+    ----- stderr -----
+    "###);
+
+    // Request CPython 3.12 via partial key syntax
+    uv_snapshot!(filters, context.toolchain_find()
+        .arg("cpython-3.12")
+        .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-PATH-3.12]
+
+    ----- stderr -----
+    "###);
+
+    // Request CPython 3.12 for the current platform
+    let os = Os::from_env();
+    let arch = Arch::from_env();
+
+    uv_snapshot!(filters, context.toolchain_find()
+    .arg(format!("cpython-3.12-{os}-{arch}"))
+    .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -53,13 +53,13 @@ impl FromStr for Libc {
 }
 
 impl Os {
-    pub(crate) fn from_env() -> Self {
+    pub fn from_env() -> Self {
         Self(target_lexicon::HOST.operating_system)
     }
 }
 
 impl Arch {
-    pub(crate) fn from_env() -> Self {
+    pub fn from_env() -> Self {
         Self(target_lexicon::HOST.architecture)
     }
 }
