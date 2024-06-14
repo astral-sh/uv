@@ -120,7 +120,7 @@ pub(crate) fn interpreter_meets_requirements(
     };
 
     if let Some(requires_python) = requires_python {
-        if requires_python.contains(interpreter.python_version()) {
+        if requires_python.contains(interpreter.version()) {
             debug!("Interpreter meets the project `Requires-Python` constraint {requires_python}");
             return true;
         }
@@ -178,11 +178,11 @@ pub(crate) fn find_interpreter(
     .into_interpreter();
 
     if let Some(requires_python) = requires_python.as_ref() {
-        if !requires_python.contains(interpreter.python_version()) {
+        if !requires_python.contains(interpreter.version()) {
             warn_user!(
                 "The Python {} you requested with {} is incompatible with the requirement of the \
                 project of {}",
-                interpreter.python_version(),
+                interpreter.version(),
                 python.unwrap_or("(default)"),
                 requires_python
             );
@@ -192,7 +192,7 @@ pub(crate) fn find_interpreter(
     writeln!(
         printer.stderr(),
         "Using Python {} interpreter at: {}",
-        interpreter.python_version(),
+        interpreter.version(),
         interpreter.sys_executable().user_display().cyan()
     )?;
 

@@ -61,7 +61,7 @@ pub(crate) async fn pip_uninstall(
 
     debug!(
         "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
+        environment.interpreter().version(),
         environment.python_executable().user_display().cyan(),
     );
 

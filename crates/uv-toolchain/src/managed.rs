@@ -15,6 +15,7 @@ use crate::implementation::{Error as ImplementationError, ImplementationName};
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
+use crate::toolchain::{self, ToolchainKey};
 use crate::ToolchainRequest;
 use uv_fs::Simplified;
 
@@ -46,8 +47,8 @@ pub enum Error {
     },
     #[error("Failed to read toolchain directory name: {0}")]
     NameError(String),
-    #[error("Failed to parse toolchain directory name `{0}`: {1}")]
-    NameParseError(String, String),
+    #[error(transparent)]
+    NameParseError(#[from] toolchain::ToolchainKeyError),
 }
 /// A collection of uv-managed Python toolchains installed on the current system.
 #[derive(Debug, Clone)]
@@ -205,45 +206,20 @@ Error=This toolchain is managed by uv and should not be modified.
 pub struct InstalledToolchain {
     /// The path to the top-level directory of the installed toolchain.
     path: PathBuf,
-    /// The Python version of the toolchain.
-    python_version: PythonVersion,
-    /// The name of the Python implementation of the toolchain.
-    implementation: ImplementationName,
     /// An install key for the toolchain.
-    key: String,
+    key: ToolchainKey,
 }
 
 impl InstalledToolchain {
     pub fn new(path: PathBuf) -> Result<Self, Error> {
-        let key = path
-            .file_name()
-            .ok_or(Error::NameError("name is empty".to_string()))?
-            .to_str()
-            .ok_or(Error::NameError("not a valid string".to_string()))?
-            .to_string();
+        let key = ToolchainKey::from_str(
+            path.file_name()
+                .ok_or(Error::NameError("name is empty".to_string()))?
+                .to_str()
+                .ok_or(Error::NameError("not a valid string".to_string()))?,
+        )?;
 
-        let parts = key.split('-').collect::<Vec<_>>();
-        let [implementation, version, ..] = parts.as_slice() else {
-            return Err(Error::NameParseError(
-                key.clone(),
-                "not enough `-`-separated values".to_string(),
-            ));
-        };
-
-        let implementation = ImplementationName::from_str(implementation).map_err(|err| {
-            Error::NameParseError(key.clone(), format!("invalid Python implementation: {err}"))
-        })?;
-
-        let python_version = PythonVersion::from_str(version).map_err(|err| {
-            Error::NameParseError(key.clone(), format!("invalid Python version: {err}"))
-        })?;
-
-        Ok(Self {
-            path,
-            python_version,
-            implementation,
-            key,
-        })
+        Ok(Self { path, key })
     }
 
     pub fn executable(&self) -> PathBuf {
@@ -256,15 +232,19 @@ impl InstalledToolchain {
         }
     }
 
-    pub fn python_version(&self) -> &PythonVersion {
-        &self.python_version
+    pub fn version(&self) -> PythonVersion {
+        self.key.version()
+    }
+
+    pub fn implementation(&self) -> &ImplementationName {
+        self.key.implementation()
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    pub fn key(&self) -> &str {
+    pub fn key(&self) -> &ToolchainKey {
         &self.key
     }
 
@@ -278,13 +258,13 @@ impl InstalledToolchain {
                 .file_name()
                 .map_or(false, |filename| filename.to_string_lossy() == *name),
             ToolchainRequest::Implementation(implementation) => {
-                *implementation == self.implementation
+                implementation == self.implementation()
             }
             ToolchainRequest::ImplementationVersion(implementation, version) => {
-                *implementation == self.implementation
-                    && version.matches_version(&self.python_version)
+                implementation == self.implementation() && version.matches_version(&self.version())
             }
-            ToolchainRequest::Version(version) => version.matches_version(&self.python_version),
+            ToolchainRequest::Version(version) => version.matches_version(&self.version()),
+            ToolchainRequest::Key(request) => request.satisfied_by_key(self.key()),
         }
     }
 

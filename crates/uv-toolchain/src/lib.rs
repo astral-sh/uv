@@ -63,6 +63,10 @@ pub enum Error {
     #[error(transparent)]
     Download(#[from] downloads::Error),
 
+    // TODO(zanieb) We might want to ensure this is always wrapped in another type
+    #[error(transparent)]
+    KeyError(#[from] toolchain::ToolchainKeyError),
+
     #[error(transparent)]
     NotFound(#[from] ToolchainNotFound),
 }

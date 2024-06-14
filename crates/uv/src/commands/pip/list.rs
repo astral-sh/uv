@@ -50,7 +50,7 @@ pub(crate) fn pip_list(
 
     debug!(
         "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
+        environment.interpreter().version(),
         environment.python_executable().user_display().cyan()
     );
 

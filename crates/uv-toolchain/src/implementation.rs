@@ -10,7 +10,7 @@ pub enum Error {
     UnknownImplementation(String),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord)]
 pub enum ImplementationName {
     #[default]
     CPython,
@@ -65,6 +65,12 @@ impl From<&str> for LenientImplementationName {
             Ok(implementation) => Self::Known(implementation),
             Err(_) => Self::Unknown(s.to_string()),
         }
+    }
+}
+
+impl From<ImplementationName> for LenientImplementationName {
+    fn from(implementation: ImplementationName) -> Self {
+        Self::Known(implementation)
     }
 }
 
