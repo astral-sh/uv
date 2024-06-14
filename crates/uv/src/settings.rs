@@ -376,6 +376,7 @@ impl AddSettings {
     pub(crate) fn resolve(args: AddArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let AddArgs {
             requirements,
+            dev,
             installer,
             build,
             refresh,
