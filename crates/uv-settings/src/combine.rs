@@ -81,6 +81,10 @@ impl Combine for ResolverInstallerOptions {
             upgrade_package: self.upgrade_package.combine(other.upgrade_package),
             reinstall: self.reinstall.combine(other.reinstall),
             reinstall_package: self.reinstall_package.combine(other.reinstall_package),
+            no_build: self.no_build.combine(other.no_build),
+            no_build_package: self.no_build_package.combine(other.no_build_package),
+            no_binary: self.no_binary.combine(other.no_binary),
+            no_binary_package: self.no_binary_package.combine(other.no_binary_package),
         }
     }
 }

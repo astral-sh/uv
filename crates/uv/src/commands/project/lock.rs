@@ -62,6 +62,7 @@ pub(crate) async fn lock(
         &settings.config_setting,
         settings.exclude_newer.as_ref(),
         &settings.link_mode,
+        &settings.build_options,
         preview,
         connectivity,
         concurrency,
@@ -98,6 +99,7 @@ pub(super) async fn do_lock(
     config_setting: &ConfigSettings,
     exclude_newer: Option<&ExcludeNewer>,
     link_mode: &LinkMode,
+    build_options: &BuildOptions,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -161,7 +163,6 @@ pub(super) async fn do_lock(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
-    let build_options = BuildOptions::default();
     let extras = ExtrasSpecification::default();
     let setup_py = SetupPyStrategy::default();
 
@@ -169,7 +170,7 @@ pub(super) async fn do_lock(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &hasher, &build_options)
+        FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
     // If an existing lockfile exists, build up a set of preferences.
@@ -192,7 +193,7 @@ pub(super) async fn do_lock(
         config_setting,
         build_isolation,
         *link_mode,
-        &build_options,
+        build_options,
         concurrency,
         preview,
     );

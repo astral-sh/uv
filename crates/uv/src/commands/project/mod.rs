@@ -9,9 +9,7 @@ use distribution_types::Resolution;
 use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    BuildOptions, Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::Workspace;
 use uv_fs::Simplified;
@@ -280,6 +278,7 @@ pub(crate) async fn update_environment(
         compile_bytecode,
         upgrade,
         reinstall,
+        build_options,
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
@@ -348,7 +347,6 @@ pub(crate) async fn update_environment(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
-    let build_options = BuildOptions::default();
     let dev = Vec::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
@@ -360,7 +358,7 @@ pub(crate) async fn update_environment(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -377,7 +375,7 @@ pub(crate) async fn update_environment(
         config_setting,
         build_isolation,
         *link_mode,
-        &build_options,
+        build_options,
         concurrency,
         preview,
     );
@@ -436,7 +434,7 @@ pub(crate) async fn update_environment(
             config_setting,
             build_isolation,
             *link_mode,
-            &build_options,
+            build_options,
             concurrency,
             preview,
         )
@@ -448,7 +446,7 @@ pub(crate) async fn update_environment(
         site_packages,
         pip::operations::Modifications::Sufficient,
         reinstall,
-        &build_options,
+        build_options,
         *link_mode,
         *compile_bytecode,
         index_locations,
