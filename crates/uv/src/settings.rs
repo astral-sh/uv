@@ -17,10 +17,11 @@ use uv_configuration::{
 };
 use uv_normalize::PackageName;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::{Prefix, PythonVersion, Target};
-use uv_workspace::{
-    Combine, InstallerOptions, PipOptions, ResolverInstallerOptions, ResolverOptions, Workspace,
+use uv_settings::{
+    Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
+    ResolverOptions,
 };
+use uv_toolchain::{Prefix, PythonVersion, Target};
 
 use crate::cli::{
     AddArgs, ColorChoice, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe, PipCheckArgs,
@@ -44,8 +45,8 @@ pub(crate) struct GlobalSettings {
 }
 
 impl GlobalSettings {
-    /// Resolve the [`GlobalSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: GlobalArgs, workspace: Option<&Workspace>) -> Self {
+    /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
@@ -67,10 +68,10 @@ impl GlobalSettings {
                 args.color
             },
             native_tls: flag(args.native_tls, args.no_native_tls)
-                .combine(workspace.and_then(|workspace| workspace.options.globals.native_tls))
+                .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
                 .unwrap_or(false),
             connectivity: if flag(args.offline, args.no_offline)
-                .combine(workspace.and_then(|workspace| workspace.options.globals.offline))
+                .combine(workspace.and_then(|workspace| workspace.globals.offline))
                 .unwrap_or(false)
             {
                 Connectivity::Offline
@@ -80,7 +81,7 @@ impl GlobalSettings {
             isolated: args.isolated,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
-                    .combine(workspace.and_then(|workspace| workspace.options.globals.preview))
+                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
                     .unwrap_or(false),
             ),
         }
@@ -96,16 +97,16 @@ pub(crate) struct CacheSettings {
 }
 
 impl CacheSettings {
-    /// Resolve the [`CacheSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: CacheArgs, workspace: Option<&Workspace>) -> Self {
+    /// Resolve the [`CacheSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
             no_cache: args.no_cache
                 || workspace
-                    .and_then(|workspace| workspace.options.globals.no_cache)
+                    .and_then(|workspace| workspace.globals.no_cache)
                     .unwrap_or(false),
-            cache_dir: args.cache_dir.or_else(|| {
-                workspace.and_then(|workspace| workspace.options.globals.cache_dir.clone())
-            }),
+            cache_dir: args
+                .cache_dir
+                .or_else(|| workspace.and_then(|workspace| workspace.globals.cache_dir.clone())),
         }
     }
 }
@@ -127,9 +128,9 @@ pub(crate) struct RunSettings {
 }
 
 impl RunSettings {
-    /// Resolve the [`RunSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`RunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: RunArgs, workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let RunArgs {
             extra,
             all_extras,
@@ -165,7 +166,7 @@ impl RunSettings {
             package,
             settings: ResolverInstallerSettings::combine(
                 ResolverInstallerOptions::from(installer),
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -184,9 +185,9 @@ pub(crate) struct ToolRunSettings {
 }
 
 impl ToolRunSettings {
-    /// Resolve the [`ToolRunSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`ToolRunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolRunArgs, workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: ToolRunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolRunArgs {
             target,
             args,
@@ -204,7 +205,7 @@ impl ToolRunSettings {
             python,
             settings: ResolverInstallerSettings::combine(
                 ResolverInstallerOptions::from(installer),
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -227,9 +228,9 @@ pub(crate) struct ToolchainListSettings {
 }
 
 impl ToolchainListSettings {
-    /// Resolve the [`ToolchainListSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`ToolchainListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolchainListArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: ToolchainListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let ToolchainListArgs {
             all_versions,
             all_platforms,
@@ -259,9 +260,12 @@ pub(crate) struct ToolchainInstallSettings {
 }
 
 impl ToolchainInstallSettings {
-    /// Resolve the [`ToolchainInstallSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`ToolchainInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolchainInstallArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(
+        args: ToolchainInstallArgs,
+        _filesystem: Option<FilesystemOptions>,
+    ) -> Self {
         let ToolchainInstallArgs { target, force } = args;
 
         Self { target, force }
@@ -280,9 +284,9 @@ pub(crate) struct SyncSettings {
 }
 
 impl SyncSettings {
-    /// Resolve the [`SyncSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`SyncSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: SyncArgs, workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: SyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let SyncArgs {
             extra,
             all_extras,
@@ -304,7 +308,7 @@ impl SyncSettings {
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
             python,
-            settings: InstallerSettings::combine(InstallerOptions::from(installer), workspace),
+            settings: InstallerSettings::combine(InstallerOptions::from(installer), filesystem),
         }
     }
 }
@@ -320,9 +324,9 @@ pub(crate) struct LockSettings {
 }
 
 impl LockSettings {
-    /// Resolve the [`LockSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: LockArgs, workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
             refresh,
             no_refresh,
@@ -338,7 +342,7 @@ impl LockSettings {
             refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             python,
-            settings: ResolverSettings::combine(ResolverOptions::from(resolver), workspace),
+            settings: ResolverSettings::combine(ResolverOptions::from(resolver), filesystem),
         }
     }
 }
@@ -352,9 +356,9 @@ pub(crate) struct AddSettings {
 }
 
 impl AddSettings {
-    /// Resolve the [`AddSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`AddSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: AddArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: AddArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let AddArgs {
             requirements,
             python,
@@ -376,9 +380,9 @@ pub(crate) struct RemoveSettings {
 }
 
 impl RemoveSettings {
-    /// Resolve the [`RemoveSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: RemoveArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: RemoveArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let RemoveArgs {
             requirements,
             python,
@@ -405,8 +409,8 @@ pub(crate) struct PipCompileSettings {
 }
 
 impl PipCompileSettings {
-    /// Resolve the [`PipCompileSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipCompileArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipCompileSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipCompileArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipCompileArgs {
             src_file,
             constraint,
@@ -459,9 +463,8 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace = if let Some(workspace) = &workspace {
-            workspace
-                .options
+        let overrides_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
                 .override_dependencies
                 .clone()
                 .unwrap_or_default()
@@ -515,7 +518,7 @@ impl PipCompileSettings {
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(resolver)
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -534,8 +537,8 @@ pub(crate) struct PipSyncSettings {
 }
 
 impl PipSyncSettings {
-    /// Resolve the [`PipSyncSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipSyncArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipSyncSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipSyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipSyncArgs {
             src_file,
             constraint,
@@ -603,7 +606,7 @@ impl PipSyncSettings {
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(installer)
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -627,8 +630,8 @@ pub(crate) struct PipInstallSettings {
 }
 
 impl PipInstallSettings {
-    /// Resolve the [`PipInstallSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipInstallArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipInstallSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipInstallArgs {
             package,
             requirement,
@@ -675,9 +678,8 @@ impl PipInstallSettings {
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace = if let Some(workspace) = &workspace {
-            workspace
-                .options
+        let overrides_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
                 .override_dependencies
                 .clone()
                 .unwrap_or_default()
@@ -728,7 +730,7 @@ impl PipInstallSettings {
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(installer)
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -744,8 +746,8 @@ pub(crate) struct PipUninstallSettings {
 }
 
 impl PipUninstallSettings {
-    /// Resolve the [`PipUninstallSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipUninstallArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipUninstallSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipUninstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipUninstallArgs {
             package,
             requirement,
@@ -772,7 +774,7 @@ impl PipUninstallSettings {
                     keyring_provider,
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -787,8 +789,8 @@ pub(crate) struct PipFreezeSettings {
 }
 
 impl PipFreezeSettings {
-    /// Resolve the [`PipFreezeSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipFreezeArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipFreezeSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipFreezeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipFreezeArgs {
             exclude_editable,
             strict,
@@ -807,7 +809,7 @@ impl PipFreezeSettings {
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -825,8 +827,8 @@ pub(crate) struct PipListSettings {
 }
 
 impl PipListSettings {
-    /// Resolve the [`PipListSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipListArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipListSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipListArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipListArgs {
             editable,
             exclude_editable,
@@ -852,7 +854,7 @@ impl PipListSettings {
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -867,8 +869,8 @@ pub(crate) struct PipShowSettings {
 }
 
 impl PipShowSettings {
-    /// Resolve the [`PipShowSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipShowArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipShowSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipShowArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipShowArgs {
             package,
             strict,
@@ -887,7 +889,7 @@ impl PipShowSettings {
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -901,8 +903,8 @@ pub(crate) struct PipCheckSettings {
 }
 
 impl PipCheckSettings {
-    /// Resolve the [`PipCheckSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipCheckArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipCheckSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipCheckArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipCheckArgs {
             python,
             system,
@@ -916,7 +918,7 @@ impl PipCheckSettings {
                     system: flag(system, no_system),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -935,8 +937,8 @@ pub(crate) struct VenvSettings {
 }
 
 impl VenvSettings {
-    /// Resolve the [`VenvSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: VenvArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`VenvSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: VenvArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let VenvArgs {
             python,
             system,
@@ -970,7 +972,7 @@ impl VenvSettings {
                     link_mode,
                     ..PipOptions::from(index_args)
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -992,8 +994,8 @@ pub(crate) struct InstallerSettings {
 }
 
 impl InstallerSettings {
-    /// Resolve the [`InstallerSettings`] from the CLI and workspace configuration.
-    pub(crate) fn combine(args: InstallerOptions, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`InstallerSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn combine(args: InstallerOptions, filesystem: Option<FilesystemOptions>) -> Self {
         let ResolverInstallerOptions {
             index_url,
             extra_index_url,
@@ -1007,8 +1009,9 @@ impl InstallerSettings {
             exclude_newer: _,
             link_mode,
             compile_bytecode,
-        } = workspace
-            .map(|workspace| workspace.options.top_level)
+        } = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
             .unwrap_or_default();
 
         Self {
@@ -1059,8 +1062,8 @@ pub(crate) struct ResolverSettings {
 }
 
 impl ResolverSettings {
-    /// Resolve the [`ResolverSettings`] from the CLI and workspace configuration.
-    pub(crate) fn combine(args: ResolverOptions, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn combine(args: ResolverOptions, filesystem: Option<FilesystemOptions>) -> Self {
         let ResolverInstallerOptions {
             index_url,
             extra_index_url,
@@ -1074,8 +1077,9 @@ impl ResolverSettings {
             exclude_newer,
             link_mode,
             compile_bytecode: _,
-        } = workspace
-            .map(|workspace| workspace.options.top_level)
+        } = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
             .unwrap_or_default();
 
         Self {
@@ -1127,8 +1131,11 @@ pub(crate) struct ResolverInstallerSettings {
 }
 
 impl ResolverInstallerSettings {
-    /// Resolve the [`ResolverInstallerSettings`] from the CLI and workspace configuration.
-    pub(crate) fn combine(args: ResolverInstallerOptions, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn combine(
+        args: ResolverInstallerOptions,
+        filesystem: Option<FilesystemOptions>,
+    ) -> Self {
         let ResolverInstallerOptions {
             index_url,
             extra_index_url,
@@ -1142,8 +1149,9 @@ impl ResolverInstallerSettings {
             exclude_newer,
             link_mode,
             compile_bytecode,
-        } = workspace
-            .map(|workspace| workspace.options.top_level)
+        } = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
             .unwrap_or_default();
 
         Self {
@@ -1226,8 +1234,8 @@ pub(crate) struct PipSettings {
 }
 
 impl PipSettings {
-    /// Resolve the [`PipSettings`] from the CLI and workspace configuration.
-    pub(crate) fn combine(args: PipOptions, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn combine(args: PipOptions, filesystem: Option<FilesystemOptions>) -> Self {
         let PipOptions {
             python,
             system,
@@ -1273,8 +1281,9 @@ impl PipSettings {
             concurrent_builds,
             concurrent_downloads,
             concurrent_installs,
-        } = workspace
-            .map(|workspace| workspace.options.pip())
+        } = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(Options::pip)
             .unwrap_or_default();
 
         Self {

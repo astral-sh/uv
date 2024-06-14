@@ -6,7 +6,7 @@ use pretty_assertions::StrComparison;
 use schemars::{schema_for, JsonSchema};
 use serde::Deserialize;
 
-use uv_workspace::Options;
+use uv_settings::Options;
 
 use crate::ROOT_DIR;
 

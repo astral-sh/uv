@@ -1,5 +1,5 @@
 [package]
-name = "uv-workspace"
+name = "uv-settings"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -22,7 +22,6 @@ uv-fs = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
 uv-resolver = { workspace = true, features = ["schemars"] }
 uv-toolchain = { workspace = true, features = ["schemars"] }
-uv-warnings = { workspace = true }
 
 dirs-sys = { workspace = true }
 fs-err = { workspace = true }

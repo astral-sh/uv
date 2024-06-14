@@ -38,16 +38,16 @@ uv-extract = { path = "crates/uv-extract" }
 uv-fs = { path = "crates/uv-fs" }
 uv-git = { path = "crates/uv-git" }
 uv-installer = { path = "crates/uv-installer" }
-uv-toolchain = { path = "crates/uv-toolchain" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
+uv-settings = { path = "crates/uv-settings" }
 uv-state = { path = "crates/uv-state" }
+uv-toolchain = { path = "crates/uv-toolchain" }
 uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
-uv-workspace = { path = "crates/uv-workspace" }
 
 anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }
