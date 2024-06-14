@@ -364,6 +364,7 @@ impl LockSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<String>,
+    pub(crate) dev: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -375,6 +376,7 @@ impl AddSettings {
     pub(crate) fn resolve(args: AddArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let AddArgs {
             requirements,
+            dev,
             installer,
             build,
             refresh,
@@ -383,6 +385,7 @@ impl AddSettings {
 
         Self {
             requirements,
+            dev,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -398,6 +401,7 @@ impl AddSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
     pub(crate) requirements: Vec<PackageName>,
+    pub(crate) dev: bool,
     pub(crate) python: Option<String>,
 }
 
@@ -406,12 +410,14 @@ impl RemoveSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RemoveArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let RemoveArgs {
+            dev,
             requirements,
             python,
         } = args;
 
         Self {
             requirements,
+            dev,
             python,
         }
     }

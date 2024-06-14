@@ -1602,6 +1602,10 @@ pub(crate) struct AddArgs {
     #[arg(required = true)]
     pub(crate) requirements: Vec<String>,
 
+    /// Add the requirements as development dependencies.
+    #[arg(long)]
+    pub(crate) dev: bool,
+
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
 
@@ -1633,6 +1637,10 @@ pub(crate) struct RemoveArgs {
     /// The names of the packages to remove (e.g., `flask`).
     #[arg(required = true)]
     pub(crate) requirements: Vec<PackageName>,
+
+    /// Remove the requirements from development dependencies.
+    #[arg(long)]
+    pub(crate) dev: bool,
 
     /// The Python interpreter into which packages should be installed.
     ///

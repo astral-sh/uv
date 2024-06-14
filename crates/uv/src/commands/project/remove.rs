@@ -16,6 +16,7 @@ use crate::settings::{InstallerSettings, ResolverSettings};
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn remove(
     requirements: Vec<PackageName>,
+    dev: bool,
     python: Option<String>,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -33,12 +34,43 @@ pub(crate) async fn remove(
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements {
-        if pyproject.remove_dependency(&req)?.is_empty() {
-            anyhow::bail!(
-                "The dependency `{}` could not be found in `dependencies`",
-                req
-            );
+        if dev {
+            let deps = pyproject.remove_dev_dependency(&req)?;
+            if deps.is_empty() {
+                // Check if there is a matching regular dependency.
+                if pyproject
+                    .remove_dependency(&req)
+                    .ok()
+                    .filter(|deps| !deps.is_empty())
+                    .is_some()
+                {
+                    uv_warnings::warn_user!("`{req}` is not a development dependency; try calling `uv add` without the `--dev` flag");
+                }
+
+                anyhow::bail!("The dependency `{req}` could not be found in `dev-dependencies`");
+            }
+
+            continue;
         }
+
+        let deps = pyproject.remove_dependency(&req)?;
+        if deps.is_empty() {
+            // Check if there is a matching development dependency.
+            if pyproject
+                .remove_dev_dependency(&req)
+                .ok()
+                .filter(|deps| !deps.is_empty())
+                .is_some()
+            {
+                uv_warnings::warn_user!(
+                    "`{req}` is a development dependency; try calling `uv add --dev`"
+                );
+            }
+
+            anyhow::bail!("The dependency `{req}` could not be found in `dependencies`");
+        }
+
+        continue;
     }
 
     // Save the modified `pyproject.toml`.
