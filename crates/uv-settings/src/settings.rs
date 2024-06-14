@@ -8,6 +8,7 @@ use pypi_types::VerbatimParsedUrl;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
+use uv_macros::CombineOptions;
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
@@ -28,7 +29,7 @@ pub(crate) struct Tools {
 
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
@@ -49,7 +50,7 @@ pub struct Options {
 
 /// Global settings, relevant to all invocations.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct GlobalOptions {
@@ -111,7 +112,7 @@ pub struct ResolverOptions {
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverInstallerOptions {
@@ -139,7 +140,7 @@ pub struct ResolverInstallerOptions {
 
 /// A `[tool.uv.pip]` section.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PipOptions {
