@@ -232,7 +232,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
-                args.upgrade,
+                args.settings.upgrade,
                 args.settings.generate_hashes,
                 args.settings.no_emit_package,
                 args.settings.no_strip_extras,
@@ -297,7 +297,7 @@ async fn run() -> Result<ExitStatus> {
             commands::pip_sync(
                 &requirements,
                 &constraints,
-                &args.reinstall,
+                args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
                 args.settings.require_hashes,
@@ -373,11 +373,11 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
-                args.upgrade,
+                args.settings.upgrade,
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                args.reinstall,
+                args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
                 args.settings.require_hashes,
@@ -581,20 +581,6 @@ async fn run() -> Result<ExitStatus> {
                 .with
                 .into_iter()
                 .map(RequirementsSource::from_package)
-                // TODO(zanieb): Consider editable package support. What benefit do these have in an ephemeral
-                //               environment?
-                // .chain(
-                //     args.with_editable
-                //         .into_iter()
-                //         .map(RequirementsSource::Editable),
-                // )
-                // TODO(zanieb): Consider requirements file support, this comes with additional complexity due to
-                //               to the extensive configuration allowed in requirements files
-                // .chain(
-                //     args.with_requirements
-                //         .into_iter()
-                //         .map(RequirementsSource::from_requirements_file),
-                // )
                 .collect::<Vec<_>>();
 
             commands::run(
@@ -604,7 +590,6 @@ async fn run() -> Result<ExitStatus> {
                 args.args,
                 requirements,
                 args.python,
-                args.upgrade,
                 args.package,
                 args.settings,
                 globals.isolated,
@@ -646,7 +631,6 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::lock(
-                args.upgrade,
                 args.python,
                 args.settings,
                 globals.preview,
@@ -715,7 +699,7 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::ToolRunSettings::resolve(args, filesystem);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::run_tool(
                 args.target,

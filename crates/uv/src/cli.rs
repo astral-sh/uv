@@ -172,6 +172,7 @@ pub(crate) enum SelfCommand {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct CacheNamespace {
     #[command(subcommand)]
     pub(crate) command: CacheCommand,
@@ -195,6 +196,7 @@ pub(crate) struct CleanArgs {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PipNamespace {
     #[command(subcommand)]
     pub(crate) command: PipCommand,
@@ -345,6 +347,9 @@ pub(crate) struct PipCompileArgs {
     #[command(flatten)]
     pub(crate) resolver: ResolverArgs,
 
+    #[command(flatten)]
+    pub(crate) refresh: RefreshArgs,
+
     /// Ignore package dependencies, instead only add those packages explicitly listed
     /// on the command line to the resulting the requirements file.
     #[arg(long)]
@@ -392,22 +397,6 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     pub(crate) custom_compile_command: Option<String>,
 
-    /// Refresh all cached data.
-    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
-    pub(crate) refresh: bool,
-
-    #[arg(
-        long,
-        conflicts_with("offline"),
-        overrides_with("refresh"),
-        hide = true
-    )]
-    pub(crate) no_refresh: bool,
-
-    /// Refresh cached data for a specific package.
-    #[arg(long)]
-    pub(crate) refresh_package: Vec<PackageName>,
-
     /// The Python interpreter against which to compile the requirements.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -438,18 +427,6 @@ pub(crate) struct PipCompileArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub(crate) no_system: bool,
-
-    /// Allow package upgrades, ignoring pinned versions in the existing output file.
-    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
-    pub(crate) upgrade: bool,
-
-    #[arg(long, overrides_with("upgrade"), hide = true)]
-    pub(crate) no_upgrade: bool,
-
-    /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
-    /// file.
-    #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Vec<PackageName>,
 
     /// Include distribution hashes in the output file.
     #[arg(long, overrides_with("no_generate_hashes"))]
@@ -609,39 +586,15 @@ pub(crate) struct PipSyncArgs {
     #[command(flatten)]
     pub(crate) installer: InstallerArgs,
 
+    #[command(flatten)]
+    pub(crate) refresh: RefreshArgs,
+
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
     #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub(crate) exclude_newer: Option<ExcludeNewer>,
-
-    /// Reinstall all packages, regardless of whether they're already installed.
-    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
-    pub(crate) reinstall: bool,
-
-    #[arg(long, overrides_with("reinstall"), hide = true)]
-    pub(crate) no_reinstall: bool,
-
-    /// Reinstall a specific package, regardless of whether it's already installed.
-    #[arg(long)]
-    pub(crate) reinstall_package: Vec<PackageName>,
-
-    /// Refresh all cached data.
-    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
-    pub(crate) refresh: bool,
-
-    #[arg(
-        long,
-        conflicts_with("offline"),
-        overrides_with("refresh"),
-        hide = true
-    )]
-    pub(crate) no_refresh: bool,
-
-    /// Refresh cached data for a specific package.
-    #[arg(long)]
-    pub(crate) refresh_package: Vec<PackageName>,
 
     /// Require a matching hash for each requirement.
     ///
@@ -893,43 +846,8 @@ pub(crate) struct PipInstallArgs {
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
 
-    /// Allow package upgrades.
-    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
-    pub(crate) upgrade: bool,
-
-    #[arg(long, overrides_with("upgrade"), hide = true)]
-    pub(crate) no_upgrade: bool,
-
-    /// Allow upgrade of a specific package.
-    #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Vec<PackageName>,
-
-    /// Reinstall all packages, regardless of whether they're already installed.
-    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
-    pub(crate) reinstall: bool,
-
-    #[arg(long, overrides_with("reinstall"), hide = true)]
-    pub(crate) no_reinstall: bool,
-
-    /// Reinstall a specific package, regardless of whether it's already installed.
-    #[arg(long)]
-    pub(crate) reinstall_package: Vec<PackageName>,
-
-    /// Refresh all cached data.
-    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
-    pub(crate) refresh: bool,
-
-    #[arg(
-        long,
-        conflicts_with("offline"),
-        overrides_with("refresh"),
-        hide = true
-    )]
-    pub(crate) no_refresh: bool,
-
-    /// Refresh cached data for a specific package.
-    #[arg(long)]
-    pub(crate) refresh_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub(crate) refresh: RefreshArgs,
 
     /// Ignore package dependencies, instead only installing those packages explicitly listed
     /// on the command line or in the requirements files.
@@ -1570,35 +1488,11 @@ pub(crate) struct RunArgs {
     #[arg(long)]
     pub(crate) with: Vec<String>,
 
-    /// Refresh all cached data.
-    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
-    pub(crate) refresh: bool,
-
-    #[arg(
-        long,
-        conflicts_with("offline"),
-        overrides_with("refresh"),
-        hide = true
-    )]
-    pub(crate) no_refresh: bool,
-
-    /// Refresh cached data for a specific package.
-    #[arg(long)]
-    pub(crate) refresh_package: Vec<PackageName>,
-
-    /// Allow package upgrades, ignoring pinned versions in the existing lockfile.
-    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
-    pub(crate) upgrade: bool,
-
-    #[arg(long, overrides_with("upgrade"), hide = true)]
-    pub(crate) no_upgrade: bool,
-
-    /// Allow upgrades for a specific package, ignoring pinned versions in the existing lockfile.
-    #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Vec<PackageName>,
-
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub(crate) refresh: RefreshArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1643,24 +1537,11 @@ pub(crate) struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub(crate) no_dev: bool,
 
-    /// Refresh all cached data.
-    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
-    pub(crate) refresh: bool,
-
-    #[arg(
-        long,
-        conflicts_with("offline"),
-        overrides_with("refresh"),
-        hide = true
-    )]
-    pub(crate) no_refresh: bool,
-
-    /// Refresh cached data for a specific package.
-    #[arg(long)]
-    pub(crate) refresh_package: Vec<PackageName>,
-
     #[command(flatten)]
     pub(crate) installer: InstallerArgs,
+
+    #[command(flatten)]
+    pub(crate) refresh: RefreshArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1680,35 +1561,11 @@ pub(crate) struct SyncArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct LockArgs {
-    /// Refresh all cached data.
-    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
-    pub(crate) refresh: bool,
-
-    #[arg(
-        long,
-        conflicts_with("offline"),
-        overrides_with("refresh"),
-        hide = true
-    )]
-    pub(crate) no_refresh: bool,
-
-    /// Refresh cached data for a specific package.
-    #[arg(long)]
-    pub(crate) refresh_package: Vec<PackageName>,
-
-    /// Allow package upgrades, ignoring pinned versions in the existing lockfile.
-    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
-    pub(crate) upgrade: bool,
-
-    #[arg(long, overrides_with("upgrade"), hide = true)]
-    pub(crate) no_upgrade: bool,
-
-    /// Allow upgrades for a specific package, ignoring pinned versions in the existing lockfile.
-    #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Vec<PackageName>,
-
     #[command(flatten)]
     pub(crate) resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub(crate) refresh: RefreshArgs,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1772,6 +1629,7 @@ pub(crate) struct RemoveArgs {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolNamespace {
     #[command(subcommand)]
     pub(crate) command: ToolCommand,
@@ -1806,6 +1664,9 @@ pub(crate) struct ToolRunArgs {
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
 
+    #[command(flatten)]
+    pub(crate) refresh: RefreshArgs,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1822,6 +1683,7 @@ pub(crate) struct ToolRunArgs {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolchainNamespace {
     #[command(subcommand)]
     pub(crate) command: ToolchainCommand,
@@ -1866,6 +1728,7 @@ pub(crate) struct ToolchainInstallArgs {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct IndexArgs {
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
@@ -1903,11 +1766,43 @@ pub(crate) struct IndexArgs {
     pub(crate) no_index: bool,
 }
 
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct RefreshArgs {
+    /// Refresh all cached data.
+    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    pub(crate) refresh: bool,
+
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("refresh"),
+        hide = true
+    )]
+    pub(crate) no_refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[arg(long)]
+    pub(crate) refresh_package: Vec<PackageName>,
+}
+
 /// Arguments that are used by commands that need to install (but not resolve) packages.
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct InstallerArgs {
     #[command(flatten)]
     pub(crate) index_args: IndexArgs,
+
+    /// Reinstall all packages, regardless of whether they're already installed.
+    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
+    pub(crate) reinstall: bool,
+
+    #[arg(long, overrides_with("reinstall"), hide = true)]
+    pub(crate) no_reinstall: bool,
+
+    /// Reinstall a specific package, regardless of whether it's already installed.
+    #[arg(long)]
+    pub(crate) reinstall_package: Vec<PackageName>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
@@ -1961,9 +1856,22 @@ pub(crate) struct InstallerArgs {
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ResolverArgs {
     #[command(flatten)]
     pub(crate) index_args: IndexArgs,
+
+    /// Allow package upgrades, ignoring pinned versions in any existing output file.
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
+
+    /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
+    /// file.
+    #[arg(long, short = 'P')]
+    pub(crate) upgrade_package: Vec<PackageName>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
@@ -2024,9 +1932,33 @@ pub(crate) struct ResolverArgs {
 
 /// Arguments that are used by commands that need to resolve and install packages.
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ResolverInstallerArgs {
     #[command(flatten)]
     pub(crate) index_args: IndexArgs,
+
+    /// Allow package upgrades, ignoring pinned versions in any existing output file.
+    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    pub(crate) upgrade: bool,
+
+    #[arg(long, overrides_with("upgrade"), hide = true)]
+    pub(crate) no_upgrade: bool,
+
+    /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
+    /// file.
+    #[arg(long, short = 'P')]
+    pub(crate) upgrade_package: Vec<PackageName>,
+
+    /// Reinstall all packages, regardless of whether they're already installed.
+    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
+    pub(crate) reinstall: bool,
+
+    #[arg(long, overrides_with("reinstall"), hide = true)]
+    pub(crate) no_reinstall: bool,
+
+    /// Reinstall a specific package, regardless of whether it's already installed.
+    #[arg(long)]
+    pub(crate) reinstall_package: Vec<PackageName>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///

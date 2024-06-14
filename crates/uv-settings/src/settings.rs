@@ -75,6 +75,8 @@ pub struct InstallerOptions {
     pub config_settings: Option<ConfigSettings>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
+    pub reinstall: Option<bool>,
+    pub reinstall_package: Option<Vec<PackageName>>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -94,6 +96,8 @@ pub struct ResolverOptions {
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
+    pub upgrade: Option<bool>,
+    pub upgrade_package: Option<Vec<PackageName>>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -115,6 +119,10 @@ pub struct ResolverInstallerOptions {
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
+    pub upgrade: Option<bool>,
+    pub upgrade_package: Option<Vec<PackageName>>,
+    pub reinstall: Option<bool>,
+    pub reinstall_package: Option<Vec<PackageName>>,
 }
 
 /// A `[tool.uv.pip]` section.
@@ -164,6 +172,10 @@ pub struct PipOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub require_hashes: Option<bool>,
+    pub upgrade: Option<bool>,
+    pub upgrade_package: Option<Vec<PackageName>>,
+    pub reinstall: Option<bool>,
+    pub reinstall_package: Option<Vec<PackageName>>,
     pub concurrent_downloads: Option<NonZeroUsize>,
     pub concurrent_builds: Option<NonZeroUsize>,
     pub concurrent_installs: Option<NonZeroUsize>,
@@ -217,6 +229,10 @@ impl Options {
             link_mode,
             compile_bytecode,
             require_hashes,
+            upgrade,
+            upgrade_package,
+            reinstall,
+            reinstall_package,
             concurrent_builds,
             concurrent_downloads,
             concurrent_installs,
@@ -235,6 +251,10 @@ impl Options {
             exclude_newer: top_level_exclude_newer,
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
+            upgrade: top_level_upgrade,
+            upgrade_package: top_level_upgrade_package,
+            reinstall: top_level_reinstall,
+            reinstall_package: top_level_reinstall_package,
         } = self.top_level;
 
         PipOptions {
@@ -279,6 +299,10 @@ impl Options {
             link_mode: link_mode.or(top_level_link_mode),
             compile_bytecode: compile_bytecode.or(top_level_compile_bytecode),
             require_hashes,
+            upgrade: upgrade.or(top_level_upgrade),
+            upgrade_package: upgrade_package.or(top_level_upgrade_package),
+            reinstall: reinstall.or(top_level_reinstall),
+            reinstall_package: reinstall_package.or(top_level_reinstall_package),
             concurrent_builds,
             concurrent_downloads,
             concurrent_installs,

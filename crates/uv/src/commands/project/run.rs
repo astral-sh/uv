@@ -8,7 +8,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Upgrade};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
@@ -28,7 +28,6 @@ pub(crate) async fn run(
     mut args: Vec<OsString>,
     requirements: Vec<RequirementsSource>,
     python: Option<String>,
-    upgrade: Upgrade,
     package: Option<PackageName>,
     settings: ResolverInstallerSettings,
     isolated: bool,
@@ -67,7 +66,7 @@ pub(crate) async fn run(
         let lock = project::lock::do_lock(
             project.workspace(),
             venv.interpreter(),
-            upgrade,
+            &settings.upgrade,
             &settings.index_locations,
             &settings.index_strategy,
             &settings.keyring_provider,
@@ -91,6 +90,7 @@ pub(crate) async fn run(
             &lock,
             extras,
             dev,
+            &settings.reinstall,
             &settings.index_locations,
             &settings.index_strategy,
             &settings.keyring_provider,

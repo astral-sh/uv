@@ -1,10 +1,10 @@
 use anyhow::Result;
-use pep508_rs::PackageName;
-use uv_distribution::pyproject_mut::PyProjectTomlMut;
 
+use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Upgrade};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
+use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::ProjectWorkspace;
 use uv_warnings::warn_user;
 
@@ -52,13 +52,12 @@ pub(crate) async fn remove(
 
     // Use the default settings.
     let settings = ResolverSettings::default();
-    let upgrade = Upgrade::default();
 
     // Lock and sync the environment.
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
-        upgrade,
+        &settings.upgrade,
         &settings.index_locations,
         &settings.index_strategy,
         &settings.keyring_provider,
@@ -89,6 +88,7 @@ pub(crate) async fn remove(
         &lock,
         extras,
         dev,
+        &settings.reinstall,
         &settings.index_locations,
         &settings.index_strategy,
         &settings.keyring_provider,

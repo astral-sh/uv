@@ -164,6 +164,21 @@
         "null"
       ]
     },
+    "reinstall": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "reinstall-package": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
     "resolution": {
       "anyOf": [
         {
@@ -181,6 +196,21 @@
       ],
       "additionalProperties": {
         "$ref": "#/definitions/Source"
+      }
+    },
+    "upgrade": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "upgrade-package": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
       }
     },
     "workspace": {
@@ -653,6 +683,21 @@
             }
           ]
         },
+        "reinstall": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "reinstall-package": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
+        },
         "require-hashes": {
           "type": [
             "boolean",
@@ -686,6 +731,21 @@
             "string",
             "null"
           ]
+        },
+        "upgrade": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "upgrade-package": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
         }
       },
       "additionalProperties": false

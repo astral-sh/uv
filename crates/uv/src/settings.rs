@@ -26,8 +26,8 @@ use uv_toolchain::{Prefix, PythonVersion, Target};
 use crate::cli::{
     AddArgs, ColorChoice, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe, PipCheckArgs,
     PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs,
-    PipUninstallArgs, RemoveArgs, ResolverArgs, ResolverInstallerArgs, RunArgs, SyncArgs,
-    ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
+    PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs, ResolverInstallerArgs, RunArgs,
+    SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -121,9 +121,8 @@ pub(crate) struct RunSettings {
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
-    pub(crate) refresh: Refresh,
-    pub(crate) upgrade: Upgrade,
     pub(crate) package: Option<PackageName>,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
 
@@ -140,20 +139,13 @@ impl RunSettings {
             target,
             args,
             with,
-            refresh,
-            no_refresh,
-            refresh_package,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
             installer,
+            refresh,
             python,
             package,
         } = args;
 
         Self {
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
-            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
@@ -164,6 +156,7 @@ impl RunSettings {
             with,
             python,
             package,
+            refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 ResolverInstallerOptions::from(installer),
                 filesystem,
@@ -181,6 +174,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
 
@@ -194,6 +188,7 @@ impl ToolRunSettings {
             from,
             with,
             installer,
+            refresh,
             python,
         } = args;
 
@@ -203,6 +198,7 @@ impl ToolRunSettings {
             from,
             with,
             python,
+            refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 ResolverInstallerOptions::from(installer),
                 filesystem,
@@ -276,10 +272,10 @@ impl ToolchainInstallSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    pub(crate) refresh: Refresh,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: InstallerSettings,
 }
 
@@ -293,21 +289,19 @@ impl SyncSettings {
             no_all_extras,
             dev,
             no_dev,
-            refresh,
-            no_refresh,
-            refresh_package,
             installer,
+            refresh,
             python,
         } = args;
 
         Self {
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
             python,
+            refresh: Refresh::from(refresh),
             settings: InstallerSettings::combine(InstallerOptions::from(installer), filesystem),
         }
     }
@@ -317,9 +311,8 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
-    pub(crate) refresh: Refresh,
-    pub(crate) upgrade: Upgrade,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
 }
 
@@ -328,20 +321,14 @@ impl LockSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
-            refresh,
-            no_refresh,
-            refresh_package,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
             resolver,
+            refresh,
             python,
         } = args;
 
         Self {
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
-            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             python,
+            refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(ResolverOptions::from(resolver), filesystem),
         }
     }
@@ -402,9 +389,8 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) refresh: Refresh,
-    pub(crate) upgrade: Upgrade,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
 
@@ -418,6 +404,7 @@ impl PipCompileSettings {
             extra,
             all_extras,
             no_all_extras,
+            refresh,
             no_deps,
             deps,
             output_file,
@@ -429,16 +416,10 @@ impl PipCompileSettings {
             header,
             annotation_style,
             custom_compile_command,
-            refresh,
-            no_refresh,
-            refresh_package,
             resolver,
             python,
             system,
             no_system,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
             generate_hashes,
             no_generate_hashes,
             legacy_setup_py,
@@ -484,9 +465,8 @@ impl PipCompileSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             r#override,
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
-            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             overrides_from_workspace,
+            refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
                     python,
@@ -530,9 +510,8 @@ impl PipCompileSettings {
 pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
-    pub(crate) reinstall: Reinstall,
-    pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
 
@@ -543,13 +522,8 @@ impl PipSyncSettings {
             src_file,
             constraint,
             installer,
-            exclude_newer,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
             refresh,
-            no_refresh,
-            refresh_package,
+            exclude_newer,
             require_hashes,
             no_require_hashes,
             python,
@@ -581,9 +555,8 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
+            refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
                     python,
@@ -621,11 +594,9 @@ pub(crate) struct PipInstallSettings {
     pub(crate) editable: Vec<String>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) upgrade: Upgrade,
-    pub(crate) reinstall: Reinstall,
-    pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
 
@@ -641,15 +612,7 @@ impl PipInstallSettings {
             extra,
             all_extras,
             no_all_extras,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
             refresh,
-            no_refresh,
-            refresh_package,
             no_deps,
             deps,
             require_hashes,
@@ -701,11 +664,9 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             r#override,
-            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
-            reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
             overrides_from_workspace,
+            refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
                     python,
@@ -991,6 +952,7 @@ pub(crate) struct InstallerSettings {
     pub(crate) config_setting: ConfigSettings,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) reinstall: Reinstall,
 }
 
 impl InstallerSettings {
@@ -1009,6 +971,10 @@ impl InstallerSettings {
             exclude_newer: _,
             link_mode,
             compile_bytecode,
+            upgrade: _,
+            upgrade_package: _,
+            reinstall,
+            reinstall_package,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1040,6 +1006,12 @@ impl InstallerSettings {
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
+            reinstall: Reinstall::from_args(
+                args.reinstall.or(reinstall),
+                args.reinstall_package
+                    .or(reinstall_package)
+                    .unwrap_or_default(),
+            ),
         }
     }
 }
@@ -1059,6 +1031,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) config_setting: ConfigSettings,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
+    pub(crate) upgrade: Upgrade,
 }
 
 impl ResolverSettings {
@@ -1077,6 +1050,10 @@ impl ResolverSettings {
             exclude_newer,
             link_mode,
             compile_bytecode: _,
+            upgrade,
+            upgrade_package,
+            reinstall: _,
+            reinstall_package: _,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1107,6 +1084,10 @@ impl ResolverSettings {
                 .unwrap_or_default(),
             exclude_newer: args.exclude_newer.combine(exclude_newer),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            upgrade: Upgrade::from_args(
+                args.upgrade.or(upgrade),
+                args.upgrade_package.or(upgrade_package).unwrap_or_default(),
+            ),
         }
     }
 }
@@ -1128,6 +1109,8 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) reinstall: Reinstall,
 }
 
 impl ResolverInstallerSettings {
@@ -1149,6 +1132,10 @@ impl ResolverInstallerSettings {
             exclude_newer,
             link_mode,
             compile_bytecode,
+            upgrade,
+            upgrade_package,
+            reinstall,
+            reinstall_package,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1183,6 +1170,16 @@ impl ResolverInstallerSettings {
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
+            upgrade: Upgrade::from_args(
+                args.upgrade.or(upgrade),
+                args.upgrade_package.or(upgrade_package).unwrap_or_default(),
+            ),
+            reinstall: Reinstall::from_args(
+                args.reinstall.or(reinstall),
+                args.reinstall_package
+                    .or(reinstall_package)
+                    .unwrap_or_default(),
+            ),
         }
     }
 }
@@ -1230,6 +1227,8 @@ pub(crate) struct PipSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) require_hashes: bool,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) reinstall: Reinstall,
     pub(crate) concurrency: Concurrency,
 }
 
@@ -1278,6 +1277,10 @@ impl PipSettings {
             link_mode,
             compile_bytecode,
             require_hashes,
+            upgrade,
+            upgrade_package,
+            reinstall,
+            reinstall_package,
             concurrent_builds,
             concurrent_downloads,
             concurrent_installs,
@@ -1393,6 +1396,16 @@ impl PipSettings {
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
             strict: args.strict.combine(strict).unwrap_or_default(),
+            upgrade: Upgrade::from_args(
+                args.upgrade.or(upgrade),
+                args.upgrade_package.or(upgrade_package).unwrap_or_default(),
+            ),
+            reinstall: Reinstall::from_args(
+                args.reinstall.or(reinstall),
+                args.reinstall_package
+                    .or(reinstall_package)
+                    .unwrap_or_default(),
+            ),
             concurrency: Concurrency {
                 downloads: args
                     .concurrent_downloads
@@ -1462,10 +1475,25 @@ fn flag(yes: bool, no: bool) -> Option<bool> {
     }
 }
 
+impl From<RefreshArgs> for Refresh {
+    fn from(value: RefreshArgs) -> Self {
+        let RefreshArgs {
+            refresh,
+            no_refresh,
+            refresh_package,
+        } = value;
+
+        Self::from_args(flag(refresh, no_refresh), refresh_package)
+    }
+}
+
 impl From<ResolverArgs> for PipOptions {
     fn from(args: ResolverArgs) -> Self {
         let ResolverArgs {
             index_args,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
             index_strategy,
             keyring_provider,
             resolution,
@@ -1486,6 +1514,8 @@ impl From<ResolverArgs> for PipOptions {
             }),
             no_index: Some(index_args.no_index),
             find_links: index_args.find_links,
+            upgrade: flag(upgrade, no_upgrade),
+            upgrade_package: Some(upgrade_package),
             index_strategy,
             keyring_provider,
             resolution,
@@ -1507,6 +1537,9 @@ impl From<InstallerArgs> for PipOptions {
     fn from(args: InstallerArgs) -> Self {
         let InstallerArgs {
             index_args,
+            reinstall,
+            no_reinstall,
+            reinstall_package,
             index_strategy,
             keyring_provider,
             config_setting,
@@ -1525,6 +1558,8 @@ impl From<InstallerArgs> for PipOptions {
             }),
             no_index: Some(index_args.no_index),
             find_links: index_args.find_links,
+            reinstall: flag(reinstall, no_reinstall),
+            reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
             config_settings: config_setting
@@ -1540,6 +1575,12 @@ impl From<ResolverInstallerArgs> for PipOptions {
     fn from(args: ResolverInstallerArgs) -> Self {
         let ResolverInstallerArgs {
             index_args,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
+            reinstall,
+            no_reinstall,
+            reinstall_package,
             index_strategy,
             keyring_provider,
             resolution,
@@ -1562,6 +1603,10 @@ impl From<ResolverInstallerArgs> for PipOptions {
             }),
             no_index: Some(index_args.no_index),
             find_links: index_args.find_links,
+            upgrade: flag(upgrade, no_upgrade),
+            upgrade_package: Some(upgrade_package),
+            reinstall: flag(reinstall, no_reinstall),
+            reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
             resolution,
@@ -1584,6 +1629,9 @@ impl From<InstallerArgs> for InstallerOptions {
     fn from(args: InstallerArgs) -> Self {
         let InstallerArgs {
             index_args,
+            reinstall,
+            no_reinstall,
+            reinstall_package,
             index_strategy,
             keyring_provider,
             config_setting,
@@ -1602,6 +1650,8 @@ impl From<InstallerArgs> for InstallerOptions {
             }),
             no_index: Some(index_args.no_index),
             find_links: index_args.find_links,
+            reinstall: flag(reinstall, no_reinstall),
+            reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
             config_settings: config_setting
@@ -1616,6 +1666,9 @@ impl From<ResolverArgs> for ResolverOptions {
     fn from(args: ResolverArgs) -> Self {
         let ResolverArgs {
             index_args,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
             index_strategy,
             keyring_provider,
             resolution,
@@ -1636,6 +1689,8 @@ impl From<ResolverArgs> for ResolverOptions {
             }),
             no_index: Some(index_args.no_index),
             find_links: index_args.find_links,
+            upgrade: flag(upgrade, no_upgrade),
+            upgrade_package: Some(upgrade_package),
             index_strategy,
             keyring_provider,
             resolution,
@@ -1656,6 +1711,12 @@ impl From<ResolverInstallerArgs> for ResolverInstallerOptions {
     fn from(args: ResolverInstallerArgs) -> Self {
         let ResolverInstallerArgs {
             index_args,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
+            reinstall,
+            no_reinstall,
+            reinstall_package,
             index_strategy,
             keyring_provider,
             resolution,
@@ -1678,6 +1739,10 @@ impl From<ResolverInstallerArgs> for ResolverInstallerOptions {
             }),
             no_index: Some(index_args.no_index),
             find_links: index_args.find_links,
+            upgrade: flag(upgrade, no_upgrade),
+            upgrade_package: Some(upgrade_package),
+            reinstall: flag(reinstall, no_reinstall),
+            reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
             resolution,
