@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::implementation::{Error as ImplementationError, ImplementationName};
-use crate::platform::{Arch, Libc, Os};
+use crate::platform::{self, Arch, Libc, Os};
 use crate::{PythonVersion, ToolchainRequest, VersionRequest};
 use thiserror::Error;
 use uv_client::BetterReqwestError;
@@ -24,6 +24,8 @@ pub enum Error {
     ImplementationError(#[from] ImplementationError),
     #[error("Invalid python version: {0}")]
     InvalidPythonVersion(String),
+    #[error("Invalid request key, too many parts: {0}")]
+    TooManyParts(String),
     #[error("Download failed")]
     NetworkError(#[from] BetterReqwestError),
     #[error("Download failed")]
@@ -48,6 +50,8 @@ pub enum Error {
     },
     #[error("Failed to parse toolchain directory name: {0}")]
     NameError(String),
+    #[error("Failed to parse request part")]
+    InvalidRequestPlatform(#[from] platform::Error),
     #[error("Cannot download toolchain for request: {0}")]
     InvalidRequestKind(ToolchainRequest),
     // TODO(zanieb): Implement display for `PythonDownloadRequest`
@@ -234,10 +238,48 @@ impl FromStr for PythonDownloadRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // TODO(zanieb): Implement parsing of additional request parts
-        let version =
-            VersionRequest::from_str(s).map_err(|_| Error::InvalidPythonVersion(s.to_string()))?;
-        Ok(Self::new(Some(version), None, None, None, None))
+        let mut parts = s.split('-');
+        let mut version = None;
+        let mut implementation = None;
+        let mut os = None;
+        let mut arch = None;
+        let mut libc = None;
+
+        loop {
+            // Consume each part
+            let Some(part) = parts.next() else { break };
+
+            if implementation.is_none() {
+                implementation = Some(ImplementationName::from_str(part)?);
+                continue;
+            }
+
+            if version.is_none() {
+                version = Some(
+                    VersionRequest::from_str(part)
+                        .map_err(|_| Error::InvalidPythonVersion(part.to_string()))?,
+                );
+                continue;
+            }
+
+            if os.is_none() {
+                os = Some(Os::from_str(part)?);
+                continue;
+            }
+
+            if arch.is_none() {
+                arch = Some(Arch::from_str(part)?);
+                continue;
+            }
+
+            if libc.is_none() {
+                libc = Some(Libc::from_str(part)?);
+                continue;
+            }
+
+            return Err(Error::TooManyParts(s.to_string()));
+        }
+        Ok(Self::new(version, implementation, arch, os, libc))
     }
 }
 
