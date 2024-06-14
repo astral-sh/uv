@@ -43,6 +43,27 @@ impl Requirement {
     }
 }
 
+impl From<Requirement> for pep508_rs::Requirement<VerbatimUrl> {
+    /// Convert a [`Requirement`] to a [`pep508_rs::Requirement`].
+    fn from(requirement: Requirement) -> Self {
+        pep508_rs::Requirement {
+            name: requirement.name,
+            extras: requirement.extras,
+            marker: requirement.marker,
+            origin: requirement.origin,
+            version_or_url: match requirement.source {
+                RequirementSource::Registry { specifier, .. } => {
+                    Some(VersionOrUrl::VersionSpecifier(specifier))
+                }
+                RequirementSource::Url { url, .. }
+                | RequirementSource::Git { url, .. }
+                | RequirementSource::Path { url, .. }
+                | RequirementSource::Directory { url, .. } => Some(VersionOrUrl::Url(url)),
+            },
+        }
+    }
+}
+
 impl From<pep508_rs::Requirement<VerbatimParsedUrl>> for Requirement {
     /// Convert a [`pep508_rs::Requirement`] to a [`Requirement`].
     fn from(requirement: pep508_rs::Requirement<VerbatimParsedUrl>) -> Self {

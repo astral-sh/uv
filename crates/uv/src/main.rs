@@ -683,11 +683,18 @@ async fn run() -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            let requirements = args
+                .requirements
+                .into_iter()
+                .map(RequirementsSource::Package)
+                .collect::<Vec<_>>();
 
             commands::add(
-                args.requirements,
+                requirements,
                 args.python,
+                args.settings,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),

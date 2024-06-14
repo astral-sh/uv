@@ -365,20 +365,30 @@ impl LockSettings {
 pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverInstallerSettings,
 }
 
 impl AddSettings {
     /// Resolve the [`AddSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: AddArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: AddArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let AddArgs {
             requirements,
+            installer,
+            build,
+            refresh,
             python,
         } = args;
 
         Self {
             requirements,
             python,
+            refresh: Refresh::from(refresh),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
         }
     }
 }

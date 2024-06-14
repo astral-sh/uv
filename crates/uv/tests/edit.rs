@@ -282,6 +282,98 @@ fn add_git() -> Result<()> {
     Ok(())
 }
 
+/// Add an unnamed requirement.
+#[test]
+fn add_unnamed() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1",
+        ]
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+."
+        sdist = { path = "." }
+
+        [[distribution.dependencies]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        sdist = { url = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Audited 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// Update a PyPI requirement.
 #[test]
 fn update_registry() -> Result<()> {
