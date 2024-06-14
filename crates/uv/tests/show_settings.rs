@@ -117,9 +117,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -241,9 +243,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -366,9 +370,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -523,9 +529,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -626,9 +634,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -761,9 +771,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -933,9 +945,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -1104,9 +1118,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -1248,9 +1264,11 @@ fn resolve_find_links() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -1373,9 +1391,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -1421,7 +1441,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     );
 
     // Write out to both the top-level (`tool.uv`) and the pip section (`tool.uv.pip`). The
-    // `tool.uv.pip` section should take precedence.
+    // `tool.uv.pip` section should take precedence when combining.
     pyproject.write_str(indoc::indoc! {r#"
         [project]
         name = "example"
@@ -1429,9 +1449,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
 
         [tool.uv]
         resolution = "lowest-direct"
+        extra-index-url = ["https://test.pypi.org/simple"]
 
         [tool.uv.pip]
         resolution = "highest"
+        extra-index-url = ["https://download.pytorch.org/whl"]
     "#})?;
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -1477,7 +1499,52 @@ fn resolve_top_level() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 index: None,
-                extra_index: [],
+                extra_index: [
+                    Url(
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "download.pytorch.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/whl",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://download.pytorch.org/whl",
+                            ),
+                        },
+                    ),
+                    Url(
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "test.pypi.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/simple",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://test.pypi.org/simple",
+                            ),
+                        },
+                    ),
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -1489,9 +1556,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -1578,7 +1647,52 @@ fn resolve_top_level() -> anyhow::Result<()> {
         settings: PipSettings {
             index_locations: IndexLocations {
                 index: None,
-                extra_index: [],
+                extra_index: [
+                    Url(
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "download.pytorch.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/whl",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://download.pytorch.org/whl",
+                            ),
+                        },
+                    ),
+                    Url(
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "test.pypi.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/simple",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://test.pypi.org/simple",
+                            ),
+                        },
+                    ),
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -1590,9 +1704,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -1715,9 +1831,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -1823,9 +1941,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -1931,9 +2051,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -2041,9 +2163,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            no_binary: None,
-            no_build: None,
             no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,

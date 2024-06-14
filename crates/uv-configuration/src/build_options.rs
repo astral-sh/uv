@@ -46,6 +46,14 @@ impl BuildOptions {
         }
     }
 
+    #[must_use]
+    pub fn combine(self, no_binary: NoBinary, no_build: NoBuild) -> Self {
+        Self {
+            no_binary: self.no_binary.combine(no_binary),
+            no_build: self.no_build.combine(no_build),
+        }
+    }
+
     pub fn no_binary_package(&self, package_name: &PackageName) -> bool {
         match &self.no_binary {
             NoBinary::None => false,

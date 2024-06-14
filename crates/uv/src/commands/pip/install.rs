@@ -12,8 +12,8 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, PreviewMode,
+    Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -56,8 +56,7 @@ pub(crate) async fn pip_install(
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
-    no_build: NoBuild,
-    no_binary: NoBinary,
+    build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     strict: bool,
@@ -92,8 +91,8 @@ pub(crate) async fn pip_install(
         extra_index_urls,
         no_index,
         find_links,
-        no_binary: specified_no_binary,
-        no_build: specified_no_build,
+        no_binary,
+        no_build,
         extras: _,
     } = operations::read_requirements(
         requirements,
@@ -263,10 +262,8 @@ pub(crate) async fn pip_install(
         .platform(interpreter.platform())
         .build();
 
-    // Combine the `--no-binary` and `--no-build` flags.
-    let no_binary = no_binary.combine(specified_no_binary);
-    let no_build = no_build.combine(specified_no_build);
-    let build_options = BuildOptions::new(no_binary, no_build);
+    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
+    let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

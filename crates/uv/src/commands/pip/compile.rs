@@ -22,7 +22,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
+    Overrides, PreviewMode, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -80,8 +80,7 @@ pub(crate) async fn pip_compile(
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
-    no_build: NoBuild,
-    no_binary: NoBinary,
+    build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     exclude_newer: Option<ExcludeNewer>,
@@ -123,8 +122,8 @@ pub(crate) async fn pip_compile(
         extra_index_urls,
         no_index,
         find_links,
-        no_binary: specified_no_binary,
-        no_build: specified_no_build,
+        no_binary,
+        no_build,
     } = RequirementsSpecification::from_sources(
         requirements,
         constraints,
@@ -254,10 +253,8 @@ pub(crate) async fn pip_compile(
     let preferences = read_requirements_txt(output_file, &upgrade).await?;
     let git = GitResolver::default();
 
-    // Combine the `--no-binary` and `--no-build` flags.
-    let no_binary = no_binary.combine(specified_no_binary);
-    let no_build = no_build.combine(specified_no_build);
-    let build_options = BuildOptions::new(no_binary, no_build);
+    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
+    let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

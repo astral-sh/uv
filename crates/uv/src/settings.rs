@@ -1268,9 +1268,8 @@ pub(crate) struct PipSettings {
     pub(crate) prefix: Option<Prefix>,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) no_binary: NoBinary,
-    pub(crate) no_build: NoBuild,
     pub(crate) no_build_isolation: bool,
+    pub(crate) build_options: BuildOptions,
     pub(crate) strict: bool,
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
@@ -1303,6 +1302,10 @@ pub(crate) struct PipSettings {
 impl PipSettings {
     /// Resolve the [`PipSettings`] from the CLI and filesystem configuration.
     pub(crate) fn combine(args: PipOptions, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options { top_level, pip, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
         let PipOptions {
             python,
             system,
@@ -1352,10 +1355,51 @@ impl PipSettings {
             concurrent_builds,
             concurrent_downloads,
             concurrent_installs,
-        } = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(Options::pip)
-            .unwrap_or_default();
+        } = pip.unwrap_or_default();
+
+        let ResolverInstallerOptions {
+            index_url: top_level_index_url,
+            extra_index_url: top_level_extra_index_url,
+            no_index: top_level_no_index,
+            find_links: top_level_find_links,
+            index_strategy: top_level_index_strategy,
+            keyring_provider: top_level_keyring_provider,
+            resolution: top_level_resolution,
+            prerelease: top_level_prerelease,
+            config_settings: top_level_config_settings,
+            exclude_newer: top_level_exclude_newer,
+            link_mode: top_level_link_mode,
+            compile_bytecode: top_level_compile_bytecode,
+            upgrade: top_level_upgrade,
+            upgrade_package: top_level_upgrade_package,
+            reinstall: top_level_reinstall,
+            reinstall_package: top_level_reinstall_package,
+            no_build: top_level_no_build,
+            no_build_package: top_level_no_build_package,
+            no_binary: top_level_no_binary,
+            no_binary_package: top_level_no_binary_package,
+        } = top_level;
+
+        // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
+        // preferring the latter.
+        //
+        // For example, prefer `tool.uv.pip.index-url` over `tool.uv.index-url`.
+        let index_url = index_url.combine(top_level_index_url);
+        let extra_index_url = extra_index_url.combine(top_level_extra_index_url);
+        let no_index = no_index.combine(top_level_no_index);
+        let find_links = find_links.combine(top_level_find_links);
+        let index_strategy = index_strategy.combine(top_level_index_strategy);
+        let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
+        let resolution = resolution.combine(top_level_resolution);
+        let prerelease = prerelease.combine(top_level_prerelease);
+        let config_settings = config_settings.combine(top_level_config_settings);
+        let exclude_newer = exclude_newer.combine(top_level_exclude_newer);
+        let link_mode = link_mode.combine(top_level_link_mode);
+        let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
+        let upgrade = upgrade.combine(top_level_upgrade);
+        let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
+        let reinstall = reinstall.combine(top_level_reinstall);
+        let reinstall_package = reinstall_package.combine(top_level_reinstall_package);
 
         Self {
             index_locations: IndexLocations::new(
@@ -1414,10 +1458,6 @@ impl PipSettings {
                 .no_build_isolation
                 .combine(no_build_isolation)
                 .unwrap_or_default(),
-            no_build: NoBuild::from_pip_args(
-                args.only_binary.combine(only_binary).unwrap_or_default(),
-                args.no_build.combine(no_build).unwrap_or_default(),
-            ),
             config_setting: args
                 .config_settings
                 .combine(config_settings)
@@ -1458,9 +1498,6 @@ impl PipSettings {
                 .unwrap_or_default(),
             target: args.target.combine(target).map(Target::from),
             prefix: args.prefix.combine(prefix).map(Prefix::from),
-            no_binary: NoBinary::from_pip_args(
-                args.no_binary.combine(no_binary).unwrap_or_default(),
-            ),
             compile_bytecode: args
                 .compile_bytecode
                 .combine(compile_bytecode)
@@ -1495,6 +1532,21 @@ impl PipSettings {
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
             },
+            build_options: BuildOptions::new(
+                NoBinary::from_pip_args(args.no_binary.combine(no_binary).unwrap_or_default())
+                    .combine(NoBinary::from_args(
+                        top_level_no_binary,
+                        top_level_no_binary_package.unwrap_or_default(),
+                    )),
+                NoBuild::from_pip_args(
+                    args.only_binary.combine(only_binary).unwrap_or_default(),
+                    args.no_build.combine(no_build).unwrap_or_default(),
+                )
+                .combine(NoBuild::from_args(
+                    top_level_no_build,
+                    top_level_no_build_package.unwrap_or_default(),
+                )),
+            ),
         }
     }
 }
