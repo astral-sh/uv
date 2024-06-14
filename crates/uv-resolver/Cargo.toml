@@ -42,6 +42,7 @@ futures = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
+path-slash = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
 rkyv = { workspace = true }
