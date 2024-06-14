@@ -1496,6 +1496,9 @@ pub(crate) struct RunArgs {
     pub(crate) installer: ResolverInstallerArgs,
 
     #[command(flatten)]
+    pub(crate) build: BuildArgs,
+
+    #[command(flatten)]
     pub(crate) refresh: RefreshArgs,
 
     /// The Python interpreter to use to build the run environment.
@@ -1545,6 +1548,9 @@ pub(crate) struct SyncArgs {
     pub(crate) installer: InstallerArgs,
 
     #[command(flatten)]
+    pub(crate) build: BuildArgs,
+
+    #[command(flatten)]
     pub(crate) refresh: RefreshArgs,
 
     /// The Python interpreter to use to build the run environment.
@@ -1567,6 +1573,9 @@ pub(crate) struct SyncArgs {
 pub(crate) struct LockArgs {
     #[command(flatten)]
     pub(crate) resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub(crate) build: BuildArgs,
 
     #[command(flatten)]
     pub(crate) refresh: RefreshArgs,
@@ -1667,6 +1676,9 @@ pub(crate) struct ToolRunArgs {
 
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub(crate) build: BuildArgs,
 
     #[command(flatten)]
     pub(crate) refresh: RefreshArgs,
@@ -1788,6 +1800,39 @@ pub(crate) struct RefreshArgs {
     /// Refresh cached data for a specific package.
     #[arg(long)]
     pub(crate) refresh_package: Vec<PackageName>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct BuildArgs {
+    /// Don't build source distributions.
+    ///
+    /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
+    /// source distributions will be reused, but operations that require building distributions will
+    /// exit with an error.
+    #[arg(long, overrides_with("build"))]
+    pub(crate) no_build: bool,
+
+    #[arg(long, overrides_with("no_build"), hide = true)]
+    pub(crate) build: bool,
+
+    /// Don't build source distributions for a specific package.
+    #[arg(long)]
+    pub(crate) no_build_package: Vec<PackageName>,
+
+    /// Don't install pre-built wheels.
+    ///
+    /// The given packages will be installed from a source distribution. The resolver
+    /// will still use pre-built wheels for metadata.
+    #[arg(long, overrides_with("binary"))]
+    pub(crate) no_binary: bool,
+
+    #[arg(long, overrides_with("no_binary"), hide = true)]
+    pub(crate) binary: bool,
+
+    /// Don't install pre-built wheels for a specific package.
+    #[arg(long)]
+    pub(crate) no_binary_package: Vec<PackageName>,
 }
 
 /// Arguments that are used by commands that need to install (but not resolve) packages.

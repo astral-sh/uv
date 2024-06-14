@@ -12,8 +12,9 @@ use pypi_types::Requirement;
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple,
+    Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
@@ -24,10 +25,10 @@ use uv_settings::{
 use uv_toolchain::{Prefix, PythonVersion, Target};
 
 use crate::cli::{
-    AddArgs, ColorChoice, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe, PipCheckArgs,
-    PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs,
-    PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs, ResolverInstallerArgs, RunArgs,
-    SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
+    AddArgs, BuildArgs, ColorChoice, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe,
+    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
+    PipSyncArgs, PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs, ResolverInstallerArgs,
+    RunArgs, SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -142,6 +143,7 @@ impl RunSettings {
             args,
             with,
             installer,
+            build,
             refresh,
             python,
             package,
@@ -160,7 +162,7 @@ impl RunSettings {
             package,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
-                ResolverInstallerOptions::from(installer),
+                resolver_installer_options(installer, build),
                 filesystem,
             ),
         }
@@ -190,6 +192,7 @@ impl ToolRunSettings {
             from,
             with,
             installer,
+            build,
             refresh,
             python,
         } = args;
@@ -202,7 +205,7 @@ impl ToolRunSettings {
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
-                ResolverInstallerOptions::from(installer),
+                resolver_installer_options(installer, build),
                 filesystem,
             ),
         }
@@ -292,6 +295,7 @@ impl SyncSettings {
             dev,
             no_dev,
             installer,
+            build,
             refresh,
             python,
         } = args;
@@ -304,7 +308,7 @@ impl SyncSettings {
             dev: flag(dev, no_dev).unwrap_or(true),
             python,
             refresh: Refresh::from(refresh),
-            settings: InstallerSettings::combine(InstallerOptions::from(installer), filesystem),
+            settings: InstallerSettings::combine(installer_options(installer, build), filesystem),
         }
     }
 }
@@ -324,6 +328,7 @@ impl LockSettings {
     pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
             resolver,
+            build,
             refresh,
             python,
         } = args;
@@ -331,7 +336,7 @@ impl LockSettings {
         Self {
             python,
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(ResolverOptions::from(resolver), filesystem),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
     }
 }
@@ -955,6 +960,7 @@ pub(crate) struct InstallerSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: Reinstall,
+    pub(crate) build_options: BuildOptions,
 }
 
 impl InstallerSettings {
@@ -977,6 +983,10 @@ impl InstallerSettings {
             upgrade_package: _,
             reinstall,
             reinstall_package,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1009,10 +1019,24 @@ impl InstallerSettings {
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
             reinstall: Reinstall::from_args(
-                args.reinstall.or(reinstall),
+                args.reinstall.combine(reinstall),
                 args.reinstall_package
-                    .or(reinstall_package)
+                    .combine(reinstall_package)
                     .unwrap_or_default(),
+            ),
+            build_options: BuildOptions::new(
+                NoBinary::from_args(
+                    args.no_binary.combine(no_binary),
+                    args.no_binary_package
+                        .combine(no_binary_package)
+                        .unwrap_or_default(),
+                ),
+                NoBuild::from_args(
+                    args.no_build.combine(no_build),
+                    args.no_build_package
+                        .combine(no_build_package)
+                        .unwrap_or_default(),
+                ),
             ),
         }
     }
@@ -1034,6 +1058,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: Upgrade,
+    pub(crate) build_options: BuildOptions,
 }
 
 impl ResolverSettings {
@@ -1056,6 +1081,10 @@ impl ResolverSettings {
             upgrade_package,
             reinstall: _,
             reinstall_package: _,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1087,8 +1116,24 @@ impl ResolverSettings {
             exclude_newer: args.exclude_newer.combine(exclude_newer),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
             upgrade: Upgrade::from_args(
-                args.upgrade.or(upgrade),
-                args.upgrade_package.or(upgrade_package).unwrap_or_default(),
+                args.upgrade.combine(upgrade),
+                args.upgrade_package
+                    .combine(upgrade_package)
+                    .unwrap_or_default(),
+            ),
+            build_options: BuildOptions::new(
+                NoBinary::from_args(
+                    args.no_binary.combine(no_binary),
+                    args.no_binary_package
+                        .combine(no_binary_package)
+                        .unwrap_or_default(),
+                ),
+                NoBuild::from_args(
+                    args.no_build.combine(no_build),
+                    args.no_build_package
+                        .combine(no_build_package)
+                        .unwrap_or_default(),
+                ),
             ),
         }
     }
@@ -1113,6 +1158,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) compile_bytecode: bool,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
+    pub(crate) build_options: BuildOptions,
 }
 
 impl ResolverInstallerSettings {
@@ -1138,6 +1184,10 @@ impl ResolverInstallerSettings {
             upgrade_package,
             reinstall,
             reinstall_package,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1173,14 +1223,30 @@ impl ResolverInstallerSettings {
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
             upgrade: Upgrade::from_args(
-                args.upgrade.or(upgrade),
-                args.upgrade_package.or(upgrade_package).unwrap_or_default(),
+                args.upgrade.combine(upgrade),
+                args.upgrade_package
+                    .combine(upgrade_package)
+                    .unwrap_or_default(),
             ),
             reinstall: Reinstall::from_args(
-                args.reinstall.or(reinstall),
+                args.reinstall.combine(reinstall),
                 args.reinstall_package
-                    .or(reinstall_package)
+                    .combine(reinstall_package)
                     .unwrap_or_default(),
+            ),
+            build_options: BuildOptions::new(
+                NoBinary::from_args(
+                    args.no_binary.combine(no_binary),
+                    args.no_binary_package
+                        .combine(no_binary_package)
+                        .unwrap_or_default(),
+                ),
+                NoBuild::from_args(
+                    args.no_build.combine(no_build),
+                    args.no_build_package
+                        .combine(no_build_package)
+                        .unwrap_or_default(),
+                ),
             ),
         }
     }
@@ -1348,7 +1414,7 @@ impl PipSettings {
                 .no_build_isolation
                 .combine(no_build_isolation)
                 .unwrap_or_default(),
-            no_build: NoBuild::from_args(
+            no_build: NoBuild::from_pip_args(
                 args.only_binary.combine(only_binary).unwrap_or_default(),
                 args.no_build.combine(no_build).unwrap_or_default(),
             ),
@@ -1392,20 +1458,24 @@ impl PipSettings {
                 .unwrap_or_default(),
             target: args.target.combine(target).map(Target::from),
             prefix: args.prefix.combine(prefix).map(Prefix::from),
-            no_binary: NoBinary::from_args(args.no_binary.combine(no_binary).unwrap_or_default()),
+            no_binary: NoBinary::from_pip_args(
+                args.no_binary.combine(no_binary).unwrap_or_default(),
+            ),
             compile_bytecode: args
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
             strict: args.strict.combine(strict).unwrap_or_default(),
             upgrade: Upgrade::from_args(
-                args.upgrade.or(upgrade),
-                args.upgrade_package.or(upgrade_package).unwrap_or_default(),
+                args.upgrade.combine(upgrade),
+                args.upgrade_package
+                    .combine(upgrade_package)
+                    .unwrap_or_default(),
             ),
             reinstall: Reinstall::from_args(
-                args.reinstall.or(reinstall),
+                args.reinstall.combine(reinstall),
                 args.reinstall_package
-                    .or(reinstall_package)
+                    .combine(reinstall_package)
                     .unwrap_or_default(),
             ),
             concurrency: Concurrency {
@@ -1507,15 +1577,6 @@ impl From<ResolverArgs> for PipOptions {
         } = args;
 
         Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
             upgrade: flag(upgrade, no_upgrade),
             upgrade_package: Some(upgrade_package),
             index_strategy,
@@ -1530,7 +1591,7 @@ impl From<ResolverArgs> for PipOptions {
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             exclude_newer,
             link_mode,
-            ..PipOptions::default()
+            ..PipOptions::from(index_args)
         }
     }
 }
@@ -1551,15 +1612,6 @@ impl From<InstallerArgs> for PipOptions {
         } = args;
 
         Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
             reinstall: flag(reinstall, no_reinstall),
             reinstall_package: Some(reinstall_package),
             index_strategy,
@@ -1568,7 +1620,7 @@ impl From<InstallerArgs> for PipOptions {
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
-            ..PipOptions::default()
+            ..PipOptions::from(index_args)
         }
     }
 }
@@ -1596,15 +1648,6 @@ impl From<ResolverInstallerArgs> for PipOptions {
         } = args;
 
         Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
             upgrade: flag(upgrade, no_upgrade),
             upgrade_package: Some(upgrade_package),
             reinstall: flag(reinstall, no_reinstall),
@@ -1622,142 +1665,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             exclude_newer,
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
-            ..PipOptions::default()
-        }
-    }
-}
-
-impl From<InstallerArgs> for InstallerOptions {
-    fn from(args: InstallerArgs) -> Self {
-        let InstallerArgs {
-            index_args,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
-            index_strategy,
-            keyring_provider,
-            config_setting,
-            link_mode,
-            compile_bytecode,
-            no_compile_bytecode,
-        } = args;
-
-        Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
-            reinstall: flag(reinstall, no_reinstall),
-            reinstall_package: Some(reinstall_package),
-            index_strategy,
-            keyring_provider,
-            config_settings: config_setting
-                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            link_mode,
-            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
-        }
-    }
-}
-
-impl From<ResolverArgs> for ResolverOptions {
-    fn from(args: ResolverArgs) -> Self {
-        let ResolverArgs {
-            index_args,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
-            index_strategy,
-            keyring_provider,
-            resolution,
-            prerelease,
-            pre,
-            config_setting,
-            exclude_newer,
-            link_mode,
-        } = args;
-
-        Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
-            upgrade: flag(upgrade, no_upgrade),
-            upgrade_package: Some(upgrade_package),
-            index_strategy,
-            keyring_provider,
-            resolution,
-            prerelease: if pre {
-                Some(PreReleaseMode::Allow)
-            } else {
-                prerelease
-            },
-            config_settings: config_setting
-                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            exclude_newer,
-            link_mode,
-        }
-    }
-}
-
-impl From<ResolverInstallerArgs> for ResolverInstallerOptions {
-    fn from(args: ResolverInstallerArgs) -> Self {
-        let ResolverInstallerArgs {
-            index_args,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
-            index_strategy,
-            keyring_provider,
-            resolution,
-            prerelease,
-            pre,
-            config_setting,
-            exclude_newer,
-            link_mode,
-            compile_bytecode,
-            no_compile_bytecode,
-        } = args;
-
-        Self {
-            index_url: index_args.index_url.and_then(Maybe::into_option),
-            extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: Some(index_args.no_index),
-            find_links: index_args.find_links,
-            upgrade: flag(upgrade, no_upgrade),
-            upgrade_package: Some(upgrade_package),
-            reinstall: flag(reinstall, no_reinstall),
-            reinstall_package: Some(reinstall_package),
-            index_strategy,
-            keyring_provider,
-            resolution,
-            prerelease: if pre {
-                Some(PreReleaseMode::Allow)
-            } else {
-                prerelease
-            },
-            config_settings: config_setting
-                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            exclude_newer,
-            link_mode,
-            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            ..PipOptions::from(index_args)
         }
     }
 }
@@ -1779,9 +1687,195 @@ impl From<IndexArgs> for PipOptions {
                     .filter_map(Maybe::into_option)
                     .collect()
             }),
-            no_index: Some(no_index),
+            no_index: if no_index { Some(true) } else { None },
             find_links,
             ..PipOptions::default()
         }
+    }
+}
+
+/// Construct the [`InstallerOptions`] from the [`InstallerArgs`] and [`BuildArgs`].
+fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -> InstallerOptions {
+    let InstallerArgs {
+        index_args,
+        reinstall,
+        no_reinstall,
+        reinstall_package,
+        index_strategy,
+        keyring_provider,
+        config_setting,
+        link_mode,
+        compile_bytecode,
+        no_compile_bytecode,
+    } = installer_args;
+
+    let BuildArgs {
+        no_build,
+        build,
+        no_build_package,
+        no_binary,
+        binary,
+        no_binary_package,
+    } = build_args;
+
+    InstallerOptions {
+        index_url: index_args.index_url.and_then(Maybe::into_option),
+        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+            extra_index_urls
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
+        no_index: if index_args.no_index {
+            Some(true)
+        } else {
+            None
+        },
+        find_links: index_args.find_links,
+        reinstall: flag(reinstall, no_reinstall),
+        reinstall_package: Some(reinstall_package),
+        index_strategy,
+        keyring_provider,
+        config_settings: config_setting
+            .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        link_mode,
+        compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+        no_build: flag(no_build, build),
+        no_build_package: Some(no_build_package),
+        no_binary: flag(no_binary, binary),
+        no_binary_package: Some(no_binary_package),
+    }
+}
+
+/// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildArgs`].
+fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> ResolverOptions {
+    let ResolverArgs {
+        index_args,
+        upgrade,
+        no_upgrade,
+        upgrade_package,
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease,
+        pre,
+        config_setting,
+        exclude_newer,
+        link_mode,
+    } = resolver_args;
+
+    let BuildArgs {
+        no_build,
+        build,
+        no_build_package,
+        no_binary,
+        binary,
+        no_binary_package,
+    } = build_args;
+
+    ResolverOptions {
+        index_url: index_args.index_url.and_then(Maybe::into_option),
+        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+            extra_index_urls
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
+        no_index: if index_args.no_index {
+            Some(true)
+        } else {
+            None
+        },
+        find_links: index_args.find_links,
+        upgrade: flag(upgrade, no_upgrade),
+        upgrade_package: Some(upgrade_package),
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease: if pre {
+            Some(PreReleaseMode::Allow)
+        } else {
+            prerelease
+        },
+        config_settings: config_setting
+            .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        exclude_newer,
+        link_mode,
+        no_build: flag(no_build, build),
+        no_build_package: Some(no_build_package),
+        no_binary: flag(no_binary, binary),
+        no_binary_package: Some(no_binary_package),
+    }
+}
+
+/// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildArgs`].
+fn resolver_installer_options(
+    resolver_installer_args: ResolverInstallerArgs,
+    build_args: BuildArgs,
+) -> ResolverInstallerOptions {
+    let ResolverInstallerArgs {
+        index_args,
+        upgrade,
+        no_upgrade,
+        upgrade_package,
+        reinstall,
+        no_reinstall,
+        reinstall_package,
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease,
+        pre,
+        config_setting,
+        exclude_newer,
+        link_mode,
+        compile_bytecode,
+        no_compile_bytecode,
+    } = resolver_installer_args;
+
+    let BuildArgs {
+        no_build,
+        build,
+        no_build_package,
+        no_binary,
+        binary,
+        no_binary_package,
+    } = build_args;
+
+    ResolverInstallerOptions {
+        index_url: index_args.index_url.and_then(Maybe::into_option),
+        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+            extra_index_urls
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
+        no_index: if index_args.no_index {
+            Some(true)
+        } else {
+            None
+        },
+        find_links: index_args.find_links,
+        upgrade: flag(upgrade, no_upgrade),
+        upgrade_package: Some(upgrade_package),
+        reinstall: flag(reinstall, no_reinstall),
+        reinstall_package: Some(reinstall_package),
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease: if pre {
+            Some(PreReleaseMode::Allow)
+        } else {
+            prerelease
+        },
+        config_settings: config_setting
+            .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        exclude_newer,
+        link_mode,
+        compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+        no_build: flag(no_build, build),
+        no_build_package: Some(no_build_package),
+        no_binary: flag(no_binary, binary),
+        no_binary_package: Some(no_binary_package),
     }
 }

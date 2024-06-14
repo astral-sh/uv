@@ -108,7 +108,22 @@ pub enum NoBinary {
 
 impl NoBinary {
     /// Determine the binary installation strategy to use for the given arguments.
-    pub fn from_args(no_binary: Vec<PackageNameSpecifier>) -> Self {
+    pub fn from_args(no_binary: Option<bool>, no_binary_package: Vec<PackageName>) -> Self {
+        match no_binary {
+            Some(true) => Self::All,
+            Some(false) => Self::None,
+            None => {
+                if no_binary_package.is_empty() {
+                    Self::None
+                } else {
+                    Self::Packages(no_binary_package)
+                }
+            }
+        }
+    }
+
+    /// Determine the binary installation strategy to use for the given arguments from the pip CLI.
+    pub fn from_pip_args(no_binary: Vec<PackageNameSpecifier>) -> Self {
         let combined = PackageNameSpecifiers::from_iter(no_binary.into_iter());
         match combined {
             PackageNameSpecifiers::All => Self::All,
@@ -117,9 +132,9 @@ impl NoBinary {
         }
     }
 
-    /// Determine the binary installation strategy to use for the given argument.
-    pub fn from_arg(no_binary: PackageNameSpecifier) -> Self {
-        Self::from_args(vec![no_binary])
+    /// Determine the binary installation strategy to use for the given argument from the pip CLI.
+    pub fn from_pip_arg(no_binary: PackageNameSpecifier) -> Self {
+        Self::from_pip_args(vec![no_binary])
     }
 
     /// Combine a set of [`NoBinary`] values.
@@ -188,7 +203,22 @@ pub enum NoBuild {
 
 impl NoBuild {
     /// Determine the build strategy to use for the given arguments.
-    pub fn from_args(only_binary: Vec<PackageNameSpecifier>, no_build: bool) -> Self {
+    pub fn from_args(no_build: Option<bool>, no_build_package: Vec<PackageName>) -> Self {
+        match no_build {
+            Some(true) => Self::All,
+            Some(false) => Self::None,
+            None => {
+                if no_build_package.is_empty() {
+                    Self::None
+                } else {
+                    Self::Packages(no_build_package)
+                }
+            }
+        }
+    }
+
+    /// Determine the build strategy to use for the given arguments from the pip CLI.
+    pub fn from_pip_args(only_binary: Vec<PackageNameSpecifier>, no_build: bool) -> Self {
         if no_build {
             Self::All
         } else {
@@ -201,9 +231,9 @@ impl NoBuild {
         }
     }
 
-    /// Determine the build strategy to use for the given argument.
-    pub fn from_arg(no_build: PackageNameSpecifier) -> Self {
-        Self::from_args(vec![no_build], false)
+    /// Determine the build strategy to use for the given argument from the pip CLI.
+    pub fn from_pip_arg(no_build: PackageNameSpecifier) -> Self {
+        Self::from_pip_args(vec![no_build], false)
     }
 
     /// Combine a set of [`NoBuild`] values.
@@ -310,23 +340,23 @@ mod tests {
     #[test]
     fn no_build_from_args() -> Result<(), Error> {
         assert_eq!(
-            NoBuild::from_args(vec![PackageNameSpecifier::from_str(":all:")?], false),
+            NoBuild::from_pip_args(vec![PackageNameSpecifier::from_str(":all:")?], false),
             NoBuild::All,
         );
         assert_eq!(
-            NoBuild::from_args(vec![PackageNameSpecifier::from_str(":all:")?], true),
+            NoBuild::from_pip_args(vec![PackageNameSpecifier::from_str(":all:")?], true),
             NoBuild::All,
         );
         assert_eq!(
-            NoBuild::from_args(vec![PackageNameSpecifier::from_str(":none:")?], true),
+            NoBuild::from_pip_args(vec![PackageNameSpecifier::from_str(":none:")?], true),
             NoBuild::All,
         );
         assert_eq!(
-            NoBuild::from_args(vec![PackageNameSpecifier::from_str(":none:")?], false),
+            NoBuild::from_pip_args(vec![PackageNameSpecifier::from_str(":none:")?], false),
             NoBuild::None,
         );
         assert_eq!(
-            NoBuild::from_args(
+            NoBuild::from_pip_args(
                 vec![
                     PackageNameSpecifier::from_str("foo")?,
                     PackageNameSpecifier::from_str("bar")?
@@ -339,7 +369,7 @@ mod tests {
             ]),
         );
         assert_eq!(
-            NoBuild::from_args(
+            NoBuild::from_pip_args(
                 vec![
                     PackageNameSpecifier::from_str("test")?,
                     PackageNameSpecifier::All
@@ -349,7 +379,7 @@ mod tests {
             NoBuild::All,
         );
         assert_eq!(
-            NoBuild::from_args(
+            NoBuild::from_pip_args(
                 vec![
                     PackageNameSpecifier::from_str("foo")?,
                     PackageNameSpecifier::from_str(":none:")?,

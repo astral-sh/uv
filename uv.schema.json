@@ -110,6 +110,36 @@
         "null"
       ]
     },
+    "no-binary": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-binary-package": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
+    "no-build": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-build-package": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
     "no-cache": {
       "type": [
         "boolean",

@@ -72,6 +72,7 @@ pub(crate) async fn sync(
         &settings.config_setting,
         &settings.link_mode,
         &settings.compile_bytecode,
+        &settings.build_options,
         preview,
         connectivity,
         concurrency,
@@ -100,6 +101,7 @@ pub(super) async fn do_sync(
     config_setting: &ConfigSettings,
     link_mode: &LinkMode,
     compile_bytecode: &bool,
+    build_options: &BuildOptions,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -150,7 +152,6 @@ pub(super) async fn do_sync(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
-    let build_options = BuildOptions::default();
     let dry_run = false;
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
@@ -159,7 +160,7 @@ pub(super) async fn do_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -176,7 +177,7 @@ pub(super) async fn do_sync(
         config_setting,
         build_isolation,
         *link_mode,
-        &build_options,
+        build_options,
         concurrency,
         preview,
     );
@@ -189,7 +190,7 @@ pub(super) async fn do_sync(
         site_packages,
         Modifications::Sufficient,
         reinstall,
-        &build_options,
+        build_options,
         *link_mode,
         *compile_bytecode,
         index_locations,

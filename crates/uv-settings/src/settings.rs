@@ -77,6 +77,10 @@ pub struct InstallerOptions {
     pub compile_bytecode: Option<bool>,
     pub reinstall: Option<bool>,
     pub reinstall_package: Option<Vec<PackageName>>,
+    pub no_build: Option<bool>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_binary: Option<bool>,
+    pub no_binary_package: Option<Vec<PackageName>>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -98,6 +102,10 @@ pub struct ResolverOptions {
     pub link_mode: Option<LinkMode>,
     pub upgrade: Option<bool>,
     pub upgrade_package: Option<Vec<PackageName>>,
+    pub no_build: Option<bool>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_binary: Option<bool>,
+    pub no_binary_package: Option<Vec<PackageName>>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -123,6 +131,10 @@ pub struct ResolverInstallerOptions {
     pub upgrade_package: Option<Vec<PackageName>>,
     pub reinstall: Option<bool>,
     pub reinstall_package: Option<Vec<PackageName>>,
+    pub no_build: Option<bool>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_binary: Option<bool>,
+    pub no_binary_package: Option<Vec<PackageName>>,
 }
 
 /// A `[tool.uv.pip]` section.
@@ -255,6 +267,10 @@ impl Options {
             upgrade_package: top_level_upgrade_package,
             reinstall: top_level_reinstall,
             reinstall_package: top_level_reinstall_package,
+            no_build: _,
+            no_build_package: _,
+            no_binary: _,
+            no_binary_package: _,
         } = self.top_level;
 
         PipOptions {

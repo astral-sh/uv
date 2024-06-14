@@ -1238,7 +1238,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                         },
                     ),
                 ],
-                no_index: false,
+                no_index: true,
             },
             python: None,
             system: false,
