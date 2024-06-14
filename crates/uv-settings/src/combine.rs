@@ -7,7 +7,7 @@ use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, Targe
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
 
-use crate::{FilesystemOptions, GlobalOptions, Options, PipOptions, ResolverInstallerOptions};
+use crate::{FilesystemOptions, PipOptions};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.
@@ -37,128 +37,11 @@ impl Combine for Option<FilesystemOptions> {
     }
 }
 
-impl Combine for Options {
-    fn combine(self, other: Options) -> Options {
-        Options {
-            globals: self.globals.combine(other.globals),
-            top_level: self.top_level.combine(other.top_level),
-            pip: self.pip.combine(other.pip),
-            override_dependencies: self
-                .override_dependencies
-                .combine(other.override_dependencies),
-        }
-    }
-}
-
-impl Combine for GlobalOptions {
-    fn combine(self, other: GlobalOptions) -> GlobalOptions {
-        GlobalOptions {
-            native_tls: self.native_tls.combine(other.native_tls),
-            offline: self.offline.combine(other.offline),
-            no_cache: self.no_cache.combine(other.no_cache),
-            cache_dir: self.cache_dir.combine(other.cache_dir),
-            preview: self.preview.combine(other.preview),
-        }
-    }
-}
-
-impl Combine for ResolverInstallerOptions {
-    fn combine(self, other: ResolverInstallerOptions) -> ResolverInstallerOptions {
-        ResolverInstallerOptions {
-            index_url: self.index_url.combine(other.index_url),
-            extra_index_url: self.extra_index_url.combine(other.extra_index_url),
-            no_index: self.no_index.combine(other.no_index),
-            find_links: self.find_links.combine(other.find_links),
-            index_strategy: self.index_strategy.combine(other.index_strategy),
-            keyring_provider: self.keyring_provider.combine(other.keyring_provider),
-            resolution: self.resolution.combine(other.resolution),
-            prerelease: self.prerelease.combine(other.prerelease),
-            config_settings: self.config_settings.combine(other.config_settings),
-            exclude_newer: self.exclude_newer.combine(other.exclude_newer),
-            link_mode: self.link_mode.combine(other.link_mode),
-            compile_bytecode: self.compile_bytecode.combine(other.compile_bytecode),
-            upgrade: self.upgrade.combine(other.upgrade),
-            upgrade_package: self.upgrade_package.combine(other.upgrade_package),
-            reinstall: self.reinstall.combine(other.reinstall),
-            reinstall_package: self.reinstall_package.combine(other.reinstall_package),
-            no_build: self.no_build.combine(other.no_build),
-            no_build_package: self.no_build_package.combine(other.no_build_package),
-            no_binary: self.no_binary.combine(other.no_binary),
-            no_binary_package: self.no_binary_package.combine(other.no_binary_package),
-        }
-    }
-}
-
 impl Combine for Option<PipOptions> {
     fn combine(self, other: Option<PipOptions>) -> Option<PipOptions> {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
-        }
-    }
-}
-
-impl Combine for PipOptions {
-    fn combine(self, other: PipOptions) -> PipOptions {
-        PipOptions {
-            python: self.python.combine(other.python),
-            system: self.system.combine(other.system),
-            break_system_packages: self
-                .break_system_packages
-                .combine(other.break_system_packages),
-            target: self.target.combine(other.target),
-            prefix: self.prefix.combine(other.prefix),
-            index_url: self.index_url.combine(other.index_url),
-            extra_index_url: self.extra_index_url.combine(other.extra_index_url),
-            no_index: self.no_index.combine(other.no_index),
-            find_links: self.find_links.combine(other.find_links),
-            index_strategy: self.index_strategy.combine(other.index_strategy),
-            keyring_provider: self.keyring_provider.combine(other.keyring_provider),
-            no_build: self.no_build.combine(other.no_build),
-            no_binary: self.no_binary.combine(other.no_binary),
-            only_binary: self.only_binary.combine(other.only_binary),
-            no_build_isolation: self.no_build_isolation.combine(other.no_build_isolation),
-            strict: self.strict.combine(other.strict),
-            extra: self.extra.combine(other.extra),
-            all_extras: self.all_extras.combine(other.all_extras),
-            no_deps: self.no_deps.combine(other.no_deps),
-            resolution: self.resolution.combine(other.resolution),
-            prerelease: self.prerelease.combine(other.prerelease),
-            output_file: self.output_file.combine(other.output_file),
-            no_strip_extras: self.no_strip_extras.combine(other.no_strip_extras),
-            no_annotate: self.no_annotate.combine(other.no_annotate),
-            no_header: self.no_header.combine(other.no_header),
-            custom_compile_command: self
-                .custom_compile_command
-                .combine(other.custom_compile_command),
-            generate_hashes: self.generate_hashes.combine(other.generate_hashes),
-            legacy_setup_py: self.legacy_setup_py.combine(other.legacy_setup_py),
-            config_settings: self.config_settings.combine(other.config_settings),
-            python_version: self.python_version.combine(other.python_version),
-            python_platform: self.python_platform.combine(other.python_platform),
-            exclude_newer: self.exclude_newer.combine(other.exclude_newer),
-            no_emit_package: self.no_emit_package.combine(other.no_emit_package),
-            emit_index_url: self.emit_index_url.combine(other.emit_index_url),
-            emit_find_links: self.emit_find_links.combine(other.emit_find_links),
-            emit_marker_expression: self
-                .emit_marker_expression
-                .combine(other.emit_marker_expression),
-            emit_index_annotation: self
-                .emit_index_annotation
-                .combine(other.emit_index_annotation),
-            annotation_style: self.annotation_style.combine(other.annotation_style),
-            link_mode: self.link_mode.combine(other.link_mode),
-            compile_bytecode: self.compile_bytecode.combine(other.compile_bytecode),
-            require_hashes: self.require_hashes.combine(other.require_hashes),
-            upgrade: self.upgrade.combine(other.upgrade),
-            upgrade_package: self.upgrade_package.combine(other.upgrade_package),
-            reinstall: self.reinstall.combine(other.reinstall),
-            reinstall_package: self.reinstall_package.combine(other.reinstall_package),
-            concurrent_downloads: self
-                .concurrent_downloads
-                .combine(other.concurrent_downloads),
-            concurrent_builds: self.concurrent_builds.combine(other.concurrent_builds),
-            concurrent_installs: self.concurrent_installs.combine(other.concurrent_installs),
         }
     }
 }
