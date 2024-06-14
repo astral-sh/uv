@@ -2478,25 +2478,8 @@ fn relative_and_absolute_paths() -> Result<()> {
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
 
-    // In this particular test, Windows paths with \ are written to the TOML
-    // lock file, but because the \ starts an escape sequence in TOML strings,
-    // this causes the TOML serializer to use single quoted strings. But
-    // everywhere else, / is used and thus double quoted strings are used.
-    //
-    // Making matters more confusing, we have filters that normalize Windows
-    // paths to Unix paths, which makes it *look* like the TOML in the snapshot
-    // is needlessly using single quoted strings.
-    //
-    // So we add a filter here (that runs after all other filters) that
-    // replaces single quoted strings with double quoted strings. This isn't
-    // correct in general, but works for this specific test.
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(r"'([^']+)'", r#""$1""#)])
-        .collect::<Vec<_>>();
     insta::with_settings!({
-        filters => filters,
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r###"

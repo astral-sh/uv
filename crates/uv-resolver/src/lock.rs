@@ -10,6 +10,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use either::Either;
+use path_slash::PathExt;
 use petgraph::visit::EdgeRef;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer};
@@ -852,8 +853,11 @@ enum Source {
 }
 
 /// A [`PathBuf`], but we show `.` instead of an empty path.
+///
+/// We also normalize backslashes to forward slashes on Windows, to ensure
+/// that the lock file contains portable paths.
 fn serialize_path_with_dot(path: &Path) -> Cow<str> {
-    let path = path.to_string_lossy();
+    let path = path.to_slash_lossy();
     if path.is_empty() {
         Cow::Borrowed(".")
     } else {
