@@ -68,7 +68,7 @@ impl LineHaul {
             .iter()
             .find_map(|&var_name| env::var(var_name).ok().map(|_| true));
 
-        let libc = match platform.map(|platform| platform.os()) {
+        let libc = match platform.map(platform_tags::Platform::os) {
             Some(Os::Manylinux { major, minor }) => Some(Libc {
                 lib: Some("glibc".to_string()),
                 version: Some(format!("{major}.{minor}")),
@@ -94,7 +94,7 @@ impl LineHaul {
                 libc,
             })
         } else if cfg!(target_os = "macos") {
-            let version = match platform.map(|platform| platform.os()) {
+            let version = match platform.map(platform_tags::Platform::os) {
                 Some(Os::Macos { major, minor }) => Some(format!("{major}.{minor}")),
                 _ => None,
             };

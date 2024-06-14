@@ -15,7 +15,7 @@ pub struct KeyringProvider {
 }
 
 #[derive(Debug)]
-pub enum KeyringProviderBackend {
+pub(crate) enum KeyringProviderBackend {
     /// Use the `keyring` command to fetch credentials.
     Subprocess,
     #[cfg(test)]
@@ -59,7 +59,7 @@ impl KeyringProvider {
             }
             #[cfg(test)]
             KeyringProviderBackend::Dummy(ref store) => {
-                self.fetch_dummy(store, url.as_str(), username)
+                Self::fetch_dummy(store, url.as_str(), username)
             }
         };
         // And fallback to a check for the host
@@ -74,7 +74,7 @@ impl KeyringProvider {
                 KeyringProviderBackend::Subprocess => self.fetch_subprocess(&host, username).await,
                 #[cfg(test)]
                 KeyringProviderBackend::Dummy(ref store) => {
-                    self.fetch_dummy(store, &host, username)
+                    Self::fetch_dummy(store, &host, username)
                 }
             };
         }
@@ -116,14 +116,13 @@ impl KeyringProvider {
 
     #[cfg(test)]
     fn fetch_dummy(
-        &self,
         store: &std::collections::HashMap<(String, &'static str), &'static str>,
         service_name: &str,
         username: &str,
     ) -> Option<String> {
         store
             .get(&(service_name.to_string(), username))
-            .map(|password| password.to_string())
+            .map(|password| (*password).to_string())
     }
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].
@@ -131,13 +130,12 @@ impl KeyringProvider {
     pub fn dummy<S: Into<String>, T: IntoIterator<Item = ((S, &'static str), &'static str)>>(
         iter: T,
     ) -> Self {
-        use std::collections::HashMap;
-
         Self {
-            backend: KeyringProviderBackend::Dummy(HashMap::from_iter(
+            backend: KeyringProviderBackend::Dummy(
                 iter.into_iter()
-                    .map(|((service, username), password)| ((service.into(), username), password)),
-            )),
+                    .map(|((service, username), password)| ((service.into(), username), password))
+                    .collect(),
+            ),
         }
     }
 

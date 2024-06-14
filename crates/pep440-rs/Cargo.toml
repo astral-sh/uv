@@ -4,7 +4,6 @@ version = "0.6.0"
 description = "A library for python version numbers and specifiers, implementing PEP 440"
 license = "Apache-2.0 OR BSD-2-Clause"
 include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
-
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -15,6 +14,9 @@ authors = { workspace = true }
 [lib]
 name = "pep440_rs"
 crate-type = ["rlib", "cdylib"]
+
+[lints]
+workspace = true
 
 [dependencies]
 once_cell = { workspace = true }

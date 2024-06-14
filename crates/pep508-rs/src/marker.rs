@@ -274,8 +274,7 @@ impl FromStr for MarkerOperator {
                     // ends with in
                     .and_then(|space_in| space_in.strip_suffix("in"))
                     // and has only whitespace in between
-                    .map(|space| !space.is_empty() && space.trim().is_empty())
-                    .unwrap_or_default() =>
+                    .is_some_and(|space| !space.is_empty() && space.trim().is_empty()) =>
             {
                 Self::NotIn
             }
@@ -547,6 +546,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::implementation_name`].
     #[inline]
+    #[must_use]
     pub fn with_implementation_name(mut self, value: impl Into<String>) -> MarkerEnvironment {
         Arc::make_mut(&mut self.inner).implementation_name = value.into();
         self
@@ -556,6 +556,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::implementation_version`].
     #[inline]
+    #[must_use]
     pub fn with_implementation_version(
         mut self,
         value: impl Into<StringVersion>,
@@ -568,6 +569,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::os_name`].
     #[inline]
+    #[must_use]
     pub fn with_os_name(mut self, value: impl Into<String>) -> MarkerEnvironment {
         Arc::make_mut(&mut self.inner).os_name = value.into();
         self
@@ -577,6 +579,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::platform_machine`].
     #[inline]
+    #[must_use]
     pub fn with_platform_machine(mut self, value: impl Into<String>) -> MarkerEnvironment {
         Arc::make_mut(&mut self.inner).platform_machine = value.into();
         self
@@ -587,6 +590,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::platform_python_implementation`].
     #[inline]
+    #[must_use]
     pub fn with_platform_python_implementation(
         mut self,
         value: impl Into<String>,
@@ -599,6 +603,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::platform_release`].
     #[inline]
+    #[must_use]
     pub fn with_platform_release(mut self, value: impl Into<String>) -> MarkerEnvironment {
         Arc::make_mut(&mut self.inner).platform_release = value.into();
         self
@@ -608,6 +613,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::platform_system`].
     #[inline]
+    #[must_use]
     pub fn with_platform_system(mut self, value: impl Into<String>) -> MarkerEnvironment {
         Arc::make_mut(&mut self.inner).platform_system = value.into();
         self
@@ -617,6 +623,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::platform_version`].
     #[inline]
+    #[must_use]
     pub fn with_platform_version(mut self, value: impl Into<String>) -> MarkerEnvironment {
         Arc::make_mut(&mut self.inner).platform_version = value.into();
         self
@@ -626,6 +633,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::python_full_version`].
     #[inline]
+    #[must_use]
     pub fn with_python_full_version(
         mut self,
         value: impl Into<StringVersion>,
@@ -638,6 +646,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::python_full_version`].
     #[inline]
+    #[must_use]
     pub fn with_python_version(mut self, value: impl Into<StringVersion>) -> MarkerEnvironment {
         Arc::make_mut(&mut self.inner).python_version = value.into();
         self
@@ -647,6 +656,7 @@ impl MarkerEnvironment {
     ///
     /// See also [`MarkerEnvironment::sys_platform`].
     #[inline]
+    #[must_use]
     pub fn with_sys_platform(mut self, value: impl Into<String>) -> MarkerEnvironment {
         Arc::make_mut(&mut self.inner).sys_platform = value.into();
         self
@@ -1004,9 +1014,8 @@ impl MarkerExpression {
                     reporter.report(
                         MarkerWarningKind::Pep440Error,
                         format!(
-                            "Expected double quoted PEP 440 version to compare with {}, found {},
-                            will evaluate to false",
-                            key, r_value
+                            "Expected double quoted PEP 440 version to compare with {key}, found {r_value},
+                            will evaluate to false"
                         ),
                     );
 
@@ -1166,8 +1175,7 @@ impl MarkerExpression {
                 reporter.report(
                     MarkerWarningKind::Pep440Error,
                     format!(
-                        "Expected PEP 440 version to compare with {}, found {}, will evaluate to false: {}",
-                        key, value, err
+                        "Expected PEP 440 version to compare with {key}, found {value}, will evaluate to false: {err}"
                     ),
                 );
 
@@ -1219,8 +1227,7 @@ impl MarkerExpression {
                 reporter.report(
                     MarkerWarningKind::Pep440Error,
                     format!(
-                        "Expected PEP 440 version to compare with {}, found {}, will evaluate to false: {}",
-                        key, value, err
+                        "Expected PEP 440 version to compare with {key}, found {value}, will evaluate to false: {err}"
                     ),
                 );
 
@@ -1232,9 +1239,8 @@ impl MarkerExpression {
             reporter.report(
                 MarkerWarningKind::Pep440Error,
                 format!(
-                    "Expected PEP 440 version operator to compare {} with '{}',
-                    found '{}', will evaluate to false",
-                    key, version, marker_operator
+                    "Expected PEP 440 version operator to compare {key} with '{version}',
+                    found '{marker_operator}', will evaluate to false"
                 ),
             );
 
@@ -1267,17 +1273,16 @@ impl MarkerExpression {
             }
         };
 
-        match ExtraOperator::from_marker_operator(operator) {
-            Some(operator) => Some(MarkerExpression::Extra { operator, name }),
-            None => {
-                reporter.report(
-                    MarkerWarningKind::ExtraInvalidComparison,
-                    "Comparing extra with something other than a quoted string is wrong,
+        if let Some(operator) = ExtraOperator::from_marker_operator(operator) {
+            Some(MarkerExpression::Extra { operator, name })
+        } else {
+            reporter.report(
+                MarkerWarningKind::ExtraInvalidComparison,
+                "Comparing extra with something other than a quoted string is wrong,
                     will evaluate to false"
-                        .to_string(),
-                );
-                None
-            }
+                    .to_string(),
+            );
+            None
         }
     }
 
@@ -1324,7 +1329,7 @@ impl MarkerExpression {
             } => env
                 .map(|env| {
                     let l_string = env.get_string(key);
-                    self.compare_strings(l_string, operator, value, reporter)
+                    Self::compare_strings(l_string, *operator, value, reporter)
                 })
                 .unwrap_or(true),
             MarkerExpression::StringInverted {
@@ -1334,7 +1339,7 @@ impl MarkerExpression {
             } => env
                 .map(|env| {
                     let r_string = env.get_string(key);
-                    self.compare_strings(value, operator, r_string, reporter)
+                    Self::compare_strings(value, *operator, r_string, reporter)
                 })
                 .unwrap_or(true),
             MarkerExpression::Extra {
@@ -1424,9 +1429,8 @@ impl MarkerExpression {
 
     /// Compare strings by PEP 508 logic, with warnings
     fn compare_strings(
-        &self,
         l_string: &str,
-        operator: &MarkerOperator,
+        operator: MarkerOperator,
         r_string: &str,
         reporter: &mut impl Reporter,
     ) -> bool {
@@ -1857,7 +1861,7 @@ impl MarkerTree {
                 let this = std::mem::replace(self, MarkerTree::And(vec![]));
                 *self = MarkerTree::And(vec![this]);
             }
-            _ => {}
+            MarkerTree::And(_) => {}
         }
         if let MarkerTree::And(ref mut exprs) = *self {
             if let MarkerTree::And(tree) = tree {
@@ -1879,7 +1883,7 @@ impl MarkerTree {
                 let this = std::mem::replace(self, MarkerTree::And(vec![]));
                 *self = MarkerTree::Or(vec![this]);
             }
-            _ => {}
+            MarkerTree::Or(_) => {}
         }
         if let MarkerTree::Or(ref mut exprs) = *self {
             if let MarkerTree::Or(tree) = tree {
@@ -1928,7 +1932,7 @@ impl Display for MarkerTree {
 fn parse_marker_operator<T: Pep508Url>(
     cursor: &mut Cursor,
 ) -> Result<MarkerOperator, Pep508Error<T>> {
-    let (start, len) = if cursor.peek_char().is_some_and(|c| c.is_alphabetic()) {
+    let (start, len) = if cursor.peek_char().is_some_and(char::is_alphabetic) {
         // "in" or "not"
         cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"')
     } else {
@@ -2301,7 +2305,7 @@ mod test {
             assert_eq!(captured_logs[0].level, log::Level::Warn);
             assert_eq!(captured_logs.len(), 1);
         });
-        let string_string = MarkerTree::from_str(r#"os.name == 'posix' and platform.machine == 'x86_64' and platform.python_implementation == 'CPython' and 'Ubuntu' in platform.version and sys.platform == 'linux'"#).unwrap();
+        let string_string = MarkerTree::from_str(r"os.name == 'posix' and platform.machine == 'x86_64' and platform.python_implementation == 'CPython' and 'Ubuntu' in platform.version and sys.platform == 'linux'").unwrap();
         string_string.evaluate(&env37, &[]);
         testing_logger::validate(|captured_logs| {
             let messages: Vec<_> = captured_logs

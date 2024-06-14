@@ -172,7 +172,10 @@ where
         // archive for SimpleMetadata in the constructor, so we can skip
         // validation here. Since we don't mutate the buffer, this conversion
         // is guaranteed to be correct.
-        unsafe { rkyv::archived_root::<A>(&self.raw) }
+        #[allow(unsafe_code)]
+        unsafe {
+            rkyv::archived_root::<A>(&self.raw)
+        }
     }
 }
 
@@ -230,6 +233,7 @@ impl<const N: usize> rkyv::ser::Serializer for Serializer<N> {
     }
 
     #[inline]
+    #[allow(unsafe_code)]
     unsafe fn resolve_aligned<T: Archive + ?Sized>(
         &mut self,
         value: &T,
@@ -241,6 +245,7 @@ impl<const N: usize> rkyv::ser::Serializer for Serializer<N> {
     }
 
     #[inline]
+    #[allow(unsafe_code)]
     unsafe fn resolve_unsized_aligned<T: ArchiveUnsized + ?Sized>(
         &mut self,
         value: &T,
@@ -255,6 +260,7 @@ impl<const N: usize> rkyv::ser::Serializer for Serializer<N> {
 
 impl<const N: usize> rkyv::ser::ScratchSpace for Serializer<N> {
     #[inline]
+    #[allow(unsafe_code)]
     unsafe fn push_scratch(
         &mut self,
         layout: std::alloc::Layout,
@@ -265,6 +271,7 @@ impl<const N: usize> rkyv::ser::ScratchSpace for Serializer<N> {
     }
 
     #[inline]
+    #[allow(unsafe_code)]
     unsafe fn pop_scratch(
         &mut self,
         ptr: std::ptr::NonNull<u8>,
@@ -325,7 +332,7 @@ impl std::error::Error for SerializerError {
 ///
 /// > Regular serializers don’t support the custom error handling needed for
 /// > this type by default. To use this wrapper, a custom serializer with an
-/// > error type satisfying <S as Fallible>::Error: From<AsStringError> must be
+/// > error type satisfying <S as Fallible>`::Error`: From<AsStringError> must be
 /// > provided.
 ///
 /// If we didn't need to use `rkyv::with::AsString` (which we do for

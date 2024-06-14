@@ -22,43 +22,44 @@ use crate::rkyvutil::OwnedArchive;
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CacheControl {
     // directives for requests and responses
-    /// * https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age
-    /// * https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age-2
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age>
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age-2>
     pub max_age_seconds: Option<u64>,
-    /// * https://www.rfc-editor.org/rfc/rfc9111.html#name-no-cache
-    /// * https://www.rfc-editor.org/rfc/rfc9111.html#name-no-cache-2
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-cache>
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-cache-2>
     pub no_cache: bool,
-    /// * https://www.rfc-editor.org/rfc/rfc9111.html#name-no-store
-    /// * https://www.rfc-editor.org/rfc/rfc9111.html#name-no-store-2
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-store>
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-store-2>
     pub no_store: bool,
-    /// * https://www.rfc-editor.org/rfc/rfc9111.html#name-no-transform
-    /// * https://www.rfc-editor.org/rfc/rfc9111.html#name-no-transform-2
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-transform>
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-transform-2>
     pub no_transform: bool,
 
     // request-only directives
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-max-stale
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-stale>
     pub max_stale_seconds: Option<u64>,
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-min-fresh
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-min-fresh>
     pub min_fresh_seconds: Option<u64>,
 
     // response-only directives
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-only-if-cached
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-only-if-cached>
     pub only_if_cached: bool,
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-must-revalidate
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-must-revalidate>
     pub must_revalidate: bool,
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-must-understand
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-must-understand>
     pub must_understand: bool,
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-private
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-private>
     pub private: bool,
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-proxy-revalidate
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-proxy-revalidate>
     pub proxy_revalidate: bool,
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-public
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-public>
     pub public: bool,
-    /// https://www.rfc-editor.org/rfc/rfc9111.html#name-s-maxage
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-s-maxage>
     pub s_maxage_seconds: Option<u64>,
-    /// https://httpwg.org/specs/rfc8246.html
+    /// <https://httpwg.org/specs/rfc8246.html>
     pub immutable: bool,
 }
 
@@ -72,7 +73,7 @@ impl CacheControl {
 
 impl<'b, B: 'b + ?Sized + AsRef<[u8]>> FromIterator<&'b B> for CacheControl {
     fn from_iter<T: IntoIterator<Item = &'b B>>(it: T) -> Self {
-        Self::from_iter(CacheControlParser::new(it))
+        CacheControlParser::new(it).collect()
     }
 }
 
@@ -182,7 +183,10 @@ impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> CacheControlPa
     /// given iterator should yield elements that satisfy `AsRef<[u8]>`.
     fn new<II: IntoIterator<IntoIter = I>>(headers: II) -> CacheControlParser<'b, I> {
         let mut directives = headers.into_iter();
-        let cur = directives.next().map(|h| h.as_ref()).unwrap_or(b"");
+        let cur = directives
+            .next()
+            .map(std::convert::AsRef::as_ref)
+            .unwrap_or(b"");
         CacheControlParser {
             cur,
             directives,
@@ -262,7 +266,7 @@ impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> CacheControlPa
             self.cur = &self.cur[1..];
             self.parse_quoted_string()
         } else {
-            self.parse_token().map(|s| s.into_bytes())
+            self.parse_token().map(std::string::String::into_bytes)
         }
     }
 
@@ -368,7 +372,7 @@ impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> Iterator
     fn next(&mut self) -> Option<CacheControlDirective> {
         loop {
             if self.cur.is_empty() {
-                self.cur = self.directives.next().map(|h| h.as_ref())?;
+                self.cur = self.directives.next().map(std::convert::AsRef::as_ref)?;
             }
             while !self.cur.is_empty() {
                 self.skip_whitespace();
