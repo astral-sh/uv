@@ -1750,13 +1750,8 @@ pub(crate) struct ToolchainInstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolchainFindArgs {
-    /// The version to find.
-    #[arg(long)]
-    pub(crate) version: Option<String>,
-
-    /// The implementation to find.
-    #[arg(long)]
-    pub(crate) implementation: Option<String>,
+    /// The toolchain request.
+    pub(crate) request: Option<String>,
 }
 
 #[derive(Args)]

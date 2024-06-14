@@ -56,7 +56,6 @@ fn toolchain_find() {
 
     // Request Python 3.12
     uv_snapshot!(filters, context.toolchain_find()
-        .arg("--version")
         .arg("3.12")
         .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
     success: true
@@ -69,7 +68,6 @@ fn toolchain_find() {
 
     // Request Python 3.11
     uv_snapshot!(filters, context.toolchain_find()
-        .arg("--version")
         .arg("3.11")
         .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
     success: true
@@ -82,7 +80,6 @@ fn toolchain_find() {
 
     // Request CPython
     uv_snapshot!(filters, context.toolchain_find()
-        .arg("--implementation")
         .arg("cpython")
         .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
     success: true
@@ -95,10 +92,7 @@ fn toolchain_find() {
 
     // Request CPython 3.12
     uv_snapshot!(filters, context.toolchain_find()
-        .arg("--implementation")
-        .arg("cpython")
-        .arg("--version")
-        .arg("3.12")
+        .arg("cpython@3.12")
         .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
     success: true
     exit_code: 0
@@ -110,7 +104,6 @@ fn toolchain_find() {
 
     // Request PyPy
     uv_snapshot!(filters, context.toolchain_find()
-        .arg("--implementation")
         .arg("pypy")
         .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
     success: false
@@ -137,7 +130,6 @@ fn toolchain_find() {
 
     // Request Python 3.11
     uv_snapshot!(filters, context.toolchain_find()
-        .arg("--version")
         .arg("3.11")
         .env("UV_TEST_PYTHON_PATH", &python_path), @r###"
     success: true
@@ -146,35 +138,5 @@ fn toolchain_find() {
     [PYTHON-PATH-3.11]
 
     ----- stderr -----
-    "###);
-}
-
-#[test]
-fn toolchain_find_invalid_implementation() {
-    let context = TestContext::new("3.12");
-
-    // No interpreters on the path
-    uv_snapshot!(context.filters(), context.toolchain_find().arg("--implementation").arg("foobar"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Unknown Python implementation `foobar`
-    "###);
-}
-
-#[test]
-fn toolchain_find_invalid_version() {
-    let context = TestContext::new("3.12");
-
-    // No interpreters on the path
-    uv_snapshot!(context.filters(), context.toolchain_find().arg("--version").arg("foobar"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Invalid version request: foobar
     "###);
 }

@@ -801,19 +801,12 @@ async fn run() -> Result<ExitStatus> {
             command: ToolchainCommand::Find(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolchainFindSettings::resolve(args, workspace);
+            let args = settings::ToolchainFindSettings::resolve(args, filesystem);
 
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::toolchain_find(
-                args.version,
-                args.implementation,
-                globals.preview,
-                &cache,
-                printer,
-            )
-            .await
+            commands::toolchain_find(args.request, globals.preview, &cache, printer).await
         }
     }
 }

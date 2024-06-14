@@ -278,23 +278,16 @@ impl ToolchainInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolchainFindSettings {
-    pub(crate) version: Option<String>,
-    pub(crate) implementation: Option<String>,
+    pub(crate) request: Option<String>,
 }
 
 impl ToolchainFindSettings {
     /// Resolve the [`ToolchainFindSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolchainFindArgs, _workspace: Option<Workspace>) -> Self {
-        let ToolchainFindArgs {
-            version,
-            implementation,
-        } = args;
+    pub(crate) fn resolve(args: ToolchainFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let ToolchainFindArgs { request } = args;
 
-        Self {
-            version,
-            implementation,
-        }
+        Self { request }
     }
 }
 
