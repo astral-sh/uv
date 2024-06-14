@@ -425,6 +425,7 @@ fn add_dev() -> Result<()> {
         );
     });
 
+    // `uv add` implies a full lock and sync, including development dependencies.
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
 
     insta::with_settings!({
