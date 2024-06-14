@@ -8,9 +8,7 @@ use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use uv_cache::Cache;
-use uv_configuration::{
-    Concurrency, ConfigSettings, ExtrasSpecification, PreviewMode, SetupPyStrategy,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_distribution::{DistributionDatabase, ProjectWorkspace};
 use uv_warnings::warn_user;
 
@@ -18,14 +16,14 @@ use crate::commands::pip::resolution_environment;
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettings, ResolverSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
     python: Option<String>,
-    settings: ResolverSettings,
+    settings: ResolverInstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -54,16 +52,11 @@ pub(crate) async fn add(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let exclude_newer = None;
     let python_version = None;
     let python_platform = None;
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
-    let config_settings = ConfigSettings::default();
     let build_isolation = BuildIsolation::default();
-
-    // Use the default settings.
-    let settings = ResolverSettings::default();
 
     // Determine the environment for the resolution.
     let (tags, markers) =
@@ -103,14 +96,18 @@ pub(crate) async fn add(
         &git,
         &in_flight,
         setup_py,
-        &config_settings,
+        &settings.config_setting,
         build_isolation,
         settings.link_mode,
         &settings.build_options,
         concurrency,
         preview,
     )
-    .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+    .with_options(
+        OptionsBuilder::new()
+            .exclude_newer(settings.exclude_newer)
+            .build(),
+    );
 
     // Resolve any unnamed requirements.
     let requirements = NamedRequirementsResolver::new(
@@ -160,7 +157,6 @@ pub(crate) async fn add(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let settings = InstallerSettings::default();
     let extras = ExtrasSpecification::All;
     let dev = true;
 

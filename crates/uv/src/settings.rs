@@ -348,7 +348,7 @@ pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<String>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverSettings,
+    pub(crate) settings: ResolverInstallerSettings,
 }
 
 impl AddSettings {
@@ -357,7 +357,7 @@ impl AddSettings {
     pub(crate) fn resolve(args: AddArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let AddArgs {
             requirements,
-            resolver,
+            installer,
             build,
             refresh,
             python,
@@ -367,7 +367,10 @@ impl AddSettings {
             requirements,
             python,
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
         }
     }
 }

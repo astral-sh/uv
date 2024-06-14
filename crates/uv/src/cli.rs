@@ -1603,7 +1603,7 @@ pub(crate) struct AddArgs {
     pub(crate) requirements: Vec<String>,
 
     #[command(flatten)]
-    pub(crate) resolver: ResolverArgs,
+    pub(crate) installer: ResolverInstallerArgs,
 
     #[command(flatten)]
     pub(crate) build: BuildArgs,
