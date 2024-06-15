@@ -325,6 +325,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             pins: FilePins::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
+            markers: MarkerTree::And(vec![]),
         };
         let mut forked_states = vec![state];
         let mut resolutions = vec![];
@@ -498,6 +499,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let forked_deps = self.get_dependencies_forking(
                         &package,
                         &version,
+                        &state.markers,
                         &mut state.priorities,
                         &request_sink,
                     )?;
@@ -572,6 +574,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 if !is_last {
                                     cur_state = Some(forked_state.clone());
                                 }
+                                forked_state.markers.and(fork.markers);
 
                                 // Add that package and version if the dependencies are not problematic.
                                 let dep_incompats =
@@ -941,10 +944,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         version: &Version,
+        markers: &MarkerTree,
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let result = self.get_dependencies(package, version, priorities, request_sink);
+        let result = self.get_dependencies(package, version, markers, priorities, request_sink);
         if self.markers.is_some() {
             return result.map(|deps| match deps {
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
@@ -960,6 +964,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         version: &Version,
+        markers: &MarkerTree,
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
     ) -> Result<Dependencies, ResolveError> {
@@ -979,6 +984,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.git,
                     self.markers.as_ref(),
                     self.requires_python.as_ref(),
+                    markers,
                 );
 
                 let dependencies = match dependencies {
@@ -1130,6 +1136,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.git,
                     self.markers.as_ref(),
                     self.requires_python.as_ref(),
+                    markers,
                 )?;
 
                 for (dep_package, dep_version) in dependencies.iter() {
@@ -1537,6 +1544,21 @@ struct SolveState {
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
     added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
+    /// The marker expression that created this state.
+    ///
+    /// The root state always corresponds to a marker expression that is always
+    /// `true` for every `MarkerEnvironment`.
+    ///
+    /// In non-universal mode, forking never occurs and so this marker
+    /// expression is always `true`.
+    ///
+    /// Whenever dependencies are fetched, all requirement specifications
+    /// are checked for disjointness with the marker expression of the fork
+    /// in which those dependencies were fetched. If a requirement has a
+    /// completely disjoint marker expression (i.e., it can never be true given
+    /// that the marker expression that provoked the fork is true), then that
+    /// dependency is completely ignored.
+    markers: MarkerTree,
 }
 
 impl SolveState {
@@ -1956,7 +1978,6 @@ impl Dependencies {
             // is look for a group in which there is some overlap. If so, this
             // package gets added to that fork group. Otherwise, we create a
             // new fork group.
-            // possible_forks.push(PossibleFork { packages: vec![] });
             let Some(possible_fork) = possible_forks.find_overlapping_fork_group(marker) else {
                 // Create a new fork since there was no overlap.
                 possible_forks.forks.push(PossibleFork {
@@ -1973,6 +1994,7 @@ impl Dependencies {
         }
         let mut forks = vec![Fork {
             dependencies: vec![],
+            markers: MarkerTree::And(vec![]),
         }];
         for (_, possible_forks) in by_name {
             let fork_groups = match possible_forks {
@@ -1991,9 +2013,16 @@ impl Dependencies {
             let mut new_forks: Vec<Fork> = vec![];
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
-                for (index, _) in group.packages {
+                for (index, markers) in group.packages {
                     for fork in &mut new_forks_for_group {
                         fork.dependencies.push(deps[index].clone());
+                        // Each marker expression in a single fork is,
+                        // by construction, overlapping with at least
+                        // one other marker expression in this fork.
+                        // However, the symmetric differences may be
+                        // non-empty. Therefore, the markers need to be
+                        // combined on the corresponding fork
+                        fork.markers.and(markers.clone());
                     }
                 }
                 new_forks.extend(new_forks_for_group);
@@ -2041,6 +2070,14 @@ struct Fork {
     /// free. (i.e., There are no two packages with the same name with
     /// non-overlapping marker expressions.)
     dependencies: Vec<(PubGrubPackage, Range<Version>)>,
+    /// The markers that provoked this fork.
+    ///
+    /// So in the example above, the `a<2` fork would have
+    /// `sys_platform == 'foo'`, while the `a>=2` fork would have
+    /// `sys_platform == 'bar'`.
+    ///
+    /// (This doesn't include any marker expressions from a parent fork.)
+    markers: MarkerTree,
 }
 
 /// Intermediate state that represents a *possible* grouping of forks
@@ -2164,11 +2201,11 @@ impl<'a> PossibleFork<'a> {
     /// Returns true if and only if the given marker expression has a non-empty
     /// intersection with *any* of the package markers within this possible
     /// fork.
-    fn is_overlapping(&self, marker: &MarkerTree) -> bool {
+    fn is_overlapping(&self, candidate_package_markers: &MarkerTree) -> bool {
         use crate::marker::is_disjoint;
 
-        for (_, tree) in &self.packages {
-            if !is_disjoint(marker, tree) {
+        for (_, package_markers) in &self.packages {
+            if !is_disjoint(candidate_package_markers, package_markers) {
                 return true;
             }
         }
