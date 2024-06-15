@@ -41,6 +41,7 @@ impl PubGrubDependencies {
         git: &GitResolver,
         env: Option<&MarkerEnvironment>,
         requires_python: Option<&MarkerTree>,
+        fork_markers: &MarkerTree,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = Vec::default();
         let mut seen = FxHashSet::default();
@@ -58,6 +59,7 @@ impl PubGrubDependencies {
             git,
             env,
             requires_python,
+            fork_markers,
             &mut dependencies,
             &mut seen,
         )?;
@@ -91,6 +93,7 @@ fn add_requirements(
     git: &GitResolver,
     env: Option<&MarkerEnvironment>,
     requires_python: Option<&MarkerTree>,
+    fork_markers: &MarkerTree,
     dependencies: &mut Vec<(PubGrubPackage, Range<Version>)>,
     seen: &mut FxHashSet<ExtraName>,
 ) -> Result<(), ResolveError> {
@@ -103,6 +106,13 @@ fn add_requirements(
         // If the requirement would not be selected with any Python version
         // supported by the root, skip it.
         if !satisfies_requires_python(requires_python, requirement) {
+            continue;
+        }
+        // If we're in universal mode, `fork_markers` might correspond to a
+        // non-trivial marker expression that provoked the resolver to fork.
+        // In that case, we should ignore any dependency that cannot possibly
+        // satisfy the markers that provoked the fork.
+        if !possible_to_satisfy_markers(fork_markers, requirement) {
             continue;
         }
         // If the requirement isn't relevant for the current platform, skip it.
@@ -167,6 +177,7 @@ fn add_requirements(
                                 git,
                                 env,
                                 requires_python,
+                                fork_markers,
                                 dependencies,
                                 seen,
                             )?;
@@ -183,6 +194,14 @@ fn add_requirements(
                 // If the requirement would not be selected with any Python
                 // version supported by the root, skip it.
                 if !satisfies_requires_python(requires_python, constraint) {
+                    continue;
+                }
+                // If we're in universal mode, `fork_markers` might correspond
+                // to a non-trivial marker expression that provoked the
+                // resolver to fork. In that case, we should ignore any
+                // dependency that cannot possibly satisfy the markers that
+                // provoked the fork.
+                if !possible_to_satisfy_markers(fork_markers, constraint) {
                     continue;
                 }
                 // If the requirement isn't relevant for the current platform, skip it.
@@ -445,8 +464,14 @@ fn satisfies_requires_python(
     let Some(requires_python) = requires_python else {
         return true;
     };
+    possible_to_satisfy_markers(requires_python, requirement)
+}
+
+/// Returns true if and only if the given requirement's marker expression has a
+/// possible true value given the `markers` expression given.
+fn possible_to_satisfy_markers(markers: &MarkerTree, requirement: &Requirement) -> bool {
     let Some(marker) = requirement.marker.as_ref() else {
         return true;
     };
-    !crate::marker::is_disjoint(requires_python, marker)
+    !crate::marker::is_disjoint(markers, marker)
 }
