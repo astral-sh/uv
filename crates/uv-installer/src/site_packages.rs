@@ -194,10 +194,10 @@ impl SitePackages {
 
                 // Verify that the package is compatible with the current Python version.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    if !requires_python.contains(self.venv.interpreter().version()) {
+                    if !requires_python.contains(self.venv.interpreter().python_version()) {
                         diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
                             package: package.clone(),
-                            version: self.venv.interpreter().version().clone(),
+                            version: self.venv.interpreter().python_version().clone(),
                             requires_python: requires_python.clone(),
                         });
                     }

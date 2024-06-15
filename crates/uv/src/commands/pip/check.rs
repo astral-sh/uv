@@ -40,7 +40,7 @@ pub(crate) fn pip_check(
 
     debug!(
         "Using Python {} environment at {}",
-        environment.interpreter().version(),
+        environment.interpreter().python_version(),
         environment.python_executable().user_display().cyan()
     );
 

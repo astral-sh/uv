@@ -53,8 +53,8 @@ impl FromStr for ImplementationName {
 impl Display for ImplementationName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::CPython => f.write_str("CPython"),
-            Self::PyPy => f.write_str("PyPy"),
+            Self::CPython => f.write_str("cpython"),
+            Self::PyPy => f.write_str("pypy"),
         }
     }
 }
@@ -78,7 +78,7 @@ impl Display for LenientImplementationName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Known(implementation) => implementation.fmt(f),
-            Self::Unknown(name) => f.write_str(name),
+            Self::Unknown(name) => f.write_str(&name.to_ascii_lowercase()),
         }
     }
 }

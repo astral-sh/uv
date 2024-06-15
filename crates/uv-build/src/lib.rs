@@ -709,7 +709,7 @@ impl SourceBuild {
         let span = info_span!(
             "run_python_script",
             script=format!("prepare_metadata_for_build_{}", self.build_kind),
-            python_version = %self.venv.interpreter().version()
+            python_version = %self.venv.interpreter().python_version()
         );
         let output = self
             .runner
@@ -767,7 +767,7 @@ impl SourceBuild {
             let span = info_span!(
                 "run_python_script",
                 script="setup.py bdist_wheel",
-                python_version = %self.venv.interpreter().version()
+                python_version = %self.venv.interpreter().python_version()
             );
             let output = self
                 .runner
@@ -845,7 +845,7 @@ impl SourceBuild {
         let span = info_span!(
             "run_python_script",
             script=format!("build_{}", self.build_kind),
-            python_version = %self.venv.interpreter().version()
+            python_version = %self.venv.interpreter().python_version()
         );
         let output = self
             .runner
@@ -947,7 +947,7 @@ async fn create_pep517_build_environment(
     let span = info_span!(
         "run_python_script",
         script=format!("get_requires_for_build_{}", build_kind),
-        python_version = %venv.interpreter().version()
+        python_version = %venv.interpreter().python_version()
     );
     let output = runner
         .run_script(

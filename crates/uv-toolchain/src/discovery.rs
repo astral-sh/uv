@@ -772,7 +772,7 @@ fn warn_on_unsupported_python(interpreter: &Interpreter) {
     if interpreter.python_tuple() < (3, 8) {
         warn_user_once!(
             "uv is only compatible with Python 3.8+, found Python {}.",
-            interpreter.version()
+            interpreter.python_version()
         );
     }
 }
@@ -1179,7 +1179,7 @@ impl VersionRequest {
                     interpreter.python_patch(),
                 ) == (*major, *minor, *patch)
             }
-            Self::Range(specifiers) => specifiers.contains(interpreter.version()),
+            Self::Range(specifiers) => specifiers.contains(interpreter.python_version()),
         }
     }
 

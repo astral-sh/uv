@@ -214,7 +214,7 @@ impl PythonDownloadRequest {
             }
         }
         if let Some(implementation) = &self.implementation {
-            if key.implementation != *implementation {
+            if key.implementation != LenientImplementationName::from(*implementation) {
                 return false;
             }
         }

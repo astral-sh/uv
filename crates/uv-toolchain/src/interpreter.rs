@@ -234,14 +234,14 @@ impl Interpreter {
 
     /// Returns the full Python version.
     #[inline]
-    pub fn version(&self) -> &Version {
+    pub fn python_version(&self) -> &Version {
         &self.markers.python_full_version().version
     }
 
     /// Returns the full minor Python version.
     #[inline]
     pub fn python_minor_version(&self) -> Version {
-        Version::new(self.version().release().iter().take(2).copied())
+        Version::new(self.python_version().release().iter().take(2).copied())
     }
 
     /// Return the major version of this Python version.
@@ -430,7 +430,7 @@ impl Interpreter {
     /// Otherwise, just the major and minor version numbers need to match.
     pub fn satisfies(&self, version: &PythonVersion) -> bool {
         if version.patch().is_some() {
-            version.version() == self.version()
+            version.version() == self.python_version()
         } else {
             (version.major(), version.minor()) == self.python_tuple()
         }

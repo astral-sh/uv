@@ -10,7 +10,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[PythonDownload] = &[
             major: {{value.major}},
             minor: {{value.minor}},
             patch: {{value.patch}},
-            implementation: ImplementationName::{{value.name}},
+            implementation: LenientImplementationName::Known(ImplementationName::{{value.name}}),
             arch: Arch(target_lexicon::Architecture::{{value.arch}}),
             os: Os(target_lexicon::OperatingSystem::{{value.os}}),
             {{#value.libc}}

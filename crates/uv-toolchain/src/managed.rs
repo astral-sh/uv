@@ -11,7 +11,9 @@ use tracing::warn;
 use uv_state::{StateBucket, StateStore};
 
 use crate::downloads::Error as DownloadError;
-use crate::implementation::{Error as ImplementationError, ImplementationName};
+use crate::implementation::{
+    Error as ImplementationError, ImplementationName, LenientImplementationName,
+};
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
@@ -237,7 +239,12 @@ impl InstalledToolchain {
     }
 
     pub fn implementation(&self) -> &ImplementationName {
-        self.key.implementation()
+        match self.key.implementation() {
+            LenientImplementationName::Known(implementation) => implementation,
+            LenientImplementationName::Unknown(_) => {
+                panic!("Managed toolchains should have a known implementation")
+            }
+        }
     }
 
     pub fn path(&self) -> &Path {

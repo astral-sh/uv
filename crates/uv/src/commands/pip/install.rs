@@ -130,7 +130,7 @@ pub(crate) async fn pip_install(
 
     debug!(
         "Using Python {} environment at {}",
-        environment.interpreter().version(),
+        environment.interpreter().python_version(),
         environment.python_executable().user_display().cyan()
     );
 

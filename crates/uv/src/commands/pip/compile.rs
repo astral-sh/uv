@@ -176,7 +176,7 @@ pub(crate) async fn pip_compile(
 
     debug!(
         "Using Python {} interpreter at {} for builds",
-        interpreter.version(),
+        interpreter.python_version(),
         interpreter.sys_executable().user_display().cyan()
     );
 
@@ -189,13 +189,13 @@ pub(crate) async fn pip_compile(
                 && python_version.minor() == interpreter.python_minor()
         };
         if no_build.is_none()
-            && python_version.version() != interpreter.version()
+            && python_version.version() != interpreter.python_version()
             && (python_version.patch().is_some() || !matches_without_patch)
         {
             warn_user!(
                 "The requested Python version {} is not available; {} will be used to build dependencies instead.",
                 python_version.version(),
-                interpreter.version(),
+                interpreter.python_version(),
             );
         }
     }

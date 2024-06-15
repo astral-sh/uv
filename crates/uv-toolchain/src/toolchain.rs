@@ -13,7 +13,7 @@ use crate::discovery::{
     ToolchainSources,
 };
 use crate::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
-use crate::implementation::{ImplementationName, LenientImplementationName};
+use crate::implementation::{LenientImplementationName};
 use crate::managed::{InstalledToolchain, InstalledToolchains};
 use crate::platform::{Arch, Libc, Os};
 use crate::{Error, Interpreter, PythonVersion, ToolchainSource};
@@ -203,10 +203,7 @@ impl Toolchain {
 
     pub fn key(&self) -> ToolchainKey {
         ToolchainKey::new(
-            // TODO(zanieb): We need to figure out how to handle this, I don't want to relax the types
-            // of the key to allow unknown implementations but... its nice to construct a key for
-            // system interpreters
-            ImplementationName::from_str(self.interpreter.implementation_name()).unwrap(),
+            LenientImplementationName::from(self.interpreter.implementation_name()),
             self.interpreter.python_major(),
             self.interpreter.python_minor(),
             self.interpreter.python_patch(),
@@ -218,7 +215,7 @@ impl Toolchain {
 
     /// Return the Python [`Version`] of the toolchain as reported by its interpreter.
     pub fn python_version(&self) -> &Version {
-        self.interpreter.version()
+        self.interpreter.python_version()
     }
 
     /// Return the [`LenientImplementationName`] of the toolchain as reported by its interpreter.
@@ -259,7 +256,7 @@ pub enum ToolchainKeyError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolchainKey {
-    pub(crate) implementation: ImplementationName,
+    pub(crate) implementation: LenientImplementationName,
     pub(crate) major: u8,
     pub(crate) minor: u8,
     pub(crate) patch: u8,
@@ -270,7 +267,7 @@ pub struct ToolchainKey {
 
 impl ToolchainKey {
     pub fn new(
-        implementation: ImplementationName,
+        implementation: LenientImplementationName,
         major: u8,
         minor: u8,
         patch: u8,
@@ -289,39 +286,7 @@ impl ToolchainKey {
         }
     }
 
-    #[must_use]
-    pub fn with_implementation(mut self, implementation: ImplementationName) -> Self {
-        self.implementation = implementation;
-        self
-    }
-
-    #[must_use]
-    pub fn with_version(mut self, major: u8, minor: u8, patch: u8) -> Self {
-        self.major = major;
-        self.minor = minor;
-        self.patch = patch;
-        self
-    }
-
-    #[must_use]
-    pub fn with_arch(mut self, arch: Arch) -> Self {
-        self.arch = arch;
-        self
-    }
-
-    #[must_use]
-    pub fn with_os(mut self, os: Os) -> Self {
-        self.os = os;
-        self
-    }
-
-    #[must_use]
-    pub fn with_libc(mut self, libc: Libc) -> Self {
-        self.libc = libc;
-        self
-    }
-
-    pub fn implementation(&self) -> &ImplementationName {
+    pub fn implementation(&self) -> &LenientImplementationName {
         &self.implementation
     }
 
@@ -348,7 +313,13 @@ impl fmt::Display for ToolchainKey {
         write!(
             f,
             "{}-{}.{}.{}-{}-{}-{}",
-            self.implementation, self.major, self.minor, self.patch, self.os, self.arch, self.libc
+            self.implementation,
+            self.major,
+            self.minor,
+            self.patch,
+            self.os,
+            self.arch,
+            self.libc
         )
     }
 }
@@ -365,12 +336,7 @@ impl FromStr for ToolchainKey {
             ));
         };
 
-        let implementation = ImplementationName::from_str(implementation).map_err(|err| {
-            ToolchainKeyError::ParseError(
-                key.to_string(),
-                format!("invalid Python implementation: {err}"),
-            )
-        })?;
+        let implementation = LenientImplementationName::from(*implementation);
 
         let os = Os::from_str(os).map_err(|err| {
             ToolchainKeyError::ParseError(key.to_string(), format!("invalid OS: {err}"))
