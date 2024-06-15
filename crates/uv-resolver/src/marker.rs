@@ -18,13 +18,13 @@ use pubgrub::range::Range as PubGrubRange;
 pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
     let (expr1, expr2) = match (first, second) {
         (MarkerTree::Expression(expr1), MarkerTree::Expression(expr2)) => (expr1, expr2),
-        // `And` expressions are disjoint if any clause is disjoint.
-        (other, MarkerTree::And(exprs)) | (MarkerTree::And(exprs), other) => {
-            return exprs.iter().any(|tree1| is_disjoint(tree1, other))
-        }
         // `Or` expressions are disjoint if all clauses are disjoint.
         (other, MarkerTree::Or(exprs)) | (MarkerTree::Or(exprs), other) => {
             return exprs.iter().all(|tree1| is_disjoint(tree1, other))
+        }
+        // `And` expressions are disjoint if any clause is disjoint.
+        (other, MarkerTree::And(exprs)) | (MarkerTree::And(exprs), other) => {
+            return exprs.iter().any(|tree1| is_disjoint(tree1, other));
         }
     };
 
@@ -528,6 +528,15 @@ mod tests {
         assert!(!is_disjoint(
             "os_name == 'a' or platform_version == '1'",
             "os_name == 'a' or platform_version == '2'"
+        ));
+
+        assert!(is_disjoint(
+            "sys_platform == 'darwin' and implementation_name == 'pypy'",
+            "sys_platform == 'bar' or implementation_name == 'foo'",
+        ));
+        assert!(is_disjoint(
+            "sys_platform == 'bar' or implementation_name == 'foo'",
+            "sys_platform == 'darwin' and implementation_name == 'pypy'",
         ));
     }
 
