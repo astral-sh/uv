@@ -1205,7 +1205,7 @@ mod tests {
         let toolchain =
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 Toolchain::find(
-                    Some("3.12"),
+                    Some(ToolchainRequest::parse("3.12")),
                     SystemPython::Required,
                     PreviewMode::Disabled,
                     &context.cache,
@@ -1220,7 +1220,7 @@ mod tests {
         // With a patch version that cannot be toolchain
         let result = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
             Toolchain::find(
-                Some("3.12.3"),
+                Some(ToolchainRequest::parse("3.12.3")),
                 SystemPython::Required,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1263,7 +1263,7 @@ mod tests {
             &[("VIRTUAL_ENV", Some(context.tempdir.as_os_str()))],
             || {
                 Toolchain::find(
-                    Some("3.12.3"),
+                    Some(ToolchainRequest::parse("3.12.3")),
                     SystemPython::Required,
                     PreviewMode::Disabled,
                     &context.cache,
@@ -1290,7 +1290,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("foobar"),
+                Some(ToolchainRequest::parse("foobar")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1317,7 +1317,7 @@ mod tests {
 
         let result = context.run(|| {
             Toolchain::find(
-                Some("3.10.0"),
+                Some(ToolchainRequest::parse("3.10.0")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1344,7 +1344,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("./foo/bar"),
+                Some(ToolchainRequest::parse("./foo/bar")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1359,7 +1359,7 @@ mod tests {
         context.add_python_versions(&["3.11.1"])?;
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("./foo/bar"),
+                Some(ToolchainRequest::parse("./foo/bar")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1387,7 +1387,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some(python.to_str().unwrap()),
+                Some(ToolchainRequest::parse(python.to_str().unwrap())),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1402,7 +1402,7 @@ mod tests {
         // With `SystemPython::Explicit
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some(python.to_str().unwrap()),
+                Some(ToolchainRequest::parse(python.to_str().unwrap())),
                 SystemPython::Explicit,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1416,7 +1416,7 @@ mod tests {
 
         let result = context.run(|| {
             Toolchain::find(
-                Some(python.to_str().unwrap()),
+                Some(ToolchainRequest::parse(python.to_str().unwrap())),
                 SystemPython::Disallowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1436,7 +1436,7 @@ mod tests {
         context.add_python_versions(&["3.11.1"])?;
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some(python.to_str().unwrap()),
+                Some(ToolchainRequest::parse(python.to_str().unwrap())),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1459,7 +1459,7 @@ mod tests {
         TestContext::mock_venv(&venv, "3.10.0")?;
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("../foo/.venv"),
+                Some(ToolchainRequest::parse("../foo/.venv")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1473,7 +1473,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some(venv.to_str().unwrap()),
+                Some(ToolchainRequest::parse(venv.to_str().unwrap())),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1495,7 +1495,9 @@ mod tests {
         )?;
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some(context.tempdir.child("bar").to_str().unwrap()),
+                Some(ToolchainRequest::parse(
+                    context.tempdir.child("bar").to_str().unwrap(),
+                )),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1513,7 +1515,7 @@ mod tests {
         let toolchain =
             context.run_with_vars(&[("VIRTUAL_ENV", Some(other_venv.as_os_str()))], || {
                 Toolchain::find(
-                    Some(venv.to_str().unwrap()),
+                    Some(ToolchainRequest::parse(venv.to_str().unwrap())),
                     SystemPython::Allowed,
                     PreviewMode::Disabled,
                     &context.cache,
@@ -1535,7 +1537,7 @@ mod tests {
 
         let result = context.run(|| {
             Toolchain::find(
-                Some("./foo/bar"),
+                Some(ToolchainRequest::parse("./foo/bar")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1567,7 +1569,7 @@ mod tests {
         let toolchain = context
             .run(|| {
                 Toolchain::find(
-                    Some("bar"),
+                    Some(ToolchainRequest::parse("bar")),
                     SystemPython::Allowed,
                     PreviewMode::Disabled,
                     &context.cache,
@@ -1623,7 +1625,7 @@ mod tests {
         let toolchain = context
             .run(|| {
                 Toolchain::find(
-                    Some("pypy"),
+                    Some(ToolchainRequest::parse("pypy")),
                     SystemPython::Allowed,
                     PreviewMode::Disabled,
                     &context.cache,
@@ -1650,7 +1652,7 @@ mod tests {
         let toolchain = context
             .run(|| {
                 Toolchain::find(
-                    Some("pypy"),
+                    Some(ToolchainRequest::parse("pypy")),
                     SystemPython::Allowed,
                     PreviewMode::Disabled,
                     &context.cache,
@@ -1692,7 +1694,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("pypy3.10"),
+                Some(ToolchainRequest::parse("pypy3.10")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1718,7 +1720,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("pypy@3.10"),
+                Some(ToolchainRequest::parse("pypy@3.10")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1755,7 +1757,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("pypy@3.10"),
+                Some(ToolchainRequest::parse("pypy@3.10")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1774,7 +1776,7 @@ mod tests {
         ])?;
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("pypy@3.10"),
+                Some(ToolchainRequest::parse("pypy@3.10")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1807,7 +1809,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("pypy@3.10"),
+                Some(ToolchainRequest::parse("pypy@3.10")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,
@@ -1836,7 +1838,7 @@ mod tests {
 
         let toolchain = context.run(|| {
             Toolchain::find(
-                Some("pypy@3.10"),
+                Some(ToolchainRequest::parse("pypy@3.10")),
                 SystemPython::Allowed,
                 PreviewMode::Disabled,
                 &context.cache,

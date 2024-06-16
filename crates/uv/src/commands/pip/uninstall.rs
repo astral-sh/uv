@@ -15,6 +15,7 @@ use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_toolchain::Toolchain;
+use uv_toolchain::ToolchainRequest;
 use uv_toolchain::{Prefix, PythonEnvironment, SystemPython, Target};
 
 use crate::commands::{elapsed, ExitStatus};
@@ -52,7 +53,7 @@ pub(crate) async fn pip_uninstall(
         SystemPython::Explicit
     };
     let environment = PythonEnvironment::from_toolchain(Toolchain::find(
-        python.as_deref(),
+        python.as_deref().map(ToolchainRequest::parse),
         system,
         preview,
         &cache,
