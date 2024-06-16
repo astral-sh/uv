@@ -19,6 +19,7 @@ struct VenvTestContext {
     cache_dir: assert_fs::TempDir,
     temp_dir: assert_fs::TempDir,
     venv: ChildPath,
+    toolchain_dir: ChildPath,
     python_path: OsString,
     python_versions: Vec<PythonVersion>,
 }
@@ -28,6 +29,9 @@ impl VenvTestContext {
         let temp_dir = assert_fs::TempDir::new().unwrap();
         let python_path = python_path_with_versions(&temp_dir, python_versions)
             .expect("Failed to create Python test path");
+
+        let toolchain_dir = temp_dir.child("toolchains");
+        toolchain_dir.create_dir_all().unwrap();
 
         // Canonicalize the virtual environment path for consistent snapshots across platforms
         let venv = ChildPath::new(temp_dir.canonicalize().unwrap().join(".venv"));
@@ -41,6 +45,7 @@ impl VenvTestContext {
         Self {
             cache_dir: assert_fs::TempDir::new().unwrap(),
             temp_dir,
+            toolchain_dir,
             venv,
             python_path,
             python_versions,
@@ -55,6 +60,7 @@ impl VenvTestContext {
             .arg(self.cache_dir.path())
             .arg("--exclude-newer")
             .arg(EXCLUDE_NEWER)
+            .env("UV_TOOLCHAIN_DIR", self.toolchain_dir.as_os_str())
             .env("UV_TEST_PYTHON_PATH", self.python_path.clone())
             .env("UV_NO_WRAP", "1")
             .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
