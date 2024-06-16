@@ -1,3 +1,4 @@
+use std::process::Stdio;
 use tokio::process::Command;
 use tracing::{instrument, trace, warn};
 use url::Url;
@@ -83,13 +84,22 @@ impl KeyringProvider {
 
     #[instrument(skip(self))]
     async fn fetch_subprocess(&self, service_name: &str, username: &str) -> Option<String> {
-        let output = Command::new("keyring")
+        // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/auth.py#L136-L141
+        let child = Command::new("keyring")
             .arg("get")
             .arg(service_name)
             .arg(username)
-            .output()
-            .await
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
             .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
+            .ok()?;
+
+        let output = child
+            .wait_with_output()
+            .await
+            .inspect_err(|err| warn!("Failed to wait for `keyring` output: {err}"))
             .ok()?;
 
         if output.status.success() {
