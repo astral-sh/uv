@@ -51,6 +51,8 @@ fn run_with_python_version() -> Result<()> {
     3.7.0
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: [VENV]/
     Resolved 5 packages in [TIME]
     Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
