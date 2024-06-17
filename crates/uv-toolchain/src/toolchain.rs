@@ -82,7 +82,6 @@ impl Toolchain {
     ) -> Result<Self, Error> {
         let sources = ToolchainSources::from_settings(system, preview);
         let toolchain = find_toolchain(request, system, &sources, cache)??;
-
         Ok(toolchain)
     }
 

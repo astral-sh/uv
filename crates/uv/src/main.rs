@@ -796,7 +796,7 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::toolchain_install(
-                args.target,
+                args.targets,
                 args.force,
                 globals.native_tls,
                 globals.connectivity,

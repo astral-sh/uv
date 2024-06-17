@@ -15,7 +15,7 @@ use uv_client::BetterReqwestError;
 use futures::TryStreamExt;
 
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 use uv_fs::Simplified;
 
@@ -265,20 +265,30 @@ impl PythonDownloadRequest {
 impl Display for PythonDownloadRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut parts = Vec::new();
-        if let Some(version) = &self.version {
-            parts.push(version.to_string());
-        }
         if let Some(implementation) = self.implementation {
             parts.push(implementation.to_string());
+        } else {
+            parts.push("any".to_string());
+        }
+        if let Some(version) = &self.version {
+            parts.push(version.to_string());
+        } else {
+            parts.push("any".to_string());
         }
         if let Some(os) = &self.os {
             parts.push(os.to_string());
+        } else {
+            parts.push("any".to_string());
         }
         if let Some(arch) = self.arch {
             parts.push(arch.to_string());
+        } else {
+            parts.push("any".to_string());
         }
         if let Some(libc) = self.libc {
             parts.push(libc.to_string());
+        } else {
+            parts.push("any".to_string());
         }
         write!(f, "{}", parts.join("-"))
     }
@@ -371,6 +381,7 @@ impl PythonDownload {
     }
 
     /// Download and extract
+    #[instrument(skip(client, parent_path), fields(download = %self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,

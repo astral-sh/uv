@@ -257,7 +257,7 @@ impl ToolchainListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolchainInstallSettings {
-    pub(crate) target: Option<String>,
+    pub(crate) targets: Vec<String>,
     pub(crate) force: bool,
 }
 
@@ -268,9 +268,9 @@ impl ToolchainInstallSettings {
         args: ToolchainInstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let ToolchainInstallArgs { target, force } = args;
+        let ToolchainInstallArgs { targets, force } = args;
 
-        Self { target, force }
+        Self { targets, force }
     }
 }
 

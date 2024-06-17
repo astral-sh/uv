@@ -1754,10 +1754,10 @@ pub(crate) struct ToolchainListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolchainInstallArgs {
-    /// The toolchain to install.
+    /// The toolchains to install.
     ///
     /// If not provided, the latest available version will be installed unless a toolchain was previously installed.
-    pub(crate) target: Option<String>,
+    pub(crate) targets: Vec<String>,
 
     /// Force the installation of the toolchain, even if it is already installed.
     #[arg(long, short)]
