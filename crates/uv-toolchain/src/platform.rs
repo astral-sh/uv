@@ -9,6 +9,8 @@ pub enum Error {
     UnknownOs(String),
     #[error("Unknown architecture: {0}")]
     UnknownArch(String),
+    #[error("Unknown libc environment: {0}")]
+    UnknownLibc(String),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -37,14 +39,27 @@ impl Libc {
     }
 }
 
+impl FromStr for Libc {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "gnu" => Ok(Self::Some(target_lexicon::Environment::Gnu)),
+            "musl" => Ok(Self::Some(target_lexicon::Environment::Musl)),
+            "none" => Ok(Self::None),
+            _ => Err(Error::UnknownLibc(s.to_string())),
+        }
+    }
+}
+
 impl Os {
-    pub(crate) fn from_env() -> Self {
+    pub fn from_env() -> Self {
         Self(target_lexicon::HOST.operating_system)
     }
 }
 
 impl Arch {
-    pub(crate) fn from_env() -> Self {
+    pub fn from_env() -> Self {
         Self(target_lexicon::HOST.architecture)
     }
 }

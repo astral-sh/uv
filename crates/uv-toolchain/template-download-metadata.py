@@ -6,7 +6,7 @@ Generates the `downloads.inc` file from the `downloads.inc.mustache` template.
 
 Usage:
 
-    python template-download-metadata.py
+    uv run --isolated --with chevron-blue -- crates/uv-toolchain/template-download-metadata.py
 """
 
 import sys

@@ -1,3 +1,6 @@
+use std::fmt;
+use std::str::FromStr;
+
 use pep440_rs::Version;
 use tracing::{debug, info};
 use uv_client::BaseClientBuilder;
@@ -13,7 +16,7 @@ use crate::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{InstalledToolchain, InstalledToolchains};
 use crate::platform::{Arch, Libc, Os};
-use crate::{Error, Interpreter, ToolchainSource};
+use crate::{Error, Interpreter, PythonVersion, ToolchainSource};
 
 /// A Python interpreter and accompanying tools.
 #[derive(Clone, Debug)]
@@ -198,14 +201,15 @@ impl Toolchain {
         &self.source
     }
 
-    pub fn key(&self) -> String {
-        format!(
-            "{}-{}-{}-{}-{}",
-            self.implementation().to_string().to_ascii_lowercase(),
-            self.python_version(),
+    pub fn key(&self) -> ToolchainKey {
+        ToolchainKey::new(
+            LenientImplementationName::from(self.interpreter.implementation_name()),
+            self.interpreter.python_major(),
+            self.interpreter.python_minor(),
+            self.interpreter.python_patch(),
             self.os(),
             self.arch(),
-            self.libc()
+            self.libc(),
         )
     }
 
@@ -241,5 +245,141 @@ impl Toolchain {
 
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ToolchainKeyError {
+    #[error("Failed to parse toolchain key `{0}`: {1}")]
+    ParseError(String, String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolchainKey {
+    pub(crate) implementation: LenientImplementationName,
+    pub(crate) major: u8,
+    pub(crate) minor: u8,
+    pub(crate) patch: u8,
+    pub(crate) os: Os,
+    pub(crate) arch: Arch,
+    pub(crate) libc: Libc,
+}
+
+impl ToolchainKey {
+    pub fn new(
+        implementation: LenientImplementationName,
+        major: u8,
+        minor: u8,
+        patch: u8,
+        os: Os,
+        arch: Arch,
+        libc: Libc,
+    ) -> Self {
+        Self {
+            implementation,
+            major,
+            minor,
+            patch,
+            os,
+            arch,
+            libc,
+        }
+    }
+
+    pub fn implementation(&self) -> &LenientImplementationName {
+        &self.implementation
+    }
+
+    pub fn version(&self) -> PythonVersion {
+        PythonVersion::from_str(&format!("{}.{}.{}", self.major, self.minor, self.patch))
+            .expect("Toolchain keys must have valid Python versions")
+    }
+
+    pub fn arch(&self) -> &Arch {
+        &self.arch
+    }
+
+    pub fn os(&self) -> &Os {
+        &self.os
+    }
+
+    pub fn libc(&self) -> &Libc {
+        &self.libc
+    }
+}
+
+impl fmt::Display for ToolchainKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}-{}.{}.{}-{}-{}-{}",
+            self.implementation, self.major, self.minor, self.patch, self.os, self.arch, self.libc
+        )
+    }
+}
+
+impl FromStr for ToolchainKey {
+    type Err = ToolchainKeyError;
+
+    fn from_str(key: &str) -> Result<Self, Self::Err> {
+        let parts = key.split('-').collect::<Vec<_>>();
+        let [implementation, version, os, arch, libc] = parts.as_slice() else {
+            return Err(ToolchainKeyError::ParseError(
+                key.to_string(),
+                "not enough `-`-separated values".to_string(),
+            ));
+        };
+
+        let implementation = LenientImplementationName::from(*implementation);
+
+        let os = Os::from_str(os).map_err(|err| {
+            ToolchainKeyError::ParseError(key.to_string(), format!("invalid OS: {err}"))
+        })?;
+
+        let arch = Arch::from_str(arch).map_err(|err| {
+            ToolchainKeyError::ParseError(key.to_string(), format!("invalid architecture: {err}"))
+        })?;
+
+        let libc = Libc::from_str(libc).map_err(|err| {
+            ToolchainKeyError::ParseError(key.to_string(), format!("invalid libc: {err}"))
+        })?;
+
+        let [major, minor, patch] = version
+            .splitn(3, '.')
+            .map(str::parse::<u8>)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| {
+                ToolchainKeyError::ParseError(
+                    key.to_string(),
+                    format!("invalid Python version: {err}"),
+                )
+            })?[..]
+        else {
+            return Err(ToolchainKeyError::ParseError(
+                key.to_string(),
+                "invalid Python version: expected `<major>.<minor>.<patch>`".to_string(),
+            ));
+        };
+
+        Ok(Self::new(
+            implementation,
+            major,
+            minor,
+            patch,
+            os,
+            arch,
+            libc,
+        ))
+    }
+}
+
+impl PartialOrd for ToolchainKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for ToolchainKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_string().cmp(&other.to_string())
     }
 }

@@ -16,6 +16,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 
+use crate::downloads::PythonDownloadRequest;
 use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::InstalledToolchains;
@@ -47,6 +48,9 @@ pub enum ToolchainRequest {
     Implementation(ImplementationName),
     /// A Python implementation name and version e.g. `pypy3.8` or `pypy@3.8`
     ImplementationVersion(ImplementationName, VersionRequest),
+    /// A request for a specific toolchain key e.g. `cpython-3.12-x86_64-linux-gnu`
+    /// Generally these refer to uv-managed toolchain downloads.
+    Key(PythonDownloadRequest),
 }
 
 /// The sources to consider when finding a Python toolchain.
@@ -101,6 +105,8 @@ pub enum ToolchainNotFound {
     NoPythonInstallation(ToolchainSources, Option<VersionRequest>),
     /// No Python installations with the requested version were found.
     NoMatchingVersion(ToolchainSources, VersionRequest),
+    /// No Python installations with the requested key were found.
+    NoMatchingKey(ToolchainSources, PythonDownloadRequest),
     /// No Python installations with the requested implementation name were found.
     NoMatchingImplementation(ToolchainSources, ImplementationName),
     /// No Python installations with the requested implementation name and version were found.
@@ -244,7 +250,7 @@ fn python_executables<'a>(
                     Ok(
                         toolchains.into_iter().filter(move |toolchain|
                             version.is_none() || version.is_some_and(|version|
-                                version.matches_version(toolchain.python_version())
+                                version.matches_version(&toolchain.version())
                             )
                         )
                         .inspect(|toolchain| debug!("Found managed toolchain `{toolchain}`"))
@@ -588,9 +594,9 @@ pub fn find_toolchains<'a>(
                 .filter(move |result| result_satisfies_system_python(result, system))
                 .filter(|result| match result {
                     Err(_) => true,
-                    Ok((_source, interpreter)) => {
-                        interpreter.implementation_name() == implementation.as_str()
-                    }
+                    Ok((_source, interpreter)) => interpreter
+                        .implementation_name()
+                        .eq_ignore_ascii_case(implementation.into()),
                 })
                 .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
@@ -602,8 +608,20 @@ pub fn find_toolchains<'a>(
                     Err(_) => true,
                     Ok((_source, interpreter)) => {
                         version.matches_interpreter(interpreter)
-                            && interpreter.implementation_name() == implementation.as_str()
+                            && interpreter
+                                .implementation_name()
+                                .eq_ignore_ascii_case(implementation.into())
                     }
+                })
+                .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
+        }),
+        ToolchainRequest::Key(request) => Box::new({
+            debug!("Searching for {request} in {sources}");
+            python_interpreters(request.version(), request.implementation(), sources, cache)
+                .filter(move |result| result_satisfies_system_python(result, system))
+                .filter(|result| match result {
+                    Err(_) => true,
+                    Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
                 })
                 .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
@@ -643,6 +661,9 @@ pub(crate) fn find_toolchain(
             }
             ToolchainRequest::ExecutableName(name) => {
                 ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone())
+            }
+            ToolchainRequest::Key(key) => {
+                ToolchainNotFound::NoMatchingKey(sources.clone(), key.clone())
             }
             // TODO(zanieb): As currently implemented, these are unreachable as they are handled in `find_toolchains`
             // We should avoid this duplication
@@ -918,7 +939,7 @@ impl ToolchainRequest {
         for implementation in ImplementationName::iter() {
             if let Some(remainder) = value
                 .to_ascii_lowercase()
-                .strip_prefix(implementation.as_str())
+                .strip_prefix(Into::<&str>::into(implementation))
             {
                 // e.g. `pypy`
                 if remainder.is_empty() {
@@ -964,6 +985,9 @@ impl ToolchainRequest {
         // On Windows, Unix path separators are often valid
         if cfg!(windows) && value.contains('/') {
             return Self::File(value_as_path);
+        }
+        if let Ok(request) = PythonDownloadRequest::from_str(value) {
+            return Self::Key(request);
         }
         // Finally, we'll treat it as the name of an executable (i.e. in the search PATH)
         // e.g. foo.exe
@@ -1047,13 +1071,16 @@ impl ToolchainRequest {
                 }
                 false
             }
-            ToolchainRequest::Implementation(implementation) => {
-                interpreter.implementation_name() == implementation.as_str()
-            }
+            ToolchainRequest::Implementation(implementation) => interpreter
+                .implementation_name()
+                .eq_ignore_ascii_case(implementation.into()),
             ToolchainRequest::ImplementationVersion(implementation, version) => {
                 version.matches_interpreter(interpreter)
-                    && interpreter.implementation_name() == implementation.as_str()
+                    && interpreter
+                        .implementation_name()
+                        .eq_ignore_ascii_case(implementation.into())
             }
+            ToolchainRequest::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
     }
 }
@@ -1103,7 +1130,7 @@ impl VersionRequest {
             .into_iter()
             .flat_map(move |implementation| {
                 let extension = std::env::consts::EXE_SUFFIX;
-                let name = implementation.as_str();
+                let name: &str = implementation.into();
                 let (python, python3) = if extension.is_empty() {
                     (Cow::Borrowed(name), Cow::Owned(format!("{name}3")))
                 } else {
@@ -1142,7 +1169,7 @@ impl VersionRequest {
     }
 
     /// Check if a interpreter matches the requested Python version.
-    fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
+    pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         match self {
             Self::Any => true,
             Self::Major(major) => interpreter.python_major() == *major,
@@ -1377,6 +1404,7 @@ impl fmt::Display for ToolchainRequest {
             Self::ImplementationVersion(implementation, version) => {
                 write!(f, "{implementation} {version}")
             }
+            Self::Key(request) => write!(f, "{request}"),
         }
     }
 }
@@ -1412,13 +1440,21 @@ impl fmt::Display for ToolchainNotFound {
                 write!(f, "No interpreter found for Python {version} in {sources}")
             }
             Self::NoMatchingImplementation(sources, implementation) => {
-                write!(f, "No interpreter found for {implementation} in {sources}")
+                write!(
+                    f,
+                    "No interpreter found for {} in {sources}",
+                    implementation.pretty()
+                )
             }
             Self::NoMatchingImplementationVersion(sources, implementation, version) => {
                 write!(
                     f,
-                    "No interpreter found for {implementation} {version} in {sources}"
+                    "No interpreter found for {} {version} in {sources}",
+                    implementation.pretty()
                 )
+            }
+            Self::NoMatchingKey(sources, key) => {
+                write!(f, "No interpreter found key {key} in {sources}")
             }
             Self::FileNotFound(path) => write!(
                 f,
