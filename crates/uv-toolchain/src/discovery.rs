@@ -1440,12 +1440,17 @@ impl fmt::Display for ToolchainNotFound {
                 write!(f, "No interpreter found for Python {version} in {sources}")
             }
             Self::NoMatchingImplementation(sources, implementation) => {
-                write!(f, "No interpreter found for {implementation} in {sources}")
+                write!(
+                    f,
+                    "No interpreter found for {} in {sources}",
+                    implementation.pretty()
+                )
             }
             Self::NoMatchingImplementationVersion(sources, implementation, version) => {
                 write!(
                     f,
-                    "No interpreter found for {implementation} {version} in {sources}"
+                    "No interpreter found for {} {version} in {sources}",
+                    implementation.pretty()
                 )
             }
             Self::NoMatchingKey(sources, key) => {
