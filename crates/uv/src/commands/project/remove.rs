@@ -8,6 +8,7 @@ use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::ProjectWorkspace;
 use uv_warnings::warn_user;
 
+use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettings, ResolverSettings};
@@ -121,6 +122,7 @@ pub(crate) async fn remove(
         &lock,
         extras,
         dev,
+        Modifications::Exact,
         &settings.reinstall,
         &settings.index_locations,
         &settings.index_strategy,

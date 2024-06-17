@@ -31,6 +31,7 @@ use crate::cli::{
     RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs, ToolchainListArgs,
     VenvArgs,
 };
+use crate::commands::pip::operations::Modifications;
 use crate::commands::ListFormat;
 
 /// The resolved global settings to use for any invocation of the CLI.
@@ -297,6 +298,7 @@ impl ToolchainFindSettings {
 pub(crate) struct SyncSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
+    pub(crate) modifications: Modifications,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: InstallerSettings,
@@ -312,11 +314,18 @@ impl SyncSettings {
             no_all_extras,
             dev,
             no_dev,
+            keep_untracked,
             installer,
             build,
             refresh,
             python,
         } = args;
+
+        let modifications = if keep_untracked {
+            Modifications::Sufficient
+        } else {
+            Modifications::Exact
+        };
 
         Self {
             extras: ExtrasSpecification::from_args(
@@ -324,6 +333,7 @@ impl SyncSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
+            modifications,
             python,
             refresh: Refresh::from(refresh),
             settings: InstallerSettings::combine(installer_options(installer, build), filesystem),

@@ -646,6 +646,7 @@ async fn run() -> Result<ExitStatus> {
             commands::sync(
                 args.extras,
                 args.dev,
+                args.modifications,
                 args.python,
                 args.settings,
                 globals.preview,

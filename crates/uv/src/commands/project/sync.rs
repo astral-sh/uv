@@ -31,6 +31,7 @@ use crate::settings::InstallerSettings;
 pub(crate) async fn sync(
     extras: ExtrasSpecification,
     dev: bool,
+    modifications: Modifications,
     python: Option<String>,
     settings: InstallerSettings,
     preview: PreviewMode,
@@ -65,6 +66,7 @@ pub(crate) async fn sync(
         &lock,
         extras,
         dev,
+        modifications,
         &settings.reinstall,
         &settings.index_locations,
         &settings.index_strategy,
@@ -94,6 +96,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: ExtrasSpecification,
     dev: bool,
+    modifications: Modifications,
     reinstall: &Reinstall,
     index_locations: &IndexLocations,
     index_strategy: &IndexStrategy,
@@ -188,7 +191,7 @@ pub(super) async fn do_sync(
     pip::operations::install(
         &resolution,
         site_packages,
-        Modifications::Exact,
+        modifications,
         reinstall,
         build_options,
         *link_mode,
