@@ -1,16 +1,14 @@
 use anyhow::Result;
-use fs_err as fs;
 use futures::StreamExt;
 use itertools::Itertools;
 use std::fmt::Write;
-use std::path::PathBuf;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_toolchain::downloads::{self, DownloadResult, PythonDownload, PythonDownloadRequest};
 use uv_toolchain::managed::{InstalledToolchain, InstalledToolchains};
-use uv_toolchain::ToolchainRequest;
+use uv_toolchain::{requests_from_version_files, ToolchainRequest};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -37,15 +35,10 @@ pub(crate) async fn install(
     let toolchain_dir = toolchains.root();
 
     let requests: Vec<_> = if targets.is_empty() {
-        if let Some(versions) = read_versions_file().await? {
-            versions
-                .into_iter()
-                .map(|version| ToolchainRequest::parse(&version))
-                .collect()
-        } else if let Some(version) = read_version_file().await? {
-            vec![ToolchainRequest::parse(&version)]
+        if let Some(requests) = requests_from_version_files().await? {
+            requests
         } else {
-            vec![ToolchainRequest::default()]
+            vec![ToolchainRequest::Any]
         }
     } else {
         targets
@@ -161,27 +154,4 @@ pub(crate) async fn install(
     )?;
 
     Ok(ExitStatus::Success)
-}
-
-async fn read_versions_file() -> Result<Option<Vec<String>>> {
-    if !PathBuf::from(".python-versions").try_exists()? {
-        return Ok(None);
-    }
-    let lines: Vec<String> = fs::tokio::read_to_string(".python-versions")
-        .await?
-        .lines()
-        .map(ToString::to_string)
-        .collect();
-    Ok(Some(lines))
-}
-
-async fn read_version_file() -> Result<Option<String>> {
-    if !PathBuf::from(".python-version").try_exists()? {
-        return Ok(None);
-    }
-    Ok(fs::tokio::read_to_string(".python-version")
-        .await?
-        .lines()
-        .next()
-        .map(ToString::to_string))
 }
