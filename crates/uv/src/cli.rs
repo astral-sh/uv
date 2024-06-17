@@ -1756,7 +1756,9 @@ pub(crate) struct ToolchainListArgs {
 pub(crate) struct ToolchainInstallArgs {
     /// The toolchains to install.
     ///
-    /// If not provided, the latest available version will be installed unless a toolchain was previously installed.
+    /// If not provided, the requested toolchain(s) will be read from the `.python-versions`
+    ///  or `.python-version` files. If neither file is present, uv will check if it has
+    /// installed any toolchains. If not, it will install the latest stable version of Python.
     pub(crate) targets: Vec<String>,
 
     /// Force the installation of the toolchain, even if it is already installed.
