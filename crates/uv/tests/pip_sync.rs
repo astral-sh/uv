@@ -13,7 +13,7 @@ use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
 
-use common::{create_venv, uv_snapshot, venv_to_interpreter};
+use common::{uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
 use crate::common::{
@@ -998,13 +998,13 @@ fn install_local_wheel() -> Result<()> {
     context.assert_command("import tomli").success();
 
     // Create a new virtual environment.
-    let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     // Reinstall. The wheel should come from the cache, so there shouldn't be a "download".
     uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1019,7 +1019,7 @@ fn install_local_wheel() -> Result<()> {
     context.assert_command("import tomli").success();
 
     // Create a new virtual environment.
-    let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     // "Modify" the wheel.
     // The `filetime` crate works on Windows unlike the std.
@@ -1029,7 +1029,7 @@ fn install_local_wheel() -> Result<()> {
     uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1280,14 +1280,12 @@ fn install_url_source_dist_cached() -> Result<()> {
         .success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1304,16 +1302,14 @@ fn install_url_source_dist_cached() -> Result<()> {
         .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("source_distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -1327,7 +1323,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1376,14 +1372,12 @@ fn install_git_source_dist_cached() -> Result<()> {
         .success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1395,12 +1389,12 @@ fn install_git_source_dist_cached() -> Result<()> {
     "###
     );
 
-    check_command(&venv, "import uv_public_pypackage", &context.temp_dir);
+    context
+        .assert_command("import uv_public_pypackage")
+        .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     let filters = if cfg!(windows) {
         [("Removed 2 files", "Removed 3 files")]
@@ -1415,7 +1409,7 @@ fn install_git_source_dist_cached() -> Result<()> {
         .arg("werkzeug")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -1429,7 +1423,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1476,14 +1470,12 @@ fn install_registry_source_dist_cached() -> Result<()> {
         .success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1500,9 +1492,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
         .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     let filters: Vec<(&str, &str)> = if cfg!(windows) {
         // On Windows, the number of files removed is different.
@@ -1522,7 +1512,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
         .arg("source_distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -1536,7 +1526,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1593,14 +1583,12 @@ fn install_path_source_dist_cached() -> Result<()> {
         .success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1617,16 +1605,14 @@ fn install_path_source_dist_cached() -> Result<()> {
         .success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("source-distribution")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -1640,7 +1626,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1693,14 +1679,12 @@ fn install_path_built_dist_cached() -> Result<()> {
     context.assert_command("import tomli").success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1712,12 +1696,10 @@ fn install_path_built_dist_cached() -> Result<()> {
     "###
     );
 
-    check_command(&venv, "import tomli", &parent);
+    context.assert_command("import tomli").success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     let filters = if cfg!(windows) {
         // We do not display sizes on Windows
@@ -1736,7 +1718,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         .arg("tomli")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -1750,7 +1732,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1763,7 +1745,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     "###
     );
 
-    check_command(&venv, "import tomli", &context.temp_dir);
+    context.assert_command("import tomli").success();
 
     Ok(())
 }
@@ -1802,14 +1784,12 @@ fn install_url_built_dist_cached() -> Result<()> {
     context.assert_command("import tqdm").success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(filters, sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1821,19 +1801,17 @@ fn install_url_built_dist_cached() -> Result<()> {
     "###
     );
 
-    check_command(&venv, "import tqdm", &context.temp_dir);
+    context.assert_command("import tqdm").success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("tqdm")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -1847,7 +1825,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     uv_snapshot!(filters, sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1860,7 +1838,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     "###
     );
 
-    check_command(&venv, "import tqdm", &context.temp_dir);
+    context.assert_command("import tqdm").success();
 
     Ok(())
 }
@@ -2103,15 +2081,13 @@ fn refresh() -> Result<()> {
 
     // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
     // latest versions of the packages.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2125,8 +2101,8 @@ fn refresh() -> Result<()> {
     "###
     );
 
-    check_command(&venv, "import markupsafe", &context.temp_dir);
-    check_command(&venv, "import tomli", &context.temp_dir);
+    context.assert_command("import markupsafe").success();
+    context.assert_command("import tomli").success();
 
     Ok(())
 }
@@ -2160,16 +2136,14 @@ fn refresh_package() -> Result<()> {
 
     // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
     // latest versions of the packages.
-    let parent = context.temp_dir.child("parent");
-    parent.create_dir_all()?;
-    let venv = create_venv(&parent, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.txt")
         .arg("--refresh-package")
         .arg("tomli")
         .arg("--strict")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2833,12 +2807,12 @@ fn offline() -> Result<()> {
     );
 
     // Install with `--offline` with a populated cache.
-    let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
+    context.reset_venv();
 
     uv_snapshot!(sync_without_exclude_newer(&context)
         .arg("requirements.in")
         .arg("--offline")
-        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -88,11 +88,7 @@ impl TestContext {
             PythonVersion::from_str(python_version).expect("Tests must use valid Python versions");
 
         let mut filters = Vec::new();
-        filters.extend(
-            Self::path_patterns(python)
-                .into_iter()
-                .map(|pattern| (format!("{pattern}python.*"), "[PYTHON]".to_string())),
-        );
+
         filters.extend(
             Self::path_patterns(&cache_dir)
                 .into_iter()
@@ -146,28 +142,36 @@ impl TestContext {
         // Destroy any remaining UNC prefixes (Windows only)
         filters.push((r"\\\\\?\\".to_string(), String::new()));
 
-        // Add Python patch version filtering unless explicitly requested to ensure
-        // snapshots are patch version agnostic when it is not a part of the test.
-        if python_version.patch().is_none() {
-            filters.push((
-                format!(
-                    r"({})\.\d+",
-                    regex::escape(python_version.to_string().as_str())
-                ),
-                "$1.[X]".to_string(),
-            ));
-        }
-
-        Self {
+        let mut result = Self {
             temp_dir,
             cache_dir,
             venv,
             python_version: python_version.to_string(),
             filters,
             workspace_root,
-        }
+        };
+
+        result.add_filters_for_python_version(&python_version, python);
+
+        result
     }
 
+    fn add_filters_for_python_version(&mut self, version: &PythonVersion, executable: PathBuf) {
+        // Add filtering for the interpreter path
+        self.filters.extend(
+            Self::path_patterns(executable)
+                .into_iter()
+                .map(|pattern| (format!("{pattern}python.*"), format!("[PYTHON-{version}]"))),
+        );
+        // Add Python patch version filtering unless explicitly requested to ensure
+        // snapshots are patch version agnostic when it is not a part of the test.
+        if version.patch().is_none() {
+            self.filters.push((
+                format!(r"({})\.\d+", regex::escape(version.to_string().as_str())),
+                "$1.[X]".to_string(),
+            ));
+        }
+    }
     /// Create a `pip compile` command for testing.
     pub fn compile(&self) -> std::process::Command {
         let mut command = self.compile_without_exclude_newer();
@@ -487,6 +491,31 @@ impl TestContext {
             &format!("{}{}", self.python_kind(), self.python_version),
         )
     }
+
+    /// Reset the virtual environment in the test context.
+    pub fn reset_venv(&self) {
+        create_venv_from_executable(
+            &self.temp_dir,
+            &self.cache_dir,
+            &get_toolchain(&self.python_version),
+        );
+    }
+
+    /// Create a new virtual environment named `.venv` in the test context.
+    fn create_venv(&mut self, python: &str) -> PathBuf {
+        let parent = self.temp_dir.to_path_buf();
+        self.create_venv_in_parent(parent, python)
+    }
+
+    /// Create a new virtual environment named `.venv` in the given directory.
+    fn create_venv_in_parent<P: AsRef<Path>>(&mut self, path: P, python: &str) -> PathBuf {
+        let executable = get_toolchain(python);
+        self.add_filters_for_python_version(
+            &PythonVersion::from_str(python).unwrap(),
+            executable.clone(),
+        );
+        create_venv_from_executable(&ChildPath::new(path.as_ref()), &self.cache_dir, &executable)
+    }
 }
 
 pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
@@ -537,17 +566,6 @@ pub fn get_toolchain(python: &str) -> PathBuf {
         // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
         .unwrap_or_default()
         .unwrap_or(PathBuf::from(python))
-}
-
-/// Create a virtual environment named `.venv` in a temporary directory with the given
-/// Python version.
-pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
-    temp_dir: &Parent,
-    cache_dir: &assert_fs::TempDir,
-    python: &str,
-) -> PathBuf {
-    let python = get_toolchain(python);
-    create_venv_from_executable(temp_dir, cache_dir, &python)
 }
 
 /// Create a virtual environment named `.venv` in a temporary directory with the given
