@@ -188,7 +188,7 @@ pub(super) async fn do_sync(
     pip::operations::install(
         &resolution,
         site_packages,
-        Modifications::Sufficient,
+        Modifications::Exact,
         reinstall,
         build_options,
         *link_mode,
