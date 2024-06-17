@@ -8,7 +8,7 @@ use uv_toolchain::ToolchainRequest;
 
 use uv_fs::Simplified;
 use uv_toolchain::downloads::{DownloadResult, Error, PythonDownload, PythonDownloadRequest};
-use uv_toolchain::managed::InstalledToolchains;
+use uv_toolchain::managed::{InstalledToolchain, InstalledToolchains};
 
 #[derive(Parser, Debug)]
 pub(crate) struct FetchPythonArgs {
@@ -71,6 +71,11 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
             }
         };
         results.push((version, path));
+    }
+
+    for (_, path) in results {
+        let installed = InstalledToolchain::new(path)?;
+        installed.ensure_externally_managed()?;
     }
 
     if downloaded > 0 {

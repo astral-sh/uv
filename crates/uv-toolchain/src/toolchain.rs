@@ -178,6 +178,7 @@ impl Toolchain {
         };
 
         let installed = InstalledToolchain::new(path)?;
+        installed.ensure_externally_managed()?;
 
         Ok(Self {
             source: ToolchainSource::Managed,
