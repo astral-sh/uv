@@ -1544,7 +1544,7 @@ pub(crate) struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub(crate) no_dev: bool,
 
-    /// Keeps installations no longer tracked as dependencies.
+    /// Does not clean the environment.
     /// Without this flag any extraneous installations will be removed.
     #[arg(long)]
     pub(crate) no_clean: bool,
