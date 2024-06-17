@@ -686,14 +686,9 @@ async fn run() -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
 
-            let requirements = args
-                .requirements
-                .into_iter()
-                .map(RequirementsSource::Package)
-                .collect::<Vec<_>>();
-
             commands::add(
-                requirements,
+                args.requirements,
+                args.workspace,
                 args.dev,
                 args.python,
                 args.settings,

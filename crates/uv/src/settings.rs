@@ -17,6 +17,7 @@ use uv_configuration::{
     Upgrade,
 };
 use uv_normalize::PackageName;
+use uv_requirements::RequirementsSource;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_settings::{
     Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
@@ -373,7 +374,8 @@ impl LockSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
-    pub(crate) requirements: Vec<String>,
+    pub(crate) requirements: Vec<RequirementsSource>,
+    pub(crate) workspace: bool,
     pub(crate) dev: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
@@ -387,14 +389,21 @@ impl AddSettings {
         let AddArgs {
             requirements,
             dev,
+            workspace,
             installer,
             build,
             refresh,
             python,
         } = args;
 
+        let requirements = requirements
+            .into_iter()
+            .map(RequirementsSource::Package)
+            .collect::<Vec<_>>();
+
         Self {
             requirements,
+            workspace,
             dev,
             python,
             refresh: Refresh::from(refresh),
