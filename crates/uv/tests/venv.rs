@@ -89,6 +89,114 @@ fn create_venv_ignores_virtual_env_variable() {
 }
 
 #[test]
+fn create_venv_reads_request_from_python_version_file() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Without the file, we should use the first on the PATH
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With a version file, we should prefer that version
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_reads_request_from_python_versions_file() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Without the file, we should use the first on the PATH
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With a versions file, we should prefer the first listed version
+    context
+        .temp_dir
+        .child(".python-versions")
+        .write_str("3.12\n3.11")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_explicit_request_takes_priority_over_python_version_file() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview").arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
 fn seed() {
     let context = TestContext::new_with_versions(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv()

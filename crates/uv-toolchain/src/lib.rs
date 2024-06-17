@@ -13,7 +13,7 @@ pub use crate::prefix::Prefix;
 pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
 pub use crate::toolchain::Toolchain;
-pub use crate::version_files::{request_from_version_files, requests_from_version_files};
+pub use crate::version_files::{request_from_version_file, requests_from_version_file};
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
 mod discovery;
