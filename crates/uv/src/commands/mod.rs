@@ -17,12 +17,15 @@ pub(crate) use pip::show::pip_show;
 pub(crate) use pip::sync::pip_sync;
 pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
+pub(crate) use project::add::add;
 pub(crate) use project::lock::lock;
+pub(crate) use project::remove::remove;
 pub(crate) use project::run::run;
 pub(crate) use project::sync::sync;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::run::run as run_tool;
+pub(crate) use toolchain::find::find as toolchain_find;
 pub(crate) use toolchain::install::install as toolchain_install;
 pub(crate) use toolchain::list::list as toolchain_list;
 use uv_cache::Cache;

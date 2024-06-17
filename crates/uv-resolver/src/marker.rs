@@ -1,7 +1,6 @@
 #![allow(clippy::enum_glob_use)]
 
 use std::collections::HashMap;
-use std::mem;
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
 
@@ -16,7 +15,6 @@ use pubgrub::range::Range as PubGrubRange;
 
 /// Returns `true` if there is no environment in which both marker trees can both apply, i.e.
 /// the expression `first and second` is always false.
-#[allow(dead_code)]
 pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
     let (expr1, expr2) = match (first, second) {
         (MarkerTree::Expression(expr1), MarkerTree::Expression(expr2)) => (expr1, expr2),
@@ -94,62 +92,84 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
 ///
 /// This is useful in cases where creating conjunctions or disjunctions might occur in a non-deterministic
 /// order. This routine will attempt to erase the distinction created by such a construction.
-pub(crate) fn normalize(tree: &mut MarkerTree) {
+pub(crate) fn normalize(tree: MarkerTree) -> Option<MarkerTree> {
     match tree {
-        MarkerTree::And(trees) | MarkerTree::Or(trees) => {
+        MarkerTree::And(trees) => {
             let mut reduced = Vec::new();
             let mut versions: HashMap<_, Vec<_>> = HashMap::new();
 
-            for mut tree in mem::take(trees) {
+            for subtree in trees {
                 // Simplify nested expressions as much as possible first.
-                normalize(&mut tree);
+                //
+                // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`), omit it.
+                let Some(subtree) = normalize(subtree) else {
+                    continue;
+                };
 
                 // Extract expressions we may be able to simplify more.
-                if let MarkerTree::Expression(ref expr) = tree {
+                if let MarkerTree::Expression(ref expr) = subtree {
+                    if let Some((key, range)) = keyed_range(expr) {
+                        versions.entry(key.clone()).or_default().push(range);
+                        continue;
+                    }
+                }
+                reduced.push(subtree);
+            }
+
+            simplify_ranges(&mut reduced, versions, |ranges| {
+                ranges
+                    .iter()
+                    .fold(PubGrubRange::full(), |acc, range| acc.intersection(range))
+            });
+
+            reduced.sort();
+            reduced.dedup();
+
+            match reduced.len() {
+                0 => None,
+                1 => Some(reduced.remove(0)),
+                _ => Some(MarkerTree::And(reduced)),
+            }
+        }
+
+        MarkerTree::Or(trees) => {
+            let mut reduced = Vec::new();
+            let mut versions: HashMap<_, Vec<_>> = HashMap::new();
+
+            for subtree in trees {
+                // Simplify nested expressions as much as possible first.
+                //
+                // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`), return `true`.
+                let subtree = normalize(subtree)?;
+
+                // Extract expressions we may be able to simplify more.
+                if let MarkerTree::Expression(ref expr) = subtree {
                     if let Some((key, range)) = keyed_range(expr) {
                         versions.entry(key.clone()).or_default().push(range);
                         continue;
                     }
                 }
 
-                reduced.push(tree);
+                reduced.push(subtree);
             }
 
-            match tree {
-                MarkerTree::And(_) => {
-                    simplify_ranges(&mut reduced, versions, |ranges| {
-                        ranges
-                            .iter()
-                            .fold(PubGrubRange::full(), |acc, range| acc.intersection(range))
-                    });
+            simplify_ranges(&mut reduced, versions, |ranges| {
+                ranges
+                    .iter()
+                    .fold(PubGrubRange::empty(), |acc, range| acc.union(range))
+            });
 
-                    reduced.dedup();
-                    reduced.sort();
+            reduced.sort();
+            reduced.dedup();
 
-                    *tree = match reduced.len() {
-                        1 => reduced.remove(0),
-                        _ => MarkerTree::And(reduced),
-                    };
-                }
-                MarkerTree::Or(_) => {
-                    simplify_ranges(&mut reduced, versions, |ranges| {
-                        ranges
-                            .iter()
-                            .fold(PubGrubRange::empty(), |acc, range| acc.union(range))
-                    });
-
-                    reduced.dedup();
-                    reduced.sort();
-
-                    *tree = match reduced.len() {
-                        1 => reduced.remove(0),
-                        _ => MarkerTree::Or(reduced),
-                    };
-                }
-                MarkerTree::Expression(_) => unreachable!(),
+            match reduced.len() {
+                0 => None,
+                1 => Some(reduced.remove(0)),
+                _ => Some(MarkerTree::Or(reduced)),
             }
         }
-        MarkerTree::Expression(_) => {}
+
+        MarkerTree::Expression(_) => Some(tree),
     }
 }
 
@@ -283,18 +303,14 @@ fn keyed_range(expr: &MarkerExpression) -> Option<(&MarkerValueVersion, PubGrubR
             // if the expression was inverted, we have to reverse the operator before constructing
             // a version specifier
             let operator = reverse_operator(*operator);
-            let Ok(specifier) = VersionSpecifier::from_version(operator, version.clone()) else {
-                return None;
-            };
+            let specifier = VersionSpecifier::from_version(operator, version.clone()).ok()?;
 
             (key, specifier)
         }
         _ => return None,
     };
 
-    let Ok(pubgrub_specifier) = PubGrubSpecifier::try_from(&specifier) else {
-        return None;
-    };
+    let pubgrub_specifier = PubGrubSpecifier::try_from(&specifier).ok()?;
 
     Some((key, pubgrub_specifier.into()))
 }
@@ -403,6 +419,17 @@ mod tests {
         assert_marker_equal(
             "extra == 'a' and (extra == 'a' or extra == 'b')",
             "extra == 'a' and (extra == 'a' or extra == 'b')",
+        );
+
+        assert_normalizes_out("python_version < '3.12.0rc1' or python_version >= '3.12.0rc1'");
+
+        assert_normalizes_out(
+            "extra == 'a' or (python_version < '3.12.0rc1' or python_version >= '3.12.0rc1')",
+        );
+
+        assert_normalizes_to(
+            "extra == 'a' and (python_version < '3.12.0rc1' or python_version >= '3.12.0rc1')",
+            "extra == 'a'",
         );
     }
 
@@ -557,9 +584,24 @@ mod tests {
     }
 
     fn assert_marker_equal(one: impl AsRef<str>, two: impl AsRef<str>) {
-        let mut tree1 = MarkerTree::parse_reporter(one.as_ref(), &mut TracingReporter).unwrap();
-        super::normalize(&mut tree1);
+        let tree1 = MarkerTree::parse_reporter(one.as_ref(), &mut TracingReporter).unwrap();
+        let tree1 = normalize(tree1).unwrap();
         let tree2 = MarkerTree::parse_reporter(two.as_ref(), &mut TracingReporter).unwrap();
         assert_eq!(tree1.to_string(), tree2.to_string());
+    }
+
+    fn assert_normalizes_to(before: impl AsRef<str>, after: impl AsRef<str>) {
+        let normalized = MarkerTree::parse_reporter(before.as_ref(), &mut TracingReporter)
+            .unwrap()
+            .clone();
+        let normalized = normalize(normalized).unwrap();
+        assert_eq!(normalized.to_string(), after.as_ref());
+    }
+
+    fn assert_normalizes_out(before: impl AsRef<str>) {
+        let normalized = MarkerTree::parse_reporter(before.as_ref(), &mut TracingReporter)
+            .unwrap()
+            .clone();
+        assert!(normalize(normalized).is_none());
     }
 }

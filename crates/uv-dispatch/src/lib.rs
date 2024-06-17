@@ -5,7 +5,7 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
@@ -16,7 +16,7 @@ use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
+use uv_configuration::{BuildKind, BuildOptions, ConfigSettings, Reinstall, SetupPyStrategy};
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
@@ -39,8 +39,7 @@ pub struct BuildDispatch<'a> {
     setup_py: SetupPyStrategy,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
-    no_build: &'a NoBuild,
-    no_binary: &'a NoBinary,
+    build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     source_build_context: SourceBuildContext,
     options: Options,
@@ -64,8 +63,7 @@ impl<'a> BuildDispatch<'a> {
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
         link_mode: install_wheel_rs::linker::LinkMode,
-        no_build: &'a NoBuild,
-        no_binary: &'a NoBinary,
+        build_options: &'a BuildOptions,
         concurrency: Concurrency,
         preview_mode: PreviewMode,
     ) -> Self {
@@ -82,8 +80,7 @@ impl<'a> BuildDispatch<'a> {
             config_settings,
             build_isolation,
             link_mode,
-            no_build,
-            no_binary,
+            build_options,
             concurrency,
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
@@ -133,12 +130,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.build_isolation
     }
 
-    fn no_build(&self) -> &NoBuild {
-        self.no_build
-    }
-
-    fn no_binary(&self) -> &NoBinary {
-        self.no_binary
+    fn build_options(&self) -> &BuildOptions {
+        self.build_options
     }
 
     fn index_locations(&self) -> &IndexLocations {
@@ -217,7 +210,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         } = Planner::new(&requirements).build(
             site_packages,
             &Reinstall::default(),
-            &NoBinary::default(),
+            &BuildOptions::default(),
             &HashStrategy::default(),
             self.index_locations,
             self.cache(),
@@ -314,24 +307,21 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         dist: Option<&'data SourceDist>,
         build_kind: BuildKind,
     ) -> Result<SourceBuild> {
-        match self.no_build {
-            NoBuild::All => debug_assert!(
-                matches!(build_kind, BuildKind::Editable),
-                "Only editable builds are exempt from 'no build' checks"
-            ),
-            NoBuild::None => {}
-            NoBuild::Packages(packages) => {
-                // We can only prevent builds by name for packages with names. For editable
-                // packages and unnamed requirements, we can't prevent the build.
-                if let Some(dist) = dist {
-                    if packages.contains(dist.name()) {
-                        bail!(
-                            "Building source distributions for {} is disabled",
-                            dist.name()
-                        );
-                    }
-                }
+        // Note we can only prevent builds by name for packages with names
+        // unless all builds are disabled.
+        if self
+            .build_options
+            .no_build(dist.map(distribution_types::Name::name))
+            // We always allow editable builds
+            && !matches!(build_kind, BuildKind::Editable)
+        {
+            if let Some(dist) = dist {
+                return Err(anyhow!(
+                    "Building source distributions for {} is disabled",
+                    dist.name()
+                ));
             }
+            return Err(anyhow!("Building source distributions is disabled"));
         }
 
         let builder = SourceBuild::setup(

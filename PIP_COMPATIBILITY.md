@@ -367,3 +367,21 @@ occasionally found in Docker images and Conda environments) and (2) legacy edita
 Specifically, uv does not support installing new `.egg-info`- or `.egg-link`-style distributions,
 but will respect any such existing distributions during resolution, list them with `uv pip list` and
 `uv pip freeze`, and uninstall them with `uv pip uninstall`.
+
+## `pip compile` defaults
+
+There are a few small but notable differences in the default behaviors of `pip compile` and
+`pip-tools`.
+
+By default, uv does not write the compiled requirements to an output file. Instead, uv requires
+that the user specify an output file explicitly with the `-o` or `--output-file` option.
+
+By default, uv strips extras when outputting the compiled requirements. In other words, uv defaults to
+`--strip-extras`, while `pip-compile` defaults to `--no-strip-extras`. `pip-compile` is scheduled to
+change this default in the next major release (v8.0.0), at which point both tools will default to
+`--strip-extras`. To retain extras with uv, pass the `--no-strip-extras` flag to `uv pip compile`.
+
+By default, uv does not write any index URLs to the output file, while `pip-compile` outputs any
+`--index-url` or `--extra-index-url` that does not match the default (PyPI). To include index URLs
+in the output file, pass the `--emit-index-url` flag to `uv pip compile`. Unlike `pip-compile`,
+uv will include all index URLs when `--emit-index-url` is passed, including the default index URL.

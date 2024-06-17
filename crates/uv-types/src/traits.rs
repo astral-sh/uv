@@ -7,7 +7,7 @@ use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, 
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{BuildKind, BuildOptions, SetupPyStrategy};
 use uv_git::GitResolver;
 use uv_toolchain::{Interpreter, PythonEnvironment};
 
@@ -66,13 +66,11 @@ pub trait BuildContext {
     /// Whether to enforce build isolation when building source distributions.
     fn build_isolation(&self) -> BuildIsolation;
 
-    /// Whether source distribution building is disabled. This [`BuildContext::setup_build`] calls
-    /// will fail in this case. This method exists to avoid fetching source distributions if we know
-    /// we can't build them
-    fn no_build(&self) -> &NoBuild;
-
-    /// Whether using pre-built wheels is disabled.
-    fn no_binary(&self) -> &NoBinary;
+    /// Whether source distribution building or pre-built wheels is disabled.
+    ///
+    /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
+    /// This method exists to avoid fetching source distributions if we know we can't build them.
+    fn build_options(&self) -> &BuildOptions;
 
     /// The index locations being searched.
     fn index_locations(&self) -> &IndexLocations;

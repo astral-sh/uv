@@ -2,15 +2,17 @@
 // as we build out universal locking.
 #![allow(dead_code, unreachable_code, unused_variables)]
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
+use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::Result;
 use either::Either;
-use indexmap::IndexMap;
+use path_slash::PathExt;
 use petgraph::visit::EdgeRef;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Deserializer};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -22,7 +24,7 @@ use distribution_types::{
     RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
 };
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl};
+use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
 use uv_configuration::ExtrasSpecification;
@@ -56,7 +58,7 @@ pub struct Lock {
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolutionGraph`].
     pub fn from_resolution_graph(graph: &ResolutionGraph) -> Result<Self, LockError> {
-        let mut locked_dists = IndexMap::with_capacity(graph.petgraph.node_count());
+        let mut locked_dists = BTreeMap::new();
 
         // Lock all base packages.
         for node_index in graph.petgraph.node_indices() {
@@ -70,7 +72,10 @@ impl Lock {
                 }
                 let id = locked_dist.id.clone();
                 if let Some(locked_dist) = locked_dists.insert(id, locked_dist) {
-                    return Err(LockError::duplicate_distribution(locked_dist.id));
+                    return Err(LockErrorKind::DuplicateDistribution {
+                        id: locked_dist.id.clone(),
+                    }
+                    .into());
                 }
             }
         }
@@ -81,7 +86,11 @@ impl Lock {
             if let Some(extra) = dist.extra.as_ref() {
                 let id = DistributionId::from_annotated_dist(dist);
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
-                    return Err(LockError::missing_extra_base(id, extra.clone()));
+                    return Err(LockErrorKind::MissingExtraBase {
+                        id,
+                        extra: extra.clone(),
+                    }
+                    .into());
                 };
                 for edge in graph.petgraph.edges(node_index) {
                     let dependency_dist = &graph.petgraph[edge.target()];
@@ -92,7 +101,11 @@ impl Lock {
             if let Some(group) = dist.dev.as_ref() {
                 let id = DistributionId::from_annotated_dist(dist);
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
-                    return Err(LockError::missing_dev_base(id, group.clone()));
+                    return Err(LockErrorKind::MissingDevBase {
+                        id,
+                        group: group.clone(),
+                    }
+                    .into());
                 };
                 for edge in graph.petgraph.edges(node_index) {
                     let dependency_dist = &graph.petgraph[edge.target()];
@@ -134,6 +147,7 @@ impl Lock {
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub fn to_resolution(
         &self,
+        workspace_root: &Path,
         marker_env: &MarkerEnvironment,
         tags: &Tags,
         root_name: &PackageName,
@@ -191,7 +205,7 @@ impl Lock {
                 }
             }
             let name = dist.id.name.clone();
-            let resolved_dist = ResolvedDist::Installable(dist.to_dist(tags)?);
+            let resolved_dist = ResolvedDist::Installable(dist.to_dist(workspace_root, tags)?);
             map.insert(name, resolved_dist);
         }
         let diagnostics = vec![];
@@ -245,7 +259,7 @@ impl From<Lock> for LockWire {
 
 impl Lock {
     /// Returns the TOML representation of this lock file.
-    pub fn to_toml(&self) -> Result<String> {
+    pub fn to_toml(&self) -> anyhow::Result<String> {
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
@@ -318,7 +332,7 @@ impl Lock {
 
                         Ok(table)
                     })
-                    .collect::<Result<Array>>()?;
+                    .collect::<anyhow::Result<Array>>()?;
                 table.insert("wheels", value(wheels));
             }
 
@@ -341,10 +355,11 @@ impl TryFrom<LockWire> for Lock {
             for windows in dist.dependencies.windows(2) {
                 let (dep1, dep2) = (&windows[0], &windows[1]);
                 if dep1 == dep2 {
-                    return Err(LockError::duplicate_dependency(
-                        dist.id.clone(),
-                        dep1.clone(),
-                    ));
+                    return Err(LockErrorKind::DuplicateDependency {
+                        id: dist.id.clone(),
+                        dependency: dep1.clone(),
+                    }
+                    .into());
                 }
             }
 
@@ -354,10 +369,12 @@ impl TryFrom<LockWire> for Lock {
                 for windows in dependencies.windows(2) {
                     let (dep1, dep2) = (&windows[0], &windows[1]);
                     if dep1 == dep2 {
-                        return Err(LockError::duplicate_dependency(
-                            dist.id.clone(),
-                            dep1.clone(),
-                        ));
+                        return Err(LockErrorKind::DuplicateOptionalDependency {
+                            id: dist.id.clone(),
+                            extra: extra.clone(),
+                            dependency: dep1.clone(),
+                        }
+                        .into());
                     }
                 }
             }
@@ -368,10 +385,12 @@ impl TryFrom<LockWire> for Lock {
                 for windows in dependencies.windows(2) {
                     let (dep1, dep2) = (&windows[0], &windows[1]);
                     if dep1 == dep2 {
-                        return Err(LockError::duplicate_dependency(
-                            dist.id.clone(),
-                            dep1.clone(),
-                        ));
+                        return Err(LockErrorKind::DuplicateDevDependency {
+                            id: dist.id.clone(),
+                            group: group.clone(),
+                            dependency: dep1.clone(),
+                        }
+                        .into());
                     }
                 }
             }
@@ -384,7 +403,10 @@ impl TryFrom<LockWire> for Lock {
         let mut by_id = FxHashMap::default();
         for (i, dist) in wire.distributions.iter().enumerate() {
             if by_id.insert(dist.id.clone(), i).is_some() {
-                return Err(LockError::duplicate_distribution(dist.id.clone()));
+                return Err(LockErrorKind::DuplicateDistribution {
+                    id: dist.id.clone(),
+                }
+                .into());
             }
         }
 
@@ -397,18 +419,20 @@ impl TryFrom<LockWire> for Lock {
                     let dep_dist = &wire.distributions[*index];
                     if let Some(extra) = &dep.extra {
                         if !dep_dist.optional_dependencies.contains_key(extra) {
-                            return Err(LockError::unrecognized_extra(
-                                dist.id.clone(),
-                                dep.clone(),
-                                extra.clone(),
-                            ));
+                            return Err(LockErrorKind::UnrecognizedExtra {
+                                id: dist.id.clone(),
+                                dependency: dep.clone(),
+                                extra: extra.clone(),
+                            }
+                            .into());
                         }
                     }
                 } else {
-                    return Err(LockError::unrecognized_dependency(
-                        dist.id.clone(),
-                        dep.clone(),
-                    ));
+                    return Err(LockErrorKind::UnrecognizedDependency {
+                        id: dist.id.clone(),
+                        dependency: dep.clone(),
+                    }
+                    .into());
                 }
             }
 
@@ -419,18 +443,20 @@ impl TryFrom<LockWire> for Lock {
                         let dep_dist = &wire.distributions[*index];
                         if let Some(extra) = &dep.extra {
                             if !dep_dist.optional_dependencies.contains_key(extra) {
-                                return Err(LockError::unrecognized_extra(
-                                    dist.id.clone(),
-                                    dep.clone(),
-                                    extra.clone(),
-                                ));
+                                return Err(LockErrorKind::UnrecognizedExtra {
+                                    id: dist.id.clone(),
+                                    dependency: dep.clone(),
+                                    extra: extra.clone(),
+                                }
+                                .into());
                             }
                         }
                     } else {
-                        return Err(LockError::unrecognized_dependency(
-                            dist.id.clone(),
-                            dep.clone(),
-                        ));
+                        return Err(LockErrorKind::UnrecognizedDependency {
+                            id: dist.id.clone(),
+                            dependency: dep.clone(),
+                        }
+                        .into());
                     }
                 }
             }
@@ -442,37 +468,45 @@ impl TryFrom<LockWire> for Lock {
                         let dep_dist = &wire.distributions[*index];
                         if let Some(extra) = &dep.extra {
                             if !dep_dist.optional_dependencies.contains_key(extra) {
-                                return Err(LockError::unrecognized_extra(
-                                    dist.id.clone(),
-                                    dep.clone(),
-                                    extra.clone(),
-                                ));
+                                return Err(LockErrorKind::UnrecognizedExtra {
+                                    id: dist.id.clone(),
+                                    dependency: dep.clone(),
+                                    extra: extra.clone(),
+                                }
+                                .into());
                             }
                         }
                     } else {
-                        return Err(LockError::unrecognized_dependency(
-                            dist.id.clone(),
-                            dep.clone(),
-                        ));
+                        return Err(LockErrorKind::UnrecognizedDependency {
+                            id: dist.id.clone(),
+                            dependency: dep.clone(),
+                        }
+                        .into());
                     }
                 }
             }
 
             // Also check that our sources are consistent with whether we have
             // hashes or not.
-            let requires_hash = dist.id.source.kind.requires_hash();
+            let requires_hash = dist.id.source.requires_hash();
             if let Some(ref sdist) = dist.sdist {
-                if requires_hash != sdist.hash.is_some() {
-                    return Err(LockError::hash(
-                        dist.id.clone(),
-                        "source distribution",
-                        requires_hash,
-                    ));
+                if requires_hash != sdist.hash().is_some() {
+                    return Err(LockErrorKind::Hash {
+                        id: dist.id.clone(),
+                        artifact_type: "source distribution",
+                        expected: requires_hash,
+                    }
+                    .into());
                 }
             }
             for wheel in &dist.wheels {
                 if requires_hash != wheel.hash.is_some() {
-                    return Err(LockError::hash(dist.id.clone(), "wheel", requires_hash));
+                    return Err(LockErrorKind::Hash {
+                        id: dist.id.clone(),
+                        artifact_type: "wheel",
+                        expected: requires_hash,
+                    }
+                    .into());
                 }
             }
         }
@@ -496,10 +530,10 @@ pub struct Distribution {
     wheels: Vec<Wheel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     dependencies: Vec<Dependency>,
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    optional_dependencies: IndexMap<ExtraName, Vec<Dependency>>,
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    dev_dependencies: IndexMap<GroupName, Vec<Dependency>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
 }
 
 impl Distribution {
@@ -512,8 +546,8 @@ impl Distribution {
             sdist,
             wheels,
             dependencies: vec![],
-            optional_dependencies: IndexMap::default(),
-            dev_dependencies: IndexMap::default(),
+            optional_dependencies: BTreeMap::default(),
+            dev_dependencies: BTreeMap::default(),
         })
     }
 
@@ -550,14 +584,14 @@ impl Distribution {
     }
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
-    fn to_dist(&self, tags: &Tags) -> Result<Dist, LockError> {
+    fn to_dist(&self, workspace_root: &Path, tags: &Tags) -> Result<Dist, LockError> {
         if let Some(best_wheel_index) = self.find_best_wheel(tags) {
-            return match &self.id.source.kind {
-                SourceKind::Registry => {
+            return match &self.id.source {
+                Source::Registry(url) => {
                     let wheels = self
                         .wheels
                         .iter()
-                        .map(|wheel| wheel.to_registry_dist(&self.id.source))
+                        .map(|wheel| wheel.to_registry_dist(url, &self.id.source))
                         .collect();
                     let reg_built_dist = RegistryBuiltDist {
                         wheels,
@@ -566,79 +600,107 @@ impl Distribution {
                     };
                     Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
                 }
-                SourceKind::Path => {
+                Source::Path(path) => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let path_dist = PathBuiltDist {
                         filename,
-                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
-                        path: self.id.source.url.to_file_path().unwrap(),
+                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                            LockErrorKind::VerbatimUrl {
+                                id: self.id.clone(),
+                                err,
+                            }
+                        })?,
+                        path: path.clone(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
                     Ok(Dist::Built(built_dist))
                 }
-                SourceKind::Direct(direct) => {
+                Source::Direct(url, direct) => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let url = Url::from(ParsedArchiveUrl {
-                        url: self.id.source.url.clone(),
+                        url: url.clone(),
                         subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                     });
                     let direct_dist = DirectUrlBuiltDist {
                         filename,
-                        location: self.id.source.url.clone(),
+                        location: url.clone(),
                         url: VerbatimUrl::from_url(url),
                     };
                     let built_dist = BuiltDist::DirectUrl(direct_dist);
                     Ok(Dist::Built(built_dist))
                 }
-                SourceKind::Git(_) => Err(LockError::invalid_wheel_source(self.id.clone(), "Git")),
-                SourceKind::Directory => Err(LockError::invalid_wheel_source(
-                    self.id.clone(),
-                    "directory",
-                )),
-                SourceKind::Editable => {
-                    Err(LockError::invalid_wheel_source(self.id.clone(), "editable"))
+                Source::Git(_, _) => Err(LockErrorKind::InvalidWheelSource {
+                    id: self.id.clone(),
+                    source_type: "Git",
                 }
+                .into()),
+                Source::Directory(_) => Err(LockErrorKind::InvalidWheelSource {
+                    id: self.id.clone(),
+                    source_type: "directory",
+                }
+                .into()),
+                Source::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
+                    id: self.id.clone(),
+                    source_type: "editable",
+                }
+                .into()),
             };
         }
 
         if let Some(sdist) = &self.sdist {
-            return match &self.id.source.kind {
-                SourceKind::Path => {
+            return match &self.id.source {
+                Source::Path(path) => {
                     let path_dist = PathSourceDist {
                         name: self.id.name.clone(),
-                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
-                        path: self.id.source.url.to_file_path().unwrap(),
+                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                            LockErrorKind::VerbatimUrl {
+                                id: self.id.clone(),
+                                err,
+                            }
+                        })?,
+                        install_path: workspace_root.join(path),
+                        lock_path: path.clone(),
                     };
                     let source_dist = distribution_types::SourceDist::Path(path_dist);
                     Ok(Dist::Source(source_dist))
                 }
-                SourceKind::Directory => {
+                Source::Directory(path) => {
                     let dir_dist = DirectorySourceDist {
                         name: self.id.name.clone(),
-                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
-                        path: self.id.source.url.to_file_path().unwrap(),
+                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                            LockErrorKind::VerbatimUrl {
+                                id: self.id.clone(),
+                                err,
+                            }
+                        })?,
+                        install_path: workspace_root.join(path),
+                        lock_path: path.clone(),
                         editable: false,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
                     Ok(Dist::Source(source_dist))
                 }
-                SourceKind::Editable => {
+                Source::Editable(path) => {
                     let dir_dist = DirectorySourceDist {
                         name: self.id.name.clone(),
-                        url: VerbatimUrl::from_url(self.id.source.url.clone()),
-                        path: self.id.source.url.to_file_path().unwrap(),
+                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                            LockErrorKind::VerbatimUrl {
+                                id: self.id.clone(),
+                                err,
+                            }
+                        })?,
+                        install_path: workspace_root.join(path),
+                        lock_path: path.clone(),
                         editable: true,
                     };
                     let source_dist = distribution_types::SourceDist::Directory(dir_dist);
                     Ok(Dist::Source(source_dist))
                 }
-                SourceKind::Git(git) => {
+                Source::Git(url, git) => {
                     // Reconstruct the `GitUrl` from the `GitSource`.
-                    let git_url = uv_git::GitUrl::new(
-                        self.id.source.url.clone(),
-                        GitReference::from(git.kind.clone()),
-                    )
-                    .with_precise(git.precise);
+                    let git_url =
+                        uv_git::GitUrl::new(url.clone(), GitReference::from(git.kind.clone()))
+                            .with_precise(git.precise);
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                     let url = Url::from(ParsedGitUrl {
@@ -655,32 +717,41 @@ impl Distribution {
                     let source_dist = distribution_types::SourceDist::Git(git_dist);
                     Ok(Dist::Source(source_dist))
                 }
-                SourceKind::Direct(direct) => {
+                Source::Direct(url, direct) => {
                     let url = Url::from(ParsedArchiveUrl {
-                        url: self.id.source.url.clone(),
+                        url: url.clone(),
                         subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                     });
                     let direct_dist = DirectUrlSourceDist {
                         name: self.id.name.clone(),
-                        location: self.id.source.url.clone(),
+                        location: url.clone(),
                         subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                         url: VerbatimUrl::from_url(url),
                     };
                     let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
                     Ok(Dist::Source(source_dist))
                 }
-                SourceKind::Registry => {
+                Source::Registry(url) => {
+                    let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
+                        id: self.id.clone(),
+                    })?;
+                    let filename =
+                        sdist
+                            .filename()
+                            .ok_or_else(|| LockErrorKind::MissingFilename {
+                                id: self.id.clone(),
+                            })?;
                     let file = Box::new(distribution_types::File {
                         dist_info_metadata: false,
-                        filename: sdist.url.filename().unwrap().to_string(),
+                        filename: filename.to_string(),
                         hashes: vec![],
                         requires_python: None,
-                        size: sdist.size,
+                        size: sdist.size(),
                         upload_time_utc_ms: None,
-                        url: FileLocation::AbsoluteUrl(sdist.url.to_string()),
+                        url: FileLocation::AbsoluteUrl(file_url.to_string()),
                         yanked: None,
                     });
-                    let index = IndexUrl::Url(VerbatimUrl::from_url(self.id.source.url.clone()));
+                    let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
                     let reg_dist = RegistrySourceDist {
                         name: self.id.name.clone(),
                         version: self.id.version.clone(),
@@ -694,7 +765,10 @@ impl Distribution {
             };
         }
 
-        Err(LockError::neither_source_dist_nor_wheel(self.id.clone()))
+        Err(LockErrorKind::NeitherSourceDistNorWheel {
+            id: self.id.clone(),
+        }
+        .into())
     }
 
     fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
@@ -724,10 +798,10 @@ impl Distribution {
 
     /// Returns the [`ResolvedRepositoryReference`] for the distribution, if it is a Git source.
     pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
-        match &self.id.source.kind {
-            SourceKind::Git(git) => Some(ResolvedRepositoryReference {
+        match &self.id.source {
+            Source::Git(url, git) => Some(ResolvedRepositoryReference {
                 reference: RepositoryReference {
-                    url: RepositoryUrl::new(&self.id.source.url),
+                    url: RepositoryUrl::new(url),
                     reference: GitReference::from(git.kind.clone()),
                 },
                 sha: git.precise,
@@ -763,10 +837,31 @@ impl std::fmt::Display for DistributionId {
     }
 }
 
+/// NOTE: Care should be taken when adding variants to this enum. Namely, new
+/// variants should be added without changing the relative ordering of other
+/// variants. Otherwise, this could cause the lock file to have a different
+/// canonical ordering of distributions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-struct Source {
-    kind: SourceKind,
-    url: Url,
+enum Source {
+    Registry(Url),
+    Git(Url, GitSource),
+    Direct(Url, DirectSource),
+    Path(PathBuf),
+    Directory(PathBuf),
+    Editable(PathBuf),
+}
+
+/// A [`PathBuf`], but we show `.` instead of an empty path.
+///
+/// We also normalize backslashes to forward slashes on Windows, to ensure
+/// that the lock file contains portable paths.
+fn serialize_path_with_dot(path: &Path) -> Cow<str> {
+    let path = path.to_slash_lossy();
+    if path.is_empty() {
+        Cow::Borrowed(".")
+    } else {
+        path
+    }
 }
 
 impl Source {
@@ -821,70 +916,58 @@ impl Source {
     }
 
     fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Source {
-        Source {
-            kind: SourceKind::Direct(DirectSource { subdirectory: None }),
-            url: direct_dist.url.to_url(),
-        }
+        Source::Direct(
+            direct_dist.url.to_url(),
+            DirectSource { subdirectory: None },
+        )
     }
 
     fn from_direct_source_dist(direct_dist: &DirectUrlSourceDist) -> Source {
-        Source {
-            kind: SourceKind::Direct(DirectSource {
+        Source::Direct(
+            direct_dist.url.to_url(),
+            DirectSource {
                 subdirectory: direct_dist
                     .subdirectory
                     .as_deref()
                     .and_then(Path::to_str)
                     .map(ToString::to_string),
-            }),
-            url: direct_dist.url.to_url(),
-        }
+            },
+        )
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist) -> Source {
-        Source {
-            kind: SourceKind::Path,
-            url: path_dist.url.to_url(),
-        }
+        Source::Path(path_dist.path.clone())
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist) -> Source {
-        Source {
-            kind: SourceKind::Path,
-            url: path_dist.url.to_url(),
-        }
+        Source::Path(path_dist.install_path.clone())
     }
 
     fn from_directory_source_dist(directory_dist: &DirectorySourceDist) -> Source {
-        Source {
-            kind: if directory_dist.editable {
-                SourceKind::Editable
-            } else {
-                SourceKind::Directory
-            },
-            url: directory_dist.url.to_url(),
+        if directory_dist.editable {
+            Source::Editable(directory_dist.lock_path.clone())
+        } else {
+            Source::Directory(directory_dist.lock_path.clone())
         }
     }
 
     fn from_index_url(index_url: &IndexUrl) -> Source {
         match *index_url {
-            IndexUrl::Pypi(ref verbatim_url) => Source {
-                kind: SourceKind::Registry,
-                url: verbatim_url.to_url(),
-            },
-            IndexUrl::Url(ref verbatim_url) => Source {
-                kind: SourceKind::Registry,
-                url: verbatim_url.to_url(),
-            },
-            IndexUrl::Path(ref verbatim_url) => Source {
-                kind: SourceKind::Path,
-                url: verbatim_url.to_url(),
-            },
+            IndexUrl::Pypi(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
+            IndexUrl::Url(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
+            // TODO(konsti): Retain path on index url without converting to URL.
+            IndexUrl::Path(ref verbatim_url) => Source::Path(
+                verbatim_url
+                    .to_file_path()
+                    .expect("Could not convert index url to path"),
+            ),
         }
     }
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
-        Source {
-            kind: SourceKind::Git(GitSource {
+        Source::Git(
+            locked_git_url(git_dist),
+            GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().expect("precise commit"),
                 subdirectory: git_dist
@@ -892,9 +975,8 @@ impl Source {
                     .as_deref()
                     .and_then(Path::to_str)
                     .map(ToString::to_string),
-            }),
-            url: locked_git_url(git_dist),
-        }
+            },
+        )
     }
 }
 
@@ -902,46 +984,63 @@ impl std::str::FromStr for Source {
     type Err = SourceParseError;
 
     fn from_str(s: &str) -> Result<Source, SourceParseError> {
-        let (kind, url) = s
-            .split_once('+')
-            .ok_or_else(|| SourceParseError::no_plus(s))?;
-        let mut url = Url::parse(url).map_err(|err| SourceParseError::invalid_url(s, err))?;
+        let (kind, url_or_path) = s.split_once('+').ok_or_else(|| SourceParseError::NoPlus {
+            given: s.to_string(),
+        })?;
         match kind {
-            "registry" => Ok(Source {
-                kind: SourceKind::Registry,
-                url,
+            "registry" => {
+                let url = Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
+                    given: s.to_string(),
+                    err,
+                })?;
+                Ok(Source::Registry(url))
+            }
+            "git" => {
+                let mut url =
+                    Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
+                        given: s.to_string(),
+                        err,
+                    })?;
+                let git_source = GitSource::from_url(&mut url).map_err(|err| match err {
+                    GitSourceError::InvalidSha => SourceParseError::InvalidSha {
+                        given: s.to_string(),
+                    },
+                    GitSourceError::MissingSha => SourceParseError::MissingSha {
+                        given: s.to_string(),
+                    },
+                })?;
+                Ok(Source::Git(url, git_source))
+            }
+            "direct" => {
+                let mut url =
+                    Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
+                        given: s.to_string(),
+                        err,
+                    })?;
+                let direct_source = DirectSource::from_url(&mut url);
+                Ok(Source::Direct(url, direct_source))
+            }
+            "path" => Ok(Source::Path(PathBuf::from(url_or_path))),
+            "directory" => Ok(Source::Directory(PathBuf::from(url_or_path))),
+            "editable" => Ok(Source::Editable(PathBuf::from(url_or_path))),
+            name => Err(SourceParseError::UnrecognizedSourceName {
+                given: s.to_string(),
+                name: name.to_string(),
             }),
-            "git" => Ok(Source {
-                kind: SourceKind::Git(GitSource::from_url(&mut url).map_err(|err| match err {
-                    GitSourceError::InvalidSha => SourceParseError::invalid_sha(s),
-                    GitSourceError::MissingSha => SourceParseError::missing_sha(s),
-                })?),
-                url,
-            }),
-            "direct" => Ok(Source {
-                kind: SourceKind::Direct(DirectSource::from_url(&mut url)),
-                url,
-            }),
-            "path" => Ok(Source {
-                kind: SourceKind::Path,
-                url,
-            }),
-            "directory" => Ok(Source {
-                kind: SourceKind::Directory,
-                url,
-            }),
-            "editable" => Ok(Source {
-                kind: SourceKind::Editable,
-                url,
-            }),
-            name => Err(SourceParseError::unrecognized_source_name(s, name)),
         }
     }
 }
 
 impl std::fmt::Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}+{}", self.kind.name(), self.url)
+        match self {
+            Source::Registry(url) | Source::Git(url, _) | Source::Direct(url, _) => {
+                write!(f, "{}+{}", self.name(), url)
+            }
+            Source::Path(path) | Source::Directory(path) | Source::Editable(path) => {
+                write!(f, "{}+{}", self.name(), serialize_path_with_dot(path))
+            }
+        }
     }
 }
 
@@ -955,29 +1054,15 @@ impl<'de> serde::Deserialize<'de> for Source {
     }
 }
 
-/// NOTE: Care should be taken when adding variants to this enum. Namely, new
-/// variants should be added without changing the relative ordering of other
-/// variants. Otherwise, this could cause the lock file to have a different
-/// canonical ordering of distributions.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-enum SourceKind {
-    Registry,
-    Git(GitSource),
-    Direct(DirectSource),
-    Path,
-    Directory,
-    Editable,
-}
-
-impl SourceKind {
+impl Source {
     fn name(&self) -> &str {
         match *self {
-            SourceKind::Registry => "registry",
-            SourceKind::Git(_) => "git",
-            SourceKind::Direct(_) => "direct",
-            SourceKind::Path => "path",
-            SourceKind::Directory => "directory",
-            SourceKind::Editable => "editable",
+            Self::Registry(..) => "registry",
+            Self::Git(..) => "git",
+            Self::Direct(..) => "direct",
+            Self::Path(..) => "path",
+            Self::Directory(..) => "directory",
+            Self::Editable(..) => "editable",
         }
     }
 
@@ -987,8 +1072,8 @@ impl SourceKind {
     /// _not_ be present.
     fn requires_hash(&self) -> bool {
         match *self {
-            SourceKind::Registry | SourceKind::Direct(_) | SourceKind::Path => true,
-            SourceKind::Git(_) | SourceKind::Directory | SourceKind::Editable => false,
+            Self::Registry(..) | Self::Direct(..) | Self::Path(..) => true,
+            Self::Git(..) | Self::Directory(..) | Self::Editable(..) => false,
         }
     }
 }
@@ -1076,12 +1161,7 @@ enum GitSourceKind {
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize)]
-struct SourceDist {
-    /// A URL or file path (via `file://`) where the source dist that was
-    /// locked against was found. The location does not need to exist in the
-    /// future, so this should be treated as only a hint to where to look
-    /// and/or recording where the source dist file originally came from.
-    url: Url,
+struct SourceDistMetadata {
     /// A hash of the source distribution.
     ///
     /// This is only present for source distributions that come from registries
@@ -1094,15 +1174,86 @@ struct SourceDist {
     size: Option<u64>,
 }
 
+/// A URL or file path where the source dist that was
+/// locked against was found. The location does not need to exist in the
+/// future, so this should be treated as only a hint to where to look
+/// and/or recording where the source dist file originally came from.
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum SourceDist {
+    Url {
+        url: Url,
+        #[serde(flatten)]
+        metadata: SourceDistMetadata,
+    },
+    Path {
+        #[serde(deserialize_with = "deserialize_path_with_dot")]
+        path: PathBuf,
+        #[serde(flatten)]
+        metadata: SourceDistMetadata,
+    },
+}
+
+/// A [`PathBuf`], but we show `.` instead of an empty path.
+fn deserialize_path_with_dot<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let path = String::deserialize(deserializer)?;
+    if path == "." {
+        Ok(PathBuf::new())
+    } else {
+        Ok(PathBuf::from(path))
+    }
+}
+
+impl SourceDist {
+    fn filename(&self) -> Option<Cow<str>> {
+        match self {
+            SourceDist::Url { url, .. } => url.filename().ok(),
+            SourceDist::Path { path, .. } => {
+                path.file_name().map(|filename| filename.to_string_lossy())
+            }
+        }
+    }
+
+    fn url(&self) -> Option<&Url> {
+        match &self {
+            SourceDist::Url { url, .. } => Some(url),
+            SourceDist::Path { .. } => None,
+        }
+    }
+
+    fn hash(&self) -> Option<&Hash> {
+        match &self {
+            SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
+            SourceDist::Path { metadata, .. } => metadata.hash.as_ref(),
+        }
+    }
+    fn size(&self) -> Option<u64> {
+        match &self {
+            SourceDist::Url { metadata, .. } => metadata.size,
+            SourceDist::Path { metadata, .. } => metadata.size,
+        }
+    }
+}
+
 impl SourceDist {
     /// Returns the TOML representation of this source distribution.
-    fn to_toml(&self) -> Result<InlineTable> {
+    fn to_toml(&self) -> anyhow::Result<InlineTable> {
         let mut table = InlineTable::new();
-        table.insert("url", Value::from(self.url.to_string()));
-        if let Some(ref hash) = self.hash {
+        match &self {
+            SourceDist::Url { url, .. } => {
+                table.insert("url", Value::from(url.as_str()));
+            }
+            SourceDist::Path { path, .. } => {
+                table.insert("path", Value::from(serialize_path_with_dot(path).as_ref()));
+            }
+        }
+        if let Some(hash) = self.hash() {
             table.insert("hash", Value::from(hash.to_string()));
         }
-        if let Some(size) = self.size {
+        if let Some(size) = self.size() {
             table.insert("size", Value::from(i64::try_from(size)?));
         }
         Ok(table)
@@ -1164,33 +1315,43 @@ impl SourceDist {
             .file
             .url
             .to_url()
-            .map_err(LockError::invalid_file_url)?;
+            .map_err(LockErrorKind::InvalidFileUrl)
+            .map_err(LockError::from)?;
         let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
         let size = reg_dist.file.size;
-        Ok(SourceDist { url, hash, size })
+        Ok(SourceDist::Url {
+            url,
+            metadata: SourceDistMetadata { hash, size },
+        })
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlSourceDist, hashes: &[HashDigest]) -> SourceDist {
-        SourceDist {
+        SourceDist::Url {
             url: direct_dist.url.to_url(),
-            hash: hashes.first().cloned().map(Hash::from),
-            size: None,
+            metadata: SourceDistMetadata {
+                hash: hashes.first().cloned().map(Hash::from),
+                size: None,
+            },
         }
     }
 
     fn from_git_dist(git_dist: &GitSourceDist, hashes: &[HashDigest]) -> SourceDist {
-        SourceDist {
+        SourceDist::Url {
             url: locked_git_url(git_dist),
-            hash: hashes.first().cloned().map(Hash::from),
-            size: None,
+            metadata: SourceDistMetadata {
+                hash: hashes.first().cloned().map(Hash::from),
+                size: None,
+            },
         }
     }
 
     fn from_path_dist(path_dist: &PathSourceDist, hashes: &[HashDigest]) -> SourceDist {
-        SourceDist {
-            url: path_dist.url.to_url(),
-            hash: hashes.first().cloned().map(Hash::from),
-            size: None,
+        SourceDist::Path {
+            path: path_dist.lock_path.clone(),
+            metadata: SourceDistMetadata {
+                hash: hashes.first().cloned().map(Hash::from),
+                size: None,
+            },
         }
     }
 
@@ -1198,10 +1359,12 @@ impl SourceDist {
         directory_dist: &DirectorySourceDist,
         hashes: &[HashDigest],
     ) -> SourceDist {
-        SourceDist {
-            url: directory_dist.url.to_url(),
-            hash: hashes.first().cloned().map(Hash::from),
-            size: None,
+        SourceDist::Path {
+            path: directory_dist.lock_path.clone(),
+            metadata: SourceDistMetadata {
+                hash: hashes.first().cloned().map(Hash::from),
+                size: None,
+            },
         }
     }
 }
@@ -1357,7 +1520,8 @@ impl Wheel {
             .file
             .url
             .to_url()
-            .map_err(LockError::invalid_file_url)?;
+            .map_err(LockErrorKind::InvalidFileUrl)
+            .map_err(LockError::from)?;
         let hash = wheel.file.hashes.first().cloned().map(Hash::from);
         let size = wheel.file.size;
         Ok(Wheel {
@@ -1386,7 +1550,7 @@ impl Wheel {
         }
     }
 
-    fn to_registry_dist(&self, source: &Source) -> RegistryBuiltWheel {
+    fn to_registry_dist(&self, url: &Url, source: &Source) -> RegistryBuiltWheel {
         let filename: WheelFilename = self.filename.clone();
         let file = Box::new(distribution_types::File {
             dist_info_metadata: false,
@@ -1398,7 +1562,7 @@ impl Wheel {
             url: FileLocation::AbsoluteUrl(self.url.to_string()),
             yanked: None,
         });
-        let index = IndexUrl::Url(VerbatimUrl::from_url(source.url.clone()));
+        let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
         RegistryBuiltWheel {
             filename,
             file,
@@ -1428,7 +1592,7 @@ struct WheelWire {
 
 impl Wheel {
     /// Returns the TOML representation of this wheel.
-    fn to_toml(&self) -> Result<InlineTable> {
+    fn to_toml(&self) -> anyhow::Result<InlineTable> {
         let mut table = InlineTable::new();
         table.insert("url", Value::from(self.url.to_string()));
         if let Some(ref hash) = self.hash {
@@ -1480,12 +1644,7 @@ impl Dependency {
     ) -> Dependency {
         let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.clone();
-        let mut marker = marker.cloned();
-        // Markers can be combined in an unpredictable order, so normalize them
-        // such that the lock file output is consistent and deterministic.
-        if let Some(ref mut marker) = marker {
-            crate::marker::normalize(marker);
-        }
+        let marker = marker.cloned().and_then(crate::marker::normalize);
         Dependency {
             distribution_id,
             extra,
@@ -1579,263 +1738,37 @@ impl<'de> serde::Deserialize<'de> for Hash {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct LockError(Box<LockErrorKind>);
+
+impl<E> From<E> for LockError
+where
+    LockErrorKind: From<E>,
+{
+    fn from(err: E) -> Self {
+        LockError(Box::new(LockErrorKind::from(err)))
+    }
+}
+
 /// An error that occurs when generating a `Lock` data structure.
 ///
 /// These errors are sometimes the result of possible programming bugs.
 /// For example, if there are two or more duplicative distributions given
 /// to `Lock::new`, then an error is returned. It's likely that the fault
 /// is with the caller somewhere in such cases.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LockError {
-    kind: Box<LockErrorKind>,
-}
-
-impl LockError {
-    fn neither_source_dist_nor_wheel(id: DistributionId) -> LockError {
-        let kind = LockErrorKind::NeitherSourceDistNorWheel { id };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-}
-
-impl LockError {
-    fn duplicate_distribution(id: DistributionId) -> LockError {
-        let kind = LockErrorKind::DuplicateDistribution { id };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn duplicate_dependency(id: DistributionId, dependency: Dependency) -> LockError {
-        let kind = LockErrorKind::DuplicateDependency { id, dependency };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn duplicate_optional_dependency(
-        id: DistributionId,
-        extra: ExtraName,
-        dependency: Dependency,
-    ) -> LockError {
-        let kind = LockErrorKind::DuplicateOptionalDependency {
-            id,
-            extra,
-            dependency,
-        };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn duplicate_dev_dependency(
-        id: DistributionId,
-        group: GroupName,
-        dependency: Dependency,
-    ) -> LockError {
-        let kind = LockErrorKind::DuplicateDevDependency {
-            id,
-            group,
-            dependency,
-        };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn invalid_file_url(err: ToUrlError) -> LockError {
-        let kind = LockErrorKind::InvalidFileUrl { err };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn unrecognized_dependency(id: DistributionId, dependency: Dependency) -> LockError {
-        let err = UnrecognizedDependencyError { id, dependency };
-        let kind = LockErrorKind::UnrecognizedDependency { err };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn unrecognized_extra(
-        id: DistributionId,
-        dependency: Dependency,
-        extra: ExtraName,
-    ) -> LockError {
-        let kind = LockErrorKind::UnrecognizedExtra {
-            id,
-            dependency,
-            extra,
-        };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn hash(id: DistributionId, artifact_type: &'static str, expected: bool) -> LockError {
-        let kind = LockErrorKind::Hash {
-            id,
-            artifact_type,
-            expected,
-        };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn missing_extra_base(id: DistributionId, extra: ExtraName) -> LockError {
-        let kind = LockErrorKind::MissingExtraBase { id, extra };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn missing_dev_base(id: DistributionId, group: GroupName) -> LockError {
-        let kind = LockErrorKind::MissingDevBase { id, group };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-
-    fn invalid_wheel_source(id: DistributionId, source: &'static str) -> LockError {
-        let kind = LockErrorKind::InvalidWheelSource { id, source };
-        LockError {
-            kind: Box::new(kind),
-        }
-    }
-}
-
-impl std::error::Error for LockError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match *self.kind {
-            LockErrorKind::DuplicateDistribution { .. } => None,
-            LockErrorKind::DuplicateDependency { .. } => None,
-            LockErrorKind::DuplicateOptionalDependency { .. } => None,
-            LockErrorKind::DuplicateDevDependency { .. } => None,
-            LockErrorKind::InvalidFileUrl { ref err } => Some(err),
-            LockErrorKind::UnrecognizedDependency { ref err } => Some(err),
-            LockErrorKind::UnrecognizedExtra { .. } => None,
-            LockErrorKind::Hash { .. } => None,
-            LockErrorKind::MissingExtraBase { .. } => None,
-            LockErrorKind::MissingDevBase { .. } => None,
-            LockErrorKind::InvalidWheelSource { .. } => None,
-            LockErrorKind::NeitherSourceDistNorWheel { .. } => None,
-        }
-    }
-}
-
-impl std::fmt::Display for LockError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match *self.kind {
-            LockErrorKind::DuplicateDistribution { ref id } => {
-                write!(f, "found duplicate distribution `{id}`")
-            }
-            LockErrorKind::DuplicateDependency {
-                ref id,
-                ref dependency,
-            } => {
-                write!(
-                    f,
-                    "for distribution `{id}`, found duplicate dependency `{dependency}`"
-                )
-            }
-            LockErrorKind::DuplicateOptionalDependency {
-                ref id,
-                ref extra,
-                ref dependency,
-            } => {
-                write!(
-                    f,
-                    "for distribution `{id}[{extra}]`, found duplicate dependency `{dependency}`"
-                )
-            }
-            LockErrorKind::DuplicateDevDependency {
-                ref id,
-                ref group,
-                ref dependency,
-            } => {
-                write!(
-                    f,
-                    "for distribution `{id}:{group}`, found duplicate dependency `{dependency}`"
-                )
-            }
-            LockErrorKind::InvalidFileUrl { .. } => {
-                write!(f, "failed to parse wheel or source dist URL")
-            }
-            LockErrorKind::UnrecognizedDependency { .. } => {
-                write!(f, "found unrecognized dependency")
-            }
-            LockErrorKind::UnrecognizedExtra {
-                ref id,
-                ref dependency,
-                ref extra,
-            } => {
-                write!(
-                    f,
-                    "for distribution `{id}`, found dependency `{dependency}` with unrecognized extra `{extra}`"
-                )
-            }
-            LockErrorKind::Hash {
-                ref id,
-                artifact_type,
-                expected: true,
-            } => {
-                write!(
-                    f,
-                    "since the distribution `{id}` comes from a {source} dependency, \
-                     a hash was expected but one was not found for {artifact_type}",
-                    source = id.source.kind.name(),
-                )
-            }
-            LockErrorKind::Hash {
-                ref id,
-                artifact_type,
-                expected: false,
-            } => {
-                write!(
-                    f,
-                    "since the distribution `{id}` comes from a {source} dependency, \
-                     a hash was not expected but one was found for {artifact_type}",
-                    source = id.source.kind.name(),
-                )
-            }
-            LockErrorKind::MissingExtraBase { ref id, ref extra } => {
-                write!(
-                    f,
-                    "found distribution `{id}` with extra `{extra}` but no base distribution",
-                )
-            }
-            LockErrorKind::MissingDevBase { ref id, ref group } => {
-                write!(
-                    f,
-                    "found distribution `{id}` with development dependency group `{group}` but no base distribution",
-                )
-            }
-            LockErrorKind::InvalidWheelSource { ref id, source } => {
-                write!(f, "wheels cannot come from {source} sources")
-            }
-            LockErrorKind::NeitherSourceDistNorWheel { ref id } => {
-                write!(
-                    f,
-                    "found distribution {id} with neither wheels nor source distribution"
-                )
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
     /// An error that occurs when multiple distributions with the same
     /// ID were found.
+    #[error("found duplicate distribution `{id}`")]
     DuplicateDistribution {
         /// The ID of the conflicting distributions.
         id: DistributionId,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same distribution that have identical identifiers.
+    #[error("for distribution `{id}`, found duplicate dependency `{dependency}`")]
     DuplicateDependency {
         /// The ID of the distribution for which a duplicate dependency was
         /// found.
@@ -1846,6 +1779,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same distribution that have identical identifiers, as part of the
     /// that distribution's optional dependencies.
+    #[error("for distribution `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
     DuplicateOptionalDependency {
         /// The ID of the distribution for which a duplicate dependency was
         /// found.
@@ -1858,6 +1792,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same distribution that have identical identifiers, as part of the
     /// that distribution's development dependencies.
+    #[error("for distribution `{id}:{group}`, found duplicate dependency `{dependency}`")]
     DuplicateDevDependency {
         /// The ID of the distribution for which a duplicate dependency was
         /// found.
@@ -1869,20 +1804,29 @@ enum LockErrorKind {
     },
     /// An error that occurs when the URL to a file for a wheel or
     /// source dist could not be converted to a structured `url::Url`.
-    InvalidFileUrl {
+    #[error("failed to parse wheel or source distribution URL")]
+    InvalidFileUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in its error message.
-        err: ToUrlError,
-    },
-    /// An error that occurs when the caller provides a distribution with a
-    /// dependency that doesn't correspond to any other distribution in the
-    /// lock file.
+        #[source]
+        ToUrlError,
+    ),
+    /// An error that occurs when there's an unrecognized dependency.
+    ///
+    /// That is, a dependency for a distribution that isn't in the lock file.
+    #[error(
+        "for distribution `{id}`, found dependency `{dependency}` with no locked distribution"
+    )]
     UnrecognizedDependency {
-        /// The actual error.
-        err: UnrecognizedDependencyError,
+        /// The ID of the distribution that has an unrecognized dependency.
+        id: DistributionId,
+        /// The ID of the dependency that doesn't have a corresponding distribution
+        /// entry.
+        dependency: Dependency,
     },
     /// An error that occurs when the caller provides a distribution with
     /// an extra that doesn't exist for the dependency.
+    #[error("for distribution `{id}`, found dependency `{dependency}` with unrecognized extra `{extra}`")]
     UnrecognizedExtra {
         /// The ID of the distribution that has an unrecognized dependency.
         id: DistributionId,
@@ -1894,6 +1838,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
+    #[error("since the distribution `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     Hash {
         /// The ID of the distribution that has a missing hash.
         id: DistributionId,
@@ -1905,6 +1850,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution is included with an extra name,
     /// but no corresponding base distribution (i.e., without the extra) exists.
+    #[error("found distribution `{id}` with extra `{extra}` but no base distribution")]
     MissingExtraBase {
         /// The ID of the distribution that has a missing base.
         id: DistributionId,
@@ -1914,6 +1860,7 @@ enum LockErrorKind {
     /// An error that occurs when a distribution is included with a development
     /// dependency group, but no corresponding base distribution (i.e., without
     /// the group) exists.
+    #[error("found distribution `{id}` with development dependency group `{group}` but no base distribution")]
     MissingDevBase {
         /// The ID of the distribution that has a missing base.
         id: DistributionId,
@@ -1922,132 +1869,83 @@ enum LockErrorKind {
     },
     /// An error that occurs from an invalid lockfile where a wheel comes from a non-wheel source
     /// such as a directory.
+    #[error("wheels cannot come from {source_type} sources")]
     InvalidWheelSource {
         /// The ID of the distribution that has a missing base.
         id: DistributionId,
         /// The kind of the invalid source.
-        source: &'static str,
+        source_type: &'static str,
     },
+    /// An error that occurs when a distribution indicates that it is sourced from a registry, but
+    /// is missing a URL.
+    #[error("found registry distribution {id} without a valid URL")]
+    MissingUrl {
+        /// The ID of the distribution that is missing a URL.
+        id: DistributionId,
+    },
+    /// An error that occurs when a distribution indicates that it is sourced from a registry, but
+    /// is missing a filename.
+    #[error("found registry distribution {id} without a valid filename")]
+    MissingFilename {
+        /// The ID of the distribution that is missing a filename.
+        id: DistributionId,
+    },
+    /// An error that occurs when a distribution is included with neither wheels nor a source
+    /// distribution.
+    #[error("found distribution {id} with neither wheels nor source distribution")]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution that has a missing base.
         id: DistributionId,
     },
-}
-
-/// An error that occurs when there's an unrecognized dependency.
-///
-/// That is, a dependency for a distribution that isn't in the lock file.
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct UnrecognizedDependencyError {
-    /// The ID of the distribution that has an unrecognized dependency.
-    id: DistributionId,
-    /// The ID of the dependency that doesn't have a corresponding distribution
-    /// entry.
-    dependency: Dependency,
-}
-
-impl std::error::Error for UnrecognizedDependencyError {}
-
-impl std::fmt::Display for UnrecognizedDependencyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let UnrecognizedDependencyError {
-            ref id,
-            ref dependency,
-        } = *self;
-        write!(
-            f,
-            "found dependency `{dependency}` for `{id}` with no locked distribution"
-        )
-    }
+    /// An error that occurs when converting between URLs and paths.
+    #[error("found dependency `{id}` with no locked distribution")]
+    VerbatimUrl {
+        /// The ID of the distribution that has a missing base.
+        id: DistributionId,
+        /// The inner error we forward.
+        #[source]
+        err: VerbatimUrlError,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct SourceParseError {
-    given: String,
-    kind: SourceParseErrorKind,
-}
-
-impl SourceParseError {
-    fn no_plus(given: &str) -> SourceParseError {
-        let given = given.to_string();
-        let kind = SourceParseErrorKind::NoPlus;
-        SourceParseError { given, kind }
-    }
-
-    fn unrecognized_source_name(given: &str, name: &str) -> SourceParseError {
-        let given = given.to_string();
-        let kind = SourceParseErrorKind::UnrecognizedSourceName {
-            name: name.to_string(),
-        };
-        SourceParseError { given, kind }
-    }
-
-    fn invalid_url(given: &str, err: url::ParseError) -> SourceParseError {
-        let given = given.to_string();
-        let kind = SourceParseErrorKind::InvalidUrl { err };
-        SourceParseError { given, kind }
-    }
-
-    fn missing_sha(given: &str) -> SourceParseError {
-        let given = given.to_string();
-        let kind = SourceParseErrorKind::MissingSha;
-        SourceParseError { given, kind }
-    }
-
-    fn invalid_sha(given: &str) -> SourceParseError {
-        let given = given.to_string();
-        let kind = SourceParseErrorKind::InvalidSha;
-        SourceParseError { given, kind }
-    }
-}
-
-impl std::error::Error for SourceParseError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self.kind {
-            SourceParseErrorKind::NoPlus
-            | SourceParseErrorKind::UnrecognizedSourceName { .. }
-            | SourceParseErrorKind::MissingSha
-            | SourceParseErrorKind::InvalidSha => None,
-            SourceParseErrorKind::InvalidUrl { ref err } => Some(err),
-        }
-    }
-}
-
-impl std::fmt::Display for SourceParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let given = &self.given;
-        match self.kind {
-            SourceParseErrorKind::NoPlus => write!(f, "could not find `+` in source `{given}`"),
-            SourceParseErrorKind::UnrecognizedSourceName { ref name } => {
-                write!(f, "unrecognized name `{name}` in source `{given}`")
-            }
-            SourceParseErrorKind::InvalidUrl { .. } => write!(f, "invalid URL in source `{given}`"),
-            SourceParseErrorKind::MissingSha => write!(f, "missing SHA in source `{given}`"),
-            SourceParseErrorKind::InvalidSha => write!(f, "invalid SHA in source `{given}`"),
-        }
-    }
-}
-
-/// The kind of error that can occur when parsing a source string.
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum SourceParseErrorKind {
+#[derive(Clone, Debug, thiserror::Error)]
+enum SourceParseError {
     /// An error that occurs when no '+' could be found.
-    NoPlus,
+    #[error("could not find `+` in source `{given}`")]
+    NoPlus {
+        /// The source string given.
+        given: String,
+    },
     /// An error that occurs when the source name was unrecognized.
+    #[error("unrecognized name `{name}` in source `{given}`")]
     UnrecognizedSourceName {
+        /// The source string given.
+        given: String,
         /// The unrecognized name.
         name: String,
     },
     /// An error that occurs when the URL in the source is invalid.
+    #[error("invalid URL in source `{given}`")]
     InvalidUrl {
+        /// The source string given.
+        given: String,
         /// The URL parse error.
+        #[source]
         err: url::ParseError,
     },
     /// An error that occurs when a Git URL is missing a precise commit SHA.
-    MissingSha,
+    #[error("missing SHA in source `{given}`")]
+    MissingSha {
+        /// The source string given.
+        given: String,
+    },
     /// An error that occurs when a Git URL has an invalid SHA.
-    InvalidSha,
+    #[error("invalid SHA in source `{given}`")]
+    InvalidSha {
+        /// The source string given.
+        given: String,
+    },
 }
 
 /// An error that occurs when a hash digest could not be parsed.
@@ -2058,7 +1956,7 @@ impl std::error::Error for HashParseError {}
 
 impl std::fmt::Display for HashParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.0.fmt(f)
+        Display::fmt(self.0, f)
     }
 }
 

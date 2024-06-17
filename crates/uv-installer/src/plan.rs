@@ -16,7 +16,7 @@ use distribution_types::{
 use platform_tags::Tags;
 use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
-use uv_configuration::{NoBinary, Reinstall};
+use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
@@ -56,7 +56,7 @@ impl<'a> Planner<'a> {
         self,
         mut site_packages: SitePackages,
         reinstall: &Reinstall,
-        no_binary: &NoBinary,
+        build_options: &BuildOptions,
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
         cache: &Cache,
@@ -107,11 +107,7 @@ impl<'a> Planner<'a> {
             };
 
             // Check if installation of a binary version of the package should be allowed.
-            let no_binary = match no_binary {
-                NoBinary::None => false,
-                NoBinary::All => true,
-                NoBinary::Packages(packages) => packages.contains(&requirement.name),
-            };
+            let no_binary = build_options.no_binary_package(&requirement.name);
 
             let installed_dists = site_packages.remove_packages(&requirement.name);
 
@@ -272,13 +268,47 @@ impl<'a> Planner<'a> {
                         continue;
                     }
                 }
-                RequirementSource::Path { url, editable, .. } => {
+
+                RequirementSource::Directory {
+                    url,
+                    editable,
+                    install_path,
+                    lock_path,
+                } => {
                     // Store the canonicalized path, which also serves to validate that it exists.
-                    let path = match url
-                        .to_file_path()
-                        .map_err(|()| Error::MissingFilePath(url.to_url()))?
-                        .canonicalize()
-                    {
+                    let path = match install_path.canonicalize() {
+                        Ok(path) => path,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                            return Err(Error::NotFound(url.to_url()).into());
+                        }
+                        Err(err) => return Err(err.into()),
+                    };
+
+                    let sdist = DirectorySourceDist {
+                        name: requirement.name.clone(),
+                        url: url.clone(),
+                        install_path: path,
+                        lock_path: lock_path.clone(),
+                        editable: *editable,
+                    };
+
+                    // Find the most-compatible wheel from the cache, since we don't know
+                    // the filename in advance.
+                    if let Some(wheel) = built_index.directory(&sdist)? {
+                        let cached_dist = wheel.into_url_dist(url.clone());
+                        debug!("Directory source requirement already cached: {cached_dist}");
+                        cached.push(CachedDist::Url(cached_dist));
+                        continue;
+                    }
+                }
+
+                RequirementSource::Path {
+                    url,
+                    install_path,
+                    lock_path,
+                } => {
+                    // Store the canonicalized path, which also serves to validate that it exists.
+                    let path = match install_path.canonicalize() {
                         Ok(path) => path,
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                             return Err(Error::NotFound(url.to_url()).into());
@@ -287,23 +317,7 @@ impl<'a> Planner<'a> {
                     };
 
                     // Check if we have a wheel or a source distribution.
-                    if path.is_dir() {
-                        let sdist = DirectorySourceDist {
-                            name: requirement.name.clone(),
-                            url: url.clone(),
-                            path,
-                            editable: *editable,
-                        };
-
-                        // Find the most-compatible wheel from the cache, since we don't know
-                        // the filename in advance.
-                        if let Some(wheel) = built_index.directory(&sdist)? {
-                            let cached_dist = wheel.into_url_dist(url.clone());
-                            debug!("Path source requirement already cached: {cached_dist}");
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
-                        }
-                    } else if path
+                    if path
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
                     {
@@ -369,7 +383,8 @@ impl<'a> Planner<'a> {
                         let sdist = PathSourceDist {
                             name: requirement.name.clone(),
                             url: url.clone(),
-                            path,
+                            install_path: path,
+                            lock_path: lock_path.clone(),
                         };
 
                         // Find the most-compatible wheel from the cache, since we don't know

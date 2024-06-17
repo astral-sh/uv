@@ -156,7 +156,7 @@ mod test {
     use crate::{ProjectWorkspace, RequiresDist};
 
     async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
-        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+        let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;
         let path = Path::new("pyproject.toml");
         let project_workspace = ProjectWorkspace::from_project(
             path,

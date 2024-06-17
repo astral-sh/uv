@@ -28,7 +28,7 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, NoBuild, PreviewMode};
+use uv_configuration::{BuildKind, PreviewMode};
 use uv_extract::hash::Hasher;
 use uv_fs::{write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
@@ -123,6 +123,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             .await;
                     }
                 };
+
+                // If the URL is a file URL, use the local path directly.
+                if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                    return self
+                        .archive(
+                            source,
+                            &PathSourceUrl {
+                                url: &url,
+                                path: Cow::Owned(path),
+                            },
+                            &cache_shard,
+                            tags,
+                            hashes,
+                        )
+                        .boxed_local()
+                        .await;
+                }
 
                 self.url(
                     source,
@@ -280,6 +300,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             .await;
                     }
                 };
+
+                // If the URL is a file URL, use the local path directly.
+                if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                    return self
+                        .archive_metadata(
+                            source,
+                            &PathSourceUrl {
+                                url: &url,
+                                path: Cow::Owned(path),
+                            },
+                            &cache_shard,
+                            hashes,
+                        )
+                        .boxed_local()
+                        .await;
+                }
 
                 self.url_metadata(
                     source,
@@ -792,6 +831,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<Revision, Error> {
+        // Verify that the archive exists.
+        if !resource.path.is_file() {
+            return Err(Error::NotFound(resource.url.clone()));
+        }
+
         // Determine the last-modified time of the source distribution.
         let modified = ArchiveTimestamp::from_file(&resource.path).map_err(Error::CacheRead)?;
 
@@ -997,6 +1041,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &DirectorySourceUrl<'_>,
         cache_shard: &CacheShard,
     ) -> Result<Revision, Error> {
+        // Verify that the source tree exists.
+        if !resource.path.is_dir() {
+            return Err(Error::NotFound(resource.url.clone()));
+        }
+
         // Determine the last-modified time of the source distribution.
         let Some(modified) =
             ArchiveTimestamp::from_source_tree(&resource.path).map_err(Error::CacheRead)?
@@ -1341,15 +1390,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         debug!("Building: {source}");
 
         // Guard against build of source distributions when disabled.
-        let no_build = match self.build_context.no_build() {
-            NoBuild::All => true,
-            NoBuild::None => false,
-            NoBuild::Packages(packages) => {
-                source.name().is_some_and(|name| packages.contains(name))
-            }
-        };
-
-        if no_build {
+        if self.build_context.build_options().no_build(source.name()) {
             if source.is_editable() {
                 debug!("Allowing build for editable source distribution: {source}");
             } else {

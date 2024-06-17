@@ -53,8 +53,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # For a specific version.
-curl -LsSf https://astral.sh/uv/0.2.10/install.sh | sh
-powershell -c "irm https://astral.sh/uv/0.2.10/install.ps1 | iex"
+curl -LsSf https://astral.sh/uv/0.2.11/install.sh | sh
+powershell -c "irm https://astral.sh/uv/0.2.11/install.ps1 | iex"
 
 # With pip.
 pip install uv
@@ -502,6 +502,9 @@ If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT
 variable to the path of the certificate bundle, to instruct uv to use that file instead of the
 system's trust store.
 
+If client certificate authentication (mTLS) is desired, set the `SSL_CLIENT_CERT` environment
+variable to the path of the PEM formatted file containing the certificate followed by the private key.
+
 ## Platform support
 
 uv has Tier 1 support for the following platforms:
@@ -588,6 +591,8 @@ uv accepts the following command-line arguments as environment variables:
   concurrently at any given time.
 - `UV_CONCURRENT_INSTALLS`: Used to control the number of threads used when installing and unzipping
   packages.
+- `UV_EXCLUDE_NEWER`: Equivalent to the `--exclude-newer` command-line argument. If set, uv will
+  exclude distributions published after the specified date.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
@@ -595,6 +600,8 @@ In addition, uv respects the following environment variables:
 
 - `SSL_CERT_FILE`: If set, uv will use this file as the certificate bundle instead of the system's
   trust store.
+- `SSL_CLIENT_CERT`: If set, uv will use this file for mTLS authentication. This should be a single
+  file containing both the certificate and the private key in PEM format.
 - `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
   any filter compatible with the `tracing_subscriber` crate. For example, `RUST_LOG=trace` will
   enable trace-level logging. See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)

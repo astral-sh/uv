@@ -1,3 +1,4 @@
+use pep440_rs::Version;
 use tracing::{debug, info};
 use uv_client::BaseClientBuilder;
 use uv_configuration::PreviewMode;
@@ -9,7 +10,9 @@ use crate::discovery::{
     ToolchainSources,
 };
 use crate::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
+use crate::implementation::LenientImplementationName;
 use crate::managed::{InstalledToolchain, InstalledToolchains};
+use crate::platform::{Arch, Libc, Os};
 use crate::{Error, Interpreter, ToolchainSource};
 
 /// A Python interpreter and accompanying tools.
@@ -21,6 +24,15 @@ pub struct Toolchain {
 }
 
 impl Toolchain {
+    /// Create a new [`Toolchain`] from a source, interpreter tuple.
+    pub(crate) fn from_tuple(tuple: (ToolchainSource, Interpreter)) -> Self {
+        let (source, interpreter) = tuple;
+        Self {
+            source,
+            interpreter,
+        }
+    }
+
     /// Find an installed [`Toolchain`].
     ///
     /// This is the standard interface for discovering a Python toolchain for use with uv.
@@ -144,6 +156,7 @@ impl Toolchain {
         }
     }
 
+    /// Download and install the requested toolchain.
     pub async fn fetch<'a>(
         request: ToolchainRequest,
         client_builder: BaseClientBuilder<'a>,
@@ -180,10 +193,48 @@ impl Toolchain {
         }
     }
 
+    /// Return the [`ToolchainSource`] of the toolchain, indicating where it was found.
     pub fn source(&self) -> &ToolchainSource {
         &self.source
     }
 
+    pub fn key(&self) -> String {
+        format!(
+            "{}-{}-{}-{}-{}",
+            self.implementation().to_string().to_ascii_lowercase(),
+            self.python_version(),
+            self.os(),
+            self.arch(),
+            self.libc()
+        )
+    }
+
+    /// Return the Python [`Version`] of the toolchain as reported by its interpreter.
+    pub fn python_version(&self) -> &Version {
+        self.interpreter.python_version()
+    }
+
+    /// Return the [`LenientImplementationName`] of the toolchain as reported by its interpreter.
+    pub fn implementation(&self) -> LenientImplementationName {
+        LenientImplementationName::from(self.interpreter.implementation_name())
+    }
+
+    /// Return the [`Arch`] of the toolchain as reported by its interpreter.
+    pub fn arch(&self) -> Arch {
+        Arch::from(&self.interpreter.platform().arch())
+    }
+
+    /// Return the [`Libc`] of the toolchain as reported by its interpreter.
+    pub fn libc(&self) -> Libc {
+        Libc::from(self.interpreter.platform().os())
+    }
+
+    /// Return the [`Os`] of the toolchain as reported by its interpreter.
+    pub fn os(&self) -> Os {
+        Os::from(self.interpreter.platform().os())
+    }
+
+    /// Return the [`Interpreter`] for the toolchain.
     pub fn interpreter(&self) -> &Interpreter {
         &self.interpreter
     }

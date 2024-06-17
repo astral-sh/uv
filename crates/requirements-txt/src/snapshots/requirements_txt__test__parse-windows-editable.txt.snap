@@ -10,8 +10,8 @@ RequirementsTxt {
             requirement: Unnamed(
                 UnnamedRequirement {
                     url: VerbatimParsedUrl {
-                        parsed_url: Path(
-                            ParsedPathUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
                                 url: Url {
                                     scheme: "file",
                                     cannot_be_a_base: false,
@@ -23,7 +23,8 @@ RequirementsTxt {
                                     query: None,
                                     fragment: None,
                                 },
-                                path: "<REQUIREMENTS_DIR>/editable",
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                lock_path: "./editable",
                                 editable: true,
                             },
                         ),
@@ -66,8 +67,8 @@ RequirementsTxt {
             requirement: Unnamed(
                 UnnamedRequirement {
                     url: VerbatimParsedUrl {
-                        parsed_url: Path(
-                            ParsedPathUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
                                 url: Url {
                                     scheme: "file",
                                     cannot_be_a_base: false,
@@ -79,7 +80,8 @@ RequirementsTxt {
                                     query: None,
                                     fragment: None,
                                 },
-                                path: "<REQUIREMENTS_DIR>/editable",
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                lock_path: "./editable",
                                 editable: true,
                             },
                         ),
@@ -122,8 +124,8 @@ RequirementsTxt {
             requirement: Unnamed(
                 UnnamedRequirement {
                     url: VerbatimParsedUrl {
-                        parsed_url: Path(
-                            ParsedPathUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
                                 url: Url {
                                     scheme: "file",
                                     cannot_be_a_base: false,
@@ -135,7 +137,8 @@ RequirementsTxt {
                                     query: None,
                                     fragment: None,
                                 },
-                                path: "<REQUIREMENTS_DIR>/editable",
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                lock_path: "./editable",
                                 editable: true,
                             },
                         ),
@@ -199,8 +202,8 @@ RequirementsTxt {
             requirement: Unnamed(
                 UnnamedRequirement {
                     url: VerbatimParsedUrl {
-                        parsed_url: Path(
-                            ParsedPathUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
                                 url: Url {
                                     scheme: "file",
                                     cannot_be_a_base: false,
@@ -212,7 +215,8 @@ RequirementsTxt {
                                     query: None,
                                     fragment: None,
                                 },
-                                path: "<REQUIREMENTS_DIR>/editable",
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                lock_path: "./editable",
                                 editable: true,
                             },
                         ),
@@ -276,8 +280,8 @@ RequirementsTxt {
             requirement: Unnamed(
                 UnnamedRequirement {
                     url: VerbatimParsedUrl {
-                        parsed_url: Path(
-                            ParsedPathUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
                                 url: Url {
                                     scheme: "file",
                                     cannot_be_a_base: false,
@@ -289,7 +293,8 @@ RequirementsTxt {
                                     query: None,
                                     fragment: None,
                                 },
-                                path: "<REQUIREMENTS_DIR>/editable",
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                lock_path: "./editable",
                                 editable: true,
                             },
                         ),
@@ -346,8 +351,8 @@ RequirementsTxt {
             requirement: Unnamed(
                 UnnamedRequirement {
                     url: VerbatimParsedUrl {
-                        parsed_url: Path(
-                            ParsedPathUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
                                 url: Url {
                                     scheme: "file",
                                     cannot_be_a_base: false,
@@ -359,7 +364,8 @@ RequirementsTxt {
                                     query: None,
                                     fragment: None,
                                 },
-                                path: "<REQUIREMENTS_DIR>/editable[d",
+                                install_path: "<REQUIREMENTS_DIR>/editable[d",
+                                lock_path: "./editable[d",
                                 editable: true,
                             },
                         ),

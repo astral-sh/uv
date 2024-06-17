@@ -16,6 +16,7 @@ use crate::printer::Printer;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     target: Option<String>,
+    force: bool,
     native_tls: bool,
     connectivity: Connectivity,
     preview: PreviewMode,
@@ -23,7 +24,7 @@ pub(crate) async fn install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv toolchain fetch` is experimental and may change without warning.");
+        warn_user!("`uv toolchain install` is experimental and may change without warning.");
     }
 
     let toolchains = InstalledToolchains::from_settings()?.init()?;
@@ -45,7 +46,6 @@ pub(crate) async fn install(
         }
         request
     } else {
-        writeln!(printer.stderr(), "Using latest Python version")?;
         ToolchainRequest::default()
     };
 
@@ -58,12 +58,24 @@ pub(crate) async fn install(
             "Found installed toolchain '{}'",
             toolchain.key()
         )?;
-        writeln!(
-            printer.stderr(),
-            "Already installed at {}",
-            toolchain.path().user_display()
-        )?;
-        return Ok(ExitStatus::Success);
+
+        if force {
+            writeln!(printer.stderr(), "Forcing reinstallation...")?;
+        } else {
+            if matches!(request, ToolchainRequest::Any) {
+                writeln!(
+                    printer.stderr(),
+                    "A toolchain is already installed. Use `uv toolchain install <request>` to install a specific toolchain.",
+                )?;
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "Already installed at {}",
+                    toolchain.path().user_display()
+                )?;
+            }
+            return Ok(ExitStatus::Success);
+        }
     }
 
     // Fill platform information missing from the request

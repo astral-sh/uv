@@ -3,7 +3,8 @@ use std::collections::Bound;
 use itertools::Itertools;
 use pubgrub::range::Range;
 
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{MarkerExpression, MarkerTree, MarkerValueVersion};
 
 #[derive(thiserror::Error, Debug)]
 pub enum RequiresPythonError {
@@ -21,14 +22,20 @@ pub enum RequiresPythonError {
 ///
 /// See: <https://packaging.python.org/en/latest/guides/dropping-older-python-versions/>
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct RequiresPython(VersionSpecifiers);
+pub struct RequiresPython {
+    specifiers: VersionSpecifiers,
+    bound: Bound<Version>,
+}
 
 impl RequiresPython {
     /// Returns a [`RequiresPython`] to express `>=` equality with the given version.
     pub fn greater_than_equal_version(version: Version) -> Self {
-        Self(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        ))
+        Self {
+            specifiers: VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(
+                version.clone(),
+            )),
+            bound: Bound::Included(version),
+        }
     }
 
     /// Returns a [`RequiresPython`] to express the union of the given version specifiers.
@@ -53,20 +60,25 @@ impl RequiresPython {
             return Ok(None);
         };
 
-        // Convert back to PEP 440 specifiers.
-        let requires_python = Self(
-            range
-                .iter()
-                .flat_map(VersionSpecifier::from_bounds)
-                .collect(),
-        );
+        // Extract the lower bound.
+        let bound = range
+            .iter()
+            .next()
+            .map(|(lower, _)| lower.clone())
+            .unwrap_or(Bound::Unbounded);
 
-        Ok(Some(requires_python))
+        // Convert back to PEP 440 specifiers.
+        let specifiers = range
+            .iter()
+            .flat_map(VersionSpecifier::from_bounds)
+            .collect();
+
+        Ok(Some(Self { specifiers, bound }))
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version.
     pub fn contains(&self, version: &Version) -> bool {
-        self.0.contains(version)
+        self.specifiers.contains(version)
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version specifiers.
@@ -76,24 +88,14 @@ impl RequiresPython {
     /// provided range. However, `>=3.9` would not be considered compatible, as the
     /// `Requires-Python` includes Python 3.8, but `>=3.9` does not.
     pub fn is_contained_by(&self, target: &VersionSpecifiers) -> bool {
-        let Ok(requires_python) = crate::pubgrub::PubGrubSpecifier::try_from(&self.0) else {
-            return false;
-        };
-
         let Ok(target) = crate::pubgrub::PubGrubSpecifier::try_from(target) else {
             return false;
         };
-
-        // If the dependency has no lower bound, then it supports all versions.
-        let Some((target_lower, _)) = target.iter().next() else {
-            return true;
-        };
-
-        // If we have no lower bound, then there must be versions we support that the
-        // dependency does not.
-        let Some((requires_python_lower, _)) = requires_python.iter().next() else {
-            return false;
-        };
+        let target = target
+            .iter()
+            .next()
+            .map(|(lower, _)| lower)
+            .unwrap_or(&Bound::Unbounded);
 
         // We want, e.g., `requires_python_lower` to be `>=3.8` and `version_lower` to be
         // `>=3.7`.
@@ -138,7 +140,7 @@ impl RequiresPython {
         // Alternatively, we could vary the semantics depending on whether or not the user included
         // a pre-release in their specifier, enforcing pre-release compatibility only if the user
         // explicitly requested it.
-        match (target_lower, requires_python_lower) {
+        match (target, &self.bound) {
             (Bound::Included(target_lower), Bound::Included(requires_python_lower)) => {
                 target_lower.release() <= requires_python_lower.release()
             }
@@ -161,25 +163,96 @@ impl RequiresPython {
 
     /// Returns the [`VersionSpecifiers`] for the `Requires-Python` specifier.
     pub fn specifiers(&self) -> &VersionSpecifiers {
-        &self.0
+        &self.specifiers
+    }
+
+    /// Returns the lower [`Bound`] for the `Requires-Python` specifier.
+    pub fn bound(&self) -> &Bound<Version> {
+        &self.bound
+    }
+
+    /// Returns this `Requires-Python` specifier as an equivalent marker
+    /// expression utilizing the `python_version` marker field.
+    ///
+    /// This is useful for comparing a `Requires-Python` specifier with
+    /// arbitrary marker expressions. For example, one can ask whether the
+    /// returned marker expression is disjoint with another marker expression.
+    /// If it is, then one can conclude that the `Requires-Python` specifier
+    /// excludes the dependency with that other marker expression.
+    ///
+    /// If this `Requires-Python` specifier has no constraints, then this
+    /// returns a marker tree that evaluates to `true` for all possible marker
+    /// environments.
+    pub fn to_marker_tree(&self) -> MarkerTree {
+        let (op, version) = match self.bound {
+            // If we see this anywhere, then it implies the marker
+            // tree we would generate would always evaluate to
+            // `true` because every possible Python version would
+            // satisfy it.
+            Bound::Unbounded => return MarkerTree::And(vec![]),
+            Bound::Excluded(ref version) => {
+                (Operator::GreaterThan, version.clone().without_local())
+            }
+            Bound::Included(ref version) => {
+                (Operator::GreaterThanEqual, version.clone().without_local())
+            }
+        };
+        // For the `python_version` marker expression, it specifically only
+        // supports truncate major/minor versions of Python. This means that
+        // a `Requires-Python: 3.10.1` is satisfied by `python_version ==
+        // '3.10'`. So for disjointness checking, we need to ensure that the
+        // marker expression we generate for `Requires-Python` doesn't try to
+        // be overly selective about the patch version. We do this by keeping
+        // this part of our marker limited to the major and minor version
+        // components only.
+        let version_major_minor_only = Version::new(version.release().iter().take(2));
+        let expr_python_version = MarkerExpression::Version {
+            key: MarkerValueVersion::PythonVersion,
+            // OK because a version specifier is only invalid when the
+            // version is local (which is impossible here because we
+            // strip it above) or if the operator is ~= (which is also
+            // impossible here).
+            specifier: VersionSpecifier::from_version(op, version_major_minor_only).unwrap(),
+        };
+        let expr_python_full_version = MarkerExpression::Version {
+            key: MarkerValueVersion::PythonFullVersion,
+            // For `python_full_version`, we can use the entire
+            // version as-is.
+            //
+            // OK because a version specifier is only invalid when the
+            // version is local (which is impossible here because we
+            // strip it above) or if the operator is ~= (which is also
+            // impossible here).
+            specifier: VersionSpecifier::from_version(op, version).unwrap(),
+        };
+        MarkerTree::And(vec![
+            MarkerTree::Expression(expr_python_version),
+            MarkerTree::Expression(expr_python_full_version),
+        ])
     }
 }
 
 impl std::fmt::Display for RequiresPython {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+        std::fmt::Display::fmt(&self.specifiers, f)
     }
 }
 
 impl serde::Serialize for RequiresPython {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.serialize(serializer)
+        self.specifiers.serialize(serializer)
     }
 }
 
 impl<'de> serde::Deserialize<'de> for RequiresPython {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let specifiers = VersionSpecifiers::deserialize(deserializer)?;
-        Ok(Self(specifiers))
+        let bound = crate::pubgrub::PubGrubSpecifier::try_from(&specifiers)
+            .map_err(serde::de::Error::custom)?
+            .iter()
+            .next()
+            .map(|(lower, _)| lower.clone())
+            .unwrap_or(Bound::Unbounded);
+        Ok(Self { specifiers, bound })
     }
 }

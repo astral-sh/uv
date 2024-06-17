@@ -128,15 +128,15 @@ impl From<ErrorKind> for Error {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErrorKind {
-    /// An invalid URL was provided.
     #[error(transparent)]
-    UrlParseError(#[from] url::ParseError),
+    UrlParse(#[from] url::ParseError),
 
-    /// A base URL could not be joined with a possibly relative URL.
     #[error(transparent)]
-    JoinRelativeError(#[from] pypi_types::JoinRelativeError),
+    JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
 
-    /// Dist-info error
+    #[error("Expected a file URL, but received: {0}")]
+    NonFileUrl(Url),
+
     #[error(transparent)]
     DistInfo(#[from] install_wheel_rs::Error),
 
@@ -162,10 +162,6 @@ pub enum ErrorKind {
     #[error("Metadata file `{0}` was not found in {1}")]
     MetadataNotFound(WheelFilename, String),
 
-    /// The metadata file was not found in the registry.
-    #[error("File `{0}` was not found in the registry at {1}.")]
-    FileNotFound(String, #[source] BetterReqwestError),
-
     /// A generic request error happened while making a request. Refer to the
     /// error message for more details.
     #[error(transparent)]
@@ -184,9 +180,6 @@ pub enum ErrorKind {
 
     #[error(transparent)]
     AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
-
-    #[error("Expected a single .dist-info directory in {0}, found {1}")]
-    InvalidDistInfo(WheelFilename, String),
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),
@@ -211,10 +204,6 @@ pub enum ErrorKind {
 
     #[error("Cache serialization failed")]
     Encode(#[source] rmp_serde::encode::Error),
-
-    /// An [`io::Error`] with a filename attached
-    #[error(transparent)]
-    Persist(#[from] tempfile::PersistError),
 
     #[error("Missing `Content-Type` header for {0}")]
     MissingContentType(Url),

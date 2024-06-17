@@ -10,6 +10,22 @@
         "null"
       ]
     },
+    "compile-bytecode": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "config-settings": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ConfigSettings"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "dev-dependencies": {
       "description": "PEP 508-style requirements, e.g., `flask==3.0.0`, or `black @ https://...`.",
       "type": [
@@ -20,13 +36,117 @@
         "type": "string"
       }
     },
+    "exclude-newer": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ExcludeNewer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "extra-index-url": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/IndexUrl"
+      }
+    },
+    "find-links": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/FlatIndexLocation"
+      }
+    },
+    "index-strategy": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IndexStrategy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "index-url": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IndexUrl"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "keyring-provider": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/KeyringProviderType"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "link-mode": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/LinkMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "native-tls": {
       "type": [
         "boolean",
         "null"
       ]
     },
+    "no-binary": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-binary-package": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
+    "no-build": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-build-package": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
     "no-cache": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-index": {
       "type": [
         "boolean",
         "null"
@@ -58,10 +178,45 @@
         }
       ]
     },
+    "prerelease": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PreReleaseMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "preview": {
       "type": [
         "boolean",
         "null"
+      ]
+    },
+    "reinstall": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "reinstall-package": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
+    "resolution": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ResolutionMode"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "sources": {
@@ -71,6 +226,21 @@
       ],
       "additionalProperties": {
         "$ref": "#/definitions/Source"
+      }
+    },
+    "upgrade": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "upgrade-package": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
       }
     },
     "workspace": {
@@ -543,6 +713,21 @@
             }
           ]
         },
+        "reinstall": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "reinstall-package": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
+        },
         "require-hashes": {
           "type": [
             "boolean",
@@ -576,6 +761,21 @@
             "string",
             "null"
           ]
+        },
+        "upgrade": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "upgrade-package": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
         }
       },
       "additionalProperties": false
@@ -714,7 +914,7 @@
           "additionalProperties": false
         },
         {
-          "description": "The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or `.tag.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or `setup.py` file in the root).",
+          "description": "The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or `setup.py` file in the root).",
           "type": "object",
           "required": [
             "path"

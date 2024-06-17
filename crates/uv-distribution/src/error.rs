@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use tokio::task::JoinError;
+use url::Url;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
@@ -25,6 +26,8 @@ pub enum Error {
     RelativePath(PathBuf),
     #[error(transparent)]
     JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
+    #[error("Expected a file URL, but received: {0}")]
+    NonFileUrl(Url),
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
@@ -62,12 +65,10 @@ pub enum Error {
     DistInfo(#[from] install_wheel_rs::Error),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
-    #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py: `{}`", _0.user_display())]
+    #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
     DirWithoutEntrypoint(PathBuf),
     #[error("Failed to extract archive")]
     Extract(#[from] uv_extract::Error),
-    #[error("Source distribution not found at: {0}")]
-    NotFound(PathBuf),
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
     #[error("Failed to extract static metadata from `PKG-INFO`")]
@@ -80,6 +81,8 @@ pub enum Error {
     UnsupportedScheme(String),
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
+    #[error("Distribution not found at: {0}")]
+    NotFound(Url),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.

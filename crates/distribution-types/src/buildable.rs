@@ -158,7 +158,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
     fn from(dist: &'a PathSourceDist) -> Self {
         Self {
             url: &dist.url,
-            path: Cow::Borrowed(&dist.path),
+            path: Cow::Borrowed(&dist.install_path),
         }
     }
 }
@@ -180,7 +180,7 @@ impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
     fn from(dist: &'a DirectorySourceDist) -> Self {
         Self {
             url: &dist.url,
-            path: Cow::Borrowed(&dist.path),
+            path: Cow::Borrowed(&dist.install_path),
             editable: dist.editable,
         }
     }

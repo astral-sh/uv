@@ -1,35 +1,41 @@
+use std::collections::Bound;
+
 use anstream::eprint;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
-use uv_client::{FlatIndexClient, RegistryClientBuilder};
+use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
+    KeyringProviderType, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
-use uv_normalize::PackageName;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
-use uv_toolchain::{Interpreter, SystemPython, Toolchain, ToolchainRequest};
+use uv_resolver::{
+    ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode, RequiresPython,
+    ResolutionMode,
+};
+use uv_toolchain::Interpreter;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::project::ProjectError;
+use crate::commands::project::{find_requires_python, ProjectError};
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::ResolverSettings;
 
 /// Resolve the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
-    index_locations: IndexLocations,
-    upgrade: Upgrade,
-    exclude_newer: Option<ExcludeNewer>,
     python: Option<String>,
+    settings: ResolverSettings,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
@@ -41,45 +47,26 @@ pub(crate) async fn lock(
     let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
 
     // Find an interpreter for the project
-    let interpreter = match project::find_environment(&workspace, cache) {
-        Ok(environment) => {
-            let interpreter = environment.into_interpreter();
-            if let Some(python) = python.as_deref() {
-                let request = ToolchainRequest::parse(python);
-                if request.satisfied(&interpreter, cache) {
-                    interpreter
-                } else {
-                    let request = ToolchainRequest::parse(python);
-                    Toolchain::find_requested(&request, SystemPython::Allowed, preview, cache)?
-                        .into_interpreter()
-                }
-            } else {
-                interpreter
-            }
-        }
-        Err(uv_toolchain::Error::NotFound(_)) => {
-            Toolchain::find(python.as_deref(), SystemPython::Allowed, preview, cache)?
-                .into_interpreter()
-        }
-        Err(err) => return Err(err.into()),
-    };
+    let interpreter = project::find_interpreter(&workspace, python.as_deref(), cache, printer)?;
 
     // Perform the lock operation.
-    let root_project_name = workspace.root_member().and_then(|member| {
-        member
-            .pyproject_toml()
-            .project
-            .as_ref()
-            .map(|project| project.name.clone())
-    });
     match do_lock(
-        root_project_name,
         &workspace,
         &interpreter,
-        &index_locations,
-        upgrade,
-        exclude_newer,
+        &settings.upgrade,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.resolution,
+        &settings.prerelease,
+        &settings.config_setting,
+        settings.exclude_newer.as_ref(),
+        &settings.link_mode,
+        &settings.build_options,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )
@@ -101,13 +88,22 @@ pub(crate) async fn lock(
 /// Lock the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn do_lock(
-    root_project_name: Option<PackageName>,
     workspace: &Workspace,
     interpreter: &Interpreter,
+    upgrade: &Upgrade,
     index_locations: &IndexLocations,
-    upgrade: Upgrade,
-    exclude_newer: Option<ExcludeNewer>,
+    index_strategy: &IndexStrategy,
+    keyring_provider: &KeyringProviderType,
+    resolution: &ResolutionMode,
+    prerelease: &PreReleaseMode,
+    config_setting: &ConfigSettings,
+    exclude_newer: Option<&ExcludeNewer>,
+    link_mode: &LinkMode,
+    build_options: &BuildOptions,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<Lock, ProjectError> {
@@ -125,68 +121,60 @@ pub(super) async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    //
-    // For a workspace, we compute the union of all workspace requires-python values, ensuring we
-    // keep track of `None` vs. a full range.
-    let requires_python_workspace =
-        RequiresPython::union(workspace.packages().values().filter_map(|member| {
-            member
-                .pyproject_toml()
-                .project
-                .as_ref()
-                .and_then(|project| project.requires_python.as_ref())
-        }))?;
+    let requires_python = find_requires_python(workspace)?;
 
-    let requires_python = if let Some(requires_python) = requires_python_workspace {
-        requires_python
-    } else {
-        let requires_python =
-            RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
-        if let Some(root_project_name) = root_project_name.as_ref() {
-            warn_user!(
-                "No `requires-python` field found in `{root_project_name}`. Defaulting to `{requires_python}`.",
-            );
-        } else {
-            warn_user!(
-                "No `requires-python` field found in workspace. Defaulting to `{requires_python}`.",
-            );
+    let requires_python = if let Some(requires_python) = requires_python {
+        if matches!(requires_python.bound(), Bound::Unbounded) {
+            let default =
+                RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
+            warn_user!("The workspace `requires-python` field does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
         }
         requires_python
+    } else {
+        let default =
+            RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
+        warn_user!("No `requires-python` field found in the workspace. Defaulting to `{default}`.");
+        default
     };
 
     // Initialize the registry client.
-    // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
-    // TODO(charlie): Respect project configuration.
-    let build_isolation = BuildIsolation::default();
-    let concurrency = Concurrency::default();
-    let config_settings = ConfigSettings::default();
-    let extras = ExtrasSpecification::default();
+    let options = OptionsBuilder::new()
+        .resolution_mode(*resolution)
+        .prerelease_mode(*prerelease)
+        .exclude_newer(exclude_newer.copied())
+        .index_strategy(*index_strategy)
+        .build();
+    let hasher = HashStrategy::Generate;
+
+    // Initialize any shared state.
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let link_mode = LinkMode::default();
-    let no_binary = NoBinary::default();
-    let no_build = NoBuild::default();
-    let reinstall = Reinstall::default();
-    let setup_py = SetupPyStrategy::default();
 
-    let hasher = HashStrategy::Generate;
-    let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let build_isolation = BuildIsolation::default();
+    let extras = ExtrasSpecification::default();
+    let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = read_lockfile(workspace, &upgrade).await?;
+    let LockedRequirements { preferences, git } = read_lockfile(workspace, upgrade).await?;
 
     // Create the Git resolver.
     let git = GitResolver::from_refs(git);
@@ -202,11 +190,10 @@ pub(super) async fn do_lock(
         &git,
         &in_flight,
         setup_py,
-        &config_settings,
+        config_setting,
         build_isolation,
-        link_mode,
-        &no_build,
-        &no_binary,
+        *link_mode,
+        build_options,
         concurrency,
         preview,
     );
@@ -218,13 +205,13 @@ pub(super) async fn do_lock(
         overrides,
         dev,
         source_trees,
-        root_project_name,
+        None,
         &extras,
         preferences,
         EmptyInstalledPackages,
         &hasher,
-        &reinstall,
-        &upgrade,
+        &Reinstall::default(),
+        upgrade,
         interpreter,
         None,
         None,

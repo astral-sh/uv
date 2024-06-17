@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::env;
 use std::fmt::Write;
 use std::io::stdout;
@@ -18,13 +17,12 @@ use distribution_types::{
     Verbatim,
 };
 use install_wheel_rs::linker::LinkMode;
-use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
+    Overrides, PreviewMode, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -47,7 +45,7 @@ use uv_toolchain::{
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::operations;
+use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -82,7 +80,7 @@ pub(crate) async fn pip_compile(
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
-    no_build: NoBuild,
+    build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     exclude_newer: Option<ExcludeNewer>,
@@ -124,8 +122,8 @@ pub(crate) async fn pip_compile(
         extra_index_urls,
         no_index,
         find_links,
-        no_binary: _,
-        no_build: specified_no_build,
+        no_binary,
+        no_build,
     } = RequirementsSpecification::from_sources(
         requirements,
         constraints,
@@ -221,41 +219,8 @@ pub(crate) async fn pip_compile(
         PythonRequirement::from_interpreter(&interpreter)
     };
 
-    // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = match (python_platform, python_version.as_ref()) {
-        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
-            &python_platform.platform(),
-            (python_version.major(), python_version.minor()),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
-            &python_platform.platform(),
-            interpreter.python_tuple(),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
-            interpreter.platform(),
-            (python_version.major(), python_version.minor()),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (None, None) => Cow::Borrowed(interpreter.tags()?),
-    };
-
-    // Apply the platform tags to the markers.
-    let markers = match (python_platform, python_version) {
-        (Some(python_platform), Some(python_version)) => {
-            Cow::Owned(python_version.markers(&python_platform.markers(interpreter.markers())))
-        }
-        (Some(python_platform), None) => Cow::Owned(python_platform.markers(interpreter.markers())),
-        (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
-        (None, None) => Cow::Borrowed(interpreter.markers()),
-    };
+    // Determine the environment for the resolution.
+    let (tags, markers) = resolution_environment(python_version, python_platform, &interpreter)?;
 
     // Generate, but don't enforce hashes for the requirements.
     let hasher = if generate_hashes {
@@ -288,11 +253,14 @@ pub(crate) async fn pip_compile(
     let preferences = read_requirements_txt(output_file, &upgrade).await?;
     let git = GitResolver::default();
 
+    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
+    let build_options = build_options.combine(no_binary, no_build);
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &no_build, &NoBinary::None)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -307,9 +275,6 @@ pub(crate) async fn pip_compile(
         BuildIsolation::Isolated
     };
 
-    // Combine the `--no-build` flags.
-    let no_build = no_build.combine(specified_no_build);
-
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -323,8 +288,7 @@ pub(crate) async fn pip_compile(
         &config_settings,
         build_isolation,
         link_mode,
-        &no_build,
-        &NoBinary::None,
+        &build_options,
         concurrency,
         preview,
     )
@@ -472,6 +436,7 @@ pub(crate) async fn pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
+                &dev,
                 &hasher,
                 &top_level_index,
                 DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),

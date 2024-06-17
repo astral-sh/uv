@@ -41,11 +41,31 @@ def prepare_name(name: str) -> str:
             raise ValueError(f"Unknown implementation name: {name}")
 
 
+def prepare_libc(libc: str) -> str | None:
+    if libc == "none":
+        return None
+    else:
+        return libc.title()
+
+
+def prepare_arch(arch: str) -> str:
+    match arch:
+        # Special constructors
+        case "i686":
+            return "X86_32(target_lexicon::X86_32Architecture::I686)"
+        case "aarch64":
+            return "Aarch64(target_lexicon::Aarch64Architecture::Aarch64)"
+        case "armv7":
+            return "Arm(target_lexicon::ArmArchitecture::Armv7)"
+        case _:
+            return arch.capitalize()
+
+
 def prepare_value(value: dict) -> dict:
-    # Convert fields from snake case to camel case for enums
-    for key in ["arch", "os", "libc"]:
-        value[key] = value[key].title()
+    value["os"] = value["os"].title()
+    value["arch"] = prepare_arch(value["arch"])
     value["name"] = prepare_name(value["name"])
+    value["libc"] = prepare_libc(value["libc"])
     return value
 
 

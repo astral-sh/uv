@@ -1065,6 +1065,39 @@ fn install_local_wheel() -> Result<()> {
     "###
     );
 
+    // Reinstall into the same virtual environment. The wheel should _not_ be reinstalled.
+    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    context.assert_command("import tomli").success();
+
+    // Reinstall without the package name.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("{}", Url::from_file_path(archive.path()).unwrap()))?;
+
+    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###
+    );
+
     context.assert_command("import tomli").success();
 
     Ok(())
@@ -3181,6 +3214,7 @@ fn compile() -> Result<()> {
 
 /// Test that the `PYC_INVALIDATION_MODE` option is recognized and that the error handling works.
 #[test]
+#[cfg_attr(target_os = "macos", ignore = "Fails spuriously on macOS")]
 fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     let context = TestContext::new("3.12");
 

@@ -4,7 +4,7 @@
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{ChildPath, PathChild};
 use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
@@ -26,7 +26,7 @@ pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub const BUILD_VENDOR_LINKS_URL: &str =
-    "https://raw.githubusercontent.com/astral-sh/packse/0.3.18/vendor/links.html";
+    "https://raw.githubusercontent.com/astral-sh/packse/0.3.24/vendor/links.html";
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
@@ -35,6 +35,9 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"(\s|\()(\d+m )?(\d+\.)?\d+(ms|s)", "$1[TIME]"),
     // File sizes
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
+    // Timestamps
+    (r"tv_sec: \d+", "tv_sec: [TIME]"),
+    (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
     (r"uv.exe", "uv"),
@@ -284,6 +287,34 @@ impl TestContext {
         command
     }
 
+    pub fn toolchains_dir(&self) -> ChildPath {
+        self.temp_dir.child("toolchains")
+    }
+
+    /// Create a `uv toolchain find` command with options shared across scenarios.
+    pub fn toolchain_find(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("toolchain")
+            .arg("find")
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
+            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_PREVIEW", "1")
+            .env("UV_TOOLCHAIN_DIR", self.toolchains_dir().as_os_str())
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
+    }
+
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> std::process::Command {
         let mut command = self.run_without_exclude_newer();
@@ -306,6 +337,48 @@ impl TestContext {
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
             .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
+    }
+
+    /// Create a `uv add` command for the given requirements.
+    pub fn add(&self, reqs: &[&str]) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("add")
+            .args(reqs)
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
+    }
+
+    /// Create a `uv remove` command for the given requirements.
+    pub fn remove(&self, reqs: &[&str]) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("remove")
+            .args(reqs)
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {

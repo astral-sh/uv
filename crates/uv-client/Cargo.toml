@@ -38,7 +38,6 @@ rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sys-info = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 tl = { workspace = true }
 tokio = { workspace = true }

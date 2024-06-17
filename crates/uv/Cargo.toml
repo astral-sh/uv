@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.2.10"
+version = "0.2.11"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -29,14 +29,14 @@ uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
-uv-toolchain = { workspace = true }
 uv-normalize = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
+uv-settings = { workspace = true, features = ["schemars"] }
+uv-toolchain = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
-uv-workspace = { workspace = true, features = ["schemars"] }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }

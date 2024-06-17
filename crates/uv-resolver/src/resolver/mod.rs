@@ -47,6 +47,7 @@ use crate::pubgrub::{
     PubGrubPriorities, PubGrubPython, PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
+use crate::requires_python::RequiresPython;
 use crate::resolution::ResolutionGraph;
 pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
@@ -94,6 +95,14 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     /// When not set, the resolver is in "universal" mode.
     markers: Option<MarkerEnvironment>,
     python_requirement: PythonRequirement,
+    /// This is derived from `PythonRequirement` once at initialization
+    /// time. It's used in universal mode to filter our dependencies with
+    /// a `python_version` marker expression that has no overlap with the
+    /// `Requires-Python` specifier.
+    ///
+    /// This is non-None if and only if the resolver is operating in
+    /// universal mode. (i.e., when `markers` is `None`.)
+    requires_python: Option<MarkerTree>,
     selector: CandidateSelector,
     index: InMemoryIndex,
     installed_packages: InstalledPackages,
@@ -147,8 +156,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
-            build_context.no_binary(),
-            build_context.no_build(),
+            build_context.build_options(),
         );
 
         Self::new_custom_io(
@@ -181,6 +189,16 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
+        let requires_python = if markers.is_some() {
+            None
+        } else {
+            Some(
+                python_requirement
+                    .requires_python()
+                    .map(RequiresPython::to_marker_tree)
+                    .unwrap_or_else(|| MarkerTree::And(vec![])),
+            )
+        };
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
@@ -200,6 +218,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             hasher: hasher.clone(),
             markers: markers.cloned(),
             python_requirement: python_requirement.clone(),
+            requires_python,
             reporter: None,
             installed_packages,
         };
@@ -749,6 +768,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .insert(name.clone(), UnavailablePackage::Offline);
                         return Ok(None);
                     }
+                    MetadataResponse::MissingMetadata => {
+                        self.unavailable_packages
+                            .insert(name.clone(), UnavailablePackage::MissingMetadata);
+                        return Ok(None);
+                    }
                     MetadataResponse::InvalidMetadata(err) => {
                         self.unavailable_packages.insert(
                             name.clone(),
@@ -954,6 +978,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.locals,
                     &self.git,
                     self.markers.as_ref(),
+                    self.requires_python.as_ref(),
                 );
 
                 let dependencies = match dependencies {
@@ -1042,6 +1067,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .insert(version.clone(), IncompletePackage::Offline);
                         return Ok(Dependencies::Unavailable(UnavailableVersion::Offline));
                     }
+                    MetadataResponse::MissingMetadata => {
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(version.clone(), IncompletePackage::MissingMetadata);
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::MissingMetadata,
+                        ));
+                    }
                     MetadataResponse::InvalidMetadata(err) => {
                         warn!("Unable to extract metadata for {name}: {err}");
                         self.incomplete_packages
@@ -1095,6 +1129,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.locals,
                     &self.git,
                     self.markers.as_ref(),
+                    self.requires_python.as_ref(),
                 )?;
 
                 for (dep_package, dep_version) in dependencies.iter() {

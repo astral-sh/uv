@@ -43,6 +43,27 @@ impl Requirement {
     }
 }
 
+impl From<Requirement> for pep508_rs::Requirement<VerbatimUrl> {
+    /// Convert a [`Requirement`] to a [`pep508_rs::Requirement`].
+    fn from(requirement: Requirement) -> Self {
+        pep508_rs::Requirement {
+            name: requirement.name,
+            extras: requirement.extras,
+            marker: requirement.marker,
+            origin: requirement.origin,
+            version_or_url: match requirement.source {
+                RequirementSource::Registry { specifier, .. } => {
+                    Some(VersionOrUrl::VersionSpecifier(specifier))
+                }
+                RequirementSource::Url { url, .. }
+                | RequirementSource::Git { url, .. }
+                | RequirementSource::Path { url, .. }
+                | RequirementSource::Directory { url, .. } => Some(VersionOrUrl::Url(url)),
+            },
+        }
+    }
+}
+
 impl From<pep508_rs::Requirement<VerbatimParsedUrl>> for Requirement {
     /// Convert a [`pep508_rs::Requirement`] to a [`Requirement`].
     fn from(requirement: pep508_rs::Requirement<VerbatimParsedUrl>) -> Self {
@@ -114,6 +135,9 @@ impl Display for Requirement {
             RequirementSource::Path { url, .. } => {
                 write!(f, " @ {url}")?;
             }
+            RequirementSource::Directory { url, .. } => {
+                write!(f, " @ {url}")?;
+            }
         }
         if let Some(marker) = &self.marker {
             write!(f, " ; {marker}")?;
@@ -166,11 +190,28 @@ pub enum RequirementSource {
         url: VerbatimUrl,
     },
     /// A local built or source distribution, either from a path or a `file://` URL. It can either
-    /// be a binary distribution (a `.whl` file), a source distribution archive (a `.zip` or
-    /// `.tag.gz` file) or a source tree (a directory with a pyproject.toml in, or a legacy
-    /// source distribution with only a setup.py but non pyproject.toml in it).
+    /// be a binary distribution (a `.whl` file) or a source distribution archive (a `.zip` or
+    /// `.tar.gz` file).
     Path {
-        path: PathBuf,
+        /// The resolved, absolute path to the distribution which we use for installing.
+        install_path: PathBuf,
+        /// The absolute path or path relative to the workspace root pointing to the distribution
+        /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+        /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+        lock_path: PathBuf,
+        /// The PEP 508 style URL in the format
+        /// `file:///<path>#subdirectory=<subdirectory>`.
+        url: VerbatimUrl,
+    },
+    /// A local source tree (a directory with a pyproject.toml in, or a legacy
+    /// source distribution with only a setup.py but non pyproject.toml in it).
+    Directory {
+        /// The resolved, absolute path to the distribution which we use for installing.
+        install_path: PathBuf,
+        /// The absolute path or path relative to the workspace root pointing to the distribution
+        /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+        /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+        lock_path: PathBuf,
         /// For a source tree (a directory), whether to install as an editable.
         editable: bool,
         /// The PEP 508 style URL in the format
@@ -185,9 +226,15 @@ impl RequirementSource {
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
             ParsedUrl::Path(local_file) => RequirementSource::Path {
-                path: local_file.path,
+                install_path: local_file.install_path.clone(),
+                lock_path: local_file.lock_path.clone(),
                 url,
-                editable: local_file.editable,
+            },
+            ParsedUrl::Directory(directory) => RequirementSource::Directory {
+                install_path: directory.install_path.clone(),
+                lock_path: directory.lock_path.clone(),
+                editable: directory.editable,
+                url,
             },
             ParsedUrl::Git(git) => RequirementSource::Git {
                 url,
@@ -206,6 +253,6 @@ impl RequirementSource {
 
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
-        matches!(self, Self::Path { editable: true, .. })
+        matches!(self, Self::Directory { editable: true, .. })
     }
 }

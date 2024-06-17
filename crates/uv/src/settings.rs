@@ -12,18 +12,24 @@ use pypi_types::Requirement;
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple,
+    Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_settings::{
+    Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
+    ResolverOptions,
+};
 use uv_toolchain::{Prefix, PythonVersion, Target};
-use uv_workspace::{Combine, PipOptions, Workspace};
 
 use crate::cli::{
-    ColorChoice, GlobalArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
-    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, RunArgs,
-    SyncArgs, ToolRunArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
+    AddArgs, BuildArgs, ColorChoice, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe,
+    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
+    PipSyncArgs, PipTreeArgs, PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs,
+    ResolverInstallerArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs,
+    ToolchainListArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -37,12 +43,13 @@ pub(crate) struct GlobalSettings {
     pub(crate) native_tls: bool,
     pub(crate) connectivity: Connectivity,
     pub(crate) isolated: bool,
+    pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
 }
 
 impl GlobalSettings {
-    /// Resolve the [`GlobalSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: GlobalArgs, workspace: Option<&Workspace>) -> Self {
+    /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
@@ -64,10 +71,10 @@ impl GlobalSettings {
                 args.color
             },
             native_tls: flag(args.native_tls, args.no_native_tls)
-                .combine(workspace.and_then(|workspace| workspace.options.native_tls))
+                .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
                 .unwrap_or(false),
             connectivity: if flag(args.offline, args.no_offline)
-                .combine(workspace.and_then(|workspace| workspace.options.offline))
+                .combine(workspace.and_then(|workspace| workspace.globals.offline))
                 .unwrap_or(false)
             {
                 Connectivity::Offline
@@ -75,9 +82,10 @@ impl GlobalSettings {
                 Connectivity::Online
             },
             isolated: args.isolated,
+            show_settings: args.show_settings,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
-                    .combine(workspace.and_then(|workspace| workspace.options.preview))
+                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
                     .unwrap_or(false),
             ),
         }
@@ -93,16 +101,16 @@ pub(crate) struct CacheSettings {
 }
 
 impl CacheSettings {
-    /// Resolve the [`CacheSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: CacheArgs, workspace: Option<&Workspace>) -> Self {
+    /// Resolve the [`CacheSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
             no_cache: args.no_cache
                 || workspace
-                    .and_then(|workspace| workspace.options.no_cache)
+                    .and_then(|workspace| workspace.globals.no_cache)
                     .unwrap_or(false),
             cache_dir: args
                 .cache_dir
-                .or_else(|| workspace.and_then(|workspace| workspace.options.cache_dir.clone())),
+                .or_else(|| workspace.and_then(|workspace| workspace.globals.cache_dir.clone())),
         }
     }
 }
@@ -111,23 +119,21 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
-    pub(crate) index_locations: IndexLocations,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) target: Option<String>,
     pub(crate) args: Vec<OsString>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
-    pub(crate) refresh: Refresh,
-    pub(crate) upgrade: Upgrade,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) package: Option<PackageName>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverInstallerSettings,
 }
 
 impl RunSettings {
-    /// Resolve the [`RunSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`RunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: RunArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let RunArgs {
             extra,
             all_extras,
@@ -137,35 +143,14 @@ impl RunSettings {
             target,
             args,
             with,
+            installer,
+            build,
             refresh,
-            no_refresh,
-            refresh_package,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
-            index_args,
             python,
-            exclude_newer,
             package,
         } = args;
 
         Self {
-            index_locations: IndexLocations::new(
-                index_args.index_url.and_then(Maybe::into_option),
-                index_args
-                    .extra_index_url
-                    .map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                index_args.find_links.unwrap_or_default(),
-                index_args.no_index,
-            ),
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
-            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
@@ -175,8 +160,12 @@ impl RunSettings {
             args,
             with,
             python,
-            exclude_newer,
             package,
+            refresh: Refresh::from(refresh),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
         }
     }
 }
@@ -185,56 +174,49 @@ impl RunSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolRunSettings {
-    pub(crate) index_locations: IndexLocations,
     pub(crate) target: String,
     pub(crate) args: Vec<OsString>,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverInstallerSettings,
 }
 
 impl ToolRunSettings {
-    /// Resolve the [`ToolRunSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`ToolRunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolRunArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: ToolRunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolRunArgs {
             target,
             args,
             from,
             with,
-            index_args,
+            installer,
+            build,
+            refresh,
             python,
         } = args;
 
         Self {
-            index_locations: IndexLocations::new(
-                index_args.index_url.and_then(Maybe::into_option),
-                index_args
-                    .extra_index_url
-                    .map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                index_args.find_links.unwrap_or_default(),
-                index_args.no_index,
-            ),
             target,
             args,
             from,
             with,
             python,
+            refresh: Refresh::from(refresh),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
         }
     }
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) enum ToolchainListIncludes {
+pub(crate) enum ToolchainListKinds {
     #[default]
     Default,
-    All,
     Installed,
 }
 
@@ -242,44 +224,70 @@ pub(crate) enum ToolchainListIncludes {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolchainListSettings {
-    pub(crate) includes: ToolchainListIncludes,
+    pub(crate) kinds: ToolchainListKinds,
+    pub(crate) all_platforms: bool,
+    pub(crate) all_versions: bool,
 }
 
 impl ToolchainListSettings {
-    /// Resolve the [`ToolchainListSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`ToolchainListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolchainListArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: ToolchainListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let ToolchainListArgs {
-            all,
+            all_versions,
+            all_platforms,
             only_installed,
         } = args;
 
-        let includes = if all {
-            ToolchainListIncludes::All
-        } else if only_installed {
-            ToolchainListIncludes::Installed
+        let kinds = if only_installed {
+            ToolchainListKinds::Installed
         } else {
-            ToolchainListIncludes::default()
+            ToolchainListKinds::default()
         };
 
-        Self { includes }
+        Self {
+            kinds,
+            all_platforms,
+            all_versions,
+        }
     }
 }
 
-/// The resolved settings to use for a `toolchain fetch` invocation.
+/// The resolved settings to use for a `toolchain install` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolchainInstallSettings {
     pub(crate) target: Option<String>,
+    pub(crate) force: bool,
 }
 
 impl ToolchainInstallSettings {
-    /// Resolve the [`ToolchainInstallSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`ToolchainInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolchainInstallArgs, _workspace: Option<Workspace>) -> Self {
-        let ToolchainInstallArgs { target } = args;
+    pub(crate) fn resolve(
+        args: ToolchainInstallArgs,
+        _filesystem: Option<FilesystemOptions>,
+    ) -> Self {
+        let ToolchainInstallArgs { target, force } = args;
 
-        Self { target }
+        Self { target, force }
+    }
+}
+
+/// The resolved settings to use for a `toolchain find` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolchainFindSettings {
+    pub(crate) request: Option<String>,
+}
+
+impl ToolchainFindSettings {
+    /// Resolve the [`ToolchainFindSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolchainFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let ToolchainFindArgs { request } = args;
+
+        Self { request }
     }
 }
 
@@ -287,52 +295,38 @@ impl ToolchainInstallSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    pub(crate) index_locations: IndexLocations,
-    pub(crate) refresh: Refresh,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: InstallerSettings,
 }
 
 impl SyncSettings {
-    /// Resolve the [`SyncSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`SyncSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: SyncArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: SyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let SyncArgs {
             extra,
             all_extras,
             no_all_extras,
             dev,
             no_dev,
+            installer,
+            build,
             refresh,
-            no_refresh,
-            refresh_package,
-            index_args,
             python,
         } = args;
 
         Self {
-            index_locations: IndexLocations::new(
-                index_args.index_url.and_then(Maybe::into_option),
-                index_args
-                    .extra_index_url
-                    .map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                index_args.find_links.unwrap_or_default(),
-                index_args.no_index,
-            ),
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
             python,
+            refresh: Refresh::from(refresh),
+            settings: InstallerSettings::combine(installer_options(installer, build), filesystem),
         }
     }
 }
@@ -341,47 +335,89 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
-    pub(crate) index_locations: IndexLocations,
-    pub(crate) refresh: Refresh,
-    pub(crate) upgrade: Upgrade,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverSettings,
 }
 
 impl LockSettings {
-    /// Resolve the [`LockSettings`] from the CLI and workspace configuration.
+    /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: LockArgs, _workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
+            resolver,
+            build,
             refresh,
-            no_refresh,
-            refresh_package,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
-            index_args,
-            exclude_newer,
             python,
         } = args;
 
         Self {
-            index_locations: IndexLocations::new(
-                index_args.index_url.and_then(Maybe::into_option),
-                index_args
-                    .extra_index_url
-                    .map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                index_args.find_links.unwrap_or_default(),
-                index_args.no_index,
+            python,
+            refresh: Refresh::from(refresh),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+        }
+    }
+}
+
+/// The resolved settings to use for a `add` invocation.
+#[allow(clippy::struct_excessive_bools, dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct AddSettings {
+    pub(crate) requirements: Vec<String>,
+    pub(crate) dev: bool,
+    pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverInstallerSettings,
+}
+
+impl AddSettings {
+    /// Resolve the [`AddSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: AddArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let AddArgs {
+            requirements,
+            dev,
+            installer,
+            build,
+            refresh,
+            python,
+        } = args;
+
+        Self {
+            requirements,
+            dev,
+            python,
+            refresh: Refresh::from(refresh),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
             ),
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
-            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
-            exclude_newer,
+        }
+    }
+}
+
+/// The resolved settings to use for a `remove` invocation.
+#[allow(clippy::struct_excessive_bools, dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct RemoveSettings {
+    pub(crate) requirements: Vec<PackageName>,
+    pub(crate) dev: bool,
+    pub(crate) python: Option<String>,
+}
+
+impl RemoveSettings {
+    /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: RemoveArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let RemoveArgs {
+            dev,
+            requirements,
+            python,
+        } = args;
+
+        Self {
+            requirements,
+            dev,
             python,
         }
     }
@@ -391,22 +427,17 @@ impl LockSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
-    // CLI-only settings.
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) refresh: Refresh,
-    pub(crate) upgrade: Upgrade,
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
-    // Override dependencies from workspace.
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipCompileSettings {
-    /// Resolve the [`PipCompileSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipCompileArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipCompileSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipCompileArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipCompileArgs {
             src_file,
             constraint,
@@ -414,11 +445,9 @@ impl PipCompileSettings {
             extra,
             all_extras,
             no_all_extras,
+            refresh,
             no_deps,
             deps,
-            resolution,
-            prerelease,
-            pre,
             output_file,
             no_strip_extras,
             strip_extras,
@@ -428,19 +457,10 @@ impl PipCompileSettings {
             header,
             annotation_style,
             custom_compile_command,
-            refresh,
-            no_refresh,
-            refresh_package,
-            link_mode,
-            index_args,
-            index_strategy,
-            keyring_provider,
+            resolver,
             python,
             system,
             no_system,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
             generate_hashes,
             no_generate_hashes,
             legacy_setup_py,
@@ -449,11 +469,10 @@ impl PipCompileSettings {
             build_isolation,
             no_build,
             build,
+            no_binary,
             only_binary,
-            config_setting,
             python_version,
             python_platform,
-            exclude_newer,
             no_emit_package,
             emit_index_url,
             no_emit_index_url,
@@ -466,9 +485,8 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace: Vec<Requirement> = if let Some(workspace) = &workspace {
-            workspace
-                .options
+        let overrides_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
                 .override_dependencies
                 .clone()
                 .unwrap_or_default()
@@ -482,45 +500,25 @@ impl PipCompileSettings {
         };
 
         Self {
-            // CLI-only settings.
             src_file,
             constraint: constraint
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
             r#override,
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
-            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
             overrides_from_workspace,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            refresh: Refresh::from(refresh),
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-                    index_url: index_args.index_url.and_then(Maybe::into_option),
-                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    }),
-                    no_index: Some(index_args.no_index),
-                    find_links: index_args.find_links,
-                    index_strategy,
-                    keyring_provider,
                     no_build: flag(no_build, build),
+                    no_binary,
                     only_binary,
                     no_build_isolation: flag(no_build_isolation, build_isolation),
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
                     no_deps: flag(no_deps, deps),
-                    resolution,
-                    prerelease: if pre {
-                        Some(PreReleaseMode::Allow)
-                    } else {
-                        prerelease
-                    },
                     output_file,
                     no_strip_extras: flag(no_strip_extras, strip_extras),
                     no_annotate: flag(no_annotate, annotate),
@@ -528,25 +526,20 @@ impl PipCompileSettings {
                     custom_compile_command,
                     generate_hashes: flag(generate_hashes, no_generate_hashes),
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
-                    config_settings: config_setting.map(|config_settings| {
-                        config_settings.into_iter().collect::<ConfigSettings>()
-                    }),
                     python_version,
                     python_platform,
-                    exclude_newer,
                     no_emit_package,
                     emit_index_url: flag(emit_index_url, no_emit_index_url),
                     emit_find_links: flag(emit_find_links, no_emit_find_links),
                     emit_marker_expression: flag(emit_marker_expression, no_emit_marker_expression),
                     emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
                     annotation_style,
-                    link_mode,
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::default()
+                    ..PipOptions::from(resolver)
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -556,35 +549,24 @@ impl PipCompileSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipSyncSettings {
-    // CLI-only settings.
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
-    pub(crate) reinstall: Reinstall,
-    pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipSyncSettings {
-    /// Resolve the [`PipSyncSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipSyncArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipSyncSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipSyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipSyncArgs {
             src_file,
             constraint,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
+            installer,
             refresh,
-            no_refresh,
-            refresh_package,
-            link_mode,
-            index_args,
-            index_strategy,
+            exclude_newer,
             require_hashes,
             no_require_hashes,
-            keyring_provider,
             python,
             system,
             no_system,
@@ -600,69 +582,45 @@ impl PipSyncSettings {
             build,
             no_binary,
             only_binary,
-            compile_bytecode,
-            no_compile_bytecode,
-            config_setting,
             python_version,
             python_platform,
             strict,
             no_strict,
-            exclude_newer,
             dry_run,
             compat_args: _,
         } = args;
 
         Self {
-            // CLI-only settings.
             src_file,
             constraint: constraint
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            refresh: Refresh::from(refresh),
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    exclude_newer,
                     target,
                     prefix,
-                    index_url: index_args.index_url.and_then(Maybe::into_option),
-                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    }),
-                    no_index: Some(index_args.no_index),
-                    find_links: index_args.find_links,
-                    index_strategy,
-                    keyring_provider,
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
                     no_build_isolation: flag(no_build_isolation, build_isolation),
                     strict: flag(strict, no_strict),
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
-                    config_settings: config_setting.map(|config_settings| {
-                        config_settings.into_iter().collect::<ConfigSettings>()
-                    }),
                     python_version,
                     python_platform,
-                    exclude_newer,
-                    link_mode,
-                    compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::default()
+                    ..PipOptions::from(installer)
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -672,25 +630,20 @@ impl PipSyncSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipInstallSettings {
-    // CLI-only settings.
     pub(crate) package: Vec<String>,
     pub(crate) requirement: Vec<PathBuf>,
     pub(crate) editable: Vec<String>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) upgrade: Upgrade,
-    pub(crate) reinstall: Reinstall,
-    pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipInstallSettings {
-    /// Resolve the [`PipInstallSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipInstallArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipInstallSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipInstallArgs {
             package,
             requirement,
@@ -700,26 +653,12 @@ impl PipInstallSettings {
             extra,
             all_extras,
             no_all_extras,
-            upgrade,
-            no_upgrade,
-            upgrade_package,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
             refresh,
-            no_refresh,
-            refresh_package,
             no_deps,
             deps,
-            link_mode,
-            resolution,
-            prerelease,
-            pre,
-            index_args,
-            index_strategy,
             require_hashes,
             no_require_hashes,
-            keyring_provider,
+            installer,
             python,
             system,
             no_system,
@@ -735,21 +674,16 @@ impl PipInstallSettings {
             build,
             no_binary,
             only_binary,
-            compile_bytecode,
-            no_compile_bytecode,
-            config_setting,
             python_version,
             python_platform,
             strict,
             no_strict,
-            exclude_newer,
             dry_run,
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace: Vec<Requirement> = if let Some(workspace) = &workspace {
-            workspace
-                .options
+        let overrides_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
                 .override_dependencies
                 .clone()
                 .unwrap_or_default()
@@ -763,7 +697,6 @@ impl PipInstallSettings {
         };
 
         Self {
-            // CLI-only settings.
             package,
             requirement,
             editable,
@@ -772,31 +705,16 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             r#override,
-            upgrade: Upgrade::from_args(flag(upgrade, no_upgrade), upgrade_package),
-            reinstall: Reinstall::from_args(flag(reinstall, no_reinstall), reinstall_package),
-            refresh: Refresh::from_args(flag(refresh, no_refresh), refresh_package),
             dry_run,
             overrides_from_workspace,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            refresh: Refresh::from(refresh),
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
                     prefix,
-                    index_url: index_args.index_url.and_then(Maybe::into_option),
-                    extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    }),
-                    no_index: Some(index_args.no_index),
-                    find_links: index_args.find_links,
-                    index_strategy,
-                    keyring_provider,
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
@@ -805,28 +723,16 @@ impl PipInstallSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
                     no_deps: flag(no_deps, deps),
-                    resolution,
-                    prerelease: if pre {
-                        Some(PreReleaseMode::Allow)
-                    } else {
-                        prerelease
-                    },
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
-                    config_settings: config_setting.map(|config_settings| {
-                        config_settings.into_iter().collect::<ConfigSettings>()
-                    }),
                     python_version,
                     python_platform,
-                    exclude_newer,
-                    link_mode,
-                    compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
-                    ..PipOptions::default()
+                    ..PipOptions::from(installer)
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -836,16 +742,14 @@ impl PipInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipUninstallSettings {
-    // CLI-only settings.
     pub(crate) package: Vec<String>,
     pub(crate) requirement: Vec<PathBuf>,
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipUninstallSettings {
-    /// Resolve the [`PipUninstallSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipUninstallArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipUninstallSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipUninstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipUninstallArgs {
             package,
             requirement,
@@ -860,12 +764,9 @@ impl PipUninstallSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             package,
             requirement,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
@@ -875,7 +776,7 @@ impl PipUninstallSettings {
                     keyring_provider,
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -885,15 +786,13 @@ impl PipUninstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
-    // CLI-only settings.
     pub(crate) exclude_editable: bool,
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipFreezeSettings {
-    /// Resolve the [`PipFreezeSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipFreezeArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipFreezeSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipFreezeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipFreezeArgs {
             exclude_editable,
             strict,
@@ -904,18 +803,15 @@ impl PipFreezeSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             exclude_editable,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -925,19 +821,16 @@ impl PipFreezeSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipListSettings {
-    // CLI-only settings.
     pub(crate) editable: bool,
     pub(crate) exclude_editable: bool,
     pub(crate) exclude: Vec<PackageName>,
     pub(crate) format: ListFormat,
-
-    // CLI-only settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipListSettings {
-    /// Resolve the [`PipListSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipListArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipListSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipListArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipListArgs {
             editable,
             exclude_editable,
@@ -952,21 +845,18 @@ impl PipListSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             editable,
             exclude_editable,
             exclude,
             format,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -976,16 +866,13 @@ impl PipListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipShowSettings {
-    // CLI-only settings.
     pub(crate) package: Vec<PackageName>,
-
-    // CLI-only settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipShowSettings {
-    /// Resolve the [`PipShowSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipShowArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipShowSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipShowArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipShowArgs {
             package,
             strict,
@@ -996,18 +883,15 @@ impl PipShowSettings {
         } = args;
 
         Self {
-            // CLI-only settings.
             package,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -1018,12 +902,12 @@ impl PipShowSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipTreeSettings {
     // CLI-only settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) shared: PipSettings,
 }
 
 impl PipTreeSettings {
     /// Resolve the [`PipTreeSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipTreeArgs, workspace: Option<Workspace>) -> Self {
+    pub(crate) fn resolve(args: PipTreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipTreeArgs {
             strict,
             no_strict,
@@ -1034,14 +918,14 @@ impl PipTreeSettings {
 
         Self {
             // Shared settings.
-            shared: PipSharedSettings::combine(
+            shared: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -1051,15 +935,12 @@ impl PipTreeSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCheckSettings {
-    // CLI-only settings.
-
-    // Shared settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipCheckSettings {
-    /// Resolve the [`PipCheckSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: PipCheckArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`PipCheckSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipCheckArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipCheckArgs {
             python,
             system,
@@ -1067,14 +948,13 @@ impl PipCheckSettings {
         } = args;
 
         Self {
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
                     ..PipOptions::default()
                 },
-                workspace,
+                filesystem,
             ),
         }
     }
@@ -1084,20 +964,17 @@ impl PipCheckSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct VenvSettings {
-    // CLI-only settings.
     pub(crate) seed: bool,
     pub(crate) allow_existing: bool,
     pub(crate) name: PathBuf,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
-
-    // CLI-only settings.
-    pub(crate) shared: PipSharedSettings,
+    pub(crate) settings: PipSettings,
 }
 
 impl VenvSettings {
-    /// Resolve the [`VenvSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(args: VenvArgs, workspace: Option<Workspace>) -> Self {
+    /// Resolve the [`VenvSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: VenvArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let VenvArgs {
             python,
             system,
@@ -1107,46 +984,337 @@ impl VenvSettings {
             name,
             prompt,
             system_site_packages,
-            link_mode,
-            index_url,
-            extra_index_url,
-            no_index,
+            index_args,
             index_strategy,
             keyring_provider,
-
             exclude_newer,
+            link_mode,
             compat_args: _,
         } = args;
 
         Self {
-            // CLI-only settings.
             seed,
             allow_existing,
             name,
             prompt,
             system_site_packages,
-
-            // Shared settings.
-            shared: PipSharedSettings::combine(
+            settings: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),
-
-                    index_url: index_url.and_then(Maybe::into_option),
-                    extra_index_url: extra_index_url.map(|extra_index_urls| {
-                        extra_index_urls
-                            .into_iter()
-                            .filter_map(Maybe::into_option)
-                            .collect()
-                    }),
-                    no_index: Some(no_index),
                     index_strategy,
                     keyring_provider,
                     exclude_newer,
                     link_mode,
-                    ..PipOptions::default()
+                    ..PipOptions::from(index_args)
                 },
-                workspace,
+                filesystem,
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv` CLI when installing dependencies.
+///
+/// Combines the `[tool.uv]` persistent configuration with the command-line arguments
+/// ([`InstallerArgs`], represented as [`InstallerOptions`]).
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct InstallerSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) config_setting: ConfigSettings,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) compile_bytecode: bool,
+    pub(crate) reinstall: Reinstall,
+    pub(crate) build_options: BuildOptions,
+}
+
+impl InstallerSettings {
+    /// Resolve the [`InstallerSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn combine(args: InstallerOptions, filesystem: Option<FilesystemOptions>) -> Self {
+        let ResolverInstallerOptions {
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            resolution: _,
+            prerelease: _,
+            config_settings,
+            exclude_newer: _,
+            link_mode,
+            compile_bytecode,
+            upgrade: _,
+            upgrade_package: _,
+            reinstall,
+            reinstall_package,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
+        } = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
+            .unwrap_or_default();
+
+        Self {
+            index_locations: IndexLocations::new(
+                args.index_url.combine(index_url),
+                args.extra_index_url
+                    .combine(extra_index_url)
+                    .unwrap_or_default(),
+                args.find_links.combine(find_links).unwrap_or_default(),
+                args.no_index.combine(no_index).unwrap_or_default(),
+            ),
+            index_strategy: args
+                .index_strategy
+                .combine(index_strategy)
+                .unwrap_or_default(),
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+            config_setting: args
+                .config_settings
+                .combine(config_settings)
+                .unwrap_or_default(),
+            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            compile_bytecode: args
+                .compile_bytecode
+                .combine(compile_bytecode)
+                .unwrap_or_default(),
+            reinstall: Reinstall::from_args(
+                args.reinstall.combine(reinstall),
+                args.reinstall_package
+                    .combine(reinstall_package)
+                    .unwrap_or_default(),
+            ),
+            build_options: BuildOptions::new(
+                NoBinary::from_args(
+                    args.no_binary.combine(no_binary),
+                    args.no_binary_package
+                        .combine(no_binary_package)
+                        .unwrap_or_default(),
+                ),
+                NoBuild::from_args(
+                    args.no_build.combine(no_build),
+                    args.no_build_package
+                        .combine(no_build_package)
+                        .unwrap_or_default(),
+                ),
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv` CLI when resolving dependencies.
+///
+/// Combines the `[tool.uv]` persistent configuration with the command-line arguments
+/// ([`ResolverArgs`], represented as [`ResolverOptions`]).
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ResolverSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) resolution: ResolutionMode,
+    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) config_setting: ConfigSettings,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) build_options: BuildOptions,
+}
+
+impl ResolverSettings {
+    /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn combine(args: ResolverOptions, filesystem: Option<FilesystemOptions>) -> Self {
+        let ResolverInstallerOptions {
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            config_settings,
+            exclude_newer,
+            link_mode,
+            compile_bytecode: _,
+            upgrade,
+            upgrade_package,
+            reinstall: _,
+            reinstall_package: _,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
+        } = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
+            .unwrap_or_default();
+
+        Self {
+            index_locations: IndexLocations::new(
+                args.index_url.combine(index_url),
+                args.extra_index_url
+                    .combine(extra_index_url)
+                    .unwrap_or_default(),
+                args.find_links.combine(find_links).unwrap_or_default(),
+                args.no_index.combine(no_index).unwrap_or_default(),
+            ),
+            resolution: args.resolution.combine(resolution).unwrap_or_default(),
+            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            index_strategy: args
+                .index_strategy
+                .combine(index_strategy)
+                .unwrap_or_default(),
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+            config_setting: args
+                .config_settings
+                .combine(config_settings)
+                .unwrap_or_default(),
+            exclude_newer: args.exclude_newer.combine(exclude_newer),
+            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            upgrade: Upgrade::from_args(
+                args.upgrade.combine(upgrade),
+                args.upgrade_package
+                    .combine(upgrade_package)
+                    .unwrap_or_default(),
+            ),
+            build_options: BuildOptions::new(
+                NoBinary::from_args(
+                    args.no_binary.combine(no_binary),
+                    args.no_binary_package
+                        .combine(no_binary_package)
+                        .unwrap_or_default(),
+                ),
+                NoBuild::from_args(
+                    args.no_build.combine(no_build),
+                    args.no_build_package
+                        .combine(no_build_package)
+                        .unwrap_or_default(),
+                ),
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv` CLI with both resolver and installer
+/// capabilities.
+///
+/// Represents the shared settings that are used across all `uv` commands outside the `pip` API.
+/// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ResolverInstallerSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) resolution: ResolutionMode,
+    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) config_setting: ConfigSettings,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) compile_bytecode: bool,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) reinstall: Reinstall,
+    pub(crate) build_options: BuildOptions,
+}
+
+impl ResolverInstallerSettings {
+    /// Resolve the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn combine(
+        args: ResolverInstallerOptions,
+        filesystem: Option<FilesystemOptions>,
+    ) -> Self {
+        let ResolverInstallerOptions {
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            config_settings,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            upgrade,
+            upgrade_package,
+            reinstall,
+            reinstall_package,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
+        } = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
+            .unwrap_or_default();
+
+        Self {
+            index_locations: IndexLocations::new(
+                args.index_url.combine(index_url),
+                args.extra_index_url
+                    .combine(extra_index_url)
+                    .unwrap_or_default(),
+                args.find_links.combine(find_links).unwrap_or_default(),
+                args.no_index.combine(no_index).unwrap_or_default(),
+            ),
+            resolution: args.resolution.combine(resolution).unwrap_or_default(),
+            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            index_strategy: args
+                .index_strategy
+                .combine(index_strategy)
+                .unwrap_or_default(),
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+            config_setting: args
+                .config_settings
+                .combine(config_settings)
+                .unwrap_or_default(),
+            exclude_newer: args.exclude_newer.combine(exclude_newer),
+            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            compile_bytecode: args
+                .compile_bytecode
+                .combine(compile_bytecode)
+                .unwrap_or_default(),
+            upgrade: Upgrade::from_args(
+                args.upgrade.combine(upgrade),
+                args.upgrade_package
+                    .combine(upgrade_package)
+                    .unwrap_or_default(),
+            ),
+            reinstall: Reinstall::from_args(
+                args.reinstall.combine(reinstall),
+                args.reinstall_package
+                    .combine(reinstall_package)
+                    .unwrap_or_default(),
+            ),
+            build_options: BuildOptions::new(
+                NoBinary::from_args(
+                    args.no_binary.combine(no_binary),
+                    args.no_binary_package
+                        .combine(no_binary_package)
+                        .unwrap_or_default(),
+                ),
+                NoBuild::from_args(
+                    args.no_build.combine(no_build),
+                    args.no_build_package
+                        .combine(no_build_package)
+                        .unwrap_or_default(),
+                ),
             ),
         }
     }
@@ -1154,10 +1322,11 @@ impl VenvSettings {
 
 /// The resolved settings to use for an invocation of the `pip` CLI.
 ///
-/// Represents the shared settings that are used across all `pip` commands.
+/// Represents the shared settings that are used across all `pip` commands. Analogous to the
+/// settings contained in the `[tool.uv.pip]` table.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct PipSharedSettings {
+pub(crate) struct PipSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) python: Option<String>,
     pub(crate) system: bool,
@@ -1167,9 +1336,8 @@ pub(crate) struct PipSharedSettings {
     pub(crate) prefix: Option<Prefix>,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) no_binary: NoBinary,
-    pub(crate) no_build: NoBuild,
     pub(crate) no_build_isolation: bool,
+    pub(crate) build_options: BuildOptions,
     pub(crate) strict: bool,
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
@@ -1194,12 +1362,18 @@ pub(crate) struct PipSharedSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) require_hashes: bool,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) reinstall: Reinstall,
     pub(crate) concurrency: Concurrency,
 }
 
-impl PipSharedSettings {
-    /// Resolve the [`PipSharedSettings`] from the CLI and workspace configuration.
-    pub(crate) fn combine(args: PipOptions, workspace: Option<Workspace>) -> Self {
+impl PipSettings {
+    /// Resolve the [`PipSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn combine(args: PipOptions, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options { top_level, pip, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
         let PipOptions {
             python,
             system,
@@ -1242,12 +1416,58 @@ impl PipSharedSettings {
             link_mode,
             compile_bytecode,
             require_hashes,
+            upgrade,
+            upgrade_package,
+            reinstall,
+            reinstall_package,
             concurrent_builds,
             concurrent_downloads,
             concurrent_installs,
-        } = workspace
-            .and_then(|workspace| workspace.options.pip)
-            .unwrap_or_default();
+        } = pip.unwrap_or_default();
+
+        let ResolverInstallerOptions {
+            index_url: top_level_index_url,
+            extra_index_url: top_level_extra_index_url,
+            no_index: top_level_no_index,
+            find_links: top_level_find_links,
+            index_strategy: top_level_index_strategy,
+            keyring_provider: top_level_keyring_provider,
+            resolution: top_level_resolution,
+            prerelease: top_level_prerelease,
+            config_settings: top_level_config_settings,
+            exclude_newer: top_level_exclude_newer,
+            link_mode: top_level_link_mode,
+            compile_bytecode: top_level_compile_bytecode,
+            upgrade: top_level_upgrade,
+            upgrade_package: top_level_upgrade_package,
+            reinstall: top_level_reinstall,
+            reinstall_package: top_level_reinstall_package,
+            no_build: top_level_no_build,
+            no_build_package: top_level_no_build_package,
+            no_binary: top_level_no_binary,
+            no_binary_package: top_level_no_binary_package,
+        } = top_level;
+
+        // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
+        // preferring the latter.
+        //
+        // For example, prefer `tool.uv.pip.index-url` over `tool.uv.index-url`.
+        let index_url = index_url.combine(top_level_index_url);
+        let extra_index_url = extra_index_url.combine(top_level_extra_index_url);
+        let no_index = no_index.combine(top_level_no_index);
+        let find_links = find_links.combine(top_level_find_links);
+        let index_strategy = index_strategy.combine(top_level_index_strategy);
+        let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
+        let resolution = resolution.combine(top_level_resolution);
+        let prerelease = prerelease.combine(top_level_prerelease);
+        let config_settings = config_settings.combine(top_level_config_settings);
+        let exclude_newer = exclude_newer.combine(top_level_exclude_newer);
+        let link_mode = link_mode.combine(top_level_link_mode);
+        let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
+        let upgrade = upgrade.combine(top_level_upgrade);
+        let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
+        let reinstall = reinstall.combine(top_level_reinstall);
+        let reinstall_package = reinstall_package.combine(top_level_reinstall_package);
 
         Self {
             index_locations: IndexLocations::new(
@@ -1306,10 +1526,6 @@ impl PipSharedSettings {
                 .no_build_isolation
                 .combine(no_build_isolation)
                 .unwrap_or_default(),
-            no_build: NoBuild::from_args(
-                args.only_binary.combine(only_binary).unwrap_or_default(),
-                args.no_build.combine(no_build).unwrap_or_default(),
-            ),
             config_setting: args
                 .config_settings
                 .combine(config_settings)
@@ -1350,12 +1566,23 @@ impl PipSharedSettings {
                 .unwrap_or_default(),
             target: args.target.combine(target).map(Target::from),
             prefix: args.prefix.combine(prefix).map(Prefix::from),
-            no_binary: NoBinary::from_args(args.no_binary.combine(no_binary).unwrap_or_default()),
             compile_bytecode: args
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
             strict: args.strict.combine(strict).unwrap_or_default(),
+            upgrade: Upgrade::from_args(
+                args.upgrade.combine(upgrade),
+                args.upgrade_package
+                    .combine(upgrade_package)
+                    .unwrap_or_default(),
+            ),
+            reinstall: Reinstall::from_args(
+                args.reinstall.combine(reinstall),
+                args.reinstall_package
+                    .combine(reinstall_package)
+                    .unwrap_or_default(),
+            ),
             concurrency: Concurrency {
                 downloads: args
                     .concurrent_downloads
@@ -1373,6 +1600,21 @@ impl PipSharedSettings {
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
             },
+            build_options: BuildOptions::new(
+                NoBinary::from_pip_args(args.no_binary.combine(no_binary).unwrap_or_default())
+                    .combine(NoBinary::from_args(
+                        top_level_no_binary,
+                        top_level_no_binary_package.unwrap_or_default(),
+                    )),
+                NoBuild::from_pip_args(
+                    args.only_binary.combine(only_binary).unwrap_or_default(),
+                    args.no_build.combine(no_build).unwrap_or_default(),
+                )
+                .combine(NoBuild::from_args(
+                    top_level_no_build,
+                    top_level_no_build_package.unwrap_or_default(),
+                )),
+            ),
         }
     }
 }
@@ -1402,7 +1644,6 @@ where
         Err(VarError::NotPresent) => return None,
         Err(VarError::NotUnicode(_)) => parse_failure(name, expected),
     };
-
     Some(
         val.parse()
             .unwrap_or_else(|_| parse_failure(name, expected)),
@@ -1423,5 +1664,338 @@ fn flag(yes: bool, no: bool) -> Option<bool> {
         (false, true) => Some(false),
         (false, false) => None,
         (..) => unreachable!("Clap should make this impossible"),
+    }
+}
+
+impl From<RefreshArgs> for Refresh {
+    fn from(value: RefreshArgs) -> Self {
+        let RefreshArgs {
+            refresh,
+            no_refresh,
+            refresh_package,
+        } = value;
+
+        Self::from_args(flag(refresh, no_refresh), refresh_package)
+    }
+}
+
+impl From<ResolverArgs> for PipOptions {
+    fn from(args: ResolverArgs) -> Self {
+        let ResolverArgs {
+            index_args,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            exclude_newer,
+            link_mode,
+        } = args;
+
+        Self {
+            upgrade: flag(upgrade, no_upgrade),
+            upgrade_package: Some(upgrade_package),
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease: if pre {
+                Some(PreReleaseMode::Allow)
+            } else {
+                prerelease
+            },
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+            ..PipOptions::from(index_args)
+        }
+    }
+}
+
+impl From<InstallerArgs> for PipOptions {
+    fn from(args: InstallerArgs) -> Self {
+        let InstallerArgs {
+            index_args,
+            reinstall,
+            no_reinstall,
+            reinstall_package,
+            index_strategy,
+            keyring_provider,
+            config_setting,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+        } = args;
+
+        Self {
+            reinstall: flag(reinstall, no_reinstall),
+            reinstall_package: Some(reinstall_package),
+            index_strategy,
+            keyring_provider,
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            link_mode,
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            ..PipOptions::from(index_args)
+        }
+    }
+}
+
+impl From<ResolverInstallerArgs> for PipOptions {
+    fn from(args: ResolverInstallerArgs) -> Self {
+        let ResolverInstallerArgs {
+            index_args,
+            upgrade,
+            no_upgrade,
+            upgrade_package,
+            reinstall,
+            no_reinstall,
+            reinstall_package,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+        } = args;
+
+        Self {
+            upgrade: flag(upgrade, no_upgrade),
+            upgrade_package: Some(upgrade_package),
+            reinstall: flag(reinstall, no_reinstall),
+            reinstall_package: Some(reinstall_package),
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease: if pre {
+                Some(PreReleaseMode::Allow)
+            } else {
+                prerelease
+            },
+            config_settings: config_setting
+                .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
+            link_mode,
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            ..PipOptions::from(index_args)
+        }
+    }
+}
+
+impl From<IndexArgs> for PipOptions {
+    fn from(args: IndexArgs) -> Self {
+        let IndexArgs {
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+        } = args;
+
+        Self {
+            index_url: index_url.and_then(Maybe::into_option),
+            extra_index_url: extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
+            no_index: if no_index { Some(true) } else { None },
+            find_links,
+            ..PipOptions::default()
+        }
+    }
+}
+
+/// Construct the [`InstallerOptions`] from the [`InstallerArgs`] and [`BuildArgs`].
+fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -> InstallerOptions {
+    let InstallerArgs {
+        index_args,
+        reinstall,
+        no_reinstall,
+        reinstall_package,
+        index_strategy,
+        keyring_provider,
+        config_setting,
+        link_mode,
+        compile_bytecode,
+        no_compile_bytecode,
+    } = installer_args;
+
+    let BuildArgs {
+        no_build,
+        build,
+        no_build_package,
+        no_binary,
+        binary,
+        no_binary_package,
+    } = build_args;
+
+    InstallerOptions {
+        index_url: index_args.index_url.and_then(Maybe::into_option),
+        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+            extra_index_urls
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
+        no_index: if index_args.no_index {
+            Some(true)
+        } else {
+            None
+        },
+        find_links: index_args.find_links,
+        reinstall: flag(reinstall, no_reinstall),
+        reinstall_package: Some(reinstall_package),
+        index_strategy,
+        keyring_provider,
+        config_settings: config_setting
+            .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        link_mode,
+        compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+        no_build: flag(no_build, build),
+        no_build_package: Some(no_build_package),
+        no_binary: flag(no_binary, binary),
+        no_binary_package: Some(no_binary_package),
+    }
+}
+
+/// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildArgs`].
+fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> ResolverOptions {
+    let ResolverArgs {
+        index_args,
+        upgrade,
+        no_upgrade,
+        upgrade_package,
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease,
+        pre,
+        config_setting,
+        exclude_newer,
+        link_mode,
+    } = resolver_args;
+
+    let BuildArgs {
+        no_build,
+        build,
+        no_build_package,
+        no_binary,
+        binary,
+        no_binary_package,
+    } = build_args;
+
+    ResolverOptions {
+        index_url: index_args.index_url.and_then(Maybe::into_option),
+        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+            extra_index_urls
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
+        no_index: if index_args.no_index {
+            Some(true)
+        } else {
+            None
+        },
+        find_links: index_args.find_links,
+        upgrade: flag(upgrade, no_upgrade),
+        upgrade_package: Some(upgrade_package),
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease: if pre {
+            Some(PreReleaseMode::Allow)
+        } else {
+            prerelease
+        },
+        config_settings: config_setting
+            .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        exclude_newer,
+        link_mode,
+        no_build: flag(no_build, build),
+        no_build_package: Some(no_build_package),
+        no_binary: flag(no_binary, binary),
+        no_binary_package: Some(no_binary_package),
+    }
+}
+
+/// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildArgs`].
+fn resolver_installer_options(
+    resolver_installer_args: ResolverInstallerArgs,
+    build_args: BuildArgs,
+) -> ResolverInstallerOptions {
+    let ResolverInstallerArgs {
+        index_args,
+        upgrade,
+        no_upgrade,
+        upgrade_package,
+        reinstall,
+        no_reinstall,
+        reinstall_package,
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease,
+        pre,
+        config_setting,
+        exclude_newer,
+        link_mode,
+        compile_bytecode,
+        no_compile_bytecode,
+    } = resolver_installer_args;
+
+    let BuildArgs {
+        no_build,
+        build,
+        no_build_package,
+        no_binary,
+        binary,
+        no_binary_package,
+    } = build_args;
+
+    ResolverInstallerOptions {
+        index_url: index_args.index_url.and_then(Maybe::into_option),
+        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
+            extra_index_urls
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
+        no_index: if index_args.no_index {
+            Some(true)
+        } else {
+            None
+        },
+        find_links: index_args.find_links,
+        upgrade: flag(upgrade, no_upgrade),
+        upgrade_package: Some(upgrade_package),
+        reinstall: flag(reinstall, no_reinstall),
+        reinstall_package: Some(reinstall_package),
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease: if pre {
+            Some(PreReleaseMode::Allow)
+        } else {
+            prerelease
+        },
+        config_settings: config_setting
+            .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        exclude_newer,
+        link_mode,
+        compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+        no_build: flag(no_build, build),
+        no_build_package: Some(no_build_package),
+        no_binary: flag(no_binary, binary),
+        no_binary_package: Some(no_binary_package),
     }
 }

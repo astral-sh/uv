@@ -75,7 +75,7 @@ impl Workspace {
 
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
+        let pyproject_toml = PyProjectToml::from_string(contents)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         let project_path = absolutize_path(project_root)
@@ -176,8 +176,13 @@ impl Workspace {
                     name: project.name.clone(),
                     extras,
                     marker: None,
-                    source: RequirementSource::Path {
-                        path: member.root.clone(),
+                    source: RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        lock_path: member
+                            .root
+                            .strip_prefix(&self.root)
+                            .expect("Project must be below workspace root")
+                            .to_path_buf(),
                         editable: true,
                         url,
                     },
@@ -185,13 +190,6 @@ impl Workspace {
                 })
             })
             .collect()
-    }
-
-    /// If there is a package at the workspace root, return it.
-    pub fn root_member(&self) -> Option<&WorkspaceMember> {
-        self.packages
-            .values()
-            .find(|package| package.root == self.root)
     }
 
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
@@ -237,7 +235,7 @@ impl Workspace {
             if let Some(project) = &workspace_pyproject_toml.project {
                 let pyproject_path = workspace_root.join("pyproject.toml");
                 let contents = fs_err::read_to_string(&pyproject_path)?;
-                let pyproject_toml = toml::from_str(&contents)
+                let pyproject_toml = PyProjectToml::from_string(contents)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
 
                 debug!(
@@ -292,7 +290,7 @@ impl Workspace {
                 // Read the member `pyproject.toml`.
                 let pyproject_path = member_root.join("pyproject.toml");
                 let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-                let pyproject_toml: PyProjectToml = toml::from_str(&contents)
+                let pyproject_toml = PyProjectToml::from_string(contents)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
 
                 // Extract the package name.
@@ -485,7 +483,7 @@ impl ProjectWorkspace {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
+        let pyproject_toml = PyProjectToml::from_string(contents)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // It must have a `[project]` table.
@@ -509,7 +507,7 @@ impl ProjectWorkspace {
             // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
             return Ok(None);
         };
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
+        let pyproject_toml = PyProjectToml::from_string(contents)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Extract the `[project]` metadata.
@@ -651,7 +649,7 @@ async fn find_workspace(
 
         // Read the `pyproject.toml`.
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml: PyProjectToml = toml::from_str(&contents)
+        let pyproject_toml = PyProjectToml::from_string(contents)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         return if let Some(workspace) = pyproject_toml

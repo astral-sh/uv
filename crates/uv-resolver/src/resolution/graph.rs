@@ -53,7 +53,7 @@ impl ResolutionGraph {
         git: &GitResolver,
         python: &PythonRequirement,
         resolution: Resolution,
-    ) -> anyhow::Result<Self, ResolveError> {
+    ) -> Result<Self, ResolveError> {
         let mut petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed> =
             Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
         let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> = FxHashMap::with_capacity_and_hasher(
@@ -331,7 +331,7 @@ impl ResolutionGraph {
         manifest: &Manifest,
         index: &InMemoryIndex,
         marker_env: &MarkerEnvironment,
-    ) -> anyhow::Result<pep508_rs::MarkerTree, Box<ParsedUrlError>> {
+    ) -> Result<MarkerTree, Box<ParsedUrlError>> {
         use pep508_rs::{
             MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
         };

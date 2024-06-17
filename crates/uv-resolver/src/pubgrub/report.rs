@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
 
 use derivative::Derivative;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 use owo_colors::OwoColorize;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
@@ -26,7 +26,7 @@ use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
-    pub(crate) available_versions: &'a IndexMap<PubGrubPackage, BTreeSet<Version>>,
+    pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, BTreeSet<Version>>,
 
     /// The versions that were available for each package
     pub(crate) python_requirement: Option<&'a PythonRequirement>,
@@ -476,6 +476,11 @@ impl PubGrubReportFormatter<'_> {
                                 Some(UnavailablePackage::Offline) => {
                                     hints.insert(PubGrubHint::Offline);
                                 }
+                                Some(UnavailablePackage::MissingMetadata) => {
+                                    hints.insert(PubGrubHint::MissingPackageMetadata {
+                                        package: package.clone(),
+                                    });
+                                }
                                 Some(UnavailablePackage::InvalidMetadata(reason)) => {
                                     hints.insert(PubGrubHint::InvalidPackageMetadata {
                                         package: package.clone(),
@@ -499,6 +504,12 @@ impl PubGrubReportFormatter<'_> {
                                         match incomplete {
                                             IncompletePackage::Offline => {
                                                 hints.insert(PubGrubHint::Offline);
+                                            }
+                                            IncompletePackage::MissingMetadata => {
+                                                hints.insert(PubGrubHint::MissingVersionMetadata {
+                                                    package: package.clone(),
+                                                    version: version.clone(),
+                                                });
                                             }
                                             IncompletePackage::InvalidMetadata(reason) => {
                                                 hints.insert(PubGrubHint::InvalidVersionMetadata {
@@ -601,6 +612,8 @@ pub(crate) enum PubGrubHint {
     NoIndex,
     /// A package was not found in the registry, but network access was disabled.
     Offline,
+    /// Metadata for a package could not be found.
+    MissingPackageMetadata { package: PubGrubPackage },
     /// Metadata for a package could not be parsed.
     InvalidPackageMetadata {
         package: PubGrubPackage,
@@ -612,6 +625,12 @@ pub(crate) enum PubGrubHint {
         package: PubGrubPackage,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         reason: String,
+    },
+    /// Metadata for a package version could not be found.
+    MissingVersionMetadata {
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        version: Version,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
@@ -689,6 +708,15 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                 )
             }
+            Self::MissingPackageMetadata { package } => {
+                write!(
+                    f,
+                    "{}{} Metadata for {} could not be found, as the wheel is missing a `METADATA` file",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold()
+                )
+            }
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
@@ -707,6 +735,16 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package.bold(),
                     textwrap::indent(reason, "  ")
+                )
+            }
+            Self::MissingVersionMetadata { package, version } => {
+                write!(
+                    f,
+                    "{}{} Metadata for {}=={} could not be found, as the wheel is missing a `METADATA` file",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    version.bold(),
                 )
             }
             Self::InvalidVersionMetadata {

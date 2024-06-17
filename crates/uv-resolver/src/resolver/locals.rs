@@ -177,7 +177,9 @@ fn iter_locals(source: &RequirementSource) -> Box<dyn Iterator<Item = Version> +
                 .filter(pep440_rs::Version::is_local),
         ),
         RequirementSource::Git { .. } => Box::new(iter::empty()),
-        RequirementSource::Path { path, .. } => Box::new(
+        RequirementSource::Path {
+            install_path: path, ..
+        } => Box::new(
             path.file_name()
                 .and_then(|filename| {
                     let filename = filename.to_string_lossy();
@@ -194,6 +196,7 @@ fn iter_locals(source: &RequirementSource) -> Box<dyn Iterator<Item = Version> +
                 .into_iter()
                 .filter(pep440_rs::Version::is_local),
         ),
+        RequirementSource::Directory { .. } => Box::new(iter::empty()),
     }
 }
 

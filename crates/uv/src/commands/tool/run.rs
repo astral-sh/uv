@@ -6,10 +6,9 @@ use itertools::Itertools;
 use tokio::process::Command;
 use tracing::debug;
 
-use distribution_types::IndexLocations;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::PreviewMode;
+use uv_configuration::{Concurrency, PreviewMode};
 use uv_requirements::RequirementsSource;
 use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
 use uv_warnings::warn_user;
@@ -17,6 +16,7 @@ use uv_warnings::warn_user;
 use crate::commands::project::update_environment;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
 #[allow(clippy::too_many_arguments)]
@@ -26,10 +26,12 @@ pub(crate) async fn run(
     python: Option<String>,
     from: Option<String>,
     with: Vec<String>,
+    settings: ResolverInstallerSettings,
     _isolated: bool,
     preview: PreviewMode,
-    index_locations: IndexLocations,
     connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -75,11 +77,13 @@ pub(crate) async fn run(
         update_environment(
             venv,
             &requirements,
-            &index_locations,
+            &settings,
+            preview,
             connectivity,
+            concurrency,
+            native_tls,
             cache,
             printer,
-            preview,
         )
         .await?,
     );

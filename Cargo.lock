@@ -4368,7 +4368,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.2.10"
+version = "0.2.11"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4427,11 +4427,11 @@ dependencies = [
  "uv-normalize",
  "uv-requirements",
  "uv-resolver",
+ "uv-settings",
  "uv-toolchain",
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
- "uv-workspace",
 ]
 
 [[package]]
@@ -4544,7 +4544,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sys-info",
- "tempfile",
  "thiserror",
  "tl",
  "tokio",
@@ -4619,9 +4618,9 @@ dependencies = [
  "uv-git",
  "uv-installer",
  "uv-resolver",
+ "uv-settings",
  "uv-toolchain",
  "uv-types",
- "uv-workspace",
  "walkdir",
 ]
 
@@ -4681,6 +4680,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "toml",
+ "toml_edit",
  "tracing",
  "url",
  "uv-cache",
@@ -4794,6 +4794,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-macros"
+version = "0.0.1"
+dependencies = [
+ "quote",
+ "syn 2.0.66",
+]
+
+[[package]]
 name = "uv-normalize"
 version = "0.0.1"
 dependencies = [
@@ -4856,6 +4864,7 @@ dependencies = [
  "itertools 0.13.0",
  "once-map",
  "owo-colors",
+ "path-slash",
  "pep440_rs",
  "pep508_rs",
  "petgraph",
@@ -4884,6 +4893,29 @@ dependencies = [
  "uv-toolchain",
  "uv-types",
  "uv-warnings",
+]
+
+[[package]]
+name = "uv-settings"
+version = "0.0.1"
+dependencies = [
+ "dirs-sys",
+ "distribution-types",
+ "fs-err",
+ "install-wheel-rs",
+ "pep508_rs",
+ "pypi-types",
+ "schemars",
+ "serde",
+ "thiserror",
+ "toml",
+ "tracing",
+ "uv-configuration",
+ "uv-fs",
+ "uv-macros",
+ "uv-normalize",
+ "uv-resolver",
+ "uv-toolchain",
 ]
 
 [[package]]
@@ -4921,6 +4953,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "target-lexicon",
  "temp-env",
  "tempfile",
  "test-log",
@@ -4961,7 +4994,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.10"
+version = "0.2.11"
 
 [[package]]
 name = "uv-virtualenv"
@@ -4987,29 +5020,6 @@ dependencies = [
  "once_cell",
  "owo-colors",
  "rustc-hash",
-]
-
-[[package]]
-name = "uv-workspace"
-version = "0.0.1"
-dependencies = [
- "dirs-sys",
- "distribution-types",
- "fs-err",
- "install-wheel-rs",
- "pep508_rs",
- "pypi-types",
- "schemars",
- "serde",
- "thiserror",
- "toml",
- "tracing",
- "uv-configuration",
- "uv-fs",
- "uv-normalize",
- "uv-resolver",
- "uv-toolchain",
- "uv-warnings",
 ]
 
 [[package]]

@@ -54,7 +54,7 @@ fn run_with_python_version() -> Result<()> {
     3.7.0
 
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 5 packages in [TIME]
     Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -81,7 +81,7 @@ fn run_with_python_version() -> Result<()> {
     3.7.0
 
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 5 packages in [TIME]
     Audited 4 packages in [TIME]
     "###);
 
@@ -115,7 +115,7 @@ fn run_with_python_version() -> Result<()> {
     Removing virtual environment at: [VENV]/
     Using Python 3.11.[X] interpreter at: [PYTHON]
     Creating virtualenv at: [VENV]/
-    Resolved 10 packages in [TIME]
+    Resolved 5 packages in [TIME]
     Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.6.0

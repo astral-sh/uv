@@ -25,7 +25,7 @@ use uv_cache::{ArchiveId, ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, 
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{NoBinary, NoBuild, PreviewMode};
+use uv_configuration::PreviewMode;
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_types::BuildContext;
@@ -145,13 +145,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        let no_binary = match self.build_context.no_binary() {
-            NoBinary::None => false,
-            NoBinary::All => true,
-            NoBinary::Packages(packages) => packages.contains(dist.name()),
-        };
-
-        if no_binary {
+        if self
+            .build_context
+            .build_options()
+            .no_binary_package(dist.name())
+        {
             return Err(Error::NoBinary);
         }
 
@@ -171,7 +169,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
-
                         return self
                             .load_wheel(path, &wheel.filename, cache_entry, dist, hashes)
                             .await;
@@ -184,6 +181,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
                 );
+
+                // If the URL is a file URL, load the wheel directly.
+                if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                    return self
+                        .load_wheel(&path, &wheel.filename, wheel_entry, dist, hashes)
+                        .await;
+                }
 
                 // Download and unzip.
                 match self
@@ -405,16 +412,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let no_build = match self.build_context.no_build() {
-            NoBuild::All => true,
-            NoBuild::None => false,
-            NoBuild::Packages(packages) => {
-                source.name().is_some_and(|name| packages.contains(name))
-            }
-        };
-
         // Optimization: Skip source dist download when we must not build them anyway.
-        if no_build {
+        if self.build_context.build_options().no_build(source.name()) {
             if source.is_editable() {
                 debug!("Allowing build for editable source distribution: {source}");
             } else {

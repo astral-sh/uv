@@ -2,7 +2,7 @@ use std::future::Future;
 
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-use uv_configuration::{NoBinary, NoBuild};
+use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
 use uv_types::{BuildContext, HashStrategy};
@@ -33,6 +33,8 @@ pub enum VersionsResponse {
 pub enum MetadataResponse {
     /// The wheel metadata was found and parsed successfully.
     Found(ArchiveMetadata),
+    /// The wheel metadata was not found.
+    MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Box<pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
@@ -79,8 +81,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
-    no_binary: NoBinary,
-    no_build: NoBuild,
+    build_options: &'a BuildOptions,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -94,8 +95,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
-        no_binary: &'a NoBinary,
-        no_build: &'a NoBuild,
+        build_options: &'a BuildOptions,
     ) -> Self {
         Self {
             fetcher,
@@ -105,8 +105,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
-            no_binary: no_binary.clone(),
-            no_build: no_build.clone(),
+            build_options,
         }
     }
 }
@@ -138,8 +137,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                             &self.hasher,
                             self.exclude_newer.as_ref(),
                             self.flat_index.get(package_name).cloned(),
-                            &self.no_binary,
-                            &self.no_build,
+                            self.build_options,
                         )
                     })
                     .collect(),
@@ -184,6 +182,9 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => match client.into_kind() {
                     uv_client::ErrorKind::Offline(_) => Ok(MetadataResponse::Offline),
+                    uv_client::ErrorKind::MetadataNotFound(_, _) => {
+                        Ok(MetadataResponse::MissingMetadata)
+                    }
                     uv_client::ErrorKind::MetadataParseError(_, _, err) => {
                         Ok(MetadataResponse::InvalidMetadata(err))
                     }

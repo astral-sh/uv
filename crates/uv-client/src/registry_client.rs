@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -20,7 +20,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
-use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_normalize::PackageName;
@@ -258,6 +258,10 @@ impl RegistryClient {
         Ok(results)
     }
 
+    /// Fetch the [`SimpleMetadata`] from a single index for a given package.
+    ///
+    /// The index can either be a PEP 503-compatible remote repository, or a local directory laid
+    /// out in the same format.
     async fn simple_single_index(
         &self,
         package_name: &PackageName,
@@ -293,6 +297,22 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
+        if matches!(index, IndexUrl::Path(_)) {
+            self.fetch_local_index(package_name, &url).await.map(Ok)
+        } else {
+            self.fetch_remote_index(package_name, &url, &cache_entry, cache_control)
+                .await
+        }
+    }
+
+    /// Fetch the [`SimpleMetadata`] from a remote URL, using the PEP 503 Simple Repository API.
+    async fn fetch_remote_index(
+        &self,
+        package_name: &PackageName,
+        url: &Url,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+    ) -> Result<Result<OwnedArchive<SimpleMetadata>, CachedClientError<Error>>, Error> {
         let simple_request = self
             .uncached_client()
             .get(url.clone())
@@ -331,10 +351,7 @@ impl RegistryClient {
                     }
                     MediaType::Html => {
                         let text = response.text().await.map_err(ErrorKind::from)?;
-                        let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
-                            .map_err(|err| Error::from_html_err(err, url.clone()))?;
-
-                        SimpleMetadata::from_files(files, package_name, base.as_url())
+                        SimpleMetadata::from_html(&text, package_name, &url)?
                     }
                 };
                 OwnedArchive::from_unarchived(&unarchived)
@@ -346,12 +363,30 @@ impl RegistryClient {
             .cached_client()
             .get_cacheable(
                 simple_request,
-                &cache_entry,
+                cache_entry,
                 cache_control,
                 parse_simple_response,
             )
             .await;
         Ok(result)
+    }
+
+    /// Fetch the [`SimpleMetadata`] from a local file, using a PEP 503-compatible directory
+    /// structure.
+    async fn fetch_local_index(
+        &self,
+        package_name: &PackageName,
+        url: &Url,
+    ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
+        let path = url
+            .to_file_path()
+            .map_err(|_| ErrorKind::NonFileUrl(url.clone()))?
+            .join("index.html");
+        let text = fs_err::tokio::read_to_string(&path)
+            .await
+            .map_err(ErrorKind::from)?;
+        let metadata = SimpleMetadata::from_html(&text, package_name, url)?;
+        OwnedArchive::from_unarchived(&metadata)
     }
 
     /// Fetch the metadata for a remote wheel file.
@@ -364,25 +399,54 @@ impl RegistryClient {
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata23, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
+                #[derive(Debug, Clone)]
+                enum WheelLocation {
+                    /// A local file path.
+                    Path(PathBuf),
+                    /// A remote URL.
+                    Url(Url),
+                }
+
                 let wheel = wheels.best_wheel();
-                match &wheel.file.url {
+
+                let location = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => {
                         let url = pypi_types::base_url_join_relative(base, url)
-                            .map_err(ErrorKind::JoinRelativeError)?;
-                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
-                            .await?
+                            .map_err(ErrorKind::JoinRelativeUrl)?;
+                        if url.scheme() == "file" {
+                            let path = url
+                                .to_file_path()
+                                .map_err(|_| ErrorKind::NonFileUrl(url.clone()))?;
+                            WheelLocation::Path(path)
+                        } else {
+                            WheelLocation::Url(url)
+                        }
                     }
                     FileLocation::AbsoluteUrl(url) => {
-                        let url = Url::parse(url).map_err(ErrorKind::UrlParseError)?;
-                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
-                            .await?
+                        let url = Url::parse(url).map_err(ErrorKind::UrlParse)?;
+                        if url.scheme() == "file" {
+                            let path = url
+                                .to_file_path()
+                                .map_err(|_| ErrorKind::NonFileUrl(url.clone()))?;
+                            WheelLocation::Path(path)
+                        } else {
+                            WheelLocation::Url(url)
+                        }
                     }
-                    FileLocation::Path(path) => {
+                    FileLocation::Path(path) => WheelLocation::Path(path.clone()),
+                };
+
+                match location {
+                    WheelLocation::Path(path) => {
                         let file = fs_err::tokio::File::open(&path)
                             .await
                             .map_err(ErrorKind::Io)?;
                         let reader = tokio::io::BufReader::new(file);
                         read_metadata_async_seek(&wheel.filename, built_dist.to_string(), reader)
+                            .await?
+                    }
+                    WheelLocation::Url(url) => {
+                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
                             .await?
                     }
                 }
@@ -599,7 +663,7 @@ impl RegistryClient {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",  self.timeout()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout()
                 ),
             )
         } else {
@@ -772,7 +836,6 @@ impl SimpleMetadata {
                     DistFilename::SourceDistFilename(ref inner) => &inner.version,
                     DistFilename::WheelFilename(ref inner) => &inner.version,
                 };
-
                 let file = match File::try_from(file, base) {
                     Ok(file) => file,
                     Err(err) => {
@@ -798,6 +861,18 @@ impl SimpleMetadata {
                 .map(|(version, files)| SimpleMetadatum { version, files })
                 .collect(),
         )
+    }
+
+    /// Read the [`SimpleMetadata`] from an HTML index.
+    fn from_html(text: &str, package_name: &PackageName, url: &Url) -> Result<Self, Error> {
+        let SimpleHtml { base, files } =
+            SimpleHtml::parse(text, url).map_err(|err| Error::from_html_err(err, url.clone()))?;
+
+        Ok(SimpleMetadata::from_files(
+            files,
+            package_name,
+            base.as_url(),
+        ))
     }
 }
 

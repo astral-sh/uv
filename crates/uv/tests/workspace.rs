@@ -4,7 +4,6 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use url::Url;
 
 use crate::common::{copy_dir_ignore, get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
@@ -421,7 +420,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: [VENV]/
-    Resolved 10 packages in [TIME]
+    Resolved 8 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -443,7 +442,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 8 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
@@ -481,7 +480,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: [VENV]/
-    Resolved 10 packages in [TIME]
+    Resolved 8 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -503,7 +502,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 8 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
@@ -529,27 +528,12 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
             .assert()
             .success();
 
-        let raw_lock = fs_err::read_to_string(work_dir.join("uv.lock"))?;
-        // Remove temp paths from lock.
-        // TODO(konsti): There shouldn't be absolute paths in the lock to begin with.
-        let redacted_lock = raw_lock
-            .replace(
-                Url::from_directory_path(&context.temp_dir)
-                    .unwrap()
-                    .as_str(),
-                "file:///tmp",
-            )
-            .replace(
-                Url::from_directory_path(fs_err::canonicalize(&context.temp_dir)?)
-                    .unwrap()
-                    .as_str(),
-                "file:///tmp",
-            );
+        let lock = fs_err::read_to_string(work_dir.join("uv.lock"))?;
         // Check the lockfile is the same for all resolutions.
         if let Some(shared_lock) = &shared_lock {
-            assert_eq!(shared_lock, &redacted_lock);
+            assert_eq!(shared_lock, &lock);
         } else {
-            shared_lock = Some(redacted_lock);
+            shared_lock = Some(lock);
         }
     }
     Ok(())

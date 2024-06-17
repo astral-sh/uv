@@ -155,7 +155,7 @@ impl InstalledToolchains {
     pub fn find_matching_current_platform(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
-        let platform_key = platform_key_from_env()?;
+        let platform_key = platform_key_from_env();
 
         let iter = InstalledToolchains::from_settings()?
             .find_all()?
@@ -286,11 +286,11 @@ impl InstalledToolchain {
 }
 
 /// Generate a platform portion of a key from the environment.
-fn platform_key_from_env() -> Result<String, Error> {
-    let os = Os::from_env()?;
-    let arch = Arch::from_env()?;
+fn platform_key_from_env() -> String {
+    let os = Os::from_env();
+    let arch = Arch::from_env();
     let libc = Libc::from_env();
-    Ok(format!("{os}-{arch}-{libc}").to_lowercase())
+    format!("{os}-{arch}-{libc}").to_lowercase()
 }
 
 impl fmt::Display for InstalledToolchain {

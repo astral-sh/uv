@@ -1,12 +1,14 @@
+use std::path::Path;
+
 use anyhow::Result;
 
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
-use uv_client::{FlatIndexClient, RegistryClientBuilder};
+use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, ExtrasSpecification, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SetupPyStrategy,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
+    KeyringProviderType, PreviewMode, Reinstall, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
@@ -22,15 +24,19 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::ProjectError;
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::InstallerSettings;
 
 /// Sync the project environment.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync(
-    index_locations: IndexLocations,
     extras: ExtrasSpecification,
     dev: bool,
     python: Option<String>,
+    settings: InstallerSettings,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -42,13 +48,7 @@ pub(crate) async fn sync(
     let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(
-        project.workspace(),
-        python.as_deref(),
-        preview,
-        cache,
-        printer,
-    )?;
+    let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
 
     // Read the lockfile.
     let lock: Lock = {
@@ -60,12 +60,23 @@ pub(crate) async fn sync(
     // Perform the sync operation.
     do_sync(
         project.project_name(),
+        project.workspace().root(),
         &venv,
         &lock,
-        &index_locations,
         extras,
         dev,
+        &settings.reinstall,
+        &settings.index_locations,
+        &settings.index_strategy,
+        &settings.keyring_provider,
+        &settings.config_setting,
+        &settings.link_mode,
+        &settings.compile_bytecode,
+        &settings.build_options,
         preview,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
         printer,
     )
@@ -77,13 +88,24 @@ pub(crate) async fn sync(
 /// Sync a lockfile with an environment.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn do_sync(
-    project: &PackageName,
+    project_name: &PackageName,
+    workspace_root: &Path,
     venv: &PythonEnvironment,
     lock: &Lock,
-    index_locations: &IndexLocations,
     extras: ExtrasSpecification,
     dev: bool,
+    reinstall: &Reinstall,
+    index_locations: &IndexLocations,
+    index_strategy: &IndexStrategy,
+    keyring_provider: &KeyringProviderType,
+    config_setting: &ConfigSettings,
+    link_mode: &LinkMode,
+    compile_bytecode: &bool,
+    build_options: &BuildOptions,
     preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
@@ -108,37 +130,37 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(markers, tags, project, &extras, &dev)?;
+    let resolution =
+        lock.to_resolution(workspace_root, markers, tags, project_name, &extras, &dev)?;
 
     // Initialize the registry client.
-    // TODO(zanieb): Support client options e.g. offline, tls, etc.
     let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
 
-    // TODO(charlie): Respect project configuration.
-    let build_isolation = BuildIsolation::default();
-    let compile = false;
-    let concurrency = Concurrency::default();
-    let config_settings = ConfigSettings::default();
-    let dry_run = false;
+    // Initialize any shared state.
     let git = GitResolver::default();
-    let hasher = HashStrategy::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
-    let link_mode = LinkMode::default();
-    let no_binary = NoBinary::default();
-    let no_build = NoBuild::default();
-    let reinstall = Reinstall::default();
+
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let build_isolation = BuildIsolation::default();
+    let dry_run = false;
+    let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -152,11 +174,10 @@ pub(super) async fn do_sync(
         &git,
         &in_flight,
         setup_py,
-        &config_settings,
+        config_setting,
         build_isolation,
-        link_mode,
-        &no_build,
-        &no_binary,
+        *link_mode,
+        build_options,
         concurrency,
         preview,
     );
@@ -168,10 +189,10 @@ pub(super) async fn do_sync(
         &resolution,
         site_packages,
         Modifications::Sufficient,
-        &reinstall,
-        &no_binary,
-        link_mode,
-        compile,
+        reinstall,
+        build_options,
+        *link_mode,
+        *compile_bytecode,
         index_locations,
         &hasher,
         tags,

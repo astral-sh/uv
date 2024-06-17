@@ -594,7 +594,7 @@ fn parse_entry(
                 end: s.cursor(),
             }
         })?;
-        RequirementsTxtStatement::NoBinary(NoBinary::from_arg(specifier))
+        RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
@@ -605,7 +605,7 @@ fn parse_entry(
                 end: s.cursor(),
             }
         })?;
-        RequirementsTxtStatement::OnlyBinary(NoBuild::from_arg(specifier))
+        RequirementsTxtStatement::OnlyBinary(NoBuild::from_pip_arg(specifier))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
         let source = if requirements_txt == Path::new("-") {
             None
@@ -1830,8 +1830,8 @@ mod test {
                         requirement: Unnamed(
                             UnnamedRequirement {
                                 url: VerbatimParsedUrl {
-                                    parsed_url: Path(
-                                        ParsedPathUrl {
+                                    parsed_url: Directory(
+                                        ParsedDirectoryUrl {
                                             url: Url {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
@@ -1843,7 +1843,8 @@ mod test {
                                                 query: None,
                                                 fragment: None,
                                             },
-                                            path: "/foo/bar",
+                                            install_path: "/foo/bar",
+                                            lock_path: "/foo/bar",
                                             editable: true,
                                         },
                                     ),

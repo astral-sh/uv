@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
@@ -8,13 +7,12 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
-use platform_tags::Tags;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary, NoBuild,
-    PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, PreviewMode,
+    Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -29,8 +27,8 @@ use uv_resolver::{
 use uv_toolchain::{Prefix, PythonEnvironment, PythonVersion, SystemPython, Target, Toolchain};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -39,7 +37,7 @@ use crate::printer::Printer;
 pub(crate) async fn pip_sync(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
-    reinstall: &Reinstall,
+    reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
     require_hashes: bool,
@@ -50,8 +48,7 @@ pub(crate) async fn pip_sync(
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
-    no_build: NoBuild,
-    no_binary: NoBinary,
+    build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     strict: bool,
@@ -92,8 +89,8 @@ pub(crate) async fn pip_sync(
         extra_index_urls,
         no_index,
         find_links,
-        no_binary: specified_no_binary,
-        no_build: specified_no_build,
+        no_binary,
+        no_build,
         extras: _,
     } = operations::read_requirements(
         requirements,
@@ -156,13 +153,13 @@ pub(crate) async fn pip_sync(
         } else {
             return if let Some(error) = externally_managed.into_error() {
                 Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv environment`.",
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
                 ))
             } else {
                 Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv environment`.",
+                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
                     environment.root().user_display().cyan()
                 ))
             };
@@ -173,41 +170,8 @@ pub(crate) async fn pip_sync(
 
     let interpreter = environment.interpreter();
 
-    // Determine the current environment markers.
-    let tags = match (python_platform, python_version.as_ref()) {
-        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
-            &python_platform.platform(),
-            (python_version.major(), python_version.minor()),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
-            &python_platform.platform(),
-            interpreter.python_tuple(),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
-            interpreter.platform(),
-            (python_version.major(), python_version.minor()),
-            interpreter.implementation_name(),
-            interpreter.implementation_tuple(),
-            interpreter.gil_disabled(),
-        )?),
-        (None, None) => Cow::Borrowed(interpreter.tags()?),
-    };
-
-    // Apply the platform tags to the markers.
-    let markers = match (python_platform, python_version) {
-        (Some(python_platform), Some(python_version)) => {
-            Cow::Owned(python_version.markers(&python_platform.markers(interpreter.markers())))
-        }
-        (Some(python_platform), None) => Cow::Owned(python_platform.markers(interpreter.markers())),
-        (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
-        (None, None) => Cow::Borrowed(interpreter.markers()),
-    };
+    // Determine the environment for the resolution.
+    let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
 
     // Collect the set of required hashes.
     let hasher = if require_hashes {
@@ -241,11 +205,14 @@ pub(crate) async fn pip_sync(
         .platform(interpreter.platform())
         .build();
 
+    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
+    let build_options = build_options.combine(no_binary, no_build);
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
     };
 
     // Determine whether to enable build isolation.
@@ -254,10 +221,6 @@ pub(crate) async fn pip_sync(
     } else {
         BuildIsolation::Isolated
     };
-
-    // Combine the `--no-binary` and `--no-build` flags.
-    let no_binary = no_binary.combine(specified_no_binary);
-    let no_build = no_build.combine(specified_no_build);
 
     // Create a shared in-memory index.
     let index = InMemoryIndex::default();
@@ -286,8 +249,7 @@ pub(crate) async fn pip_sync(
         config_settings,
         build_isolation,
         link_mode,
-        &no_build,
-        &no_binary,
+        &build_options,
         concurrency,
         preview,
     )
@@ -315,7 +277,7 @@ pub(crate) async fn pip_sync(
         preferences,
         site_packages.clone(),
         &hasher,
-        reinstall,
+        &reinstall,
         &upgrade,
         interpreter,
         Some(&tags),
@@ -363,8 +325,7 @@ pub(crate) async fn pip_sync(
             config_settings,
             build_isolation,
             link_mode,
-            &no_build,
-            &no_binary,
+            &build_options,
             concurrency,
             preview,
         )
@@ -376,8 +337,8 @@ pub(crate) async fn pip_sync(
         &resolution,
         site_packages,
         Modifications::Exact,
-        reinstall,
-        &no_binary,
+        &reinstall,
+        &build_options,
         link_mode,
         compile,
         &index_locations,
