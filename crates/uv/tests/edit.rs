@@ -691,10 +691,13 @@ fn remove_registry() -> Result<()> {
     warning: `uv remove` is experimental and may change without warning.
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
     Installed 1 package in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     - sniffio==1.3.1
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -808,10 +811,13 @@ fn remove_dev() -> Result<()> {
     warning: `uv remove` is experimental and may change without warning.
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
     Installed 1 package in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     - sniffio==1.3.1
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -917,10 +923,13 @@ fn remove_all_registry() -> Result<()> {
     warning: `uv remove` is experimental and may change without warning.
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
     Installed 1 package in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     - sniffio==1.3.1
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
