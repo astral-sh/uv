@@ -1547,7 +1547,7 @@ pub(crate) struct SyncArgs {
     /// Keeps installations no longer tracked as dependencies.
     /// Without this flag any extraneous installations will be removed.
     #[arg(long)]
-    pub(crate) keep_untracked: bool,
+    pub(crate) no_clean: bool,
 
     #[command(flatten)]
     pub(crate) installer: InstallerArgs,

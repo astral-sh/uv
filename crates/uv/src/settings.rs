@@ -314,14 +314,14 @@ impl SyncSettings {
             no_all_extras,
             dev,
             no_dev,
-            keep_untracked,
+            no_clean,
             installer,
             build,
             refresh,
             python,
         } = args;
 
-        let modifications = if keep_untracked {
+        let modifications = if no_clean {
             Modifications::Sufficient
         } else {
             Modifications::Exact
