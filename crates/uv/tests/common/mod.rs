@@ -70,7 +70,8 @@ impl TestContext {
     pub fn new(python_version: &str) -> Self {
         let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
         let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
-        let venv = create_venv(&temp_dir, &cache_dir, python_version);
+        let python = get_toolchain(python_version);
+        let venv = create_venv_from_executable(&temp_dir, &cache_dir, &python);
 
         // The workspace root directory is not available without walking up the tree
         // https://github.com/rust-lang/cargo/issues/3946
@@ -87,6 +88,11 @@ impl TestContext {
             PythonVersion::from_str(python_version).expect("Tests must use valid Python versions");
 
         let mut filters = Vec::new();
+        filters.extend(
+            Self::path_patterns(python)
+                .into_iter()
+                .map(|pattern| (format!("{pattern}python.*"), "[PYTHON]".to_string())),
+        );
         filters.extend(
             Self::path_patterns(&cache_dir)
                 .into_iter()
@@ -534,14 +540,25 @@ pub fn get_toolchain(python: &str) -> PathBuf {
 }
 
 /// Create a virtual environment named `.venv` in a temporary directory with the given
-/// Python version. Expected format for `python` is "<version>".
+/// Python version.
 pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
     temp_dir: &Parent,
     cache_dir: &assert_fs::TempDir,
     python: &str,
 ) -> PathBuf {
     let python = get_toolchain(python);
+    create_venv_from_executable(temp_dir, cache_dir, &python)
+}
 
+/// Create a virtual environment named `.venv` in a temporary directory with the given
+/// Python executable.
+pub fn create_venv_from_executable<
+    Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>,
+>(
+    temp_dir: &Parent,
+    cache_dir: &assert_fs::TempDir,
+    python: &Path,
+) -> PathBuf {
     let venv = temp_dir.child(".venv");
     Command::new(get_bin())
         .arg("venv")
