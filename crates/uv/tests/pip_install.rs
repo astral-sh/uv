@@ -3960,6 +3960,8 @@ fn install_package_basic_auth_from_keyring() {
     ----- stdout -----
 
     ----- stderr -----
+    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
+    Request for public@pypi-proxy.fly.dev
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -4005,6 +4007,8 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
     ----- stdout -----
 
     ----- stderr -----
+    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
+    Request for public@pypi-proxy.fly.dev
     error: Failed to download `anyio==4.3.0`
       Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
     "###
@@ -4044,6 +4048,8 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
     ----- stdout -----
 
     ----- stderr -----
+    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
+    Request for public@pypi-proxy.fly.dev
     error: Failed to download `anyio==4.3.0`
       Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
     "###
