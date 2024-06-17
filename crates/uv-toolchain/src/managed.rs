@@ -283,7 +283,8 @@ impl InstalledToolchain {
             .path
             .join("install")
             .join(lib)
-            .join(format!("python{}", self.python_version.python_version()))
+            // Note the Python version must not include the patch.
+            .join(format!("python{}", self.key.version().python_version()))
             .join("EXTERNALLY-MANAGED");
         fs_err::write(file, EXTERNALLY_MANAGED)?;
         Ok(())
