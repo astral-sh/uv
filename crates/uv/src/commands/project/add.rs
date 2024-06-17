@@ -12,6 +12,7 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStr
 use uv_distribution::{DistributionDatabase, ProjectWorkspace};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{project, ExitStatus};
@@ -172,6 +173,7 @@ pub(crate) async fn add(
         &lock,
         extras,
         dev,
+        Modifications::Sufficient,
         &settings.reinstall,
         &settings.index_locations,
         &settings.index_strategy,

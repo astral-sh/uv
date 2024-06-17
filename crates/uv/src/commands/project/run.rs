@@ -15,6 +15,7 @@ use uv_requirements::RequirementsSource;
 use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -91,6 +92,7 @@ pub(crate) async fn run(
             &lock,
             extras,
             dev,
+            Modifications::Sufficient,
             &settings.reinstall,
             &settings.index_locations,
             &settings.index_strategy,

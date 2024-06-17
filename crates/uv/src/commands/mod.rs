@@ -40,7 +40,7 @@ use crate::printer::Printer;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;
-mod pip;
+pub(crate) mod pip;
 mod project;
 pub(crate) mod reporters;
 mod tool;
