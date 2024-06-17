@@ -12,7 +12,7 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
-use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
 use uv_warnings::warn_user;
 
 use crate::commands::{project, ExitStatus};
@@ -128,7 +128,7 @@ pub(crate) async fn run(
         } else {
             // Note we force preview on during `uv run` for now since the entire interface is in preview
             Toolchain::find_or_fetch(
-                python.as_deref(),
+                python.as_deref().map(ToolchainRequest::parse),
                 SystemPython::Allowed,
                 PreviewMode::Enabled,
                 client_builder,

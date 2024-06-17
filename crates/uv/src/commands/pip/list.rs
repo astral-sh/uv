@@ -14,8 +14,8 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_toolchain::Toolchain;
 use uv_toolchain::{PythonEnvironment, SystemPython};
+use uv_toolchain::{Toolchain, ToolchainRequest};
 
 use crate::commands::ExitStatus;
 use crate::commands::ListFormat;
@@ -41,8 +41,12 @@ pub(crate) fn pip_list(
     } else {
         SystemPython::Allowed
     };
-    let environment =
-        PythonEnvironment::from_toolchain(Toolchain::find(python, system, preview, cache)?);
+    let environment = PythonEnvironment::from_toolchain(Toolchain::find(
+        python.map(ToolchainRequest::parse),
+        system,
+        preview,
+        cache,
+    )?);
 
     debug!(
         "Using Python {} environment at {}",

@@ -39,13 +39,12 @@ impl Toolchain {
     ///
     /// See [`uv-toolchain::discovery`] for implementation details.
     pub fn find(
-        python: Option<&str>,
+        python: Option<ToolchainRequest>,
         system: SystemPython,
         preview: PreviewMode,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        if let Some(python) = python {
-            let request = ToolchainRequest::parse(python);
+        if let Some(request) = python {
             Self::find_requested(&request, system, preview, cache)
         } else if system.is_preferred() {
             Self::find_default(preview, cache)
@@ -134,19 +133,19 @@ impl Toolchain {
     ///
     /// Unlike [`Toolchain::find`], if the toolchain is not installed it will be installed automatically.
     pub async fn find_or_fetch<'a>(
-        python: Option<&str>,
+        python: Option<ToolchainRequest>,
         system: SystemPython,
         preview: PreviewMode,
         client_builder: BaseClientBuilder<'a>,
         cache: &Cache,
     ) -> Result<Self, Error> {
         // Perform a find first
-        match Self::find(python, system, preview, cache) {
+        match Self::find(python.clone(), system, preview, cache) {
             Ok(venv) => Ok(venv),
             Err(Error::NotFound(_)) if system.is_allowed() && preview.is_enabled() => {
                 debug!("Requested Python not found, checking for available download...");
                 let request = if let Some(request) = python {
-                    ToolchainRequest::parse(request)
+                    request
                 } else {
                     ToolchainRequest::default()
                 };
