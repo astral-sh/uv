@@ -594,9 +594,9 @@ pub fn find_toolchains<'a>(
                 .filter(move |result| result_satisfies_system_python(result, system))
                 .filter(|result| match result {
                     Err(_) => true,
-                    Ok((_source, interpreter)) => {
-                        interpreter.implementation_name() == implementation.as_str()
-                    }
+                    Ok((_source, interpreter)) => interpreter
+                        .implementation_name()
+                        .eq_ignore_ascii_case(implementation.into()),
                 })
                 .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
@@ -608,7 +608,9 @@ pub fn find_toolchains<'a>(
                     Err(_) => true,
                     Ok((_source, interpreter)) => {
                         version.matches_interpreter(interpreter)
-                            && interpreter.implementation_name() == implementation.as_str()
+                            && interpreter
+                                .implementation_name()
+                                .eq_ignore_ascii_case(implementation.into())
                     }
                 })
                 .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
@@ -937,7 +939,7 @@ impl ToolchainRequest {
         for implementation in ImplementationName::iter() {
             if let Some(remainder) = value
                 .to_ascii_lowercase()
-                .strip_prefix(implementation.as_str())
+                .strip_prefix(Into::<&str>::into(implementation))
             {
                 // e.g. `pypy`
                 if remainder.is_empty() {
@@ -1069,12 +1071,14 @@ impl ToolchainRequest {
                 }
                 false
             }
-            ToolchainRequest::Implementation(implementation) => {
-                interpreter.implementation_name() == implementation.as_str()
-            }
+            ToolchainRequest::Implementation(implementation) => interpreter
+                .implementation_name()
+                .eq_ignore_ascii_case(implementation.into()),
             ToolchainRequest::ImplementationVersion(implementation, version) => {
                 version.matches_interpreter(interpreter)
-                    && interpreter.implementation_name() == implementation.as_str()
+                    && interpreter
+                        .implementation_name()
+                        .eq_ignore_ascii_case(implementation.into())
             }
             ToolchainRequest::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
@@ -1126,7 +1130,7 @@ impl VersionRequest {
             .into_iter()
             .flat_map(move |implementation| {
                 let extension = std::env::consts::EXE_SUFFIX;
-                let name = implementation.as_str();
+                let name: &str = implementation.into();
                 let (python, python3) = if extension.is_empty() {
                     (Cow::Borrowed(name), Cow::Owned(format!("{name}3")))
                 } else {

@@ -13,7 +13,7 @@ use crate::discovery::{
     ToolchainSources,
 };
 use crate::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
-use crate::implementation::{LenientImplementationName};
+use crate::implementation::LenientImplementationName;
 use crate::managed::{InstalledToolchain, InstalledToolchains};
 use crate::platform::{Arch, Libc, Os};
 use crate::{Error, Interpreter, PythonVersion, ToolchainSource};
@@ -313,13 +313,7 @@ impl fmt::Display for ToolchainKey {
         write!(
             f,
             "{}-{}.{}.{}-{}-{}-{}",
-            self.implementation,
-            self.major,
-            self.minor,
-            self.patch,
-            self.os,
-            self.arch,
-            self.libc
+            self.implementation, self.major, self.minor, self.patch, self.os, self.arch, self.libc
         )
     }
 }

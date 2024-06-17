@@ -248,7 +248,7 @@ mod tests {
                 )
                 .replace("{FULL_VERSION}", &version.to_string())
                 .replace("{VERSION}", &version.without_patch().to_string())
-                .replace("{IMPLEMENTATION}", implementation.as_str());
+                .replace("{IMPLEMENTATION}", (&implementation).into());
 
             fs_err::create_dir_all(path.parent().unwrap())?;
             fs_err::write(

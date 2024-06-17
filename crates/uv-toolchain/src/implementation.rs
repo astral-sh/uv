@@ -30,10 +30,37 @@ impl ImplementationName {
         NAMES.iter()
     }
 
-    pub fn as_str(self) -> &'static str {
+    pub fn pretty(self) -> &'static str {
         match self {
-            Self::CPython => "cpython",
-            Self::PyPy => "pypy",
+            Self::CPython => "CPython",
+            Self::PyPy => "PyPy",
+        }
+    }
+}
+
+impl LenientImplementationName {
+    pub fn pretty(&self) -> &str {
+        match self {
+            Self::Known(implementation) => implementation.pretty(),
+            Self::Unknown(name) => name,
+        }
+    }
+}
+
+impl From<&ImplementationName> for &'static str {
+    fn from(v: &ImplementationName) -> &'static str {
+        match v {
+            ImplementationName::CPython => "cpython",
+            ImplementationName::PyPy => "pypy",
+        }
+    }
+}
+
+impl<'a> From<&'a LenientImplementationName> for &'a str {
+    fn from(v: &'a LenientImplementationName) -> &'a str {
+        match v {
+            LenientImplementationName::Known(implementation) => implementation.into(),
+            LenientImplementationName::Unknown(name) => name,
         }
     }
 }
@@ -52,10 +79,7 @@ impl FromStr for ImplementationName {
 
 impl Display for ImplementationName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::CPython => f.write_str("cpython"),
-            Self::PyPy => f.write_str("pypy"),
-        }
+        f.write_str(self.into())
     }
 }
 
