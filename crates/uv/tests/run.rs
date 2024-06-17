@@ -4,16 +4,14 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
 
-use common::{python_path_with_versions, uv_snapshot, TestContext};
+use common::{uv_snapshot, TestContext};
 
 mod common;
 
 /// Run with different python versions, which also depend on different dependency versions.
 #[test]
 fn run_with_python_version() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let python_path = python_path_with_versions(&context.temp_dir, &["3.11", "3.12"])
-        .expect("Failed to create Python test path");
+    let context = TestContext::new_with_versions(&["3.12", "3.11"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -44,8 +42,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("--preview")
         .arg("python")
         .arg("-B")
-        .arg("main.py")
-        .env("UV_TEST_PYTHON_PATH", &python_path);
+        .arg("main.py");
     uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true
     exit_code: 0
@@ -71,8 +68,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("3.12")
         .arg("python")
         .arg("-B")
-        .arg("main.py")
-        .env("UV_TEST_PYTHON_PATH", &python_path);
+        .arg("main.py");
     uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true
     exit_code: 0
@@ -94,17 +90,9 @@ fn run_with_python_version() -> Result<()> {
         .arg("python")
         .arg("-B")
         .arg("main.py")
-        .env("UV_TEST_PYTHON_PATH", &python_path)
         .env_remove("VIRTUAL_ENV");
 
-    let mut filters = context.filters();
-    filters.push((
-        r"Using Python 3.11.\d+ interpreter at: .*",
-        "Using Python 3.11.[X] interpreter at: [PYTHON]",
-    ));
-    filters.push((r"3.11.\d+", "3.11.[X]"));
-
-    uv_snapshot!(filters, command_with_args, @r###"
+    uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -113,7 +101,7 @@ fn run_with_python_version() -> Result<()> {
 
     ----- stderr -----
     Removing virtual environment at: [VENV]/
-    Using Python 3.11.[X] interpreter at: [PYTHON]
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtualenv at: [VENV]/
     Resolved 5 packages in [TIME]
     Downloaded 4 packages in [TIME]
