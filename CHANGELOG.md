@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.2.12
+
+### Enhancements
+
+- Allow specific `--only-binary` and `--no-binary` packages to override `:all:` ([#4067](https://github.com/astral-sh/uv/pull/4067))
+- Flatten ORs and ANDs in marker construction ([#4260](https://github.com/astral-sh/uv/pull/4260))
+- Skip invalid interpreters when searching for requested interpreter executable name ([#4308](https://github.com/astral-sh/uv/pull/4308))
+- Display keyring stderr during queries ([#4343](https://github.com/astral-sh/uv/pull/4343))
+- Allow discovery of uv binary relative to package root ([#4336](https://github.com/astral-sh/uv/pull/4336))
+
+### Enhancements
+
+- Use relative path for `lib64` symlink ([#4268](https://github.com/astral-sh/uv/pull/4268))
+
+### CLI
+
+- Add uv version to debug output ([#4259](https://github.com/astral-sh/uv/pull/4259))
+- Allow `--no-binary` with `uv pip compile` ([#4301](https://github.com/astral-sh/uv/pull/4301))
+- Hide `--no-system` from the CLI ([#4292](https://github.com/astral-sh/uv/pull/4292))
+- Make `--reinstall`, `--upgrade`, and `--refresh` shared arguments ([#4319](https://github.com/astral-sh/uv/pull/4319))
+
+### Configuration
+
+- Add `UV_EXCLUDE_NEWER` environment variable ([#4287](https://github.com/astral-sh/uv/pull/4287))
+
+### Bug fixes
+
+- Allow normalization to completely eliminate markers ([#4271](https://github.com/astral-sh/uv/pull/4271))
+- Avoid treating direct path archives as always dynamic ([#4283](https://github.com/astral-sh/uv/pull/4283))
+- De-duplicate markers during normalization ([#4263](https://github.com/astral-sh/uv/pull/4263))
+- Fix incorrect parsing of requested Python version as empty version specifiers ([#4289](https://github.com/astral-sh/uv/pull/4289))
+- Suggest correct command to create a virtual environment when encountering externally managed interpreters ([#4314](https://github.com/astral-sh/uv/pull/4314))
+- Use consistent order for extra groups in lockfile ([#4275](https://github.com/astral-sh/uv/pull/4275))
+
+### Documentation
+
+- Add `pip-compile` defaults to `PIP_COMPATIBILITY.md` ([#4302](https://github.com/astral-sh/uv/pull/4302))
+- Expand on `pip-compile` default differences ([#4306](https://github.com/astral-sh/uv/pull/4306))
+- Tweak copy on some command-line arguments ([#4293](https://github.com/astral-sh/uv/pull/4293))
+- Move the preview changelog so the GitHub Release shows stable changes ([#4290](https://github.com/astral-sh/uv/pull/4290))
+
 ## 0.2.11
 
 ### Enhancements
@@ -192,7 +233,7 @@ requested version, skipping interpreters that are broken or do not satisfy the r
 
 Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
 the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
-also include a version, e.g., `--python pypy@3.10`. By default, uv will accept *any* interpreter implementation.
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
 
 In summary, the following Python interpreter requests are now allowed:
 
@@ -210,7 +251,7 @@ To align the user expectations, uv now respects the interpreter that starts it. 
 now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
 
 We now check if discovered interpreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
-installation directory that is *not* a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
+installation directory that is _not_ a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
 to request the interpreter.
 
 ### Enhancements

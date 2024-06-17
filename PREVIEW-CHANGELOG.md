@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.12
+
+### Preview features
+
+- Add `--force` option to `uv toolchain install` ([#4313](https://github.com/astral-sh/uv/pull/4313))
+- Add `--no-build`, `--no-build-package`, and binary variants ([#4322](https://github.com/astral-sh/uv/pull/4322))
+- Add `EXTERNALLY-MANAGED` markers to managed toolchains ([#4312](https://github.com/astral-sh/uv/pull/4312))
+- Add `uv toolchain find` ([#4206](https://github.com/astral-sh/uv/pull/4206))
+- Add persistent configuration for non-`pip` APIs ([#4294](https://github.com/astral-sh/uv/pull/4294))
+- Add support for adding/removing development dependencies ([#4327](https://github.com/astral-sh/uv/pull/4327))
+- Add support for listing system toolchains ([#4172](https://github.com/astral-sh/uv/pull/4172))
+- Add support for toolchain requests by key ([#4332](https://github.com/astral-sh/uv/pull/4332))
+- Allow multiple toolchains to be requested in `uv toolchain install` ([#4334](https://github.com/astral-sh/uv/pull/4334))
+- Fix relative and absolute path handling in lockfiles ([#4266](https://github.com/astral-sh/uv/pull/4266))
+- Load configuration options from workspace root ([#4295](https://github.com/astral-sh/uv/pull/4295))
+- Omit project name from workspace errors ([#4299](https://github.com/astral-sh/uv/pull/4299))
+- Read Python version files during toolchain installs ([#4335](https://github.com/astral-sh/uv/pull/4335))
+- Remove extraneous installations in `uv sync` by default ([#4366](https://github.com/astral-sh/uv/pull/4366))
+- Respect `requires-python` in `uv lock` ([#4282](https://github.com/astral-sh/uv/pull/4282))
+- Respect workspace-wide `requires-python` in interpreter selection ([#4298](https://github.com/astral-sh/uv/pull/4298))
+- Support unnamed requirements in `uv add` ([#4326](https://github.com/astral-sh/uv/pull/4326))
+- Use portable slash paths in lockfile ([#4324](https://github.com/astral-sh/uv/pull/4324))
+- Use registry URL for fetching source distributions from lockfile ([#4280](https://github.com/astral-sh/uv/pull/4280))
+- `uv sync --no-clean` ([#4367](https://github.com/astral-sh/uv/pull/4367))
+- Filter dependencies by tracking markers on resolver forks ([#4339](https://github.com/astral-sh/uv/pull/4339))
+- Use `Requires-Python` to filter dependencies during universal resolution ([#4273](https://github.com/astral-sh/uv/pull/4273))
+
 ## 0.2.11
 
 ### Preview features
@@ -90,7 +117,6 @@
 
 <!-- No changes -->
 
-
 ## 0.2.3
 
 ### Preview features
@@ -100,7 +126,6 @@
 ## 0.2.2
 
 <!-- No changes -->
-
 
 ## 0.2.1
 
@@ -138,7 +163,6 @@
 
 <!-- No changes -->
 
-
 ## 0.1.43
 
 ### Preview features
@@ -159,7 +183,6 @@
 ## 0.1.41
 
 <!-- No changes -->
-
 
 ## 0.1.40
 
