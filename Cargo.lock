@@ -4384,6 +4384,7 @@ dependencies = [
  "filetime",
  "flate2",
  "fs-err",
+ "futures",
  "ignore",
  "indicatif",
  "indoc",
