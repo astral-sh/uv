@@ -1,12 +1,14 @@
-use anyhow::{Error, Result};
+use anyhow::Result;
+use fs_err as fs;
 use futures::StreamExt;
 use itertools::Itertools;
 use std::fmt::Write;
+use std::path::PathBuf;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
-use uv_toolchain::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
+use uv_toolchain::downloads::{self, DownloadResult, PythonDownload, PythonDownloadRequest};
 use uv_toolchain::managed::{InstalledToolchain, InstalledToolchains};
 use uv_toolchain::ToolchainRequest;
 use uv_warnings::warn_user;
@@ -34,21 +36,39 @@ pub(crate) async fn install(
     let toolchains = InstalledToolchains::from_settings()?.init()?;
     let toolchain_dir = toolchains.root();
 
-    let requests = if targets.is_empty() {
-        vec![PythonDownloadRequest::default()]
+    let requests: Vec<_> = if targets.is_empty() {
+        if let Some(versions) = read_versions_file().await? {
+            versions
+                .into_iter()
+                .map(|version| ToolchainRequest::parse(&version))
+                .collect()
+        } else if let Some(version) = read_version_file().await? {
+            vec![ToolchainRequest::parse(&version)]
+        } else {
+            vec![ToolchainRequest::default()]
+        }
     } else {
         targets
             .iter()
-            .map(|target| parse_target(target, printer))
-            .collect::<Result<_>>()?
+            .map(|target| ToolchainRequest::parse(target.as_str()))
+            .collect()
     };
+
+    let download_requests = requests
+        .iter()
+        .map(|request| PythonDownloadRequest::from_request(request.clone()))
+        .collect::<Result<Vec<_>, downloads::Error>>()?;
 
     let installed_toolchains: Vec<_> = toolchains.find_all()?.collect();
     let mut unfilled_requests = Vec::new();
-    for request in requests {
+    for (request, download_request) in requests.iter().zip(download_requests) {
+        writeln!(
+            printer.stderr(),
+            "Looking for toolchain {request} ({download_request})"
+        )?;
         if let Some(toolchain) = installed_toolchains
             .iter()
-            .find(|toolchain| request.satisfied_by_key(toolchain.key()))
+            .find(|toolchain| download_request.satisfied_by_key(toolchain.key()))
         {
             writeln!(
                 printer.stderr(),
@@ -56,20 +76,20 @@ pub(crate) async fn install(
                 toolchain.key()
             )?;
             if force {
-                unfilled_requests.push(request);
+                unfilled_requests.push(download_request);
             }
         } else {
-            unfilled_requests.push(request);
+            unfilled_requests.push(download_request);
         }
     }
 
     if unfilled_requests.is_empty() {
-        if targets.is_empty() {
+        if matches!(requests.as_slice(), [ToolchainRequest::Any]) {
             writeln!(
                 printer.stderr(),
                 "A toolchain is already installed. Use `uv toolchain install <request>` to install a specific toolchain.",
             )?;
-        } else if targets.len() > 1 {
+        } else if requests.len() > 1 {
             writeln!(
                 printer.stderr(),
                 "All requested toolchains already installed."
@@ -80,16 +100,14 @@ pub(crate) async fn install(
         return Ok(ExitStatus::Success);
     }
 
-    let s = if unfilled_requests.len() == 1 {
-        ""
-    } else {
-        "s"
-    };
-    writeln!(
-        printer.stderr(),
-        "Installing {} toolchain{s}",
-        unfilled_requests.len()
-    )?;
+    if unfilled_requests.len() > 1 {
+        writeln!(
+            printer.stderr(),
+            "Found {}/{} toolchains requiring installation",
+            unfilled_requests.len(),
+            requests.len()
+        )?;
+    }
 
     let downloads = unfilled_requests
         .into_iter()
@@ -145,13 +163,25 @@ pub(crate) async fn install(
     Ok(ExitStatus::Success)
 }
 
-fn parse_target(target: &str, printer: Printer) -> Result<PythonDownloadRequest, Error> {
-    let request = ToolchainRequest::parse(target);
-    let download_request = PythonDownloadRequest::from_request(request.clone())?;
-    // TODO(zanieb): Can we improve the `PythonDownloadRequest` display?
-    writeln!(
-        printer.stderr(),
-        "Looking for toolchain {request} ({download_request})"
-    )?;
-    Ok(download_request)
+async fn read_versions_file() -> Result<Option<Vec<String>>> {
+    if !PathBuf::from(".python-versions").try_exists()? {
+        return Ok(None);
+    }
+    let lines: Vec<String> = fs::tokio::read_to_string(".python-versions")
+        .await?
+        .lines()
+        .map(ToString::to_string)
+        .collect();
+    Ok(Some(lines))
+}
+
+async fn read_version_file() -> Result<Option<String>> {
+    if !PathBuf::from(".python-version").try_exists()? {
+        return Ok(None);
+    }
+    Ok(fs::tokio::read_to_string(".python-version")
+        .await?
+        .lines()
+        .next()
+        .map(ToString::to_string))
 }
