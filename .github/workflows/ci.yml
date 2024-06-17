@@ -135,7 +135,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run -p uv-dev -- fetch-python
+          cargo run toolchain install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
