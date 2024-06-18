@@ -8,7 +8,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_toolchain::downloads::{self, DownloadResult, PythonDownload, PythonDownloadRequest};
 use uv_toolchain::managed::{InstalledToolchain, InstalledToolchains};
-use uv_toolchain::{requests_from_version_files, ToolchainRequest};
+use uv_toolchain::{requests_from_version_file, ToolchainRequest};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -35,7 +35,7 @@ pub(crate) async fn install(
     let toolchain_dir = toolchains.root();
 
     let requests: Vec<_> = if targets.is_empty() {
-        if let Some(requests) = requests_from_version_files().await? {
+        if let Some(requests) = requests_from_version_file().await? {
             requests
         } else {
             vec![ToolchainRequest::Any]

@@ -8,7 +8,7 @@ use crate::ToolchainRequest;
 ///
 /// Prefers `.python-versions` then `.python-version`.
 /// If only one Python version is desired, use [`request_from_version_files`] which prefers the `.python-version` file.
-pub async fn requests_from_version_files() -> Result<Option<Vec<ToolchainRequest>>, io::Error> {
+pub async fn requests_from_version_file() -> Result<Option<Vec<ToolchainRequest>>, io::Error> {
     if let Some(versions) = read_versions_file().await? {
         Ok(Some(
             versions
@@ -27,7 +27,7 @@ pub async fn requests_from_version_files() -> Result<Option<Vec<ToolchainRequest
 ///
 /// Prefers `.python-version` then the first entry of `.python-versions`.
 /// If multiple Python versions are desired, use [`requests_from_version_files`] instead.
-pub async fn request_from_version_files() -> Result<Option<ToolchainRequest>, io::Error> {
+pub async fn request_from_version_file() -> Result<Option<ToolchainRequest>, io::Error> {
     if let Some(version) = read_version_file().await? {
         Ok(Some(ToolchainRequest::parse(&version)))
     } else if let Some(versions) = read_versions_file().await? {
