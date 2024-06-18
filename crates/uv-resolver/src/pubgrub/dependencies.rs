@@ -4,7 +4,7 @@ use either::Either;
 use itertools::Itertools;
 use pubgrub::range::Range;
 use rustc_hash::FxHashSet;
-use tracing::warn;
+use tracing::{trace, warn};
 
 use distribution_types::Verbatim;
 use pep440_rs::Version;
@@ -106,6 +106,12 @@ fn add_requirements(
         // If the requirement would not be selected with any Python version
         // supported by the root, skip it.
         if !satisfies_requires_python(requires_python, requirement) {
+            trace!(
+                "skipping {requirement} because of Requires-Python {requires_python}",
+                // OK because this filter only applies when there is a present
+                // Requires-Python specifier.
+                requires_python = requires_python.unwrap()
+            );
             continue;
         }
         // If we're in universal mode, `fork_markers` might correspond to a
@@ -113,6 +119,7 @@ fn add_requirements(
         // In that case, we should ignore any dependency that cannot possibly
         // satisfy the markers that provoked the fork.
         if !possible_to_satisfy_markers(fork_markers, requirement) {
+            trace!("skipping {requirement} because of context resolver markers {fork_markers}");
             continue;
         }
         // If the requirement isn't relevant for the current platform, skip it.
@@ -194,6 +201,12 @@ fn add_requirements(
                 // If the requirement would not be selected with any Python
                 // version supported by the root, skip it.
                 if !satisfies_requires_python(requires_python, constraint) {
+                    trace!(
+                        "skipping {requirement} because of Requires-Python {requires_python}",
+                        // OK because this filter only applies when there is a present
+                        // Requires-Python specifier.
+                        requires_python = requires_python.unwrap()
+                    );
                     continue;
                 }
                 // If we're in universal mode, `fork_markers` might correspond
@@ -202,6 +215,9 @@ fn add_requirements(
                 // dependency that cannot possibly satisfy the markers that
                 // provoked the fork.
                 if !possible_to_satisfy_markers(fork_markers, constraint) {
+                    trace!(
+                        "skipping {requirement} because of context resolver markers {fork_markers}"
+                    );
                     continue;
                 }
                 // If the requirement isn't relevant for the current platform, skip it.
