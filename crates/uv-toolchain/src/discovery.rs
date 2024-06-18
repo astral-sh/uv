@@ -123,10 +123,10 @@ pub enum ToolchainNotFound {
     FileNotExecutable(PathBuf),
 }
 
-/// The source of a discovered Python toolchain.
+/// A location for discovery of a Python toolchain.
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash, PartialOrd, Ord)]
 pub enum ToolchainSource {
-    /// The toolchain path was provided directly
+    /// The path was provided directly
     ProvidedPath,
     /// An environment was active e.g. via `VIRTUAL_ENV`
     ActiveEnvironment,
@@ -196,96 +196,137 @@ pub enum Error {
 fn python_executables<'a>(
     version: Option<&'a VersionRequest>,
     implementation: Option<&'a ImplementationName>,
-    sources: &ToolchainSources,
+    sources: &'a ToolchainSources,
 ) -> impl Iterator<Item = Result<(ToolchainSource, PathBuf), Error>> + 'a {
-    // Note we are careful to ensure the iterator chain is lazy to avoid unnecessary work
+    // Note we wrap each location in a closure to ensure it is lazy
 
-    // (1) The parent interpreter
-    sources.contains(ToolchainSource::ParentInterpreter).then(||
-        std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
-        .into_iter()
-        .map(|path| Ok((ToolchainSource::ParentInterpreter, PathBuf::from(path))))
-    ).into_iter().flatten()
-    // (2) An active virtual environment
-    .chain(
-        sources.contains(ToolchainSource::ActiveEnvironment).then(||
-            virtualenv_from_env()
-            .into_iter()
-            .map(virtualenv_python_executable)
-            .map(|path| Ok((ToolchainSource::ActiveEnvironment, path)))
-        ).into_iter().flatten()
-    )
-    // (3) An active conda environment
-    .chain(
-        sources.contains(ToolchainSource::CondaPrefix).then(||
-            conda_prefix_from_env()
-            .into_iter()
-            .map(virtualenv_python_executable)
-            .map(|path| Ok((ToolchainSource::CondaPrefix, path)))
-        ).into_iter().flatten()
-    )
-    // (4) A discovered environment
-    .chain(
-        sources.contains(ToolchainSource::DiscoveredEnvironment).then(||
-            std::iter::once(
-                virtualenv_from_working_dir()
-                .map(|path|
-                    path
-                    .map(virtualenv_python_executable)
-                    .map(|path| (ToolchainSource::DiscoveredEnvironment, path))
+    let from_parent_interpreter = std::iter::once_with(|| {
+        sources
+            .contains(ToolchainSource::ParentInterpreter)
+            .then(|| {
+                std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
                     .into_iter()
-                )
-                .map_err(Error::from)
-            ).flatten_ok()
-        ).into_iter().flatten()
-    )
-    // (5) Managed toolchains
-    .chain(
-        sources.contains(ToolchainSource::Managed).then(move ||
-            std::iter::once(
-                InstalledToolchains::from_settings().map_err(Error::from).and_then(|installed_toolchains| {
-                    debug!("Searching for managed toolchains at `{}`", installed_toolchains.root().user_display());
-                    let toolchains = installed_toolchains.find_matching_current_platform()?;
-                    // Check that the toolchain version satisfies the request to avoid unnecessary interpreter queries later
-                    Ok(
-                        toolchains.into_iter().filter(move |toolchain|
-                            version.is_none() || version.is_some_and(|version|
-                                version.matches_version(&toolchain.version())
-                            )
-                        )
-                        .inspect(|toolchain| debug!("Found managed toolchain `{toolchain}`"))
-                        .map(|toolchain| (ToolchainSource::Managed, toolchain.executable()))
-                    )
-                })
-            ).flatten_ok()
-        ).into_iter().flatten()
-    )
-    // (6) The search path
-    .chain(
-        sources.contains(ToolchainSource::SearchPath).then(move ||
-            python_executables_from_search_path(version, implementation)
-            .map(|path| Ok((ToolchainSource::SearchPath, path))),
-        ).into_iter().flatten()
-    )
-    // (7) The `py` launcher (windows only)
+                    .map(|path| Ok((ToolchainSource::ParentInterpreter, PathBuf::from(path))))
+            })
+            .into_iter()
+            .flatten()
+    })
+    .flatten();
+
+    let from_virtual_environment = std::iter::once_with(|| {
+        sources
+            .contains(ToolchainSource::ActiveEnvironment)
+            .then(|| {
+                virtualenv_from_env()
+                    .into_iter()
+                    .map(virtualenv_python_executable)
+                    .map(|path| Ok((ToolchainSource::ActiveEnvironment, path)))
+            })
+            .into_iter()
+            .flatten()
+    })
+    .flatten();
+
+    let from_conda_environment = std::iter::once_with(|| {
+        sources
+            .contains(ToolchainSource::CondaPrefix)
+            .then(|| {
+                conda_prefix_from_env()
+                    .into_iter()
+                    .map(virtualenv_python_executable)
+                    .map(|path| Ok((ToolchainSource::CondaPrefix, path)))
+            })
+            .into_iter()
+            .flatten()
+    })
+    .flatten();
+
+    let from_discovered_environment = std::iter::once_with(|| {
+        sources
+            .contains(ToolchainSource::DiscoveredEnvironment)
+            .then(|| {
+                virtualenv_from_working_dir()
+                    .map(|path| {
+                        path.map(virtualenv_python_executable)
+                            .map(|path| (ToolchainSource::DiscoveredEnvironment, path))
+                            .into_iter()
+                    })
+                    .map_err(Error::from)
+            })
+            .into_iter()
+            .flatten_ok()
+    })
+    .flatten();
+
+    let from_installed_toolchains = std::iter::once_with(move || {
+        sources
+            .contains(ToolchainSource::Managed)
+            .then(move || {
+                InstalledToolchains::from_settings()
+                    .map_err(Error::from)
+                    .and_then(|installed_toolchains| {
+                        debug!(
+                            "Searching for managed toolchains at `{}`",
+                            installed_toolchains.root().user_display()
+                        );
+                        let toolchains = installed_toolchains.find_matching_current_platform()?;
+                        // Check that the toolchain version satisfies the request to avoid unnecessary interpreter queries later
+                        Ok(toolchains
+                            .into_iter()
+                            .filter(move |toolchain| {
+                                version.is_none()
+                                    || version.is_some_and(|version| {
+                                        version.matches_version(&toolchain.version())
+                                    })
+                            })
+                            .inspect(|toolchain| debug!("Found managed toolchain `{toolchain}`"))
+                            .map(|toolchain| (ToolchainSource::Managed, toolchain.executable())))
+                    })
+            })
+            .into_iter()
+            .flatten_ok()
+    })
+    .flatten();
+
+    let from_search_path = std::iter::once_with(move || {
+        sources
+            .contains(ToolchainSource::SearchPath)
+            .then(move || {
+                python_executables_from_search_path(version, implementation)
+                    .map(|path| Ok((ToolchainSource::SearchPath, path)))
+            })
+            .into_iter()
+            .flatten()
+    })
+    .flatten();
+
     // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
-    .chain(
-        (sources.contains(ToolchainSource::PyLauncher) && cfg!(windows)).then(||
-            std::iter::once(
+    let from_py_launcher = std::iter::once_with(move || {
+        (sources.contains(ToolchainSource::PyLauncher) && cfg!(windows))
+            .then(|| {
                 py_list_paths()
-                .map(|entries|
-                    // We can avoid querying the interpreter using versions from the py launcher output unless a patch is requested
-                    entries.into_iter().filter(move |entry|
-                        version.is_none() || version.is_some_and(|version|
-                            version.has_patch() || version.matches_major_minor(entry.major, entry.minor)
-                        )
+                    .map(|entries|
+                // We can avoid querying the interpreter using versions from the py launcher output unless a patch is requested
+                entries.into_iter().filter(move |entry|
+                    version.is_none() || version.is_some_and(|version|
+                        version.has_patch() || version.matches_major_minor(entry.major, entry.minor)
                     )
-                    .map(|entry| (ToolchainSource::PyLauncher, entry.executable_path))
                 )
-                .map_err(Error::from)
-            ).flatten_ok()
-        ).into_iter().flatten()
-    )
+                .map(|entry| (ToolchainSource::PyLauncher, entry.executable_path)))
+                    .map_err(Error::from)
+            })
+            .into_iter()
+            .flatten_ok()
+    })
+    .flatten();
+
+    from_parent_interpreter
+        .chain(from_virtual_environment)
+        .chain(from_conda_environment)
+        .chain(from_discovered_environment)
+        .chain(from_installed_toolchains)
+        .chain(from_search_path)
+        .chain(from_py_launcher)
 }
 
 /// Lazily iterate over Python executables in the `PATH`.
@@ -363,7 +404,7 @@ fn python_executables_from_search_path<'a>(
 fn python_interpreters<'a>(
     version: Option<&'a VersionRequest>,
     implementation: Option<&'a ImplementationName>,
-    sources: &ToolchainSources,
+    sources: &'a ToolchainSources,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a {
     python_interpreters_from_executables(
