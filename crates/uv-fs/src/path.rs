@@ -78,13 +78,20 @@ impl<T: AsRef<Path>> Simplified for T {
 
     fn user_display_from(&self, base: impl AsRef<Path>) -> impl std::fmt::Display {
         let path = dunce::simplified(self.as_ref());
+        let canonical = path.canonicalize();
 
         // Attempt to strip the base, then the current working directory, then the canonicalized
         // current working directory, in case they differ.
         let path = path.strip_prefix(base.as_ref()).unwrap_or_else(|_| {
             path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
                 path.strip_prefix(CANONICAL_CWD.simplified())
-                    .unwrap_or(path)
+                    .unwrap_or_else(move |_| {
+                        canonical
+                            .as_deref()
+                            .map(|path| path.strip_prefix(CANONICAL_CWD.simplified()))
+                            .unwrap_or(Ok(path))
+                            .unwrap_or(path)
+                    })
             })
         });
 

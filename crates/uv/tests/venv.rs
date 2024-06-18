@@ -475,7 +475,6 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
     // Create a virtual environment at `.venv`.
     context
         .venv()
-        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
         .assert()
