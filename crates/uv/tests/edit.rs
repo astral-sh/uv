@@ -582,13 +582,13 @@ fn add_remove_dev() -> Result<()> {
 fn add_remove_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let workspace = context.temp_dir.child("root/pyproject.toml");
+    let workspace = context.temp_dir.child("pyproject.toml");
     workspace.write_str(indoc! {r#"
         [tool.uv.workspace]
         members = ["child1", "child2"]
     "#})?;
 
-    let pyproject_toml = context.temp_dir.child("root/child1/pyproject.toml");
+    let pyproject_toml = context.temp_dir.child("child1/pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "child1"
@@ -597,7 +597,7 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
     "#})?;
 
-    let pyproject_toml = context.temp_dir.child("root/child2/pyproject.toml");
+    let pyproject_toml = context.temp_dir.child("child2/pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "child2"
@@ -606,7 +606,7 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
     "#})?;
 
-    let child1 = context.temp_dir.join("root/child1");
+    let child1 = context.temp_dir.join("child1");
     let mut add_cmd = context.add(&["child2"]);
     add_cmd
         .arg("--preview")
@@ -619,13 +619,11 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [TEMP_DIR]/root/.venv
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child1==0.1.0 (from file://[TEMP_DIR]/root/child1)
-     + child2==0.1.0 (from file://[TEMP_DIR]/root/child2)
+     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + child2==0.1.0 (from file://[TEMP_DIR]/child2)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
@@ -650,7 +648,7 @@ fn add_remove_workspace() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("root/uv.lock"))?;
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -703,9 +701,9 @@ fn add_remove_workspace() -> Result<()> {
     Downloaded 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
-     - child1==0.1.0 (from file://[TEMP_DIR]/root/child1)
-     + child1==0.1.0 (from file://[TEMP_DIR]/root/child1)
-     - child2==0.1.0 (from file://[TEMP_DIR]/root/child2)
+     - child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     - child2==0.1.0 (from file://[TEMP_DIR]/child2)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
@@ -726,7 +724,7 @@ fn add_remove_workspace() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("root/uv.lock"))?;
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
 
     insta::with_settings!({
         filters => context.filters(),
