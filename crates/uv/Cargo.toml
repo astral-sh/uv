@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.2.11"
+version = "0.2.13"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -46,6 +46,7 @@ clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 clap_complete_command = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }

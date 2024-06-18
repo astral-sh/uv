@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_requirements::RequirementsSource;
-use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
 use uv_warnings::warn_user;
 
 use crate::commands::project::update_environment;
@@ -55,7 +55,7 @@ pub(crate) async fn run(
     // Discover an interpreter.
     // Note we force preview on during `uv tool run` for now since the entire interface is in preview
     let interpreter = Toolchain::find(
-        python.as_deref(),
+        python.as_deref().map(ToolchainRequest::parse),
         SystemPython::Allowed,
         PreviewMode::Enabled,
         cache,

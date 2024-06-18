@@ -325,6 +325,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             pins: FilePins::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
+            markers: MarkerTree::And(vec![]),
         };
         let mut forked_states = vec![state];
         let mut resolutions = vec![];
@@ -498,6 +499,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let forked_deps = self.get_dependencies_forking(
                         &package,
                         &version,
+                        &state.markers,
                         &mut state.priorities,
                         &request_sink,
                     )?;
@@ -542,7 +544,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             );
                             forked_states.push(state);
                         }
-                        ForkedDependencies::Forked(forks) => {
+                        ForkedDependencies::Forked {
+                            forks,
+                            diverging_packages,
+                        } => {
+                            debug!(
+                                "Splitting resolution on {} over {}",
+                                state.next,
+                                diverging_packages
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .join(", ")
+                            );
                             assert!(forks.len() >= 2);
                             // This is a somewhat tortured technique to ensure
                             // that our resolver state is only cloned as much
@@ -572,6 +585,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 if !is_last {
                                     cur_state = Some(forked_state.clone());
                                 }
+                                forked_state.markers.and(fork.markers);
 
                                 // Add that package and version if the dependencies are not problematic.
                                 let dep_incompats =
@@ -941,10 +955,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         version: &Version,
+        markers: &MarkerTree,
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let result = self.get_dependencies(package, version, priorities, request_sink);
+        let result = self.get_dependencies(package, version, markers, priorities, request_sink);
         if self.markers.is_some() {
             return result.map(|deps| match deps {
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
@@ -960,6 +975,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         version: &Version,
+        markers: &MarkerTree,
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
     ) -> Result<Dependencies, ResolveError> {
@@ -979,6 +995,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.git,
                     self.markers.as_ref(),
                     self.requires_python.as_ref(),
+                    markers,
                 );
 
                 let dependencies = match dependencies {
@@ -1130,6 +1147,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.git,
                     self.markers.as_ref(),
                     self.requires_python.as_ref(),
+                    markers,
                 )?;
 
                 for (dep_package, dep_version) in dependencies.iter() {
@@ -1537,6 +1555,21 @@ struct SolveState {
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
     added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
+    /// The marker expression that created this state.
+    ///
+    /// The root state always corresponds to a marker expression that is always
+    /// `true` for every `MarkerEnvironment`.
+    ///
+    /// In non-universal mode, forking never occurs and so this marker
+    /// expression is always `true`.
+    ///
+    /// Whenever dependencies are fetched, all requirement specifications
+    /// are checked for disjointness with the marker expression of the fork
+    /// in which those dependencies were fetched. If a requirement has a
+    /// completely disjoint marker expression (i.e., it can never be true given
+    /// that the marker expression that provoked the fork is true), then that
+    /// dependency is completely ignored.
+    markers: MarkerTree,
 }
 
 impl SolveState {
@@ -1854,17 +1887,30 @@ enum Response {
     },
 }
 
-/// An enum used by [`DependencyProvider`] that holds information about package dependencies.
-/// For each [Package] there is a set of versions allowed as a dependency.
+/// Information about the dependencies for a particular package.
+///
+/// This effectively distills the dependency metadata of a package down into
+/// its pubgrub specific constituent parts: each dependency package has a range
+/// of possible versions.
 #[derive(Clone)]
 enum Dependencies {
     /// Package dependencies are not available.
     Unavailable(UnavailableVersion),
     /// Container for all available package versions.
+    ///
+    /// Note that in universal mode, it is possible and allowed for multiple
+    /// `PubGrubPackage` values in this list to have the same package name.
+    /// These conflicts are resolved via `Dependencies::fork`.
     Available(Vec<(PubGrubPackage, Range<Version>)>),
 }
 
 impl Dependencies {
+    /// Turn this flat list of dependencies into a potential set of forked
+    /// groups of dependencies.
+    ///
+    /// A fork *only* occurs when there are multiple dependencies with the same
+    /// name *and* those dependency specifications have corresponding marker
+    /// expressions that are completely disjoint with one another.
     fn fork(self) -> ForkedDependencies {
         use std::collections::hash_map::Entry;
 
@@ -1943,7 +1989,6 @@ impl Dependencies {
             // is look for a group in which there is some overlap. If so, this
             // package gets added to that fork group. Otherwise, we create a
             // new fork group.
-            // possible_forks.push(PossibleFork { packages: vec![] });
             let Some(possible_fork) = possible_forks.find_overlapping_fork_group(marker) else {
                 // Create a new fork since there was no overlap.
                 possible_forks.forks.push(PossibleFork {
@@ -1960,8 +2005,10 @@ impl Dependencies {
         }
         let mut forks = vec![Fork {
             dependencies: vec![],
+            markers: MarkerTree::And(vec![]),
         }];
-        for (_, possible_forks) in by_name {
+        let mut diverging_packages = Vec::new();
+        for (name, possible_forks) in by_name {
             let fork_groups = match possible_forks {
                 PossibleForks::PossiblyForking(fork_groups) => fork_groups,
                 PossibleForks::NoForkPossible(indices) => {
@@ -1978,41 +2025,106 @@ impl Dependencies {
             let mut new_forks: Vec<Fork> = vec![];
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
-                for (index, _) in group.packages {
+                for (index, markers) in group.packages {
                     for fork in &mut new_forks_for_group {
                         fork.dependencies.push(deps[index].clone());
+                        // Each marker expression in a single fork is,
+                        // by construction, overlapping with at least
+                        // one other marker expression in this fork.
+                        // However, the symmetric differences may be
+                        // non-empty. Therefore, the markers need to be
+                        // combined on the corresponding fork
+                        fork.markers.and(markers.clone());
                     }
                 }
                 new_forks.extend(new_forks_for_group);
             }
             forks = new_forks;
+            diverging_packages.push(name.clone());
         }
-        ForkedDependencies::Forked(forks)
+        ForkedDependencies::Forked {
+            forks,
+            diverging_packages,
+        }
     }
 }
 
+/// Information about the (possibly forked) dependencies for a particular
+/// package.
+///
+/// This is like `Dependencies` but with an extra variant that only occurs when
+/// a `Dependencies` list has multiple dependency specifications with the same
+/// name and non-overlapping marker expressions (i.e., a fork occurs).
 #[derive(Debug)]
 enum ForkedDependencies {
     /// Package dependencies are not available.
     Unavailable(UnavailableVersion),
     /// No forking occurred.
+    ///
+    /// This is the same as `Dependencies::Available`.
     Unforked(Vec<(PubGrubPackage, Range<Version>)>),
     /// Forked containers for all available package versions.
     ///
     /// Note that there is always at least two forks. If there would
     /// be fewer than 2 forks, then there is no fork at all and the
     /// `Unforked` variant is used instead.
-    Forked(Vec<Fork>),
+    Forked {
+        forks: Vec<Fork>,
+        /// The package(s) with different requirements for disjoint markers.
+        diverging_packages: Vec<PackageName>,
+    },
 }
 
+/// A single fork in a list of dependencies.
+///
+/// A fork corresponds to the full list of dependencies for a package,
+/// but with any conflicting dependency specifications omitted. For
+/// example, if we have `a<2 ; sys_platform == 'foo'` and `a>=2 ;
+/// sys_platform == 'bar'`, then because the dependency specifications
+/// have the same name and because the marker expressions are disjoint,
+/// a fork occurs. One fork will contain `a<2` but not `a>=2`, while
+/// the other fork will contain `a>=2` but not `a<2`.
 #[derive(Clone, Debug)]
 struct Fork {
+    /// The list of dependencies for this fork, guaranteed to be conflict
+    /// free. (i.e., There are no two packages with the same name with
+    /// non-overlapping marker expressions.)
     dependencies: Vec<(PubGrubPackage, Range<Version>)>,
+    /// The markers that provoked this fork.
+    ///
+    /// So in the example above, the `a<2` fork would have
+    /// `sys_platform == 'foo'`, while the `a>=2` fork would have
+    /// `sys_platform == 'bar'`.
+    ///
+    /// (This doesn't include any marker expressions from a parent fork.)
+    markers: MarkerTree,
 }
 
+/// Intermediate state that represents a *possible* grouping of forks
+/// for one package name.
+///
+/// This accumulates state while examining a `Dependencies` list. In
+/// particular, it accumulates conflicting dependency specifications and marker
+/// expressions. As soon as a fork can be ruled out, this state is switched to
+/// `NoForkPossible`. If, at the end of visiting all `Dependencies`, we still
+/// have `PossibleForks::PossiblyForking`, then a fork exists if and only if
+/// one of its groups has length bigger than `1`.
+///
+/// One common way for a fork to be known to be impossible is if there exists
+/// conflicting dependency specifications where at least one is unconditional.
+/// For example, `a<2` and `a>=2 ; sys_platform == 'foo'`. In this case, `a<2`
+/// has a marker expression that is always true and thus never disjoint with
+/// any other marker expression. Therefore, there can be no fork for `a`.
+///
+/// Note that we use indices into a `Dependencies` list to represent packages.
+/// This avoids excessive cloning.
 #[derive(Debug)]
 enum PossibleForks<'a> {
+    /// A group of dependencies (all with the same package name) where it is
+    /// known that no forks exist.
     NoForkPossible(Vec<usize>),
+    /// A group of groups dependencies (all with the same package name) where
+    /// it is possible for each group to correspond to a fork.
     PossiblyForking(PossibleForkGroups<'a>),
 }
 
@@ -2064,8 +2176,11 @@ impl<'a> PossibleForks<'a> {
     }
 }
 
+/// A list of groups of dependencies (all with the same package name), where
+/// each group may correspond to a fork.
 #[derive(Debug)]
 struct PossibleForkGroups<'a> {
+    /// The list of forks.
     forks: Vec<PossibleFork<'a>>,
 }
 
@@ -2083,6 +2198,20 @@ impl<'a> PossibleForkGroups<'a> {
     }
 }
 
+/// Intermediate state representing a single possible fork.
+///
+/// The key invariant here is that, beyond a singleton fork, for all packages
+/// in this fork, its marker expression must be overlapping with at least one
+/// other package's marker expression. That is, when considering whether a
+/// dependency specification with a conflicting package name provokes a fork
+/// or not, one must look at the existing possible groups of forks. If any of
+/// those groups have a package with an overlapping marker expression, then
+/// the conflicting package name cannot possibly introduce a new fork. But if
+/// there is no existing fork with an overlapping marker expression, then the
+/// conflict provokes a new fork.
+///
+/// As with other intermediate data types, we use indices into a list of
+/// `Dependencies` to represent packages to avoid excessive cloning.
 #[derive(Debug)]
 struct PossibleFork<'a> {
     packages: Vec<(usize, &'a MarkerTree)>,
@@ -2092,11 +2221,11 @@ impl<'a> PossibleFork<'a> {
     /// Returns true if and only if the given marker expression has a non-empty
     /// intersection with *any* of the package markers within this possible
     /// fork.
-    fn is_overlapping(&self, marker: &MarkerTree) -> bool {
+    fn is_overlapping(&self, candidate_package_markers: &MarkerTree) -> bool {
         use crate::marker::is_disjoint;
 
-        for (_, tree) in &self.packages {
-            if !is_disjoint(marker, tree) {
+        for (_, package_markers) in &self.packages {
+            if !is_disjoint(candidate_package_markers, package_markers) {
                 return true;
             }
         }

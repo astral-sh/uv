@@ -122,17 +122,17 @@ actually need to make an HTTP request).
 
 # Additional reading
 
-* Short introduction to `Cache-Control`: https://csswizardry.com/2019/03/cache-control-for-civilians/
-* Caching best practcies: https://jakearchibald.com/2016/caching-best-practices/
-* Overview of HTTP caching: https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching
-* MDN docs for `Cache-Control`: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
-* THe 1997 RFC for HTTP 1.1: https://www.rfc-editor.org/rfc/rfc2068#section-13
-* The 1999 update to HTTP 1.1: https://www.rfc-editor.org/rfc/rfc2616.html#section-13
-* The "stale content" cache-control extension: https://httpwg.org/specs/rfc5861.html
-* HTTP 1.1 caching (superseded by RFC 9111): https://httpwg.org/specs/rfc7234.html
-* The "immutable" cache-control extension: https://httpwg.org/specs/rfc8246.html
-* HTTP semantics (If-None-Match, etc.): https://www.rfc-editor.org/rfc/rfc9110#section-8.8.3
-* HTTP caching (obsoletes RFC 7234): https://www.rfc-editor.org/rfc/rfc9111.html
+* Short introduction to `Cache-Control`: <https://csswizardry.com/2019/03/cache-control-for-civilians/>
+* Caching best practcies: <https://jakearchibald.com/2016/caching-best-practices/>
+* Overview of HTTP caching: <https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching>
+* MDN docs for `Cache-Control`: <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control>
+* The 1997 RFC for HTTP 1.1: <https://www.rfc-editor.org/rfc/rfc2068#section-13>
+* The 1999 update to HTTP 1.1: <https://www.rfc-editor.org/rfc/rfc2616.html#section-13>
+* The "stale content" cache-control extension: <https://httpwg.org/specs/rfc5861.html>
+* HTTP 1.1 caching (superseded by RFC 9111): <https://httpwg.org/specs/rfc7234.html>
+* The "immutable" cache-control extension: <https://httpwg.org/specs/rfc8246.html>
+* HTTP semantics (If-None-Match, etc.): <https://www.rfc-editor.org/rfc/rfc9110#section-8.8.3>
+* HTTP caching (obsoletes RFC 7234): <https://www.rfc-editor.org/rfc/rfc9111.html>
 */
 
 use std::time::{Duration, SystemTime};
@@ -1193,7 +1193,7 @@ impl<'a> From<&'a http::HeaderMap> for ResponseHeaders {
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 struct ETag {
-    /// The actual ETag validator value.
+    /// The actual `ETag` validator value.
     ///
     /// This is received in the response, recorded as part of the cache policy
     /// and then sent back in a re-validation request. This is the "best"
@@ -1219,7 +1219,7 @@ struct ETag {
 }
 
 impl ETag {
-    /// Parses an ETag from a header value.
+    /// Parses an `ETag` from a header value.
     ///
     /// We are a little permissive here and allow arbitrary bytes,
     /// where as [RFC 9110 S8.8.3] is a bit more restrictive.

@@ -1592,6 +1592,11 @@ pub(crate) struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub(crate) no_dev: bool,
 
+    /// Does not clean the environment.
+    /// Without this flag any extraneous installations will be removed.
+    #[arg(long)]
+    pub(crate) no_clean: bool,
+
     #[command(flatten)]
     pub(crate) installer: InstallerArgs,
 
@@ -1653,6 +1658,10 @@ pub(crate) struct AddArgs {
     /// Add the requirements as development dependencies.
     #[arg(long)]
     pub(crate) dev: bool,
+
+    /// Add the requirements as workspace dependencies.
+    #[arg(long)]
+    pub(crate) workspace: bool,
 
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
@@ -1802,10 +1811,12 @@ pub(crate) struct ToolchainListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolchainInstallArgs {
-    /// The toolchain to install.
+    /// The toolchains to install.
     ///
-    /// If not provided, the latest available version will be installed unless a toolchain was previously installed.
-    pub(crate) target: Option<String>,
+    /// If not provided, the requested toolchain(s) will be read from the `.python-versions`
+    ///  or `.python-version` files. If neither file is present, uv will check if it has
+    /// installed any toolchains. If not, it will install the latest stable version of Python.
+    pub(crate) targets: Vec<String>,
 
     /// Force the installation of the toolchain, even if it is already installed.
     #[arg(long, short)]

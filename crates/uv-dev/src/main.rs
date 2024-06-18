@@ -19,7 +19,6 @@ use tracing_subscriber::{EnvFilter, Layer};
 use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
-use crate::fetch_python::FetchPythonArgs;
 use crate::generate_json_schema::GenerateJsonSchemaArgs;
 #[cfg(feature = "render")]
 use crate::render_benchmarks::RenderBenchmarksArgs;
@@ -44,7 +43,6 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod build;
 mod clear_compile;
 mod compile;
-mod fetch_python;
 mod generate_json_schema;
 mod render_benchmarks;
 mod wheel_metadata;
@@ -61,8 +59,6 @@ enum Cli {
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
     ClearCompile(ClearCompileArgs),
-    /// Fetch Python versions for testing.
-    FetchPython(FetchPythonArgs),
     /// Generate JSON schema for the TOML configuration file.
     GenerateJSONSchema(GenerateJsonSchemaArgs),
     #[cfg(feature = "render")]
@@ -81,7 +77,6 @@ async fn run() -> Result<()> {
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
-        Cli::FetchPython(args) => fetch_python::fetch_python(args).await?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
         #[cfg(feature = "render")]
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,

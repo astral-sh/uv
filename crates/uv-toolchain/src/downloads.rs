@@ -3,16 +3,19 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use crate::implementation::{Error as ImplementationError, ImplementationName};
-use crate::platform::{Arch, Libc, Os};
-use crate::{PythonVersion, ToolchainRequest, VersionRequest};
+use crate::implementation::{
+    Error as ImplementationError, ImplementationName, LenientImplementationName,
+};
+use crate::platform::{self, Arch, Libc, Os};
+use crate::toolchain::ToolchainKey;
+use crate::{Interpreter, PythonVersion, ToolchainRequest, VersionRequest};
 use thiserror::Error;
 use uv_client::BetterReqwestError;
 
 use futures::TryStreamExt;
 
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 use uv_fs::Simplified;
 
@@ -24,6 +27,8 @@ pub enum Error {
     ImplementationError(#[from] ImplementationError),
     #[error("Invalid python version: {0}")]
     InvalidPythonVersion(String),
+    #[error("Invalid request key, too many parts: {0}")]
+    TooManyParts(String),
     #[error("Download failed")]
     NetworkError(#[from] BetterReqwestError),
     #[error("Download failed")]
@@ -48,6 +53,8 @@ pub enum Error {
     },
     #[error("Failed to parse toolchain directory name: {0}")]
     NameError(String),
+    #[error("Failed to parse request part")]
+    InvalidRequestPlatform(#[from] platform::Error),
     #[error("Cannot download toolchain for request: {0}")]
     InvalidRequestKind(ToolchainRequest),
     // TODO(zanieb): Implement display for `PythonDownloadRequest`
@@ -57,18 +64,12 @@ pub enum Error {
 
 #[derive(Debug, PartialEq)]
 pub struct PythonDownload {
-    implementation: ImplementationName,
-    arch: Arch,
-    os: Os,
-    libc: Libc,
-    major: u8,
-    minor: u8,
-    patch: u8,
+    key: ToolchainKey,
     url: &'static str,
     sha256: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct PythonDownloadRequest {
     version: Option<VersionRequest>,
     implementation: Option<ImplementationName>,
@@ -126,16 +127,16 @@ impl PythonDownloadRequest {
 
     /// Construct a new [`PythonDownloadRequest`] from a [`ToolchainRequest`].
     pub fn from_request(request: ToolchainRequest) -> Result<Self, Error> {
-        let result = Self::default();
         let result = match request {
-            ToolchainRequest::Version(version) => result.with_version(version),
+            ToolchainRequest::Version(version) => Self::default().with_version(version),
             ToolchainRequest::Implementation(implementation) => {
-                result.with_implementation(implementation)
+                Self::default().with_implementation(implementation)
             }
-            ToolchainRequest::ImplementationVersion(implementation, version) => result
+            ToolchainRequest::ImplementationVersion(implementation, version) => Self::default()
                 .with_implementation(implementation)
                 .with_version(version),
-            ToolchainRequest::Any => result,
+            ToolchainRequest::Key(request) => request,
+            ToolchainRequest::Any => Self::default(),
             // We can't download a toolchain for these request kinds
             ToolchainRequest::Directory(_)
             | ToolchainRequest::ExecutableName(_)
@@ -176,55 +177,118 @@ impl PythonDownloadRequest {
         ))
     }
 
+    pub fn implementation(&self) -> Option<&ImplementationName> {
+        self.implementation.as_ref()
+    }
+
+    pub fn version(&self) -> Option<&VersionRequest> {
+        self.version.as_ref()
+    }
+
+    pub fn arch(&self) -> Option<&Arch> {
+        self.arch.as_ref()
+    }
+
+    pub fn os(&self) -> Option<&Os> {
+        self.os.as_ref()
+    }
+
+    pub fn libc(&self) -> Option<&Libc> {
+        self.libc.as_ref()
+    }
+
     /// Iterate over all [`PythonDownload`]'s that match this request.
     pub fn iter_downloads(&self) -> impl Iterator<Item = &'static PythonDownload> + '_ {
-        PythonDownload::iter_all().filter(move |download| {
-            if let Some(arch) = &self.arch {
-                if download.arch != *arch {
-                    return false;
-                }
+        PythonDownload::iter_all().filter(move |download| self.satisfied_by_download(download))
+    }
+
+    pub fn satisfied_by_key(&self, key: &ToolchainKey) -> bool {
+        if let Some(arch) = &self.arch {
+            if key.arch != *arch {
+                return false;
             }
-            if let Some(os) = &self.os {
-                if download.os != *os {
-                    return false;
-                }
+        }
+        if let Some(os) = &self.os {
+            if key.os != *os {
+                return false;
             }
-            if let Some(implementation) = &self.implementation {
-                if download.implementation != *implementation {
-                    return false;
-                }
+        }
+        if let Some(implementation) = &self.implementation {
+            if key.implementation != LenientImplementationName::from(*implementation) {
+                return false;
             }
-            if let Some(version) = &self.version {
-                if !version.matches_major_minor_patch(
-                    download.major,
-                    download.minor,
-                    download.patch,
-                ) {
-                    return false;
-                }
+        }
+        if let Some(version) = &self.version {
+            if !version.matches_major_minor_patch(key.major, key.minor, key.patch) {
+                return false;
             }
-            true
-        })
+        }
+        true
+    }
+
+    pub fn satisfied_by_download(&self, download: &PythonDownload) -> bool {
+        self.satisfied_by_key(download.key())
+    }
+
+    pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
+        if let Some(version) = self.version() {
+            if !version.matches_interpreter(interpreter) {
+                return false;
+            }
+        }
+        if let Some(os) = self.os() {
+            if &Os::from(interpreter.platform().os()) != os {
+                return false;
+            }
+        }
+        if let Some(arch) = self.arch() {
+            if &Arch::from(&interpreter.platform().arch()) != arch {
+                return false;
+            }
+        }
+        if let Some(implementation) = self.implementation() {
+            if LenientImplementationName::from(interpreter.implementation_name())
+                != LenientImplementationName::from(*implementation)
+            {
+                return false;
+            }
+        }
+        if let Some(libc) = self.libc() {
+            if &Libc::from(interpreter.platform().os()) != libc {
+                return false;
+            }
+        }
+        true
     }
 }
 
 impl Display for PythonDownloadRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut parts = Vec::new();
-        if let Some(version) = &self.version {
-            parts.push(version.to_string());
-        }
         if let Some(implementation) = self.implementation {
             parts.push(implementation.to_string());
+        } else {
+            parts.push("any".to_string());
+        }
+        if let Some(version) = &self.version {
+            parts.push(version.to_string());
+        } else {
+            parts.push("any".to_string());
         }
         if let Some(os) = &self.os {
             parts.push(os.to_string());
+        } else {
+            parts.push("any".to_string());
         }
         if let Some(arch) = self.arch {
             parts.push(arch.to_string());
+        } else {
+            parts.push("any".to_string());
         }
         if let Some(libc) = self.libc {
             parts.push(libc.to_string());
+        } else {
+            parts.push("any".to_string());
         }
         write!(f, "{}", parts.join("-"))
     }
@@ -234,10 +298,48 @@ impl FromStr for PythonDownloadRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // TODO(zanieb): Implement parsing of additional request parts
-        let version =
-            VersionRequest::from_str(s).map_err(|_| Error::InvalidPythonVersion(s.to_string()))?;
-        Ok(Self::new(Some(version), None, None, None, None))
+        let mut parts = s.split('-');
+        let mut version = None;
+        let mut implementation = None;
+        let mut os = None;
+        let mut arch = None;
+        let mut libc = None;
+
+        loop {
+            // Consume each part
+            let Some(part) = parts.next() else { break };
+
+            if implementation.is_none() {
+                implementation = Some(ImplementationName::from_str(part)?);
+                continue;
+            }
+
+            if version.is_none() {
+                version = Some(
+                    VersionRequest::from_str(part)
+                        .map_err(|_| Error::InvalidPythonVersion(part.to_string()))?,
+                );
+                continue;
+            }
+
+            if os.is_none() {
+                os = Some(Os::from_str(part)?);
+                continue;
+            }
+
+            if arch.is_none() {
+                arch = Some(Arch::from_str(part)?);
+                continue;
+            }
+
+            if libc.is_none() {
+                libc = Some(Libc::from_str(part)?);
+                continue;
+            }
+
+            return Err(Error::TooManyParts(s.to_string()));
+        }
+        Ok(Self::new(version, implementation, arch, os, libc))
     }
 }
 
@@ -266,21 +368,12 @@ impl PythonDownload {
         self.url
     }
 
-    pub fn key(&self) -> String {
-        format!(
-            "{}-{}.{}.{}-{}-{}-{}",
-            self.implementation.as_str().to_ascii_lowercase(),
-            self.major,
-            self.minor,
-            self.patch,
-            self.os,
-            self.arch,
-            self.libc
-        )
+    pub fn key(&self) -> &ToolchainKey {
+        &self.key
     }
 
     pub fn os(&self) -> &Os {
-        &self.os
+        self.key.os()
     }
 
     pub fn sha256(&self) -> Option<&str> {
@@ -288,13 +381,14 @@ impl PythonDownload {
     }
 
     /// Download and extract
+    #[instrument(skip(client, parent_path), fields(download = %self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
         parent_path: &Path,
     ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
-        let path = parent_path.join(self.key()).clone();
+        let path = parent_path.join(self.key().to_string()).clone();
 
         // If it already exists, return it
         if path.is_dir() {
@@ -344,8 +438,7 @@ impl PythonDownload {
     }
 
     pub fn python_version(&self) -> PythonVersion {
-        PythonVersion::from_str(&format!("{}.{}.{}", self.major, self.minor, self.patch))
-            .expect("Python downloads should always have valid versions")
+        self.key.version()
     }
 }
 
@@ -368,6 +461,6 @@ impl From<reqwest_middleware::Error> for Error {
 
 impl Display for PythonDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.key())
+        write!(f, "{}", self.key)
     }
 }

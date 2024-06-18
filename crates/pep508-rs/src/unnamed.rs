@@ -137,7 +137,7 @@ impl<Url: UnnamedRequirementUrl> Display for UnnamedRequirement<Url> {
             )?;
         }
         if let Some(marker) = &self.marker {
-            write!(f, " ; {}", marker)?;
+            write!(f, " ; {marker}")?;
         }
         Ok(())
     }

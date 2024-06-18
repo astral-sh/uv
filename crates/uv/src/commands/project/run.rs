@@ -12,9 +12,10 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
-use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain};
+use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -59,8 +60,15 @@ pub(crate) async fn run(
         } else {
             ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
         };
-        let venv =
-            project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
+        let venv = project::init_environment(
+            project.workspace(),
+            python.as_deref().map(ToolchainRequest::parse),
+            connectivity,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
 
         // Lock and sync the environment.
         let lock = project::lock::do_lock(
@@ -91,6 +99,7 @@ pub(crate) async fn run(
             &lock,
             extras,
             dev,
+            Modifications::Sufficient,
             &settings.reinstall,
             &settings.index_locations,
             &settings.index_strategy,
@@ -128,7 +137,7 @@ pub(crate) async fn run(
         } else {
             // Note we force preview on during `uv run` for now since the entire interface is in preview
             Toolchain::find_or_fetch(
-                python.as_deref(),
+                python.as_deref().map(ToolchainRequest::parse),
                 SystemPython::Allowed,
                 PreviewMode::Enabled,
                 client_builder,

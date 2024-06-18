@@ -65,7 +65,7 @@ fn check_compatible_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
@@ -108,7 +108,7 @@ fn check_incompatible_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
@@ -131,7 +131,7 @@ fn check_incompatible_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - idna==3.6
@@ -175,7 +175,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
@@ -198,7 +198,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - idna==3.6

@@ -50,7 +50,7 @@ pub trait Cacheable: Sized {
 /// implement `Cacheable`.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
-pub struct SerdeCacheable<T> {
+pub(crate) struct SerdeCacheable<T> {
     inner: T,
 }
 
@@ -228,19 +228,16 @@ impl CachedClient {
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
-        let cached_response = match Self::read_cache(cache_entry).await {
-            Some(cached) => {
-                self.send_cached(req, cache_control, cached)
-                    .boxed_local()
-                    .await?
-            }
-            None => {
-                debug!("No cache entry for: {}", req.url());
-                let (response, cache_policy) = self.fresh_request(req).await?;
-                CachedResponse::ModifiedOrNew {
-                    response,
-                    cache_policy,
-                }
+        let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
+            self.send_cached(req, cache_control, cached)
+                .boxed_local()
+                .await?
+        } else {
+            debug!("No cache entry for: {}", req.url());
+            let (response, cache_policy) = self.fresh_request(req).await?;
+            CachedResponse::ModifiedOrNew {
+                response,
+                cache_policy,
             }
         };
         match cached_response {

@@ -18,7 +18,8 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, RequiresPython};
 use uv_toolchain::{
-    Interpreter, PythonEnvironment, SystemPython, Toolchain, ToolchainRequest, VersionRequest,
+    request_from_version_file, Interpreter, PythonEnvironment, SystemPython, Toolchain,
+    ToolchainRequest, VersionRequest,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -99,7 +100,7 @@ pub(crate) fn find_environment(
 /// Check if the given interpreter satisfies the project's requirements.
 pub(crate) fn interpreter_meets_requirements(
     interpreter: &Interpreter,
-    requested_python: Option<&str>,
+    requested_python: Option<&ToolchainRequest>,
     requires_python: Option<&RequiresPython>,
     cache: &Cache,
 ) -> bool {
@@ -108,8 +109,7 @@ pub(crate) fn interpreter_meets_requirements(
     // we'll fail at the build or at last the install step when we aren't able to install
     // the editable wheel for the current project into the venv.
     // TODO(konsti): Do we want to support a workspace python version requirement?
-    if let Some(python) = requested_python {
-        let request = ToolchainRequest::parse(python);
+    if let Some(request) = requested_python {
         if request.satisfied(interpreter, cache) {
             debug!("Interpreter meets the requested python {}", request);
             return true;
@@ -136,20 +136,36 @@ pub(crate) fn interpreter_meets_requirements(
 }
 
 /// Find the interpreter to use in the current project.
-pub(crate) fn find_interpreter(
+pub(crate) async fn find_interpreter(
     workspace: &Workspace,
-    python: Option<&str>,
+    python_request: Option<ToolchainRequest>,
+    connectivity: Connectivity,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<Interpreter, ProjectError> {
     let requires_python = find_requires_python(workspace)?;
+
+    // (1) Explicit request from user
+    let python_request = if let Some(request) = python_request {
+        Some(request)
+    // (2) Request from `.python-version`
+    } else if let Some(request) = request_from_version_file().await? {
+        Some(request)
+    // (3) `Requires-Python` in `pyproject.toml`
+    } else {
+        requires_python
+            .as_ref()
+            .map(RequiresPython::specifiers)
+            .map(|specifiers| ToolchainRequest::Version(VersionRequest::Range(specifiers.clone())))
+    };
 
     // Read from the virtual environment first
     match find_environment(workspace, cache) {
         Ok(venv) => {
             if interpreter_meets_requirements(
                 venv.interpreter(),
-                python,
+                python_request.as_ref(),
                 requires_python.as_ref(),
                 cache,
             ) {
@@ -160,34 +176,20 @@ pub(crate) fn find_interpreter(
         Err(e) => return Err(e.into()),
     };
 
-    // Otherwise, find a system interpreter to use
-    let interpreter = if let Some(request) = python.map(ToolchainRequest::parse).or(requires_python
-        .as_ref()
-        .map(RequiresPython::specifiers)
-        .map(|specifiers| ToolchainRequest::Version(VersionRequest::Range(specifiers.clone()))))
-    {
-        Toolchain::find_requested(
-            &request,
-            SystemPython::Required,
-            PreviewMode::Enabled,
-            cache,
-        )
-    } else {
-        Toolchain::find(None, SystemPython::Required, PreviewMode::Enabled, cache)
-    }?
-    .into_interpreter();
+    let client_builder = BaseClientBuilder::default()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
 
-    if let Some(requires_python) = requires_python.as_ref() {
-        if !requires_python.contains(interpreter.python_version()) {
-            warn_user!(
-                "The Python {} you requested with {} is incompatible with the requirement of the \
-                project of {}",
-                interpreter.python_version(),
-                python.unwrap_or("(default)"),
-                requires_python
-            );
-        }
-    }
+    // Locate the Python interpreter to use in the environment
+    let interpreter = Toolchain::find_or_fetch(
+        python_request,
+        SystemPython::Required,
+        PreviewMode::Enabled,
+        client_builder,
+        cache,
+    )
+    .await?
+    .into_interpreter();
 
     writeln!(
         printer.stderr(),
@@ -196,13 +198,25 @@ pub(crate) fn find_interpreter(
         interpreter.sys_executable().user_display().cyan()
     )?;
 
+    if let Some(requires_python) = requires_python.as_ref() {
+        if !requires_python.contains(interpreter.python_version()) {
+            warn_user!(
+                "The Python interpreter ({}) is incompatible with the project Python requirement {}",
+                interpreter.python_version(),
+                requires_python
+            );
+        }
+    }
+
     Ok(interpreter)
 }
 
 /// Initialize a virtual environment for the current project.
-pub(crate) fn init_environment(
+pub(crate) async fn init_environment(
     workspace: &Workspace,
-    python: Option<&str>,
+    python: Option<ToolchainRequest>,
+    connectivity: Connectivity,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
@@ -213,7 +227,7 @@ pub(crate) fn init_environment(
         Ok(venv) => {
             if interpreter_meets_requirements(
                 venv.interpreter(),
-                python,
+                python.as_ref(),
                 requires_python.as_ref(),
                 cache,
             ) {
@@ -234,7 +248,8 @@ pub(crate) fn init_environment(
     };
 
     // Find an interpreter to create the environment with
-    let interpreter = find_interpreter(workspace, python, cache, printer)?;
+    let interpreter =
+        find_interpreter(workspace, python, connectivity, native_tls, cache, printer).await?;
 
     let venv = workspace.venv();
     writeln!(

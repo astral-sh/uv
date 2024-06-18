@@ -24,7 +24,9 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
     ResolutionMode,
 };
-use uv_toolchain::{Prefix, PythonEnvironment, PythonVersion, SystemPython, Target, Toolchain};
+use uv_toolchain::{
+    Prefix, PythonEnvironment, PythonVersion, SystemPython, Target, Toolchain, ToolchainRequest,
+};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip::operations::Modifications;
@@ -115,7 +117,7 @@ pub(crate) async fn pip_sync(
         SystemPython::Explicit
     };
     let environment = PythonEnvironment::from_toolchain(Toolchain::find(
-        python.as_deref(),
+        python.as_deref().map(ToolchainRequest::parse),
         system,
         preview,
         &cache,

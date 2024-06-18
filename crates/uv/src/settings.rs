@@ -17,6 +17,7 @@ use uv_configuration::{
     Upgrade,
 };
 use uv_normalize::PackageName;
+use uv_requirements::RequirementsSource;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_settings::{
     Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
@@ -31,6 +32,7 @@ use crate::cli::{
     ResolverInstallerArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs,
     ToolchainListArgs, VenvArgs,
 };
+use crate::commands::pip::operations::Modifications;
 use crate::commands::ListFormat;
 
 /// The resolved global settings to use for any invocation of the CLI.
@@ -257,7 +259,7 @@ impl ToolchainListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolchainInstallSettings {
-    pub(crate) target: Option<String>,
+    pub(crate) targets: Vec<String>,
     pub(crate) force: bool,
 }
 
@@ -268,9 +270,9 @@ impl ToolchainInstallSettings {
         args: ToolchainInstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let ToolchainInstallArgs { target, force } = args;
+        let ToolchainInstallArgs { targets, force } = args;
 
-        Self { target, force }
+        Self { targets, force }
     }
 }
 
@@ -297,6 +299,7 @@ impl ToolchainFindSettings {
 pub(crate) struct SyncSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
+    pub(crate) modifications: Modifications,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: InstallerSettings,
@@ -312,11 +315,18 @@ impl SyncSettings {
             no_all_extras,
             dev,
             no_dev,
+            no_clean,
             installer,
             build,
             refresh,
             python,
         } = args;
+
+        let modifications = if no_clean {
+            Modifications::Sufficient
+        } else {
+            Modifications::Exact
+        };
 
         Self {
             extras: ExtrasSpecification::from_args(
@@ -324,6 +334,7 @@ impl SyncSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
+            modifications,
             python,
             refresh: Refresh::from(refresh),
             settings: InstallerSettings::combine(installer_options(installer, build), filesystem),
@@ -363,7 +374,8 @@ impl LockSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
-    pub(crate) requirements: Vec<String>,
+    pub(crate) requirements: Vec<RequirementsSource>,
+    pub(crate) workspace: bool,
     pub(crate) dev: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
@@ -377,14 +389,21 @@ impl AddSettings {
         let AddArgs {
             requirements,
             dev,
+            workspace,
             installer,
             build,
             refresh,
             python,
         } = args;
 
+        let requirements = requirements
+            .into_iter()
+            .map(RequirementsSource::Package)
+            .collect::<Vec<_>>();
+
         Self {
             requirements,
+            workspace,
             dev,
             python,
             refresh: Refresh::from(refresh),

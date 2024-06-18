@@ -135,7 +135,7 @@ impl ProgressReporter {
         state.sizes.insert(position, size.unwrap_or(0));
 
         let progress = multi_progress.insert(
-            // Make sure not to reorder the initial "Downloading..." bar, or any previous bars.
+            // Make sure not to reorder the initial "Preparing..." bar, or any previous bars.
             position + 1 + state.headers,
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
@@ -229,11 +229,11 @@ impl ProgressReporter {
 }
 
 #[derive(Debug)]
-pub(crate) struct DownloadReporter {
+pub(crate) struct PrepareReporter {
     reporter: ProgressReporter,
 }
 
-impl From<Printer> for DownloadReporter {
+impl From<Printer> for PrepareReporter {
     fn from(printer: Printer) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
         let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
@@ -243,14 +243,14 @@ impl From<Printer> for DownloadReporter {
                 .unwrap()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
-        root.set_message("Downloading packages...");
+        root.set_message("Preparing packages...");
 
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
 }
 
-impl DownloadReporter {
+impl PrepareReporter {
     #[must_use]
     pub(crate) fn with_length(self, length: u64) -> Self {
         self.reporter.root.set_length(length);
@@ -258,7 +258,7 @@ impl DownloadReporter {
     }
 }
 
-impl uv_installer::DownloadReporter for DownloadReporter {
+impl uv_installer::PrepareReporter for PrepareReporter {
     fn on_progress(&self, _dist: &CachedDist) {
         self.reporter.root.inc(1);
     }

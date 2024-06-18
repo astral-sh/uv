@@ -1,111 +1,19 @@
 #![cfg(feature = "python")]
 
-use std::process::Command;
-use std::{ffi::OsString, str::FromStr};
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
-use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-#[cfg(windows)]
-use uv_fs::Simplified;
-use uv_toolchain::PythonVersion;
 
-use crate::common::{get_bin, python_path_with_versions, uv_snapshot, TestContext, EXCLUDE_NEWER};
+use crate::common::{uv_snapshot, TestContext};
 
 mod common;
 
-struct VenvTestContext {
-    cache_dir: assert_fs::TempDir,
-    temp_dir: assert_fs::TempDir,
-    venv: ChildPath,
-    python_path: OsString,
-    python_versions: Vec<PythonVersion>,
-}
-
-impl VenvTestContext {
-    fn new(python_versions: &[&str]) -> Self {
-        let temp_dir = assert_fs::TempDir::new().unwrap();
-        let python_path = python_path_with_versions(&temp_dir, python_versions)
-            .expect("Failed to create Python test path");
-
-        // Canonicalize the virtual environment path for consistent snapshots across platforms
-        let venv = ChildPath::new(temp_dir.canonicalize().unwrap().join(".venv"));
-
-        let python_versions = python_versions
-            .iter()
-            .map(|version| {
-                PythonVersion::from_str(version).expect("Tests should use valid Python versions")
-            })
-            .collect::<Vec<_>>();
-        Self {
-            cache_dir: assert_fs::TempDir::new().unwrap(),
-            temp_dir,
-            venv,
-            python_path,
-            python_versions,
-        }
-    }
-
-    fn venv_command(&self) -> Command {
-        let mut command = Command::new(get_bin());
-        command
-            .arg("venv")
-            .arg("--cache-dir")
-            .arg(self.cache_dir.path())
-            .arg("--exclude-newer")
-            .arg(EXCLUDE_NEWER)
-            .env("UV_TEST_PYTHON_PATH", self.python_path.clone())
-            .env("UV_NO_WRAP", "1")
-            .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
-            .current_dir(self.temp_dir.as_os_str());
-        command
-    }
-
-    fn filters(&self) -> Vec<(String, String)> {
-        let mut filters = Vec::new();
-        filters.extend(
-            TestContext::path_patterns(&self.temp_dir)
-                .into_iter()
-                .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
-        );
-        filters.push((
-            r"interpreter at: .+".to_string(),
-            "interpreter at: [PATH]".to_string(),
-        ));
-        filters.push((
-            r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
-            "Activate with: source .venv/bin/activate".to_string(),
-        ));
-
-        // Add Python patch version filtering unless one was explicitly requested to ensure
-        // snapshots are patch version agnostic when it is not a part of the test.
-        if self
-            .python_versions
-            .iter()
-            .all(|version| version.patch().is_none())
-        {
-            for python_version in &self.python_versions {
-                filters.push((
-                    format!(
-                        r"({})\.\d+",
-                        regex::escape(python_version.to_string().as_str())
-                    ),
-                    "$1.[X]".to_string(),
-                ));
-            }
-        }
-
-        filters
-    }
-}
-
 #[test]
 fn create_venv() {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a virtual environment at `.venv`.
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r###"
@@ -114,7 +22,7 @@ fn create_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -123,7 +31,7 @@ fn create_venv() {
     context.venv.assert(predicates::path::is_dir());
 
     // Create a virtual environment at the same location, which should replace it.
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r###"
@@ -132,7 +40,7 @@ fn create_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -143,8 +51,8 @@ fn create_venv() {
 
 #[test]
 fn create_venv_defaults_to_cwd() {
-    let context = VenvTestContext::new(&["3.12"]);
-    uv_snapshot!(context.filters(), context.venv_command()
+    let context = TestContext::new_with_versions(&["3.12"]);
+    uv_snapshot!(context.filters(), context.venv()
         .arg("--python")
         .arg("3.12"), @r###"
     success: true
@@ -152,7 +60,7 @@ fn create_venv_defaults_to_cwd() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -163,17 +71,17 @@ fn create_venv_defaults_to_cwd() {
 
 #[test]
 fn create_venv_ignores_virtual_env_variable() {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
     // We shouldn't care if `VIRTUAL_ENV` is set to an non-existent directory
     // because we ignore virtual environment interpreter sources (we require a system interpreter)
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .env("VIRTUAL_ENV", context.temp_dir.child("does-not-exist").as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -181,9 +89,117 @@ fn create_venv_ignores_virtual_env_variable() {
 }
 
 #[test]
+fn create_venv_reads_request_from_python_version_file() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Without the file, we should use the first on the PATH
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With a version file, we should prefer that version
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_reads_request_from_python_versions_file() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Without the file, we should use the first on the PATH
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With a versions file, we should prefer the first listed version
+    context
+        .temp_dir
+        .child(".python-versions")
+        .write_str("3.12\n3.11")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_explicit_request_takes_priority_over_python_version_file() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview").arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
 fn seed() {
-    let context = VenvTestContext::new(&["3.12"]);
-    uv_snapshot!(context.filters(), context.venv_command()
+    let context = TestContext::new_with_versions(&["3.12"]);
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
@@ -193,7 +209,7 @@ fn seed() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
      + pip==24.0
     Activate with: source .venv/bin/activate
@@ -205,8 +221,8 @@ fn seed() {
 
 #[test]
 fn seed_older_python_version() {
-    let context = VenvTestContext::new(&["3.10"]);
-    uv_snapshot!(context.filters(), context.venv_command()
+    let context = TestContext::new_with_versions(&["3.10"]);
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
@@ -216,7 +232,7 @@ fn seed_older_python_version() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.10.[X] interpreter at: [PATH]
+    Using Python 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtualenv at: .venv
      + pip==24.0
      + setuptools==69.2.0
@@ -230,9 +246,9 @@ fn seed_older_python_version() {
 
 #[test]
 fn create_venv_unknown_python_minor() {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
-    let mut command = context.venv_command();
+    let mut command = context.venv();
     command
         .arg(context.venv.as_os_str())
         // Request a version we know we'll never see
@@ -268,9 +284,9 @@ fn create_venv_unknown_python_minor() {
 
 #[test]
 fn create_venv_unknown_python_patch() {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
-    let mut command = context.venv_command();
+    let mut command = context.venv();
     command
         .arg(context.venv.as_os_str())
         // Request a version we know we'll never see
@@ -307,9 +323,9 @@ fn create_venv_unknown_python_patch() {
 #[cfg(feature = "python-patch")]
 #[test]
 fn create_venv_python_patch() {
-    let context = VenvTestContext::new(&["3.12.1"]);
+    let context = TestContext::new_with_versions(&["3.12.1"]);
 
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12.1"), @r###"
@@ -318,7 +334,7 @@ fn create_venv_python_patch() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PYTHON-3.12.1]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -329,12 +345,12 @@ fn create_venv_python_patch() {
 
 #[test]
 fn file_exists() -> Result<()> {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a file at `.venv`. Creating a virtualenv at the same path should fail.
     context.venv.touch()?;
 
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r###"
@@ -343,7 +359,7 @@ fn file_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     uv::venv::creation
 
@@ -357,11 +373,11 @@ fn file_exists() -> Result<()> {
 
 #[test]
 fn empty_dir_exists() -> Result<()> {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create an empty directory at `.venv`. Creating a virtualenv at the same path should succeed.
     context.venv.create_dir_all()?;
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r###"
@@ -370,7 +386,7 @@ fn empty_dir_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -383,13 +399,13 @@ fn empty_dir_exists() -> Result<()> {
 
 #[test]
 fn non_empty_dir_exists() -> Result<()> {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should fail.
     context.venv.create_dir_all()?;
     context.venv.child("file").touch()?;
 
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r###"
@@ -398,7 +414,7 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     uv::venv::creation
 
@@ -412,14 +428,14 @@ fn non_empty_dir_exists() -> Result<()> {
 
 #[test]
 fn non_empty_dir_exists_allow_existing() -> Result<()> {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should
     // succeed when `--allow-existing` is specified, but fail when it is not.
     context.venv.create_dir_all()?;
     context.venv.child("file").touch()?;
 
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r###"
@@ -428,7 +444,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     uv::venv::creation
 
@@ -437,7 +453,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--allow-existing")
         .arg("--python")
@@ -447,7 +463,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -455,7 +471,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 
     // Running again should _also_ succeed, overwriting existing symlinks and respecting existing
     // directories.
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--allow-existing")
         .arg("--python")
@@ -465,7 +481,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -477,37 +493,37 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn windows_shims() -> Result<()> {
-    let context = VenvTestContext::new(&["3.9", "3.8"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.8"]);
     let shim_path = context.temp_dir.child("shim");
 
-    let py38 = std::env::split_paths(&context.python_path)
+    let py38 = context
+        .python_versions
         .last()
         .expect("python_path_with_versions to set up the python versions");
+
     // We want 3.8 and the first version should be 3.9.
     // Picking the last is necessary to prove that shims work because the python version selects
     // the python version from the first path segment by default, so we take the last to prove it's not
     // returning that version.
-    assert!(py38.to_str().unwrap().contains("3.8"));
+    assert!(py38.0.to_string().contains("3.8"));
 
     // Write the shim script that forwards the arguments to the python3.8 installation.
     fs_err::create_dir(&shim_path)?;
     fs_err::write(
         shim_path.child("python.bat"),
-        format!("@echo off\r\n{}/python.exe %*", py38.display()),
+        format!("@echo off\r\n{}/python.exe %*", py38.1.display()),
     )?;
 
-    // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
-    uv_snapshot!(context.filters(), context.venv_command()
+    // Create a virtual environment at `.venv` with the shim
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
-        .arg("--clear")
-        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.python_path.simplified_display())), @r###"
+        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.python_path().to_string_lossy())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
-    Using Python 3.8.[X] interpreter at: [PATH]
+    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -520,10 +536,10 @@ fn windows_shims() -> Result<()> {
 
 #[test]
 fn virtualenv_compatibility() {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
-    uv_snapshot!(context.filters(), context.venv_command()
+    uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--clear")
         .arg("--python")
@@ -534,7 +550,7 @@ fn virtualenv_compatibility() {
 
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
-    Using Python 3.12.[X] interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -546,10 +562,9 @@ fn virtualenv_compatibility() {
 #[test]
 fn verify_pyvenv_cfg() {
     let context = TestContext::new("3.12");
-    let venv = context.temp_dir.child(".venv");
-    let pyvenv_cfg = venv.child("pyvenv.cfg");
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
 
-    venv.assert(predicates::path::is_dir());
+    context.venv.assert(predicates::path::is_dir());
 
     // Check pyvenv.cfg exists
     pyvenv_cfg.assert(predicates::path::is_file());
@@ -563,11 +578,11 @@ fn verify_pyvenv_cfg() {
 /// Ensure that a nested virtual environment uses the same `home` directory as the parent.
 #[test]
 fn verify_nested_pyvenv_cfg() -> Result<()> {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a virtual environment at `.venv`.
     context
-        .venv_command()
+        .venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
@@ -589,7 +604,7 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
     // Now, create a virtual environment from within the virtual environment.
     let subvenv = context.temp_dir.child(".subvenv");
     context
-        .venv_command()
+        .venv()
         .arg(subvenv.as_os_str())
         .arg("--python")
         .arg("3.12")
@@ -616,29 +631,19 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn path_with_trailing_space_gives_proper_error() {
-    let context = VenvTestContext::new(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
-    let mut filters = context.filters();
-    filters.push((
-        regex::escape(&context.cache_dir.path().display().to_string()).to_string(),
-        r"C:\Path\to\Cache\dir".to_string(),
-    ));
-    // Create a virtual environment at `.venv`.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(context.venv.as_os_str())
-        .arg("--python")
-        .arg("3.12")
-        .env("UV_CACHE_DIR", format!("{} ", context.cache_dir.path().display()))
-        .env("UV_TEST_PYTHON_PATH", context.python_path.clone())
-        .current_dir(context.temp_dir.path()), @r###"
+    // Set a custom cache directory with a trailing space
+    uv_snapshot!(context.filters(), context.venv()
+        .env("UV_CACHE_DIR", format!("{} ", context.cache_dir.path().display())), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `C:\Path\to\Cache\dir \CACHEDIR.TAG`
+    error: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`
       Caused by: The system cannot find the path specified. (os error 3)
     "###
     );
+    // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.
 }

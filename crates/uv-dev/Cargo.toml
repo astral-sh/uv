@@ -27,7 +27,6 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true, features = ["schemars"] }
-uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-resolver = { workspace = true }
@@ -41,7 +40,6 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
-futures = { workspace = true }
 owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.0" }

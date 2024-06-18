@@ -3,6 +3,9 @@ name = "uv-auth"
 version = "0.0.1"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }

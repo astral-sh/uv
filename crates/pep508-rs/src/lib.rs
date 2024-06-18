@@ -35,7 +35,6 @@ use pyo3::{
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
-use unicode_width::UnicodeWidthChar;
 use url::Url;
 
 use cursor::Cursor;
@@ -95,7 +94,7 @@ impl<T: Pep508Url> Display for Pep508Error<T> {
         // We can use char indices here since it's a Vec<char>
         let start_offset = self.input[..self.start]
             .chars()
-            .flat_map(|c| c.width())
+            .filter_map(unicode_width::UnicodeWidthChar::width)
             .sum::<usize>();
         let underline_len = if self.start == self.input.len() {
             // We also allow 0 here for convenience
@@ -108,7 +107,7 @@ impl<T: Pep508Url> Display for Pep508Error<T> {
         } else {
             self.input[self.start..self.start + self.len]
                 .chars()
-                .flat_map(|c| c.width())
+                .filter_map(unicode_width::UnicodeWidthChar::width)
                 .sum::<usize>()
         };
         write!(
@@ -247,7 +246,7 @@ impl PyRequirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     #[getter]
     pub fn marker(&self) -> Option<String> {
-        self.marker.as_ref().map(std::string::ToString::to_string)
+        self.marker.as_ref().map(ToString::to_string)
     }
 
     /// Parses a PEP 440 string
@@ -405,6 +404,7 @@ impl<T: Pep508Url> Requirement<T> {
     ///
     /// For example, given `flask >= 2.0.2`, calling `with_extra_marker("dotenv")` would return
     /// `flask >= 2.0.2 ; extra == "dotenv"`.
+    #[must_use]
     pub fn with_extra_marker(self, extra: &ExtraName) -> Self {
         let marker = match self.marker {
             Some(expression) => MarkerTree::And(vec![
@@ -463,7 +463,7 @@ where
     F: FnMut(MarkerWarningKind, String),
 {
     fn report(&mut self, kind: MarkerWarningKind, warning: String) {
-        (self)(kind, warning)
+        (self)(kind, warning);
     }
 }
 
@@ -471,10 +471,11 @@ where
 pub struct TracingReporter;
 
 impl Reporter for TracingReporter {
-    fn report(&mut self, _kind: MarkerWarningKind, _message: String) {
+    #[allow(unused_variables)]
+    fn report(&mut self, _kind: MarkerWarningKind, message: String) {
         #[cfg(feature = "tracing")]
         {
-            tracing::warn!("{}", _message);
+            tracing::warn!("{message}");
         }
     }
 }

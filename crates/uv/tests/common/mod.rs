@@ -5,6 +5,7 @@ use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild};
+use predicates::prelude::predicate;
 use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
@@ -18,7 +19,7 @@ use uv_configuration::PreviewMode;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_toolchain::managed::InstalledToolchains;
-use uv_toolchain::{PythonVersion, Toolchain};
+use uv_toolchain::{PythonVersion, Toolchain, ToolchainRequest};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -26,7 +27,7 @@ pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub const BUILD_VENDOR_LINKS_URL: &str =
-    "https://raw.githubusercontent.com/astral-sh/packse/0.3.24/vendor/links.html";
+    "https://raw.githubusercontent.com/astral-sh/packse/0.3.27/vendor/links.html";
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
@@ -53,24 +54,55 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 /// * Set the current directory to a temporary directory (`temp_dir`).
 /// * Set the cache dir to a different temporary directory (`cache_dir`).
 /// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
-/// * Set the venv to a fresh `.venv` in `temp_dir`.
-#[derive(Debug)]
+/// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
     pub temp_dir: assert_fs::TempDir,
     pub cache_dir: assert_fs::TempDir,
-    pub venv: PathBuf,
-    pub python_version: String,
+    pub venv: ChildPath,
     pub workspace_root: PathBuf,
+
+    /// The Python version used for the virtual environment, if any.
+    pub python_version: Option<PythonVersion>,
+
+    // All the Python versions available during this test context.
+    pub python_versions: Vec<(PythonVersion, PathBuf)>,
 
     // Standard filters for this test context
     filters: Vec<(String, String)>,
 }
 
 impl TestContext {
+    /// Create a new test context with a virtual environment.
+    ///
+    /// See [`TestContext::new_with_versions`] if multiple versions are needed or
+    /// if creation of the virtual environment should be deferred.
     pub fn new(python_version: &str) -> Self {
+        let new = Self::new_with_versions(&[python_version]);
+        new.create_venv();
+        new
+    }
+
+    /// Create a new test context with multiple Python versions.
+    ///
+    /// Does not create a virtual environment by default, but the first Python version
+    /// can be used to create a virtual environment with [`TestContext::create_venv`].
+    ///
+    /// See [`TestContext::new`] if only a single version is desired.
+    pub fn new_with_versions(python_versions: &[&str]) -> Self {
         let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
         let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
-        let venv = create_venv(&temp_dir, &cache_dir, python_version);
+
+        // Canonicalize the temp dir for consistent snapshot behavior
+        let canonical_temp_dir = temp_dir.canonicalize().unwrap();
+        let venv = ChildPath::new(canonical_temp_dir.join(".venv"));
+
+        let python_version = python_versions
+            .first()
+            .map(|version| PythonVersion::from_str(version).unwrap());
+
+        let site_packages = python_version
+            .as_ref()
+            .map(|version| site_packages_path(&venv, &format!("python{version}")));
 
         // The workspace root directory is not available without walking up the tree
         // https://github.com/rust-lang/cargo/issues/3946
@@ -81,27 +113,51 @@ impl TestContext {
             .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
             .to_path_buf();
 
-        let site_packages = site_packages_path(&venv, &format!("python{python_version}"));
-
-        let python_version =
-            PythonVersion::from_str(python_version).expect("Tests must use valid Python versions");
+        let python_versions: Vec<_> = python_versions
+            .iter()
+            .map(|version| PythonVersion::from_str(version).unwrap())
+            .zip(
+                python_toolchains_for_versions(&temp_dir, python_versions)
+                    .expect("Failed to find test Python versions"),
+            )
+            .collect();
 
         let mut filters = Vec::new();
+
         filters.extend(
             Self::path_patterns(&cache_dir)
                 .into_iter()
                 .map(|pattern| (pattern, "[CACHE_DIR]/".to_string())),
         );
-        filters.extend(
-            Self::path_patterns(&site_packages)
-                .into_iter()
-                .map(|pattern| (pattern, "[SITE_PACKAGES]/".to_string())),
-        );
+        if let Some(ref site_packages) = site_packages {
+            filters.extend(
+                Self::path_patterns(site_packages)
+                    .into_iter()
+                    .map(|pattern| (pattern, "[SITE_PACKAGES]/".to_string())),
+            );
+        }
         filters.extend(
             Self::path_patterns(&venv)
                 .into_iter()
                 .map(|pattern| (pattern, "[VENV]/".to_string())),
         );
+        for (version, executable) in &python_versions {
+            // Add filtering for the interpreter path
+            filters.extend(
+                Self::path_patterns(executable)
+                    .into_iter()
+                    .map(|pattern| (format!("{pattern}python.*"), format!("[PYTHON-{version}]"))),
+            );
+
+            // Add Python patch version filtering unless explicitly requested to ensure
+            // snapshots are patch version agnostic when it is not a part of the test.
+            if version.patch().is_none() {
+                filters.push((
+                    format!(r"({})\.\d+", regex::escape(version.to_string().as_str())),
+                    "$1.[X]".to_string(),
+                ));
+            }
+        }
         filters.extend(
             Self::path_patterns(&temp_dir)
                 .into_iter()
@@ -113,22 +169,23 @@ impl TestContext {
                 .map(|pattern| (pattern, "[WORKSPACE]/".to_string())),
         );
 
+        // Make virtual environment activation cross-platform
+        filters.push((
+            r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
+            "Activate with: source .venv/bin/activate".to_string(),
+        ));
+
         // Account for [`Simplified::user_display`] which is relative to the command working directory
-        filters.push((
-            Self::path_pattern(
-                site_packages
-                    .strip_prefix(&temp_dir)
-                    .expect("The test site-packages directory is always in the tempdir"),
-            ),
-            "[SITE_PACKAGES]/".to_string(),
-        ));
-        filters.push((
-            Self::path_pattern(
-                venv.strip_prefix(&temp_dir)
-                    .expect("The test virtual environment directory is always in the tempdir"),
-            ),
-            "[VENV]/".to_string(),
-        ));
+        if let Some(site_packages) = site_packages {
+            filters.push((
+                Self::path_pattern(
+                    site_packages
+                        .strip_prefix(&canonical_temp_dir)
+                        .expect("The test site-packages directory is always in the tempdir"),
+                ),
+                "[SITE_PACKAGES]/".to_string(),
+            ));
+        };
 
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching
@@ -140,25 +197,14 @@ impl TestContext {
         // Destroy any remaining UNC prefixes (Windows only)
         filters.push((r"\\\\\?\\".to_string(), String::new()));
 
-        // Add Python patch version filtering unless explicitly requested to ensure
-        // snapshots are patch version agnostic when it is not a part of the test.
-        if python_version.patch().is_none() {
-            filters.push((
-                format!(
-                    r"({})\.\d+",
-                    regex::escape(python_version.to_string().as_str())
-                ),
-                "$1.[X]".to_string(),
-            ));
-        }
-
         Self {
             temp_dir,
             cache_dir,
             venv,
-            python_version: python_version.to_string(),
-            filters,
             workspace_root,
+            python_version,
+            python_versions,
+            filters,
         }
     }
 
@@ -183,7 +229,8 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
-            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(self.temp_dir.path());
 
         if cfg!(all(windows, debug_assertions)) {
@@ -193,6 +240,22 @@ impl TestContext {
         }
 
         cmd
+    }
+
+    /// Create a `uv venv` command
+    pub fn venv(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("venv")
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("UV_CACHE_DIR", self.cache_dir.path())
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
+            .env("UV_NO_WRAP", "1")
+            .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
+            .current_dir(self.temp_dir.as_os_str());
+        command
     }
 
     /// Create a `pip install` command with options shared across scenarios.
@@ -217,7 +280,8 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
-            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -237,9 +301,9 @@ impl TestContext {
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
-            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_NO_WRAP", "1")
-            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -257,7 +321,8 @@ impl TestContext {
         command
             .arg("--exclude-newer")
             .arg(EXCLUDE_NEWER)
-            .env("UV_TEST_PYTHON_PATH", "/dev/null");
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path());
         command
     }
 
@@ -275,7 +340,8 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
-            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -285,10 +351,6 @@ impl TestContext {
         }
 
         command
-    }
-
-    pub fn toolchains_dir(&self) -> ChildPath {
-        self.temp_dir.child("toolchains")
     }
 
     /// Create a `uv toolchain find` command with options shared across scenarios.
@@ -301,9 +363,10 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
-            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .env("UV_PREVIEW", "1")
-            .env("UV_TOOLCHAIN_DIR", self.toolchains_dir().as_os_str())
+            .env("UV_TOOLCHAIN_DIR", "")
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -336,7 +399,8 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
-            .env("UV_TEST_PYTHON_PATH", "/dev/null")
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -457,6 +521,10 @@ impl TestContext {
         )
     }
 
+    pub fn python_path(&self) -> OsString {
+        std::env::join_paths(self.python_versions.iter().map(|(_, path)| path)).unwrap()
+    }
+
     /// Standard snapshot filters _plus_ those for this test context.
     pub fn filters(&self) -> Vec<(&str, &str)> {
         // Put test context snapshots before the default filters
@@ -478,8 +546,29 @@ impl TestContext {
     pub fn site_packages(&self) -> PathBuf {
         site_packages_path(
             &self.venv,
-            &format!("{}{}", self.python_kind(), self.python_version),
+            &format!(
+                "{}{}",
+                self.python_kind(),
+                self.python_version.as_ref().expect(
+                    "A Python version must be provided to retrieve the test site packages path"
+                )
+            ),
         )
+    }
+
+    /// Reset the virtual environment in the test context.
+    pub fn reset_venv(&self) {
+        self.create_venv();
+    }
+
+    /// Create a new virtual environment named `.venv` in the test context.
+    fn create_venv(&self) {
+        let executable = get_toolchain(
+            self.python_version
+                .as_ref()
+                .expect("A Python version must be provided to create a test virtual environment"),
+        );
+        create_venv_from_executable(&self.venv, &self.cache_dir, &executable);
     }
 }
 
@@ -493,11 +582,11 @@ pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
     }
 }
 
-pub fn venv_bin_path(venv: &Path) -> PathBuf {
+pub fn venv_bin_path(venv: impl AsRef<Path>) -> PathBuf {
     if cfg!(unix) {
-        venv.join("bin")
+        venv.as_ref().join("bin")
     } else if cfg!(windows) {
-        venv.join("Scripts")
+        venv.as_ref().join("Scripts")
     } else {
         unimplemented!("Only Windows and Unix are supported")
     }
@@ -514,14 +603,11 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
 }
 
 /// Get the path to the python interpreter for a specific toolchain version.
-pub fn get_toolchain(python: &str) -> PathBuf {
+pub fn get_toolchain(version: &PythonVersion) -> PathBuf {
     InstalledToolchains::from_settings()
         .map(|installed_toolchains| {
             installed_toolchains
-                .find_version(
-                    &PythonVersion::from_str(python)
-                        .expect("Tests should use a valid Python version"),
-                )
+                .find_version(version)
                 .expect("Tests are run on a supported platform")
                 .next()
                 .as_ref()
@@ -530,31 +616,26 @@ pub fn get_toolchain(python: &str) -> PathBuf {
         // We'll search for the request Python on the PATH if not found in the toolchain versions
         // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
         .unwrap_or_default()
-        .unwrap_or(PathBuf::from(python))
+        .unwrap_or(PathBuf::from(version.to_string()))
 }
 
-/// Create a virtual environment named `.venv` in a temporary directory with the given
-/// Python version. Expected format for `python` is "<version>".
-pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
-    temp_dir: &Parent,
+/// Create a virtual environment at the given path.
+pub fn create_venv_from_executable<P: AsRef<std::path::Path>>(
+    path: P,
     cache_dir: &assert_fs::TempDir,
-    python: &str,
-) -> PathBuf {
-    let python = get_toolchain(python);
-
-    let venv = temp_dir.child(".venv");
+    python: &Path,
+) {
     Command::new(get_bin())
         .arg("venv")
-        .arg(venv.as_os_str())
+        .arg(path.as_ref().as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--python")
         .arg(python)
-        .current_dir(temp_dir)
+        .current_dir(path.as_ref().parent().unwrap())
         .assert()
         .success();
-    venv.assert(predicates::path::is_dir());
-    venv.to_path_buf()
+    ChildPath::new(path.as_ref()).assert(predicate::path::is_dir());
 }
 
 /// Returns the uv binary that cargo built before launching the tests.
@@ -571,6 +652,19 @@ pub fn python_path_with_versions(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
+    Ok(std::env::join_paths(python_toolchains_for_versions(
+        temp_dir,
+        python_versions,
+    )?)?)
+}
+
+/// Create a `PATH` with the requested Python versions available in order.
+///
+/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+pub fn python_toolchains_for_versions(
+    temp_dir: &assert_fs::TempDir,
+    python_versions: &[&str],
+) -> anyhow::Result<Vec<PathBuf>> {
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;
     let selected_pythons = python_versions
         .iter()
@@ -596,7 +690,7 @@ pub fn python_path_with_versions(
             if inner.is_empty() {
                 // Fallback to a system lookup if we failed to find one in the toolchain directory
                 if let Ok(toolchain) = Toolchain::find(
-                    Some(python_version),
+                    Some(ToolchainRequest::parse(python_version)),
                     // Without required, we could pick the current venv here and the test fails
                     // because the venv subcommand requires a system interpreter.
                     uv_toolchain::SystemPython::Required,
@@ -623,7 +717,7 @@ pub fn python_path_with_versions(
         "Failed to fulfill requested test Python versions: {selected_pythons:?}"
     );
 
-    Ok(env::join_paths(selected_pythons)?)
+    Ok(selected_pythons)
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -706,10 +800,10 @@ pub fn run_and_format<T: AsRef<str>>(
                 for i in 1..20 {
                     for verb in match windows_filters {
                         WindowsFilters::Platform => {
-                            ["Resolved", "Downloaded", "Installed", "Uninstalled"].iter()
+                            ["Resolved", "Prepared", "Installed", "Uninstalled"].iter()
                         }
                         WindowsFilters::Universal => {
-                            ["Downloaded", "Installed", "Uninstalled"].iter()
+                            ["Prepared", "Installed", "Uninstalled"].iter()
                         }
                     } {
                         snapshot = snapshot.replace(

@@ -135,7 +135,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run -p uv-dev -- fetch-python
+          cargo run toolchain install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -168,7 +168,7 @@ jobs:
     steps:
       - name: Create Dev Drive using ReFS
         run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 12GB |
                     Mount-VHD -Passthru |
                     Initialize-Disk -Passthru |
                     New-Partition -AssignDriveLetter -UseMaximumSize |

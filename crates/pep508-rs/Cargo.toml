@@ -16,13 +16,13 @@ authors = { workspace = true }
 name = "pep508_rs"
 crate-type = ["cdylib", "rlib"]
 
-[dependencies]
-pep440_rs = { workspace = true }
-uv-fs = { workspace = true }
-uv-normalize = { workspace = true }
+[lints]
+workspace = true
 
+[dependencies]
 derivative = { workspace = true }
 once_cell = { workspace = true }
+pep440_rs = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }
 regex = { workspace = true }
@@ -32,6 +32,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 url = { workspace = true, features = ["serde"] }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.36.1" }

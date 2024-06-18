@@ -108,7 +108,7 @@ fn test_albatross_in_examples_bird_feeder() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-in-example/examples/bird-feeder)
@@ -143,7 +143,7 @@ fn test_albatross_in_examples() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-in-example)
      + tqdm==4.66.2
@@ -176,7 +176,7 @@ fn test_albatross_just_project() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-just-project)
      + tqdm==4.66.2
@@ -212,7 +212,7 @@ fn test_albatross_project_in_excluded() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/excluded/bird-feeder)
@@ -247,7 +247,7 @@ fn test_albatross_root_workspace() {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace)
      + anyio==4.3.0
@@ -288,7 +288,7 @@ fn test_albatross_root_workspace_bird_feeder() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
@@ -327,7 +327,7 @@ fn test_albatross_root_workspace_albatross() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
@@ -366,7 +366,7 @@ fn test_albatross_virtual_workspace() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-virtual-workspace/packages/bird-feeder)
@@ -419,9 +419,9 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/bird-feeder)
@@ -443,7 +443,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
      + tqdm==4.66.2
@@ -479,9 +479,9 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
@@ -503,7 +503,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
      + tqdm==4.66.2

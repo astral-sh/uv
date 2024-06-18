@@ -16,7 +16,7 @@ use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
-use uv_toolchain::PythonEnvironment;
+use uv_toolchain::{PythonEnvironment, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -31,6 +31,7 @@ use crate::settings::InstallerSettings;
 pub(crate) async fn sync(
     extras: ExtrasSpecification,
     dev: bool,
+    modifications: Modifications,
     python: Option<String>,
     settings: InstallerSettings,
     preview: PreviewMode,
@@ -48,7 +49,15 @@ pub(crate) async fn sync(
     let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
+    let venv = project::init_environment(
+        project.workspace(),
+        python.as_deref().map(ToolchainRequest::parse),
+        connectivity,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?;
 
     // Read the lockfile.
     let lock: Lock = {
@@ -65,6 +74,7 @@ pub(crate) async fn sync(
         &lock,
         extras,
         dev,
+        modifications,
         &settings.reinstall,
         &settings.index_locations,
         &settings.index_strategy,
@@ -94,6 +104,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: ExtrasSpecification,
     dev: bool,
+    modifications: Modifications,
     reinstall: &Reinstall,
     index_locations: &IndexLocations,
     index_strategy: &IndexStrategy,
@@ -188,7 +199,7 @@ pub(super) async fn do_sync(
     pip::operations::install(
         &resolution,
         site_packages,
-        Modifications::Sufficient,
+        modifications,
         reinstall,
         build_options,
         *link_mode,

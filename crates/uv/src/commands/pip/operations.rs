@@ -27,7 +27,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
-use uv_installer::{Downloader, Plan, Planner, SitePackages};
+use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
@@ -41,7 +41,7 @@ use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
+use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, DryRunEvent};
 use crate::printer::Printer;
 
@@ -375,25 +375,25 @@ pub(crate) async fn install(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(
+        let preparer = Preparer::new(
             cache,
             tags,
             hasher,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
         )
-        .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
+        .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
 
-        let wheels = downloader
-            .download(remote.clone(), in_flight)
+        let wheels = preparer
+            .prepare(remote.clone(), in_flight)
             .await
-            .context("Failed to download distributions")?;
+            .context("Failed to prepare distributions")?;
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
             "{}",
             format!(
-                "Downloaded {} in {}",
+                "Prepared {} in {}",
                 format!("{} package{}", wheels.len(), s).bold(),
                 elapsed(start.elapsed())
             )

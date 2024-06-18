@@ -671,6 +671,7 @@ async fn run() -> Result<ExitStatus> {
             commands::sync(
                 args.extras,
                 args.dev,
+                args.modifications,
                 args.python,
                 args.settings,
                 globals.preview,
@@ -710,14 +711,9 @@ async fn run() -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
 
-            let requirements = args
-                .requirements
-                .into_iter()
-                .map(RequirementsSource::Package)
-                .collect::<Vec<_>>();
-
             commands::add(
-                requirements,
+                args.requirements,
+                args.workspace,
                 args.dev,
                 args.python,
                 args.settings,
@@ -821,7 +817,7 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::toolchain_install(
-                args.target,
+                args.targets,
                 args.force,
                 globals.native_tls,
                 globals.connectivity,

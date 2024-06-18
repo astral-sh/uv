@@ -32,7 +32,7 @@ pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
     native_tls: bool,
     retries: u32,
-    connectivity: Connectivity,
+    pub connectivity: Connectivity,
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
@@ -113,7 +113,7 @@ impl<'a> BaseClientBuilder<'a> {
         if let Some(markers) = self.markers {
             let linehaul = LineHaul::new(markers, self.platform);
             if let Ok(output) = serde_json::to_string(&linehaul) {
-                user_agent_string += &format!(" {}", output);
+                user_agent_string += &format!(" {output}");
             }
         }
 
@@ -267,7 +267,7 @@ impl RetryableStrategy for LoggingRetryableStrategy {
                         .join("\n");
                     debug!(
                         "Transient request failure for {}, retrying: {err}\n{context}",
-                        err.url().map(|url| url.as_str()).unwrap_or("unknown URL")
+                        err.url().map(reqwest::Url::as_str).unwrap_or("unknown URL")
                     );
                 }
             }
