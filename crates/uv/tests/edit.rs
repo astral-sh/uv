@@ -502,7 +502,7 @@ fn add_remove_dev() -> Result<()> {
 
     ----- stderr -----
     warning: `uv remove` is experimental and may change without warning.
-    warning: `anyio` is a development dependency; try calling `uv add --dev`
+    warning: `anyio` is a development dependency; try calling `uv remove --dev`
     error: The dependency `anyio` could not be found in `dependencies`
     "###);
 
@@ -619,8 +619,8 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: /usr/bin/python3
-    Creating virtualenv at: [TEMP_DIR]/root/[VENV]/
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: [TEMP_DIR]/root/.venv
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]

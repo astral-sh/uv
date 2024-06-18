@@ -46,7 +46,7 @@ pub(crate) async fn remove(
                     .filter(|deps| !deps.is_empty())
                     .is_some()
                 {
-                    uv_warnings::warn_user!("`{req}` is not a development dependency; try calling `uv add` without the `--dev` flag");
+                    uv_warnings::warn_user!("`{req}` is not a development dependency; try calling `uv remove` without the `--dev` flag");
                 }
 
                 anyhow::bail!("The dependency `{req}` could not be found in `dev-dependencies`");
@@ -65,7 +65,7 @@ pub(crate) async fn remove(
                 .is_some()
             {
                 uv_warnings::warn_user!(
-                    "`{req}` is a development dependency; try calling `uv add --dev`"
+                    "`{req}` is a development dependency; try calling `uv remove --dev`"
                 );
             }
 
