@@ -22,7 +22,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
     workspace: bool,
@@ -140,7 +140,7 @@ pub(crate) async fn add(
 
     // Add the requirements to the `pyproject.toml`.
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
-    for req in requirements.into_iter() {
+    for req in requirements {
         let (req, source) = if raw {
             // Use the PEP 508 requirement directly.
             (pep508_rs::Requirement::from(req), None)
