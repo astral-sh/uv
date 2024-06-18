@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.13
+
+### Preview features
+
+- Add `--workspace` option to `uv add` ([#4362](https://github.com/astral-sh/uv/pull/4362))
+- Ignore query errors during `uv toolchain list` ([#4382](https://github.com/astral-sh/uv/pull/4382))
+- Respect `.python-version` files and fetch manged toolchains in uv project commands ([#4361](https://github.com/astral-sh/uv/pull/4361))
+- Respect `.python-version` in `uv venv --preview` ([#4360](https://github.com/astral-sh/uv/pull/4360))
+
 ## 0.2.12
 
 ### Preview features
@@ -117,6 +126,7 @@
 
 <!-- No changes -->
 
+
 ## 0.2.3
 
 ### Preview features
@@ -126,6 +136,7 @@
 ## 0.2.2
 
 <!-- No changes -->
+
 
 ## 0.2.1
 
@@ -163,6 +174,7 @@
 
 <!-- No changes -->
 
+
 ## 0.1.43
 
 ### Preview features
@@ -183,6 +195,7 @@
 ## 0.1.41
 
 <!-- No changes -->
+
 
 ## 0.1.40
 
