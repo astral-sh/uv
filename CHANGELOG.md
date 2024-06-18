@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.13
+
+### Enhancements
+
+- Add resolver tracing logs for when we filter requirements ([#4381](https://github.com/astral-sh/uv/pull/4381))
+
 ## 0.2.12
 
 ### Enhancements
