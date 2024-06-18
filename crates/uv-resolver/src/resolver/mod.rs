@@ -544,7 +544,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             );
                             forked_states.push(state);
                         }
-                        ForkedDependencies::Forked(forks) => {
+                        ForkedDependencies::Forked {
+                            forks,
+                            diverging_packages,
+                        } => {
+                            debug!(
+                                "Splitting resolution on {} over {}",
+                                state.next,
+                                diverging_packages
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .join(", ")
+                            );
                             assert!(forks.len() >= 2);
                             // This is a somewhat tortured technique to ensure
                             // that our resolver state is only cloned as much
@@ -1996,7 +2007,8 @@ impl Dependencies {
             dependencies: vec![],
             markers: MarkerTree::And(vec![]),
         }];
-        for (_, possible_forks) in by_name {
+        let mut diverging_packages = Vec::new();
+        for (name, possible_forks) in by_name {
             let fork_groups = match possible_forks {
                 PossibleForks::PossiblyForking(fork_groups) => fork_groups,
                 PossibleForks::NoForkPossible(indices) => {
@@ -2028,8 +2040,12 @@ impl Dependencies {
                 new_forks.extend(new_forks_for_group);
             }
             forks = new_forks;
+            diverging_packages.push(name.clone());
         }
-        ForkedDependencies::Forked(forks)
+        ForkedDependencies::Forked {
+            forks,
+            diverging_packages,
+        }
     }
 }
 
@@ -2052,7 +2068,11 @@ enum ForkedDependencies {
     /// Note that there is always at least two forks. If there would
     /// be fewer than 2 forks, then there is no fork at all and the
     /// `Unforked` variant is used instead.
-    Forked(Vec<Fork>),
+    Forked {
+        forks: Vec<Fork>,
+        /// The package(s) with different requirements for disjoint markers.
+        diverging_packages: Vec<PackageName>,
+    },
 }
 
 /// A single fork in a list of dependencies.
