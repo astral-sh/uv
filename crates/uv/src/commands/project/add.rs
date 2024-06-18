@@ -5,6 +5,7 @@ use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_git::GitResolver;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_toolchain::ToolchainRequest;
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use uv_cache::Cache;
@@ -41,7 +42,15 @@ pub(crate) async fn add(
     let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
+    let venv = project::init_environment(
+        project.workspace(),
+        python.as_deref().map(ToolchainRequest::parse),
+        connectivity,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?;
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)

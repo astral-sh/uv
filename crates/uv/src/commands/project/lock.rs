@@ -18,7 +18,7 @@ use uv_resolver::{
     ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode, RequiresPython,
     ResolutionMode,
 };
-use uv_toolchain::Interpreter;
+use uv_toolchain::{Interpreter, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -47,7 +47,15 @@ pub(crate) async fn lock(
     let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
 
     // Find an interpreter for the project
-    let interpreter = project::find_interpreter(&workspace, python.as_deref(), cache, printer)?;
+    let interpreter = project::find_interpreter(
+        &workspace,
+        python.as_deref().map(ToolchainRequest::parse),
+        connectivity,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?;
 
     // Perform the lock operation.
     match do_lock(

@@ -144,7 +144,11 @@ impl Toolchain {
         // Perform a find first
         match Self::find(python.clone(), system, preview, cache) {
             Ok(venv) => Ok(venv),
-            Err(Error::NotFound(_)) if system.is_allowed() && preview.is_enabled() => {
+            Err(Error::NotFound(_))
+                if system.is_allowed()
+                    && preview.is_enabled()
+                    && client_builder.connectivity.is_online() =>
+            {
                 debug!("Requested Python not found, checking for available download...");
                 let request = if let Some(request) = python {
                     request

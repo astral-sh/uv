@@ -302,9 +302,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
-            .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .env("UV_NO_WRAP", "1")
-            .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
 

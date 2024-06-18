@@ -6,6 +6,7 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::ProjectWorkspace;
+use uv_toolchain::ToolchainRequest;
 use uv_warnings::warn_user;
 
 use crate::commands::pip::operations::Modifications;
@@ -81,7 +82,15 @@ pub(crate) async fn remove(
     )?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(project.workspace(), python.as_deref(), cache, printer)?;
+    let venv = project::init_environment(
+        project.workspace(),
+        python.as_deref().map(ToolchainRequest::parse),
+        connectivity,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?;
 
     // Use the default settings.
     let settings = ResolverSettings::default();
