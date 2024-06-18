@@ -183,13 +183,6 @@ impl TestContext {
                 "[SITE_PACKAGES]/".to_string(),
             ));
         };
-        filters.push((
-            Self::path_pattern(
-                venv.strip_prefix(&temp_dir)
-                    .expect("The test virtual environment directory is always in the tempdir"),
-            ),
-            "[VENV]/".to_string(),
-        ));
 
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching

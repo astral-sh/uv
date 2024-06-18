@@ -1894,7 +1894,7 @@ fn lock_requires_python() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Removing virtual environment at: [VENV]/
+    Removing virtual environment at: .venv
     error: No interpreter found for Python >=3.12 in provided path, active virtual environment, or search path
     "###);
 
