@@ -1611,6 +1611,10 @@ pub(crate) struct AddArgs {
     #[arg(long)]
     pub(crate) dev: bool,
 
+    /// Add the requirements as workspace dependencies.
+    #[arg(long)]
+    pub(crate) workspace: bool,
+
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
 

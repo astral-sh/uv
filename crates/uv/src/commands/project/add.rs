@@ -1,6 +1,7 @@
 use anyhow::Result;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
+use uv_distribution::pyproject::Source;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_git::GitResolver;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -24,6 +25,7 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
+    workspace: bool,
     dev: bool,
     python: Option<String>,
     settings: ResolverInstallerSettings,
@@ -134,10 +136,19 @@ pub(crate) async fn add(
     // Add the requirements to the `pyproject.toml`.
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements.into_iter().map(pep508_rs::Requirement::from) {
-        if dev {
-            pyproject.add_dev_dependency(&req)?;
+        let source = if workspace {
+            Some(Source::Workspace {
+                workspace: true,
+                editable: None,
+            })
         } else {
-            pyproject.add_dependency(&req)?;
+            None
+        };
+
+        if dev {
+            pyproject.add_dev_dependency(&req, source.as_ref())?;
+        } else {
+            pyproject.add_dependency(&req, source.as_ref())?;
         }
     }
 

@@ -374,9 +374,9 @@ fn add_unnamed() -> Result<()> {
     Ok(())
 }
 
-/// Add a development dependency.
+/// Add and remove a development dependency.
 #[test]
-fn add_dev() -> Result<()> {
+fn add_remove_dev() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -492,6 +492,272 @@ fn add_dev() -> Result<()> {
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
     Audited 4 packages in [TIME]
+    "###);
+
+    // This should fail without --dev.
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv remove` is experimental and may change without warning.
+    warning: `anyio` is a development dependency; try calling `uv remove --dev`
+    error: The dependency `anyio` could not be found in `dependencies`
+    "###);
+
+    // Remove the dependency.
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv remove` is experimental and may change without warning.
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==3.7.0
+     - idna==3.7
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = "editable+."
+        sdist = { path = "." }
+        "###
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Add and remove a workspace dependency.
+#[test]
+fn add_remove_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+    "#})?;
+
+    let pyproject_toml = context.temp_dir.child("child1/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let pyproject_toml = context.temp_dir.child("child2/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let child1 = context.temp_dir.join("child1");
+    let mut add_cmd = context.add(&["child2"]);
+    add_cmd
+        .arg("--preview")
+        .arg("--workspace")
+        .current_dir(&child1);
+
+    uv_snapshot!(context.filters(), add_cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + child2==0.1.0 (from file://[TEMP_DIR]/child2)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child2",
+        ]
+
+        [tool.uv.sources]
+        child2 = { workspace = true }
+        "###
+        );
+    });
+
+    // `uv add` implies a full lock and sync, including development dependencies.
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[distribution]]
+        name = "child1"
+        version = "0.1.0"
+        source = "editable+child1"
+        sdist = { path = "child1" }
+
+        [[distribution.dependencies]]
+        name = "child2"
+        version = "0.1.0"
+        source = "editable+child2"
+
+        [[distribution]]
+        name = "child2"
+        version = "0.1.0"
+        source = "editable+child2"
+        sdist = { path = "child2" }
+        "###
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().current_dir(&child1), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Audited 2 packages in [TIME]
+    "###);
+
+    // Remove the dependency.
+    uv_snapshot!(context.filters(), context.remove(&["child2"]).current_dir(&child1), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv remove` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     - child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     - child2==0.1.0 (from file://[TEMP_DIR]/child2)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.sources]
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[distribution]]
+        name = "child1"
+        version = "0.1.0"
+        source = "editable+child1"
+        sdist = { path = "child1" }
+
+        [[distribution]]
+        name = "child2"
+        version = "0.1.0"
+        source = "editable+child2"
+        sdist = { path = "child2" }
+        "###
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().current_dir(&child1), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Audited 1 package in [TIME]
     "###);
 
     Ok(())
@@ -798,238 +1064,6 @@ fn remove_registry() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-    "#})?;
-
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
-    Resolved 4 packages in [TIME]
-    "###);
-
-    uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     + sniffio==1.3.1
-    "###);
-
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning.
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Uninstalled 4 packages in [TIME]
-    Installed 1 package in [TIME]
-     - anyio==3.7.0
-     - idna==3.6
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     - sniffio==1.3.1
-    "###);
-
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject_toml, @r###"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "###
-        );
-    });
-
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
-
-        [[distribution]]
-        name = "project"
-        version = "0.1.0"
-        source = "editable+."
-        sdist = { path = "." }
-        "###
-        );
-    });
-
-    // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
-    Audited 1 package in [TIME]
-    "###);
-
-    Ok(())
-}
-
-/// Remove a development dependency.
-#[test]
-fn remove_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [tool.uv]
-        dev-dependencies = ["anyio==3.7.0"]
-    "#})?;
-
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
-    Resolved 4 packages in [TIME]
-    "###);
-
-    uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     + sniffio==1.3.1
-    "###);
-
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning.
-    warning: `anyio` is a development dependency; try calling `uv add --dev`
-    error: The dependency `anyio` could not be found in `dependencies`
-    "###);
-
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--dev"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning.
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Uninstalled 4 packages in [TIME]
-    Installed 1 package in [TIME]
-     - anyio==3.7.0
-     - idna==3.6
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     - sniffio==1.3.1
-    "###);
-
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject_toml, @r###"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
-        "###
-        );
-    });
-
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
-
-        [[distribution]]
-        name = "project"
-        version = "0.1.0"
-        source = "editable+."
-        sdist = { path = "." }
-        "###
-        );
-    });
-
-    // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
-    Audited 1 package in [TIME]
-    "###);
-
-    Ok(())
-}
-
-/// Remove a PyPI requirement that occurs multiple times.
-#[test]
-fn remove_all_registry() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = [
-          "anyio == 3.7.0 ; python_version >= '3.12'",
-          "anyio < 3.7.0 ; python_version < '3.12'",
-        ]
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
