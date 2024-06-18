@@ -23,8 +23,8 @@ fn create_venv() {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -41,8 +41,8 @@ fn create_venv() {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -61,8 +61,8 @@ fn create_venv_defaults_to_cwd() {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -82,8 +82,8 @@ fn create_venv_ignores_virtual_env_variable() {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 }
@@ -102,9 +102,9 @@ fn seed() {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
      + pip==24.0
-    Activate with: source [VENV]/bin/activate
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -125,11 +125,11 @@ fn seed_older_python_version() {
 
     ----- stderr -----
     Using Python 3.10.[X] interpreter at: [PYTHON-3.10]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
      + pip==24.0
      + setuptools==69.2.0
      + wheel==0.43.0
-    Activate with: source [VENV]/bin/activate
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -227,8 +227,8 @@ fn create_venv_python_patch() {
 
     ----- stderr -----
     Using Python 3.12.1 interpreter at: [PYTHON-3.12.1]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -252,11 +252,11 @@ fn file_exists() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
     uv::venv::creation
 
       × Failed to create virtualenv
-      ╰─▶ File exists at `[VENV]/`
+      ╰─▶ File exists at `.venv`
     "###
     );
 
@@ -279,8 +279,8 @@ fn empty_dir_exists() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -307,11 +307,11 @@ fn non_empty_dir_exists() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
     uv::venv::creation
 
       × Failed to create virtualenv
-      ╰─▶ The directory `[VENV]/` exists, but it's not a virtualenv
+      ╰─▶ The directory `.venv` exists, but it's not a virtualenv
     "###
     );
 
@@ -337,11 +337,11 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
     uv::venv::creation
 
       × Failed to create virtualenv
-      ╰─▶ The directory `[VENV]/` exists, but it's not a virtualenv
+      ╰─▶ The directory `.venv` exists, but it's not a virtualenv
     "###
     );
 
@@ -356,8 +356,8 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -374,8 +374,8 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -416,8 +416,8 @@ fn windows_shims() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -443,8 +443,8 @@ fn virtualenv_compatibility() {
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]/
-    Activate with: source [VENV]/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 

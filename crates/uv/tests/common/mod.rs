@@ -92,7 +92,10 @@ impl TestContext {
         let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
         let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
 
-        let venv = temp_dir.child(".venv");
+        // Canonicalize the temp dir for consistent snapshot behavior
+        let canonical_temp_dir = temp_dir.canonicalize().unwrap();
+        let venv = ChildPath::new(canonical_temp_dir.join(".venv"));
+
         let python_version = python_versions
             .first()
             .map(|version| PythonVersion::from_str(version).unwrap());
@@ -177,19 +180,12 @@ impl TestContext {
             filters.push((
                 Self::path_pattern(
                     site_packages
-                        .strip_prefix(&temp_dir)
+                        .strip_prefix(&canonical_temp_dir)
                         .expect("The test site-packages directory is always in the tempdir"),
                 ),
                 "[SITE_PACKAGES]/".to_string(),
             ));
         };
-        filters.push((
-            Self::path_pattern(
-                venv.strip_prefix(&temp_dir)
-                    .expect("The test virtual environment directory is always in the tempdir"),
-            ),
-            "[VENV]/".to_string(),
-        ));
 
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching

@@ -419,7 +419,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -479,7 +479,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON]
-    Creating virtualenv at: [VENV]/
+    Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
