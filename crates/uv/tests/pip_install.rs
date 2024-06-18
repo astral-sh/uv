@@ -3954,7 +3954,7 @@ fn install_package_basic_auth_from_keyring() {
         .arg("subprocess")
         .arg("--strict")
         .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+        .env("PATH", venv_bin_path(&context.venv)), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4001,7 +4001,7 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .arg("subprocess")
         .arg("--strict")
         .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
-        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+        .env("PATH", venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4042,7 +4042,7 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .arg("subprocess")
         .arg("--strict")
         .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
-        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+        .env("PATH", venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
