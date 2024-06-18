@@ -75,7 +75,7 @@ fn show_requires_multiple() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
@@ -130,7 +130,7 @@ fn show_python_version_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + click==8.1.7
     "###
@@ -185,7 +185,7 @@ fn show_found_single_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + markupsafe==2.1.3
     "###
@@ -239,7 +239,7 @@ fn show_found_multiple_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + pip==21.3.1
@@ -301,7 +301,7 @@ fn show_found_one_out_of_three() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + pip==21.3.1
@@ -359,7 +359,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + pip==21.3.1
@@ -412,7 +412,7 @@ fn show_empty_quiet() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + pip==21.3.1
@@ -506,7 +506,7 @@ fn show_required_by_multiple() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + anyio==4.0.0
      + certifi==2024.2.2

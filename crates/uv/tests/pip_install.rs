@@ -330,7 +330,7 @@ fn install_package() {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
@@ -364,7 +364,7 @@ fn install_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
@@ -477,7 +477,7 @@ build-backend = "poetry.core.masonry.api"
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.1
      + idna==3.6
@@ -508,7 +508,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
@@ -565,7 +565,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.2
@@ -589,7 +589,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.3
@@ -642,7 +642,7 @@ fn reinstall_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + anyio==4.3.0
      + certifi==2024.2.2
@@ -670,7 +670,7 @@ fn reinstall_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + h2==4.1.0
      + hpack==4.0.0
@@ -701,7 +701,7 @@ fn reinstall_incomplete() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -725,7 +725,7 @@ fn reinstall_incomplete() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -756,7 +756,7 @@ fn allow_incompatibilities() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
@@ -784,7 +784,7 @@ fn allow_incompatibilities() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - jinja2==3.1.3
@@ -813,7 +813,7 @@ fn install_editable() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -846,7 +846,7 @@ fn install_editable() {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Downloaded 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -871,7 +871,7 @@ fn install_editable_and_registry() {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Downloaded 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -892,7 +892,7 @@ fn install_editable_and_registry() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
@@ -932,7 +932,7 @@ fn install_editable_and_registry() {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
@@ -957,7 +957,7 @@ fn install_editable_no_binary() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -983,7 +983,7 @@ fn install_editable_compatible_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1065,7 +1065,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Downloaded 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + aiohttp==3.9.3
      + aiosignal==1.3.1
@@ -1094,7 +1094,7 @@ fn install_editable_pep_508_cli() {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Downloaded 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + aiohttp==3.9.3
      + aiosignal==1.3.1
@@ -1124,7 +1124,7 @@ fn install_editable_bare_cli() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1150,7 +1150,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1253,7 +1253,7 @@ fn reinstall_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Downloaded 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
@@ -1355,7 +1355,7 @@ fn install_extra_index_url_has_priority() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==24.2.0
     "###
@@ -1381,7 +1381,7 @@ fn install_git_public_https() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
@@ -1480,7 +1480,7 @@ fn install_git_private_https_pat() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
@@ -1513,7 +1513,7 @@ fn install_git_private_https_pat_mixed_with_public() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
@@ -1550,7 +1550,7 @@ fn install_git_private_https_multiple_pat() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://***_1@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
      + uv-private-pypackage-2==0.1.0 (from git+https://***_2@github.com/astral-test/uv-private-pypackage-2@45c0bec7365710f09b1f4dbca61c86dde9537e4e)
@@ -1590,7 +1590,7 @@ fn install_git_private_https_pat_at_ref() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-private-pypackage==0.1.0 (from ***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
     "###);
@@ -1624,7 +1624,7 @@ fn install_git_private_https_pat_and_username() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
     "###);
@@ -1693,7 +1693,7 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + uv-private-pypackage==0.1.0 (from https://***@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
      + uv-public-pypackage==0.1.0 (from https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl)
@@ -1731,7 +1731,7 @@ fn install_github_artifact_private_https_multiple_pat() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + uv-private-pypackage==0.1.0 (from https://astral-test-bot:***_1@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
      + uv-private-pypackage-2==0.1.0 (from https://astral-test-bot:***_2@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
@@ -1757,7 +1757,7 @@ fn reinstall_no_binary() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -1847,7 +1847,7 @@ fn install_no_binary_overrides_only_binary_all() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -1881,7 +1881,7 @@ fn install_only_binary_overrides_no_binary_all() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -2065,7 +2065,7 @@ fn only_binary_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###
@@ -2094,7 +2094,7 @@ fn only_binary_dependent_editables() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
      + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
@@ -2119,7 +2119,7 @@ fn only_binary_editable_setup_py() {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Downloaded 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + anyio==4.3.0
      + certifi==2024.2.2
@@ -2149,7 +2149,7 @@ fn install_executable() {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + astroid==3.0.3
      + dill==0.3.8
@@ -2185,7 +2185,7 @@ fn install_executable_copy() {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + astroid==3.0.3
      + dill==0.3.8
@@ -2221,7 +2221,7 @@ fn install_executable_hardlink() {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + astroid==3.0.3
      + dill==0.3.8
@@ -2257,7 +2257,7 @@ fn no_deps() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flask==3.0.2
     warning: The package `flask` requires `werkzeug>=3.0.0`, but it's not installed.
@@ -2288,7 +2288,7 @@ fn no_deps_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -2314,7 +2314,7 @@ fn install_upgrade() {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Downloaded 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + anyio==3.6.2
      + certifi==2024.2.2
@@ -2338,7 +2338,7 @@ fn install_upgrade() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.6.2
@@ -2386,7 +2386,7 @@ fn install_upgrade() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - httpcore==0.16.3
@@ -2416,7 +2416,7 @@ fn install_constraints_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.3
@@ -2446,7 +2446,7 @@ fn install_constraints_inline() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.3
@@ -2472,7 +2472,7 @@ fn install_constraints_remote() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.7.1
     "###
@@ -2496,7 +2496,7 @@ fn install_constraints_inline_remote() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.7.1
     "### // would yield typing-extensions==4.8.2 without constraint file
@@ -2527,7 +2527,7 @@ fn install_constraints_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Downloaded 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
@@ -2584,7 +2584,7 @@ fn install_pinned_polars_invalid_metadata() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + polars==0.14.0
     "###
@@ -2611,7 +2611,7 @@ fn install_sdist_resolution_lowest() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
      + idna==3.6
@@ -2644,7 +2644,7 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 6 packages in [TIME]
      + distro==1.9.0
      + opensafely-pipeline==2023.11.6.145820 (from https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip)
@@ -2682,7 +2682,7 @@ fn launcher() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + simple_launcher.whl
     "###
@@ -2728,7 +2728,7 @@ fn launcher_with_symlink() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + simple_launcher.whl
     "###
@@ -2785,7 +2785,7 @@ fn config_settings() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
@@ -2813,7 +2813,7 @@ fn config_settings() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
@@ -2875,7 +2875,7 @@ fn reinstall_duplicate() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - pip==21.3.1
@@ -2901,7 +2901,7 @@ fn install_symlink() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + pgpdump==1.5
     "###
@@ -2950,7 +2950,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -2994,7 +2994,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
@@ -3040,7 +3040,7 @@ dependencies = {file = ["requirements.txt"]}
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -3059,7 +3059,7 @@ dependencies = {file = ["requirements.txt"]}
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -3080,7 +3080,7 @@ dependencies = {file = ["requirements.txt"]}
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
@@ -3121,7 +3121,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -3165,7 +3165,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
@@ -3208,7 +3208,7 @@ requires-python = ">=3.11,<3.13"
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from file://[TEMP_DIR]/editable)
@@ -3300,7 +3300,7 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + setuptools==69.2.0
      + wheel==0.43.0
@@ -3317,7 +3317,7 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==0.0.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
      + idna==3.6
@@ -3371,7 +3371,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + setuptools==69.2.0
      + wheel==0.43.0
@@ -3388,7 +3388,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==0.0.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
      + idna==3.6
@@ -3417,7 +3417,7 @@ fn install_utf16le_requirements() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1
     "###
@@ -3443,7 +3443,7 @@ fn install_utf16be_requirements() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1
     "###
@@ -3548,7 +3548,7 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
      + idna==3.6
@@ -3599,7 +3599,7 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + anyio==4.3.0
      + certifi==2024.2.2
@@ -3649,7 +3649,7 @@ fn dry_run_install_transitive_dependency_already_installed(
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + certifi==2024.2.2
      + h11==0.14.0
@@ -3699,7 +3699,7 @@ fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error:
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + anyio==4.3.0
      + certifi==2024.2.2
@@ -3786,7 +3786,7 @@ fn install_package_basic_auth_from_url() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -3816,7 +3816,7 @@ fn install_package_basic_auth_from_netrc_default() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -3848,7 +3848,7 @@ fn install_package_basic_auth_from_netrc() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -3888,7 +3888,7 @@ anyio
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -3917,7 +3917,7 @@ fn install_index_with_relative_links() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -3963,7 +3963,7 @@ fn install_package_basic_auth_from_keyring() {
     Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
     Request for public@pypi-proxy.fly.dev
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -4072,7 +4072,7 @@ fn install_index_with_relative_links_authenticated() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -4108,7 +4108,7 @@ fn install_site_packages_mtime_updated() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -4149,7 +4149,7 @@ fn deptry_gitignore() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + cffi==1.16.0
      + deptry-reproducer==0.1.0 (from file://[WORKSPACE]/scripts/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
@@ -4178,7 +4178,7 @@ fn reinstall_no_index() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -4236,7 +4236,7 @@ fn already_installed_remote_dependencies() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + idna==3.6
      + sniffio==1.3.1
@@ -4253,7 +4253,7 @@ fn already_installed_remote_dependencies() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0
     "###
@@ -4278,7 +4278,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
@@ -4299,7 +4299,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
@@ -4354,7 +4354,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4380,7 +4380,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
@@ -4400,7 +4400,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
@@ -4453,7 +4453,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4519,7 +4519,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###
@@ -4582,7 +4582,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -4601,7 +4601,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 3 packages in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -4620,7 +4620,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
@@ -4653,7 +4653,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + certifi==2024.2.2
      + h11==0.14.0
@@ -4705,7 +4705,7 @@ fn already_installed_multiple_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
@@ -4727,7 +4727,7 @@ fn already_installed_multiple_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
@@ -4753,7 +4753,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
@@ -4882,7 +4882,7 @@ fn find_links() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==1000.0.0
     "###
@@ -4913,7 +4913,7 @@ fn find_links_no_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==999.0.0
     "###
@@ -4953,7 +4953,7 @@ fn require_hashes() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.0.0
      + idna==3.6
@@ -4988,7 +4988,7 @@ fn require_hashes_no_deps() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0
     "###
@@ -5167,7 +5167,7 @@ fn require_hashes_unnamed() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
      + idna==3.6
@@ -5212,7 +5212,7 @@ fn require_hashes_unnamed_repeated() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
      + idna==3.6
@@ -5340,7 +5340,7 @@ fn tool_uv_sources() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    Downloaded 9 packages in [TIME]
+    Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + anyio==4.3.0
      + boltons==24.0.1.dev0 (from git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0)
@@ -5437,7 +5437,7 @@ fn recursive_extra_transitive_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
      + project==0.0.0 (from file://[TEMP_DIR]/)
@@ -5461,7 +5461,7 @@ fn prefer_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -5490,7 +5490,7 @@ fn prefer_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -5543,7 +5543,7 @@ fn local_index() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==1000.0.0
     "###

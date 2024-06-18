@@ -122,7 +122,7 @@ fn list_single_no_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + markupsafe==2.1.3
     "###
@@ -166,7 +166,7 @@ fn list_editable() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -218,7 +218,7 @@ fn list_editable_only() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -308,7 +308,7 @@ fn list_exclude() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -411,7 +411,7 @@ fn list_format_json() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -517,7 +517,7 @@ fn list_format_freeze() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6

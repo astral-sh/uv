@@ -393,7 +393,7 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Downloaded {} in {}",
+                "Prepared {} in {}",
                 format!("{} package{}", wheels.len(), s).bold(),
                 elapsed(start.elapsed())
             )

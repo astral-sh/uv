@@ -98,7 +98,7 @@ fn lock_wheel_registry() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -173,7 +173,7 @@ fn lock_sdist_registry() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.1
@@ -246,7 +246,7 @@ fn lock_sdist_git() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
@@ -343,7 +343,7 @@ fn lock_wheel_url() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
      + idna==3.6
@@ -442,7 +442,7 @@ fn lock_sdist_url() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
      + idna==3.6
@@ -559,7 +559,7 @@ fn lock_project_extra() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -575,7 +575,7 @@ fn lock_project_extra() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -818,7 +818,7 @@ fn lock_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 9 packages in [TIME]
+    Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
@@ -1060,7 +1060,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.0.1
@@ -1084,7 +1084,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.0.1
@@ -2269,7 +2269,7 @@ fn lock_dev() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
