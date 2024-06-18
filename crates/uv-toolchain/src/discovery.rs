@@ -44,9 +44,9 @@ pub enum ToolchainRequest {
     File(PathBuf),
     /// The name of a Python executable (i.e. for lookup in the PATH) e.g. `foopython3`
     ExecutableName(String),
-    /// A Python implementation without a version e.g. `pypy`
+    /// A Python implementation without a version e.g. `pypy` or `pp`
     Implementation(ImplementationName),
-    /// A Python implementation name and version e.g. `pypy3.8` or `pypy@3.8`
+    /// A Python implementation name and version e.g. `pypy3.8` or `pypy@3.8` or `pp38`
     ImplementationVersion(ImplementationName, VersionRequest),
     /// A request for a specific toolchain key e.g. `cpython-3.12-x86_64-linux-gnu`
     /// Generally these refer to uv-managed toolchain downloads.
@@ -920,7 +920,7 @@ impl ToolchainRequest {
     ///
     /// This cannot fail, which means weird inputs will be parsed as [`ToolchainRequest::File`] or [`ToolchainRequest::ExecutableName`].
     pub fn parse(value: &str) -> Self {
-        // e.g. `3.12.1`
+        // e.g. `3.12.1`, `312`, or `>=3.12`
         if let Ok(version) = VersionRequest::from_str(value) {
             return Self::Version(version);
         }
@@ -938,18 +938,25 @@ impl ToolchainRequest {
                 }
             }
         }
-        for implementation in ImplementationName::iter() {
+        for implementation in ImplementationName::possible_names() {
             if let Some(remainder) = value
                 .to_ascii_lowercase()
                 .strip_prefix(Into::<&str>::into(implementation))
             {
                 // e.g. `pypy`
                 if remainder.is_empty() {
-                    return Self::Implementation(*implementation);
+                    return Self::Implementation(
+                        // Safety: The name matched the possible names above
+                        ImplementationName::from_str(implementation).unwrap(),
+                    );
                 }
-                // e.g. `pypy3.12`
+                // e.g. `pypy3.12` or `pp312`
                 if let Ok(version) = VersionRequest::from_str(remainder) {
-                    return Self::ImplementationVersion(*implementation, version);
+                    return Self::ImplementationVersion(
+                        // Safety: The name matched the possible names above
+                        ImplementationName::from_str(implementation).unwrap(),
+                        version,
+                    );
                 }
             }
         }
@@ -1268,8 +1275,33 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // e.g. `3`, `38`, `312`
+        if let Some(request) = {
+            match s.chars().collect::<Vec<_>>().as_slice() {
+                [major] => {
+                    if let Some(Ok(major)) = major.to_digit(10).map(u8::try_from) {
+                        Some(VersionRequest::Major(major))
+                    } else {
+                        None
+                    }
+                }
+                [major, minor @ ..] => {
+                    if let (Some(Ok(major)), Ok(minor)) = (
+                        major.to_digit(10).map(u8::try_from),
+                        str::parse::<u8>(&minor.iter().collect::<String>()),
+                    ) {
+                        Some(VersionRequest::MajorMinor(major, minor))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        } {
+            Ok(request)
+        }
         // e.g. `3.12.1`
-        if let Ok(versions) = s
+        else if let Ok(versions) = s
             .splitn(3, '.')
             .map(str::parse::<u8>)
             .collect::<Result<Vec<_>, _>>()
@@ -1285,6 +1317,7 @@ impl FromStr for VersionRequest {
             };
 
             Ok(selector)
+
         // e.g. `>=3.12.1,<3.12`
         } else if let Ok(specifiers) = VersionSpecifiers::from_str(s) {
             if specifiers.is_empty() {
@@ -1550,6 +1583,7 @@ mod tests {
     use assert_fs::{prelude::*, TempDir};
     use test_log::test;
 
+    use super::Error;
     use crate::{
         discovery::{ToolchainRequest, VersionRequest},
         implementation::ImplementationName,
@@ -1589,10 +1623,32 @@ mod tests {
             ToolchainRequest::Implementation(ImplementationName::PyPy)
         );
         assert_eq!(
+            ToolchainRequest::parse("pp"),
+            ToolchainRequest::Implementation(ImplementationName::PyPy)
+        );
+        assert_eq!(
+            ToolchainRequest::parse("cp"),
+            ToolchainRequest::Implementation(ImplementationName::CPython)
+        );
+        assert_eq!(
             ToolchainRequest::parse("pypy3.10"),
             ToolchainRequest::ImplementationVersion(
                 ImplementationName::PyPy,
                 VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            ToolchainRequest::parse("pp310"),
+            ToolchainRequest::ImplementationVersion(
+                ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            ToolchainRequest::parse("cp38"),
+            ToolchainRequest::ImplementationVersion(
+                ImplementationName::CPython,
+                VersionRequest::from_str("3.8").unwrap()
             )
         );
         assert_eq!(
@@ -1604,7 +1660,10 @@ mod tests {
         );
         assert_eq!(
             ToolchainRequest::parse("pypy310"),
-            ToolchainRequest::ExecutableName("pypy310".to_string())
+            ToolchainRequest::ImplementationVersion(
+                ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
         );
 
         let tempdir = TempDir::new().unwrap();
@@ -1646,5 +1705,28 @@ mod tests {
             VersionRequest::MajorMinorPatch(3, 12, 1)
         );
         assert!(VersionRequest::from_str("1.foo.1").is_err());
+        assert_eq!(
+            VersionRequest::from_str("3").unwrap(),
+            VersionRequest::Major(3)
+        );
+        assert_eq!(
+            VersionRequest::from_str("38").unwrap(),
+            VersionRequest::MajorMinor(3, 8)
+        );
+        assert_eq!(
+            VersionRequest::from_str("312").unwrap(),
+            VersionRequest::MajorMinor(3, 12)
+        );
+        assert_eq!(
+            VersionRequest::from_str("3100").unwrap(),
+            VersionRequest::MajorMinor(3, 100)
+        );
+        assert!(
+            // Test for overflow
+            matches!(
+                VersionRequest::from_str("31000"),
+                Err(Error::InvalidVersionRequest(_))
+            )
+        );
     }
 }

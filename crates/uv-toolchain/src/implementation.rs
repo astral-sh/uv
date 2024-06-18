@@ -24,10 +24,8 @@ pub enum LenientImplementationName {
 }
 
 impl ImplementationName {
-    pub(crate) fn iter() -> impl Iterator<Item = &'static ImplementationName> {
-        static NAMES: &[ImplementationName] =
-            &[ImplementationName::CPython, ImplementationName::PyPy];
-        NAMES.iter()
+    pub(crate) fn possible_names() -> impl Iterator<Item = &'static str> {
+        ["cpython", "pypy", "cp", "pp"].into_iter()
     }
 
     pub fn pretty(self) -> &'static str {
@@ -68,10 +66,13 @@ impl<'a> From<&'a LenientImplementationName> for &'a str {
 impl FromStr for ImplementationName {
     type Err = Error;
 
+    /// Parse a Python implementation name from a string.
+    ///
+    /// Supports the full name and the platform compatibility tag style name.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "cpython" => Ok(Self::CPython),
-            "pypy" => Ok(Self::PyPy),
+            "cpython" | "cp" => Ok(Self::CPython),
+            "pypy" | "pp" => Ok(Self::PyPy),
             _ => Err(Error::UnknownImplementation(s.to_string())),
         }
     }
