@@ -11,14 +11,14 @@ echo "Updating metadata with rooster..."
 cd "$project_root"
 
 # Update the preview changelog
-uv tool run --from 'rooster-blue>=0.0.7' --isolated -- \
+uv tool run --from 'rooster-blue>=0.0.7' --python 3.12 --isolated -- \
     rooster release "$@" \
     --only-sections preview \
     --changelog-file PREVIEW-CHANGELOG.md \
     --no-update-pyproject --no-update-version-files
 
 # Update the real changelog
-uv tool run --from 'rooster-blue>=0.0.7' --isolated -- \
+uv tool run --from 'rooster-blue>=0.0.7' --python 3.12 --isolated -- \
     rooster release "$@" --without-sections preview
 
 echo "Updating lockfile..."
