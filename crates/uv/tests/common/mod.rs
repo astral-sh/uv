@@ -582,7 +582,7 @@ pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
     }
 }
 
-pub fn venv_bin_path<P: AsRef<Path>>(venv: &P) -> PathBuf {
+pub fn venv_bin_path(venv: impl AsRef<Path>) -> PathBuf {
     if cfg!(unix) {
         venv.as_ref().join("bin")
     } else if cfg!(windows) {

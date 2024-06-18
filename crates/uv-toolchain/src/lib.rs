@@ -289,9 +289,9 @@ mod tests {
         }
 
         /// Create child directories in a temporary directory.
-        fn new_search_path_directories<P: AsRef<Path>>(
+        fn new_search_path_directories(
             &mut self,
-            names: &[P],
+            names: &[impl AsRef<Path>],
         ) -> Result<Vec<ChildPath>> {
             let paths = names
                 .iter()
