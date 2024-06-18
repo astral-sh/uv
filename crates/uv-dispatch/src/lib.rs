@@ -20,7 +20,7 @@ use uv_configuration::{BuildKind, BuildOptions, ConfigSettings, Reinstall, Setup
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
-use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
+use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
@@ -240,7 +240,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             vec![]
         } else {
             // TODO(konstin): Check that there is no endless recursion.
-            let downloader = Downloader::new(
+            let preparer = Preparer::new(
                 self.cache,
                 tags,
                 &HashStrategy::None,
@@ -258,10 +258,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 remote.iter().map(ToString::to_string).join(", ")
             );
 
-            downloader
-                .download(remote, self.in_flight)
+            preparer
+                .prepare(remote, self.in_flight)
                 .await
-                .context("Failed to download and build distributions")?
+                .context("Failed to prepare distributions")?
         };
 
         // Remove any unnecessary packages.
