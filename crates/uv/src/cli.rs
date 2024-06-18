@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -1457,6 +1458,31 @@ pub(crate) struct VenvArgs {
     pub(crate) compat_args: compat::VenvCompatArgs,
 }
 
+#[derive(Parser, Debug, Clone)]
+pub(crate) enum ExternalCommand {
+    #[command(external_subcommand)]
+    Cmd(Vec<OsString>),
+}
+
+impl Deref for ExternalCommand {
+    type Target = Vec<OsString>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Cmd(cmd) => cmd,
+        }
+    }
+}
+
+impl ExternalCommand {
+    pub(crate) fn split(&self) -> (Option<&OsString>, &[OsString]) {
+        match self.as_slice() {
+            [] => (None, &[]),
+            [cmd, args @ ..] => (Some(cmd), args),
+        }
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
@@ -1482,11 +1508,8 @@ pub(crate) struct RunArgs {
     pub(crate) no_dev: bool,
 
     /// The command to run.
-    pub(crate) target: Option<String>,
-
-    /// The arguments to the command.
-    #[arg(allow_hyphen_values = true)]
-    pub(crate) args: Vec<OsString>,
+    #[command(subcommand)]
+    pub(crate) command: ExternalCommand,
 
     /// Run with the given packages installed.
     #[arg(long)]
@@ -1684,11 +1707,8 @@ pub(crate) enum ToolCommand {
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolRunArgs {
     /// The command to run.
-    pub(crate) target: String,
-
-    /// The arguments to the command.
-    #[arg(allow_hyphen_values = true)]
-    pub(crate) args: Vec<OsString>,
+    #[command(subcommand)]
+    pub(crate) command: ExternalCommand,
 
     /// Use the given package to provide the command.
     ///

@@ -116,3 +116,58 @@ fn run_with_python_version() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_args() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = []
+        "#
+    })?;
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.run().arg("--version").arg("python"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    uv [VERSION] ([COMMIT] DATE)
+
+    ----- stderr -----
+    "###);
+
+    // We don't treat arguments after the command as uv arguments
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Can use `--` to separate uv arguments from the command arguments.
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning.
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}

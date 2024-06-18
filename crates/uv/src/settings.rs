@@ -1,5 +1,4 @@
 use std::env::VarError;
-use std::ffi::OsString;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
@@ -26,11 +25,11 @@ use uv_settings::{
 use uv_toolchain::{Prefix, PythonVersion, Target};
 
 use crate::cli::{
-    AddArgs, BuildArgs, ColorChoice, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs, ResolverInstallerArgs,
-    RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs, ToolchainListArgs,
-    VenvArgs,
+    AddArgs, BuildArgs, ColorChoice, ExternalCommand, GlobalArgs, IndexArgs, InstallerArgs,
+    LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs,
+    PipShowArgs, PipSyncArgs, PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs,
+    ResolverInstallerArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs,
+    ToolchainListArgs, VenvArgs,
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::ListFormat;
@@ -123,8 +122,7 @@ impl CacheSettings {
 pub(crate) struct RunSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
-    pub(crate) target: Option<String>,
-    pub(crate) args: Vec<OsString>,
+    pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
     pub(crate) package: Option<PackageName>,
@@ -142,8 +140,7 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
-            target,
-            args,
+            command,
             with,
             installer,
             build,
@@ -158,8 +155,7 @@ impl RunSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
-            target,
-            args,
+            command,
             with,
             python,
             package,
@@ -176,8 +172,7 @@ impl RunSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolRunSettings {
-    pub(crate) target: String,
-    pub(crate) args: Vec<OsString>,
+    pub(crate) command: ExternalCommand,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
@@ -190,8 +185,7 @@ impl ToolRunSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolRunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolRunArgs {
-            target,
-            args,
+            command,
             from,
             with,
             installer,
@@ -201,8 +195,7 @@ impl ToolRunSettings {
         } = args;
 
         Self {
-            target,
-            args,
+            command,
             from,
             with,
             python,
