@@ -130,15 +130,15 @@ impl<'a> RegistryClientBuilder<'a> {
         let mut builder = BaseClientBuilder::new();
 
         if let Some(client) = self.client {
-            builder = builder.client(client)
+            builder = builder.client(client);
         }
 
         if let Some(markers) = self.markers {
-            builder = builder.markers(markers)
+            builder = builder.markers(markers);
         }
 
         if let Some(platform) = self.platform {
-            builder = builder.platform(platform)
+            builder = builder.platform(platform);
         }
 
         let client = builder
@@ -380,7 +380,7 @@ impl RegistryClient {
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let path = url
             .to_file_path()
-            .map_err(|_| ErrorKind::NonFileUrl(url.clone()))?
+            .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?
             .join("index.html");
         let text = fs_err::tokio::read_to_string(&path)
             .await
@@ -416,7 +416,7 @@ impl RegistryClient {
                         if url.scheme() == "file" {
                             let path = url
                                 .to_file_path()
-                                .map_err(|_| ErrorKind::NonFileUrl(url.clone()))?;
+                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
                             WheelLocation::Path(path)
                         } else {
                             WheelLocation::Url(url)
@@ -427,7 +427,7 @@ impl RegistryClient {
                         if url.scheme() == "file" {
                             let path = url
                                 .to_file_path()
-                                .map_err(|_| ErrorKind::NonFileUrl(url.clone()))?;
+                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
                             WheelLocation::Path(path)
                         } else {
                             WheelLocation::Url(url)
@@ -769,7 +769,7 @@ impl VersionFiles {
         match filename {
             DistFilename::WheelFilename(name) => self.wheels.push(VersionWheel { name, file }),
             DistFilename::SourceDistFilename(name) => {
-                self.source_dists.push(VersionSourceDist { name, file })
+                self.source_dists.push(VersionSourceDist { name, file });
             }
         }
     }
@@ -990,7 +990,8 @@ mod tests {
     }
 
     /// Test for AWS Code Artifact registry
-    /// Regression coverage of https://github.com/astral-sh/uv/issues/1388
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/1388>
     #[test]
     fn relative_urls_code_artifact() -> Result<(), JoinRelativeError> {
         let text = r#"
@@ -1021,7 +1022,7 @@ mod tests {
             .iter()
             .map(|file| pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
             .collect::<Result<Vec<_>, JoinRelativeError>>()?;
-        let urls = urls.iter().map(|url| url.as_str()).collect::<Vec<_>>();
+        let urls = urls.iter().map(reqwest::Url::as_str).collect::<Vec<_>>();
         insta::assert_debug_snapshot!(urls, @r###"
         [
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",

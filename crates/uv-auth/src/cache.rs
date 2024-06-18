@@ -64,7 +64,7 @@ impl CredentialsCache {
     /// Note we do not cache per username, but if a username is passed we will confirm that the
     /// cached credentials have a username equal to the provided one — otherwise `None` is returned.
     /// If multiple usernames are used per URL, the realm cache should be queried instead.
-    pub(crate) fn get_url(&self, url: &Url, username: Username) -> Option<Arc<Credentials>> {
+    pub(crate) fn get_url(&self, url: &Url, username: &Username) -> Option<Arc<Credentials>> {
         let urls = self.urls.read().unwrap();
         let credentials = urls.get(url);
         if let Some(credentials) = credentials {
@@ -93,15 +93,15 @@ impl CredentialsCache {
         let username = credentials.to_username();
         if username.is_some() {
             let realm = (Realm::from(url), username.clone());
-            self.insert_realm(realm, credentials.clone());
+            self.insert_realm(realm, &credentials);
         }
 
         // Insert an entry for requests with no username
-        self.insert_realm((Realm::from(url), Username::none()), credentials.clone());
+        self.insert_realm((Realm::from(url), Username::none()), &credentials);
 
         // Insert an entry for the URL
         let mut urls = self.urls.write().unwrap();
-        urls.insert(url.clone(), credentials.clone());
+        urls.insert(url, credentials);
     }
 
     /// Private interface to update a realm cache entry.
@@ -110,7 +110,7 @@ impl CredentialsCache {
     fn insert_realm(
         &self,
         key: (Realm, Username),
-        credentials: Arc<Credentials>,
+        credentials: &Arc<Credentials>,
     ) -> Option<Arc<Credentials>> {
         // Do not cache empty credentials
         if credentials.is_empty() {
@@ -169,9 +169,9 @@ impl UrlTrie {
         self.states[state].value.as_ref()
     }
 
-    fn insert(&mut self, url: Url, value: Arc<Credentials>) {
+    fn insert(&mut self, url: &Url, value: Arc<Credentials>) {
         let mut state = 0;
-        let realm = Realm::from(&url).to_string();
+        let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
             .into_iter()
             .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
@@ -234,19 +234,19 @@ mod tests {
 
         let mut trie = UrlTrie::new();
         trie.insert(
-            Url::parse("https://burntsushi.net").unwrap(),
+            &Url::parse("https://burntsushi.net").unwrap(),
             credentials1.clone(),
         );
         trie.insert(
-            Url::parse("https://astral.sh").unwrap(),
+            &Url::parse("https://astral.sh").unwrap(),
             credentials2.clone(),
         );
         trie.insert(
-            Url::parse("https://example.com/foo").unwrap(),
+            &Url::parse("https://example.com/foo").unwrap(),
             credentials3.clone(),
         );
         trie.insert(
-            Url::parse("https://example.com/bar").unwrap(),
+            &Url::parse("https://example.com/bar").unwrap(),
             credentials4.clone(),
         );
 

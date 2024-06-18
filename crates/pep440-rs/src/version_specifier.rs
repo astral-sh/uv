@@ -480,11 +480,11 @@ impl VersionSpecifier {
         // "Except where specifically noted below, local version identifiers MUST NOT be permitted
         // in version specifiers, and local version labels MUST be ignored entirely when checking
         // if candidate versions match a given version specifier."
-        let (this, other) = if !self.version.local().is_empty() {
-            (self.version.clone(), version.clone())
-        } else {
+        let (this, other) = if self.version.local().is_empty() {
             // self is already without local
             (self.version.clone(), version.clone().without_local())
+        } else {
+            (self.version.clone(), version.clone())
         };
 
         match self.operator {
@@ -650,7 +650,7 @@ impl std::fmt::Display for VersionSpecifierBuildError {
                 let local = version
                     .local()
                     .iter()
-                    .map(|segment| segment.to_string())
+                    .map(ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(".");
                 write!(

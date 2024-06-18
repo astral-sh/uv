@@ -50,7 +50,7 @@ impl VerbatimUrl {
 
         // Convert to a URL.
         let mut url = Url::from_file_path(path.clone())
-            .map_err(|_| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
+            .map_err(|()| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
@@ -84,14 +84,14 @@ impl VerbatimUrl {
 
         // Normalize the path.
         let path = normalize_path(&path)
-            .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
+            .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?;
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
         let mut url = Url::from_file_path(path.clone())
-            .map_err(|_| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
+            .map_err(|()| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
@@ -122,7 +122,7 @@ impl VerbatimUrl {
 
         // Convert to a URL.
         let mut url = Url::from_file_path(path.clone())
-            .unwrap_or_else(|_| panic!("path is absolute: {}", path.display()));
+            .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
@@ -160,7 +160,7 @@ impl VerbatimUrl {
     pub fn as_path(&self) -> Result<PathBuf, VerbatimUrlError> {
         self.url
             .to_file_path()
-            .map_err(|_| VerbatimUrlError::UrlConversion(self.url.to_file_path().unwrap()))
+            .map_err(|()| VerbatimUrlError::UrlConversion(self.url.to_file_path().unwrap()))
     }
 }
 

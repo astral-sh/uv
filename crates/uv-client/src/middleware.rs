@@ -13,7 +13,7 @@ pub(crate) struct OfflineError {
 
 impl OfflineError {
     /// Returns the URL that caused the error.
-    pub fn url(&self) -> &Url {
+    pub(crate) fn url(&self) -> &Url {
         &self.url
     }
 }

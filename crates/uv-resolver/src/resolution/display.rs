@@ -189,7 +189,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let deps = edges
                                 .iter()
                                 .map(|dependency| format!("{}", dependency.name()))
-                                .chain(source.iter().map(std::string::ToString::to_string))
+                                .chain(source.iter().map(ToString::to_string))
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -214,7 +214,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let separator = "\n";
                             let deps = source
                                 .iter()
-                                .map(std::string::ToString::to_string)
+                                .map(ToString::to_string)
                                 .chain(
                                     edges
                                         .iter()

@@ -180,7 +180,7 @@ impl Middleware for AuthMiddleware {
         trace!("Request for {url} is unauthenticated, checking cache");
 
         // Check the cache for a URL match
-        let credentials = self.cache().get_url(request.url(), Username::none());
+        let credentials = self.cache().get_url(request.url(), &Username::none());
         if let Some(credentials) = credentials.as_ref() {
             request = credentials.authenticate(request);
             if credentials.password().is_some() {
@@ -287,7 +287,7 @@ impl AuthMiddleware {
             .is_ok_and(|response| response.error_for_status_ref().is_ok())
         {
             trace!("Updating cached credentials for {url} to {credentials:?}");
-            self.cache().insert(&url, credentials)
+            self.cache().insert(&url, credentials);
         };
 
         result
@@ -346,16 +346,15 @@ impl AuthMiddleware {
         //      implementation returns different credentials for different URLs in the
         //      same realm we will use the wrong credentials.
         } else if let Some(credentials) = match self.keyring {
-            Some(ref keyring) => match credentials.and_then(|credentials| credentials.username()) {
-                Some(username) => {
+            Some(ref keyring) => {
+                if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     debug!("Checking keyring for credentials for {username}@{url}");
                     keyring.fetch(url, username).await
-                }
-                None => {
+                } else {
                     debug!("Skipping keyring lookup for {url} with no username");
                     None
                 }
-            },
+            }
             None => None,
         } {
             debug!("Found credentials in keyring for {url}");
@@ -1065,12 +1064,12 @@ mod tests {
         );
 
         assert_eq!(
-            client.get(format!("{}/foo", url_1)).send().await?.status(),
+            client.get(format!("{url_1}/foo")).send().await?.status(),
             200,
             "Requests can be to different paths in the same realm"
         );
         assert_eq!(
-            client.get(format!("{}/foo", url_2)).send().await?.status(),
+            client.get(format!("{url_2}/foo")).send().await?.status(),
             200,
             "Requests can be to different paths in the same realm"
         );

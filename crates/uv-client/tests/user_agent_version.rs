@@ -31,7 +31,7 @@ async fn test_user_agent_has_version() -> Result<()> {
                 .headers()
                 .get(USER_AGENT)
                 .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string())
+                .map(ToString::to_string)
                 .unwrap_or_default(); // Empty Default
             future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
         });
@@ -89,7 +89,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
                 .headers()
                 .get(USER_AGENT)
                 .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string())
+                .map(ToString::to_string)
                 .unwrap_or_default(); // Empty Default
             future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
         });

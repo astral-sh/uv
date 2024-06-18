@@ -929,7 +929,8 @@ mod tests {
     }
 
     /// Test for AWS Code Artifact
-    /// From https://github.com/astral-sh/uv/issues/1388#issuecomment-1947659088
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/1388#issuecomment-1947659088>
     #[test]
     fn parse_code_artifact_index_html() {
         let text = r#"

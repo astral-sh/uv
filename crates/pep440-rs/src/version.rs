@@ -67,9 +67,9 @@ impl Operator {
     /// specifiers [spec].
     ///
     /// [spec]: https://packaging.python.org/en/latest/specifications/version-specifiers/
-    pub(crate) fn is_local_compatible(&self) -> bool {
+    pub(crate) fn is_local_compatible(self) -> bool {
         !matches!(
-            *self,
+            self,
             Self::GreaterThan
                 | Self::GreaterThanEqual
                 | Self::LessThan
@@ -149,10 +149,12 @@ impl std::fmt::Display for Operator {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Operator {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     fn __str__(&self) -> String {
         self.to_string()
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -412,6 +414,7 @@ impl Version {
     ///
     /// When the iterator yields no elements.
     #[inline]
+    #[must_use]
     pub fn with_release<I, R>(mut self, release_numbers: I) -> Self
     where
         I: IntoIterator<Item = R>,
@@ -456,6 +459,7 @@ impl Version {
 
     /// Set the epoch and return the updated version.
     #[inline]
+    #[must_use]
     pub fn with_epoch(mut self, value: u64) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_epoch(value) {
@@ -468,6 +472,7 @@ impl Version {
 
     /// Set the pre-release component and return the updated version.
     #[inline]
+    #[must_use]
     pub fn with_pre(mut self, value: Option<PreRelease>) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_pre(value) {
@@ -480,6 +485,7 @@ impl Version {
 
     /// Set the post-release component and return the updated version.
     #[inline]
+    #[must_use]
     pub fn with_post(mut self, value: Option<u64>) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_post(value) {
@@ -492,6 +498,7 @@ impl Version {
 
     /// Set the dev-release component and return the updated version.
     #[inline]
+    #[must_use]
     pub fn with_dev(mut self, value: Option<u64>) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_dev(value) {
@@ -504,6 +511,7 @@ impl Version {
 
     /// Set the local segments and return the updated version.
     #[inline]
+    #[must_use]
     pub fn with_local(mut self, value: Vec<LocalSegment>) -> Self {
         if value.is_empty() {
             self.without_local()
@@ -518,6 +526,7 @@ impl Version {
     /// and local version labels MUST be ignored entirely when checking if
     /// candidate versions match a given version specifier."
     #[inline]
+    #[must_use]
     pub fn without_local(mut self) -> Self {
         // A "small" version is already guaranteed not to have a local
         // component, so we only need to do anything if we have a "full"
@@ -534,6 +543,7 @@ impl Version {
     /// The version `1.0min0` is smaller than all other `1.0` versions,
     /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
+    #[must_use]
     pub fn with_min(mut self, value: Option<u64>) -> Self {
         debug_assert!(!self.is_pre(), "min is not allowed on pre-release versions");
         debug_assert!(!self.is_dev(), "min is not allowed on dev versions");
@@ -552,6 +562,7 @@ impl Version {
     /// The version `1.0max0` is larger than all other `1.0` versions,
     /// like `1.0.post1`, `1.0+local`, etc.
     #[inline]
+    #[must_use]
     pub fn with_max(mut self, value: Option<u64>) -> Self {
         debug_assert!(
             !self.is_post(),
@@ -680,7 +691,7 @@ impl std::fmt::Display for Version {
                 "+{}",
                 self.local()
                     .iter()
-                    .map(std::string::ToString::to_string)
+                    .map(ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(".")
             )
@@ -779,7 +790,7 @@ impl FromStr for Version {
 /// calendar versions, like `2023.03`, to be represented.)
 /// * There is *at most* one of the following components: pre, dev or post.
 /// * If there is a pre segment, then its numeric value is less than 64.
-/// * If there is a dev or post segment, then its value is less than u8::MAX.
+/// * If there is a dev or post segment, then its value is less than `u8::MAX`.
 /// * There are zero "local" segments.
 ///
 /// The above constraints were chosen as a balancing point between being able
@@ -871,23 +882,25 @@ impl VersionSmall {
     const SUFFIX_NONE: u64 = 5;
     const SUFFIX_POST: u64 = 6;
     const SUFFIX_MAX: u64 = 7;
-    const SUFFIX_MAX_VERSION: u64 = 0x1FFFFF;
+    const SUFFIX_MAX_VERSION: u64 = 0x001F_FFFF;
 
     #[inline]
     fn new() -> Self {
         Self {
-            repr: 0x00000000_00A00000,
+            repr: 0x0000_0000_00A0_0000,
             release: [0, 0, 0, 0],
             len: 0,
         }
     }
 
     #[inline]
+    #[allow(clippy::unused_self)]
     fn epoch(&self) -> u64 {
         0
     }
 
     #[inline]
+    #[allow(clippy::unused_self)]
     fn set_epoch(&mut self, value: u64) -> bool {
         if value != 0 {
             return false;
@@ -902,7 +915,7 @@ impl VersionSmall {
 
     #[inline]
     fn clear_release(&mut self) {
-        self.repr &= !0xFFFFFFFF_FF000000;
+        self.repr &= !0xFFFF_FFFF_FF00_0000;
         self.release = [0, 0, 0, 0];
         self.len = 0;
     }
@@ -1122,6 +1135,7 @@ impl VersionSmall {
     }
 
     #[inline]
+    #[allow(clippy::unused_self)]
     fn local(&self) -> &[LocalSegment] {
         // A "small" version is never used if the version has a non-zero number
         // of local segments.
@@ -1138,7 +1152,7 @@ impl VersionSmall {
     #[inline]
     fn set_suffix_kind(&mut self, kind: u64) {
         debug_assert!(kind <= Self::SUFFIX_MAX);
-        self.repr &= !0xE00000;
+        self.repr &= !0x00E0_0000;
         self.repr |= kind << 21;
         if kind == Self::SUFFIX_NONE {
             self.set_suffix_version(0);
@@ -1147,13 +1161,13 @@ impl VersionSmall {
 
     #[inline]
     fn suffix_version(&self) -> u64 {
-        self.repr & 0x1FFFFF
+        self.repr & 0x001F_FFFF
     }
 
     #[inline]
     fn set_suffix_version(&mut self, value: u64) {
-        debug_assert!(value <= 0x1FFFFF);
-        self.repr &= !0x1FFFFF;
+        debug_assert!(value <= 0x001F_FFFF);
+        self.repr &= !0x001F_FFFF;
         self.repr |= value;
     }
 }
@@ -1196,8 +1210,8 @@ struct VersionFull {
     /// if any
     dev: Option<u64>,
     /// A [local version
-    /// identifier](https://peps.python.org/pep-0440/#local-version-identif
-    /// iers) such as `+deadbeef` in `1.2.3+deadbeef`
+    /// identifier](https://peps.python.org/pep-0440/#local-version-identifiers)
+    /// such as `+deadbeef` in `1.2.3+deadbeef`
     ///
     /// > They consist of a normal public version identifier (as defined
     /// > in the previous section), along with an arbitrary “local version
@@ -1460,10 +1474,10 @@ impl<'a> Parser<'a> {
     fn parse(self) -> Result<Version, VersionParseError> {
         match self.parse_pattern() {
             Ok(vpat) => {
-                if !vpat.is_wildcard() {
-                    Ok(vpat.into_version())
-                } else {
+                if vpat.is_wildcard() {
                     Err(ErrorKind::Wildcard.into())
+                } else {
+                    Ok(vpat.into_version())
                 }
             }
             // If we get an error when parsing a version pattern, then
@@ -2456,7 +2470,7 @@ fn starts_with_ignore_ascii_case(needle: &[u8], haystack: &[u8]) -> bool {
 /// # Motivation
 ///
 /// We hand-write this for a couple reasons. Firstly, the standard library's
-/// FromStr impl for parsing integers requires UTF-8 validation first. We
+/// `FromStr` impl for parsing integers requires UTF-8 validation first. We
 /// don't need that for version parsing since we stay in the realm of ASCII.
 /// Secondly, std's version is a little more flexible because it supports
 /// signed integers. So for example, it permits a leading `+` before the actual
@@ -2647,19 +2661,19 @@ mod tests {
             ),
             (
                 "1.2+123456",
-                Version::new([1, 2]).with_local(vec![LocalSegment::Number(123456)]),
+                Version::new([1, 2]).with_local(vec![LocalSegment::Number(123_456)]),
             ),
             (
                 "1.2.r32+123456",
                 Version::new([1, 2])
                     .with_post(Some(32))
-                    .with_local(vec![LocalSegment::Number(123456)]),
+                    .with_local(vec![LocalSegment::Number(123_456)]),
             ),
             (
                 "1.2.rev33+123456",
                 Version::new([1, 2])
                     .with_post(Some(33))
-                    .with_local(vec![LocalSegment::Number(123456)]),
+                    .with_local(vec![LocalSegment::Number(123_456)]),
             ),
             // Explicit epoch of 1
             (
@@ -2848,28 +2862,28 @@ mod tests {
                 "1!1.2+123456",
                 Version::new([1, 2])
                     .with_epoch(1)
-                    .with_local(vec![LocalSegment::Number(123456)]),
+                    .with_local(vec![LocalSegment::Number(123_456)]),
             ),
             (
                 "1!1.2.r32+123456",
                 Version::new([1, 2])
                     .with_epoch(1)
                     .with_post(Some(32))
-                    .with_local(vec![LocalSegment::Number(123456)]),
+                    .with_local(vec![LocalSegment::Number(123_456)]),
             ),
             (
                 "1!1.2.rev33+123456",
                 Version::new([1, 2])
                     .with_epoch(1)
                     .with_post(Some(33))
-                    .with_local(vec![LocalSegment::Number(123456)]),
+                    .with_local(vec![LocalSegment::Number(123_456)]),
             ),
             (
                 "98765!1.2.rev33+123456",
                 Version::new([1, 2])
                     .with_epoch(98765)
                     .with_post(Some(33))
-                    .with_local(vec![LocalSegment::Number(123456)]),
+                    .with_local(vec![LocalSegment::Number(123_456)]),
             ),
         ];
         for (string, structured) in versions {
@@ -3397,7 +3411,7 @@ mod tests {
         assert_eq!(
             p("5+18446744073709551615.abc"),
             Version::new([5]).with_local(vec![
-                LocalSegment::Number(18446744073709551615),
+                LocalSegment::Number(18_446_744_073_709_551_615),
                 LocalSegment::String("abc".to_string()),
             ])
         );
@@ -3496,7 +3510,7 @@ mod tests {
         assert_eq!(p("  \n5\n \t"), Version::new([5]));
 
         // min tests
-        assert!(Parser::new("1.min0".as_bytes()).parse().is_err())
+        assert!(Parser::new("1.min0".as_bytes()).parse().is_err());
     }
 
     // Tests the error cases of our version parser.
@@ -3626,7 +3640,7 @@ mod tests {
             "1.1.dev1",
         ];
         for (i, v1) in versions.iter().enumerate() {
-            for v2 in versions[i + 1..].iter() {
+            for v2 in &versions[i + 1..] {
                 let less = v1.parse::<Version>().unwrap();
                 let greater = v2.parse::<Version>().unwrap();
                 assert_eq!(
@@ -3668,7 +3682,7 @@ mod tests {
             "1.1.dev1",
         ];
 
-        for greater in versions.iter() {
+        for greater in versions {
             let greater = greater.parse::<Version>().unwrap();
             assert_eq!(
                 less.cmp(&greater),
@@ -3707,7 +3721,7 @@ mod tests {
             "1.0",
         ];
 
-        for less in versions.iter() {
+        for less in versions {
             let less = less.parse::<Version>().unwrap();
             assert_eq!(
                 less.cmp(&greater),
@@ -3728,7 +3742,7 @@ mod tests {
 
         let versions = &["1.0a1", "1.0a1+local", "1.0a1.post1"];
 
-        for less in versions.iter() {
+        for less in versions {
             let less = less.parse::<Version>().unwrap();
             assert_eq!(
                 less.cmp(&greater),
@@ -3749,7 +3763,7 @@ mod tests {
 
         let versions = &["1.0b1", "1.0b1+local", "1.0b1.post1", "1.0"];
 
-        for greater in versions.iter() {
+        for greater in versions {
             let greater = greater.parse::<Version>().unwrap();
             assert_eq!(
                 less.cmp(&greater),
@@ -3771,9 +3785,12 @@ mod tests {
         assert_eq!(p("01"), Ok(1));
         assert_eq!(p("9"), Ok(9));
         assert_eq!(p("10"), Ok(10));
-        assert_eq!(p("18446744073709551615"), Ok(18446744073709551615));
-        assert_eq!(p("018446744073709551615"), Ok(18446744073709551615));
-        assert_eq!(p("000000018446744073709551615"), Ok(18446744073709551615));
+        assert_eq!(p("18446744073709551615"), Ok(18_446_744_073_709_551_615));
+        assert_eq!(p("018446744073709551615"), Ok(18_446_744_073_709_551_615));
+        assert_eq!(
+            p("000000018446744073709551615"),
+            Ok(18_446_744_073_709_551_615)
+        );
 
         assert_eq!(p("10a"), Err(ErrorKind::InvalidDigit { got: b'a' }.into()));
         assert_eq!(p("10["), Err(ErrorKind::InvalidDigit { got: b'[' }.into()));
