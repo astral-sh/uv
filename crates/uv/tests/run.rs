@@ -54,7 +54,7 @@ fn run_with_python_version() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 5 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)
@@ -106,7 +106,7 @@ fn run_with_python_version() -> Result<()> {
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtualenv at: .venv
     Resolved 5 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.6.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)

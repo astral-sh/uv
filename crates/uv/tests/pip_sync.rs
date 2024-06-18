@@ -142,7 +142,7 @@ fn install() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + markupsafe==2.1.3
     "###
@@ -185,7 +185,7 @@ fn install_copy() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + markupsafe==2.1.3
     "###
@@ -220,7 +220,7 @@ fn install_hardlink() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + markupsafe==2.1.3
     "###
@@ -253,7 +253,7 @@ fn install_many() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + tomli==2.0.1
@@ -379,7 +379,7 @@ fn add_remove() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
@@ -420,7 +420,7 @@ fn install_sequential() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1
     "###
@@ -460,7 +460,7 @@ fn upgrade() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tomli==2.0.0
@@ -490,7 +490,7 @@ fn install_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
     "###
@@ -519,7 +519,7 @@ fn install_git_commit() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
@@ -552,7 +552,7 @@ fn install_git_tag() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###
@@ -583,7 +583,7 @@ fn install_git_subdirectories() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
      + example-pkg-b==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b)
@@ -614,7 +614,7 @@ fn install_sdist() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1
     "###
@@ -644,7 +644,7 @@ fn install_sdist_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
@@ -680,7 +680,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + bz2==1.0.0 (from file://[WORKSPACE]/scripts/links/bz2-1.0.0.tar.bz2)
     "###
@@ -785,7 +785,7 @@ fn install_version_then_install_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - werkzeug==2.0.0
@@ -816,7 +816,7 @@ fn install_numpy_py38() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + numpy==1.24.4
     "###
@@ -874,7 +874,7 @@ fn install_no_index_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###
@@ -925,7 +925,7 @@ fn warn_on_yanked() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + colorama==0.4.2
     warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install").
@@ -989,7 +989,7 @@ fn install_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
@@ -1036,7 +1036,7 @@ fn install_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
@@ -1057,7 +1057,7 @@ fn install_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
@@ -1129,7 +1129,7 @@ fn mismatched_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
       Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
     "###
@@ -1200,7 +1200,7 @@ fn install_local_source_distribution() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
     "###
@@ -1239,7 +1239,7 @@ fn install_build_system_no_backend() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + build-system-no-backend==0.1.0 (from https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz)
     "###
@@ -1269,7 +1269,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
@@ -1330,7 +1330,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
@@ -1361,7 +1361,7 @@ fn install_git_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
@@ -1459,7 +1459,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1
     "###
@@ -1533,7 +1533,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1
     "###
@@ -1572,7 +1572,7 @@ fn install_path_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
     "###
@@ -1633,7 +1633,7 @@ fn install_path_source_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
     "###
@@ -1670,7 +1670,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
@@ -1739,7 +1739,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
@@ -1775,7 +1775,7 @@ fn install_url_built_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
     "###
@@ -1832,7 +1832,7 @@ fn install_url_built_dist_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
     "###
@@ -1884,7 +1884,7 @@ fn duplicate_package_disjoint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + markupsafe==2.1.3
     "###
@@ -1910,7 +1910,7 @@ fn reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + tomli==2.0.1
@@ -1963,7 +1963,7 @@ fn reinstall_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + tomli==2.0.1
@@ -2016,7 +2016,7 @@ fn reinstall_git() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
@@ -2069,7 +2069,7 @@ fn refresh() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + tomli==2.0.1
@@ -2094,7 +2094,7 @@ fn refresh() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + tomli==2.0.1
@@ -2124,7 +2124,7 @@ fn refresh_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + tomli==2.0.1
@@ -2150,7 +2150,7 @@ fn refresh_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + markupsafe==2.1.3
      + tomli==2.0.1
@@ -2194,7 +2194,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + boltons==23.1.1
      + numpy==1.26.2
@@ -2213,7 +2213,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
@@ -2297,7 +2297,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==24.1.0
     warning: The package `black` requires `click>=8.0.0`, but it's not installed.
@@ -2324,7 +2324,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.1.0
@@ -2368,7 +2368,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
@@ -2411,7 +2411,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "###
@@ -2432,7 +2432,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
@@ -2455,7 +2455,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
@@ -2508,7 +2508,7 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
     "###
@@ -2534,7 +2534,7 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
     "###
@@ -2566,7 +2566,7 @@ fn find_links() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + markupsafe==2.1.3
      + numpy==1.26.3
@@ -2599,7 +2599,7 @@ fn find_links_no_index_match() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==1000.0.0
     "###
@@ -2629,7 +2629,7 @@ fn find_links_offline_match() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==1000.0.0
     "###
@@ -2690,7 +2690,7 @@ fn find_links_wheel_cache() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==1000.0.0
     "###
@@ -2740,7 +2740,7 @@ fn find_links_source_cache() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==999.0.0
     "###
@@ -2800,7 +2800,7 @@ fn offline() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==23.10.1
     "###
@@ -2847,7 +2847,7 @@ fn compatible_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==3.7.0
     "###
@@ -2903,7 +2903,7 @@ fn irrelevant_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==3.7.0
     "###
@@ -2927,7 +2927,7 @@ fn repeat_requirement_identical() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0
     "###);
@@ -2950,7 +2950,7 @@ fn repeat_requirement_compatible() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0
     "###);
@@ -2996,7 +2996,7 @@ fn tar_dont_preserve_mtime() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tomli==2.0.1 (from https://files.pythonhosted.org/packages/c0/3f/d7af728f075fb08564c5949a9c95e44352e23dee646869fa104a3b2060a3/tomli-2.0.1.tar.gz)
     "###);
@@ -3019,7 +3019,7 @@ fn set_read_permissions() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + databricks==0.2
     "###);
@@ -3098,7 +3098,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
@@ -3138,7 +3138,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -3167,7 +3167,7 @@ fn compile() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
     Bytecode compiled 3 files in [TIME]
      + markupsafe==2.1.3
@@ -3231,7 +3231,7 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
     error: Failed to bytecode-compile Python file in: [SITE_PACKAGES]/
       Caused by: Python process stderr:
@@ -3304,7 +3304,7 @@ fn no_stream() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + hashb-foxglove-protocolbuffers-python==25.3.0.1.20240226043130+465630478360
     "###
@@ -3395,7 +3395,7 @@ fn require_hashes_missing_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0
     "###
@@ -3436,7 +3436,7 @@ fn require_hashes_missing_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0
     "###
@@ -3477,7 +3477,7 @@ fn require_hashes_invalid_operator() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0
     "###
@@ -3554,7 +3554,7 @@ fn require_hashes_wheel_only_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0
     "###
@@ -3583,7 +3583,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1
     "###
@@ -3711,7 +3711,7 @@ fn require_hashes_source_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
@@ -3812,7 +3812,7 @@ fn require_hashes_wheel_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "###
@@ -3879,7 +3879,7 @@ fn require_hashes_wheel_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###
@@ -3993,7 +3993,7 @@ fn require_hashes_re_download() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0
     "###
@@ -4074,7 +4074,7 @@ fn require_hashes_wheel_path() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==1000.0.0 (from file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl)
     "###
@@ -4144,7 +4144,7 @@ fn require_hashes_source_path() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==999.0.0 (from file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz)
     "###
@@ -4209,7 +4209,7 @@ fn require_hashes_unnamed() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "###
@@ -4309,7 +4309,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "###
@@ -4333,7 +4333,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
@@ -4359,7 +4359,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
@@ -4419,7 +4419,7 @@ fn require_hashes_at_least_one() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0
     "###
@@ -4495,7 +4495,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###
@@ -4578,7 +4578,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example-a-961b4c22==1.0.0
@@ -4609,7 +4609,7 @@ fn require_hashes_find_links_valid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###
@@ -4722,7 +4722,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example-a-961b4c22==1.0.0
@@ -4783,7 +4783,7 @@ fn require_hashes_registry_no_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###
@@ -4923,7 +4923,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - example-a-961b4c22==1.0.0
@@ -4983,7 +4983,7 @@ fn target_built_distribution() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -5018,7 +5018,7 @@ fn target_built_distribution() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
@@ -5039,7 +5039,7 @@ fn target_built_distribution() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      + flask==3.0.3
@@ -5077,7 +5077,7 @@ fn target_source_distribution() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -5122,7 +5122,7 @@ fn target_no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flit-core==3.9.0
     "###);
@@ -5144,7 +5144,7 @@ fn target_no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + wheel==0.43.0
     "###);
@@ -5190,7 +5190,7 @@ fn prefix() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -5225,7 +5225,7 @@ fn prefix() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
@@ -5251,7 +5251,7 @@ fn preserve_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.4.0
     "###

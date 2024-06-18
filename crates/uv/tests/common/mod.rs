@@ -800,10 +800,10 @@ pub fn run_and_format<T: AsRef<str>>(
                 for i in 1..20 {
                     for verb in match windows_filters {
                         WindowsFilters::Platform => {
-                            ["Resolved", "Downloaded", "Installed", "Uninstalled"].iter()
+                            ["Resolved", "Prepared", "Installed", "Uninstalled"].iter()
                         }
                         WindowsFilters::Universal => {
-                            ["Downloaded", "Installed", "Uninstalled"].iter()
+                            ["Prepared", "Installed", "Uninstalled"].iter()
                         }
                     } {
                         snapshot = snapshot.replace(

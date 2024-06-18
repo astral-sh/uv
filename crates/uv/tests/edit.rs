@@ -32,7 +32,7 @@ fn add_registry() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning.
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.7
@@ -159,7 +159,7 @@ fn add_git() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -175,7 +175,7 @@ fn add_git() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning.
     Resolved 5 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      - project==0.1.0 (from file://[TEMP_DIR]/)
@@ -305,7 +305,7 @@ fn add_unnamed() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning.
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
@@ -396,7 +396,7 @@ fn add_remove_dev() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning.
     Resolved 4 packages in [TIME]
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.7
@@ -515,7 +515,7 @@ fn add_remove_dev() -> Result<()> {
     ----- stderr -----
     warning: `uv remove` is experimental and may change without warning.
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
@@ -620,7 +620,7 @@ fn add_remove_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
      + child2==0.1.0 (from file://[TEMP_DIR]/child2)
@@ -698,7 +698,7 @@ fn add_remove_workspace() -> Result<()> {
     ----- stderr -----
     warning: `uv remove` is experimental and may change without warning.
     Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - child1==0.1.0 (from file://[TEMP_DIR]/child1)
@@ -797,7 +797,7 @@ fn update_registry() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -813,7 +813,7 @@ fn update_registry() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning.
     Resolved 4 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==3.7.0
@@ -942,7 +942,7 @@ fn add_no_clean() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -967,7 +967,7 @@ fn add_no_clean() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning.
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
@@ -1083,7 +1083,7 @@ fn remove_registry() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -1099,7 +1099,7 @@ fn remove_registry() -> Result<()> {
     ----- stderr -----
     warning: `uv remove` is experimental and may change without warning.
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0

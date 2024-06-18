@@ -658,7 +658,7 @@ fn extra_required() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==1.0.0
      + package-b==1.0.0
@@ -708,7 +708,7 @@ fn missing_extra() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
     warning: The package `package-a==1.0.0` does not have an extra named `extra`.
@@ -759,7 +759,7 @@ fn multiple_extras_required() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + package-a==1.0.0
      + package-b==1.0.0
@@ -839,7 +839,7 @@ fn all_extras_required() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + package-a==1.0.0
      + package-b==1.0.0
@@ -961,7 +961,7 @@ fn extra_incompatible_with_extra_not_requested() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==1.0.0
      + package-b==2.0.0
@@ -1081,7 +1081,7 @@ fn extra_does_not_exist_backtrack() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==3.0.0
     warning: The package `package-a==3.0.0` does not have an extra named `extra`.
@@ -1372,7 +1372,7 @@ fn local_not_used_with_sdist() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.2.3
     "###);
@@ -1464,7 +1464,7 @@ fn local_not_latest() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.2.1+foo
     "###);
@@ -1514,7 +1514,7 @@ fn local_transitive() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==1.0.0
      + package-b==2.0.0+foo
@@ -1625,7 +1625,7 @@ fn local_transitive_greater_than_or_equal() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==1.0.0
      + package-b==2.0.0+foo
@@ -1736,7 +1736,7 @@ fn local_transitive_less_than_or_equal() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==1.0.0
      + package-b==2.0.0+foo
@@ -1901,7 +1901,7 @@ fn local_transitive_backtrack() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==1.0.0
      + package-b==2.0.0+foo
@@ -1986,7 +1986,7 @@ fn local_greater_than_or_equal() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.2.3+foo
     "###);
@@ -2139,7 +2139,7 @@ fn post_greater_than_or_equal() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.2.3.post1
     "###);
@@ -2219,7 +2219,7 @@ fn post_greater_than_post() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.2.3.post1
     "###);
@@ -2265,7 +2265,7 @@ fn post_greater_than_or_equal_post() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.2.3.post1
     "###);
@@ -2507,7 +2507,7 @@ fn post_equal_available() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.2.3.post0
     "###);
@@ -2593,7 +2593,7 @@ fn package_only_prereleases() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0a1
     "###);
@@ -2689,7 +2689,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0a1
     "###);
@@ -2733,7 +2733,7 @@ fn requires_package_prerelease_and_final_any() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.1.0
     "###);
@@ -2785,7 +2785,7 @@ fn package_prerelease_specified_only_final_available() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.3.0
     "###);
@@ -2836,7 +2836,7 @@ fn package_prerelease_specified_only_prerelease_available() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.3.0a1
     "###);
@@ -2886,7 +2886,7 @@ fn package_prerelease_specified_mixed_available() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0a1
     "###);
@@ -2935,7 +2935,7 @@ fn package_multiple_prereleases_kinds() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0rc1
     "###);
@@ -2982,7 +2982,7 @@ fn package_multiple_prereleases_numbers() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0a3
     "###);
@@ -3030,7 +3030,7 @@ fn transitive_package_only_prereleases() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==0.1.0
      + package-b==1.0.0a1
@@ -3145,7 +3145,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==0.1.0
      + package-b==1.0.0a1
@@ -3278,7 +3278,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + package-a==1.0.0
      + package-b==1.0.0
@@ -3524,7 +3524,7 @@ fn package_only_prereleases_boundary() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.1.0a1
     "###);
@@ -3573,7 +3573,7 @@ fn package_prereleases_boundary() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.1.0
     "###);
@@ -3621,7 +3621,7 @@ fn package_prereleases_global_boundary() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.1.0
     "###);
@@ -3671,7 +3671,7 @@ fn package_prereleases_specifier_boundary() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.2.0a1
     "###);
@@ -3956,7 +3956,7 @@ fn python_greater_than_current_backtrack() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
     "###);
@@ -4063,7 +4063,7 @@ fn specific_tag_and_default() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
     "###);
@@ -4098,7 +4098,7 @@ fn only_wheels() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
     "###);
@@ -4133,7 +4133,7 @@ fn no_wheels() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
     "###);
@@ -4168,7 +4168,7 @@ fn no_wheels_with_matching_platform() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
     "###);
@@ -4407,7 +4407,7 @@ fn no_build() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
     "###);
@@ -4447,7 +4447,7 @@ fn no_binary() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
     "###);
@@ -4571,7 +4571,7 @@ fn requires_package_yanked_and_unyanked_any() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.1.0
     "###);
@@ -4619,7 +4619,7 @@ fn package_yanked_specified_mixed_available() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==0.3.0
     "###);
@@ -4775,7 +4775,7 @@ fn transitive_package_only_yanked_in_range_opt_in() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + package-a==0.1.0
      + package-b==1.0.0
@@ -4906,7 +4906,7 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + package-a==1.0.0
      + package-b==1.0.0

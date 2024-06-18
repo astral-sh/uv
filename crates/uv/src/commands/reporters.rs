@@ -135,7 +135,7 @@ impl ProgressReporter {
         state.sizes.insert(position, size.unwrap_or(0));
 
         let progress = multi_progress.insert(
-            // Make sure not to reorder the initial "Downloading..." bar, or any previous bars.
+            // Make sure not to reorder the initial "Preparing..." bar, or any previous bars.
             position + 1 + state.headers,
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
@@ -243,7 +243,7 @@ impl From<Printer> for DownloadReporter {
                 .unwrap()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
-        root.set_message("Downloading packages...");
+        root.set_message("Preparing packages...");
 
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
