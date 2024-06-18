@@ -454,29 +454,31 @@ fn result_satisfies_system_python(
     })
 }
 
-/// Check if an encountered error should stop discovery.
+/// Check if an encountered error is critical and should stop discovery.
 ///
 /// Returns false when an error could be due to a faulty toolchain and we should continue searching for a working one.
-fn should_stop_discovery(err: &Error) -> bool {
-    match err {
-        // When querying the toolchain interpreter fails, we will only raise errors that demonstrate that something is broken
-        // If the toolchain interpreter returned a bad response, we'll continue searching for one that works
-        Error::Query(err) => match err {
-            InterpreterError::Encode(_)
-            | InterpreterError::Io(_)
-            | InterpreterError::SpawnFailed { .. } => true,
-            InterpreterError::QueryScript { path, .. }
-            | InterpreterError::UnexpectedResponse { path, .. }
-            | InterpreterError::StatusCode { path, .. } => {
-                trace!("Skipping bad interpreter at {}", path.display());
-                false
-            }
-            InterpreterError::NotFound(path) => {
-                trace!("Skipping missing interpreter at {}", path.display());
-                false
-            }
-        },
-        _ => true,
+impl Error {
+    pub fn is_critical(&self) -> bool {
+        match self {
+            // When querying the toolchain interpreter fails, we will only raise errors that demonstrate that something is broken
+            // If the toolchain interpreter returned a bad response, we'll continue searching for one that works
+            Error::Query(err) => match err {
+                InterpreterError::Encode(_)
+                | InterpreterError::Io(_)
+                | InterpreterError::SpawnFailed { .. } => true,
+                InterpreterError::QueryScript { path, .. }
+                | InterpreterError::UnexpectedResponse { path, .. }
+                | InterpreterError::StatusCode { path, .. } => {
+                    debug!("Skipping bad interpreter at {}: {err}", path.display());
+                    false
+                }
+                InterpreterError::NotFound(path) => {
+                    trace!("Skipping missing interpreter at {}", path.display());
+                    false
+                }
+            },
+            _ => true,
+        }
     }
 }
 
@@ -641,7 +643,7 @@ pub(crate) fn find_toolchain(
     let mut toolchains = find_toolchains(request, system, sources, cache);
     if let Some(result) = toolchains.find(|result| {
         // Return the first critical discovery error or toolchain result
-        result.as_ref().err().map_or(true, should_stop_discovery)
+        result.as_ref().err().map_or(true, Error::is_critical)
     }) {
         result
     } else {

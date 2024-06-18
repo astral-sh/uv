@@ -59,10 +59,16 @@ pub(crate) async fn list(
         &ToolchainSources::All(PreviewMode::Enabled),
         cache,
     )
-    // Raise any errors encountered during discovery
+    // Raise discovery errors if critical
+    .filter(|result| {
+        result
+            .as_ref()
+            .err()
+            .map_or(true, DiscoveryError::is_critical)
+    })
     .collect::<Result<Vec<Result<Toolchain, ToolchainNotFound>>, DiscoveryError>>()?
     .into_iter()
-    // Then drop any "missing" toolchains
+    // Drop any "missing" toolchains
     .filter_map(std::result::Result::ok);
 
     let mut output = BTreeSet::new();
