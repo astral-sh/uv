@@ -1887,7 +1887,8 @@ fn lock_requires_python() -> Result<()> {
         .collect();
 
     // Install from the lockfile.
-    uv_snapshot!(filters, context38.sync(), @r###"
+    // Note we need `--offline` otherwise we'll just fetch a 3.12 interpreter!
+    uv_snapshot!(filters, context38.sync().arg("--offline"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

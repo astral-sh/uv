@@ -32,7 +32,7 @@ pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
     native_tls: bool,
     retries: u32,
-    connectivity: Connectivity,
+    pub connectivity: Connectivity,
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,

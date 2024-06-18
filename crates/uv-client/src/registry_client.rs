@@ -929,6 +929,16 @@ pub enum Connectivity {
     Offline,
 }
 
+impl Connectivity {
+    pub fn is_online(&self) -> bool {
+        matches!(self, Self::Online)
+    }
+
+    pub fn is_offline(&self) -> bool {
+        matches!(self, Self::Offline)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
