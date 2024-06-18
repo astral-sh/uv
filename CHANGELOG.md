@@ -9,9 +9,6 @@
 - Skip invalid interpreters when searching for requested interpreter executable name ([#4308](https://github.com/astral-sh/uv/pull/4308))
 - Display keyring stderr during queries ([#4343](https://github.com/astral-sh/uv/pull/4343))
 - Allow discovery of uv binary relative to package root ([#4336](https://github.com/astral-sh/uv/pull/4336))
-
-### Enhancements
-
 - Use relative path for `lib64` symlink ([#4268](https://github.com/astral-sh/uv/pull/4268))
 
 ### CLI
