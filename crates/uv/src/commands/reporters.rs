@@ -229,11 +229,11 @@ impl ProgressReporter {
 }
 
 #[derive(Debug)]
-pub(crate) struct DownloadReporter {
+pub(crate) struct PrepareReporter {
     reporter: ProgressReporter,
 }
 
-impl From<Printer> for DownloadReporter {
+impl From<Printer> for PrepareReporter {
     fn from(printer: Printer) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
         let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
@@ -250,7 +250,7 @@ impl From<Printer> for DownloadReporter {
     }
 }
 
-impl DownloadReporter {
+impl PrepareReporter {
     #[must_use]
     pub(crate) fn with_length(self, length: u64) -> Self {
         self.reporter.root.set_length(length);
@@ -258,7 +258,7 @@ impl DownloadReporter {
     }
 }
 
-impl uv_installer::DownloadReporter for DownloadReporter {
+impl uv_installer::PrepareReporter for PrepareReporter {
     fn on_progress(&self, _dist: &CachedDist) {
         self.reporter.root.inc(1);
     }

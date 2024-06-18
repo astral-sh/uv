@@ -3519,7 +3519,7 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
       Caused by: Hash mismatch for `anyio==4.0.0`
 
@@ -3612,7 +3612,7 @@ fn require_hashes_source_only_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
       Caused by: Hash mismatch for `anyio==4.0.0`
 
@@ -3645,7 +3645,7 @@ fn require_hashes_wrong_digest() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
       Caused by: Hash mismatch for `anyio==4.0.0`
 
@@ -3678,7 +3678,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
       Caused by: Hash mismatch for `anyio==4.0.0`
 
@@ -3851,7 +3851,7 @@ fn require_hashes_wheel_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
       Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
@@ -3906,7 +3906,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
       Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
@@ -4014,7 +4014,7 @@ fn require_hashes_re_download() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
       Caused by: Hash mismatch for `anyio==4.0.0`
 
@@ -4106,7 +4106,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl
       Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
 
@@ -4385,7 +4385,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
       Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
@@ -4517,7 +4517,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
@@ -4547,7 +4547,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
@@ -4639,7 +4639,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
@@ -4668,7 +4668,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
@@ -4840,7 +4840,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
@@ -4869,7 +4869,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download distributions
+    error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 

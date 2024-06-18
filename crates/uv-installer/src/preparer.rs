@@ -30,8 +30,10 @@ pub enum Error {
     Thread(String),
 }
 
-/// Download, build, and unzip a set of distributions.
-pub struct Downloader<'a, Context: BuildContext> {
+/// Prepare distributions for installation.
+///
+/// Downloads, builds, and unzips a set of distributions.
+pub struct Preparer<'a, Context: BuildContext> {
     tags: &'a Tags,
     cache: &'a Cache,
     hashes: &'a HashStrategy,
@@ -39,7 +41,7 @@ pub struct Downloader<'a, Context: BuildContext> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, Context: BuildContext> Downloader<'a, Context> {
+impl<'a, Context: BuildContext> Preparer<'a, Context> {
     pub fn new(
         cache: &'a Cache,
         tags: &'a Tags,
@@ -55,7 +57,7 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
         }
     }
 
-    /// Set the [`Reporter`] to use for this downloader.
+    /// Set the [`Reporter`] to use for operations.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         let reporter: Arc<dyn Reporter> = Arc::new(reporter);
@@ -69,7 +71,7 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
     }
 
     /// Fetch, build, and unzip the distributions in parallel.
-    pub fn download_stream<'stream>(
+    pub fn prepare_stream<'stream>(
         &'stream self,
         distributions: Vec<Dist>,
         in_flight: &'stream InFlight,
@@ -86,9 +88,9 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
             .collect::<FuturesUnordered<_>>()
     }
 
-    /// Download, build, and unzip a set of downloaded wheels.
+    /// Download, build, and unzip a set of distributions.
     #[instrument(skip_all, fields(total = distributions.len()))]
-    pub async fn download(
+    pub async fn prepare(
         &self,
         mut distributions: Vec<Dist>,
         in_flight: &InFlight,
@@ -98,7 +100,7 @@ impl<'a, Context: BuildContext> Downloader<'a, Context> {
             .sort_unstable_by_key(|distribution| Reverse(distribution.size().unwrap_or(u64::MAX)));
 
         let wheels = self
-            .download_stream(distributions, in_flight)
+            .prepare_stream(distributions, in_flight)
             .try_collect()
             .await?;
 
