@@ -6,15 +6,17 @@
 //!
 //! Then lowers them into a dependency specification.
 
-use std::collections::BTreeMap;
 use std::ops::Deref;
+use std::{collections::BTreeMap, mem};
 
 use glob::Pattern;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::{RequirementSource, VerbatimParsedUrl};
+use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -180,6 +182,90 @@ pub enum Source {
         index: String,
         workspace: bool,
     },
+}
+
+#[derive(Error, Debug)]
+pub enum SourceError {
+    #[error("Cannot resolve git reference `{0}`.")]
+    UnresolvedReference(String),
+    #[error("Workspace dependency must be a local path.")]
+    InvalidWorkspaceRequirement,
+}
+
+impl Source {
+    pub fn from_requirement(
+        source: RequirementSource,
+        workspace: bool,
+        editable: Option<bool>,
+        rev: Option<String>,
+        tag: Option<String>,
+        branch: Option<String>,
+    ) -> Result<Option<Source>, SourceError> {
+        if workspace {
+            match source {
+                RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {}
+                _ => return Err(SourceError::InvalidWorkspaceRequirement),
+            }
+
+            return Ok(Some(Source::Workspace {
+                editable,
+                workspace: true,
+            }));
+        }
+
+        let source = match source {
+            RequirementSource::Registry { .. } => return Ok(None),
+            RequirementSource::Path { lock_path, .. } => Source::Path {
+                editable,
+                path: lock_path.to_string_lossy().into_owned(),
+            },
+            RequirementSource::Directory { lock_path, .. } => Source::Path {
+                editable,
+                path: lock_path.to_string_lossy().into_owned(),
+            },
+            RequirementSource::Url {
+                subdirectory, url, ..
+            } => Source::Url {
+                url: url.to_url(),
+                subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
+            },
+            RequirementSource::Git {
+                repository,
+                mut reference,
+                subdirectory,
+                ..
+            } => {
+                // We can only resolve a full commit hash from a pep508 URL, everything else is ambiguous.
+                let rev = match reference {
+                    GitReference::FullCommit(ref mut rev) => Some(mem::take(rev)),
+                    _ => None,
+                }
+                // Give precedence to an explicit argument.
+                .or(rev);
+
+                // Error if the user tried to specify a reference but didn't disambiguate.
+                if reference != GitReference::DefaultBranch
+                    && rev.is_none()
+                    && tag.is_none()
+                    && branch.is_none()
+                {
+                    return Err(SourceError::UnresolvedReference(
+                        reference.as_str().unwrap().to_owned(),
+                    ));
+                }
+
+                Source::Git {
+                    rev,
+                    tag,
+                    branch,
+                    git: repository,
+                    subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
+                }
+            }
+        };
+
+        Ok(Some(source))
+    }
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
