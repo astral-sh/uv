@@ -184,7 +184,7 @@ fn add_git() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      - project==0.1.0 (from file://[TEMP_DIR]/)
@@ -325,7 +325,7 @@ fn add_git_raw() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Downloaded 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -963,7 +963,7 @@ fn add_workspace_editable() -> Result<()> {
     let child1 = context.temp_dir.join("child1");
     let mut add_cmd = context.add(&["child2"]);
     add_cmd
-        .arg("--editable=true")
+        .arg("--editable")
         .arg("--workspace")
         .arg("--preview")
         .current_dir(&child1);
@@ -975,7 +975,7 @@ fn add_workspace_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
      + child2==0.1.0 (from file://[TEMP_DIR]/child2)
