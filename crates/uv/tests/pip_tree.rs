@@ -71,7 +71,7 @@ fn single_package() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
@@ -123,7 +123,7 @@ fn nested_dependencies() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + joblib==1.3.2
      + numpy==1.26.4
@@ -188,7 +188,7 @@ fn cyclic_dependency() {
     
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + uv-cyclic-dependencies-a==0.1.0
      + uv-cyclic-dependencies-b==0.1.0
@@ -235,7 +235,7 @@ fn removed_dependency() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Downloaded 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
@@ -309,7 +309,7 @@ fn multiple_packages() {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Downloaded 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
@@ -374,7 +374,7 @@ fn multiple_packages_shared_descendant() {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Downloaded 10 packages in [TIME]
+    Prepared 10 packages in [TIME]
     Installed 10 packages in [TIME]
      + boto3==1.34.69
      + botocore==1.34.69
@@ -435,7 +435,7 @@ fn with_editable() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + hatchling-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/hatchling_editable)
      + iniconfig==2.0.1.dev6+g9cae431 (from git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4)
