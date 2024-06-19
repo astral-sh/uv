@@ -3178,6 +3178,63 @@ requires-python = ">=3.8"
     Ok(())
 }
 
+/// Install from a direct path (wheel) with changed versions in the path.
+#[test]
+fn path_version_change() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg(context.workspace_root.join("scripts/links/ok-1.0.0-py3-none-any.whl")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[WORKSPACE]/scripts/links/ok-1.0.0-py3-none-any.whl)
+    "###
+    );
+
+    // Installing the same path again should be a no-op
+    uv_snapshot!(context.filters(), context.install()
+        .arg(context.workspace_root.join("scripts/links/ok-1.0.0-py3-none-any.whl")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Installing a new path should succeed
+    uv_snapshot!(context.filters(), context.install()
+        .arg(context.workspace_root.join("scripts/links/ok-2.0.0-py3-none-any.whl")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Installing a new path should succeed regardless of which version is "newer"
+    uv_snapshot!(context.filters(), context.install()
+        .arg(context.workspace_root.join("scripts/links/ok-1.0.0-py3-none-any.whl")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+}
+
 /// Ignore a URL dependency with a non-matching marker.
 #[test]
 fn editable_url_with_marker() -> Result<()> {
