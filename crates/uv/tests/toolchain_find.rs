@@ -10,6 +10,16 @@ fn toolchain_find() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // No interpreters on the path
+    uv_snapshot!(context.filters(), context.toolchain_find().env("UV_TEST_PYTHON_PATH", ""), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No Python interpreters found in provided path, active virtual environment, or search path
+    "###);
+
+    // We find the first interpreter on the path
     uv_snapshot!(context.filters(), context.toolchain_find(), @r###"
     success: true
     exit_code: 0
@@ -19,21 +29,8 @@ fn toolchain_find() {
     ----- stderr -----
     "###);
 
-    // We find the first interpreter on the path
-    uv_snapshot!(context.filters(), context.toolchain_find()
-        , @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    [PYTHON-3.11]
-
-    ----- stderr -----
-    "###);
-
     // Request Python 3.12
-    uv_snapshot!(context.filters(), context.toolchain_find()
-        .arg("3.12")
-        , @r###"
+    uv_snapshot!(context.filters(), context.toolchain_find().arg("3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -43,9 +40,7 @@ fn toolchain_find() {
     "###);
 
     // Request Python 3.11
-    uv_snapshot!(context.filters(), context.toolchain_find()
-        .arg("3.11")
-        , @r###"
+    uv_snapshot!(context.filters(), context.toolchain_find().arg("3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -55,9 +50,7 @@ fn toolchain_find() {
     "###);
 
     // Request CPython
-    uv_snapshot!(context.filters(), context.toolchain_find()
-        .arg("cpython")
-        , @r###"
+    uv_snapshot!(context.filters(), context.toolchain_find().arg("cpython"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -67,9 +60,7 @@ fn toolchain_find() {
     "###);
 
     // Request CPython 3.12
-    uv_snapshot!(context.filters(), context.toolchain_find()
-        .arg("cpython@3.12")
-        , @r###"
+    uv_snapshot!(context.filters(), context.toolchain_find().arg("cpython@3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -79,9 +70,7 @@ fn toolchain_find() {
     "###);
 
     // Request CPython 3.12 via partial key syntax
-    uv_snapshot!(context.filters(), context.toolchain_find()
-        .arg("cpython-3.12")
-        , @r###"
+    uv_snapshot!(context.filters(), context.toolchain_find().arg("cpython-3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -106,9 +95,7 @@ fn toolchain_find() {
     "###);
 
     // Request PyPy
-    uv_snapshot!(context.filters(), context.toolchain_find()
-        .arg("pypy")
-        , @r###"
+    uv_snapshot!(context.filters(), context.toolchain_find().arg("pypy"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -131,9 +118,7 @@ fn toolchain_find() {
     "###);
 
     // Request Python 3.11
-    uv_snapshot!(context.filters(), context.toolchain_find()
-        .arg("3.11")
-        , @r###"
+    uv_snapshot!(context.filters(), context.toolchain_find().arg("3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
