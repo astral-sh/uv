@@ -1,16 +1,16 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use distribution_types::{Diagnostic, InstalledDist, Name};
 use owo_colors::OwoColorize;
 use tracing::debug;
-
-use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_toolchain::Toolchain;
+use uv_toolchain::ToolchainRequest;
 use uv_toolchain::{PythonEnvironment, SystemPython};
 
 use crate::commands::ExitStatus;
@@ -34,8 +34,12 @@ pub(crate) fn pip_tree(
     } else {
         SystemPython::Allowed
     };
-    let environment =
-        PythonEnvironment::from_toolchain(Toolchain::find(python, system, preview, cache)?);
+    let environment = PythonEnvironment::from_toolchain(Toolchain::find(
+        python.map(ToolchainRequest::parse),
+        system,
+        preview,
+        cache,
+    )?);
 
     debug!(
         "Using Python {} environment at {}",
@@ -45,6 +49,7 @@ pub(crate) fn pip_tree(
 
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&environment)?;
+
     match DisplayDependencyGraph::new(&site_packages).render() {
         Ok(lines) => {
             writeln!(printer.stdout(), "{}", lines.join("\n"))?;
