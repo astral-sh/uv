@@ -15,6 +15,7 @@ use uv_requirements::RequirementsSource;
 use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
 use uv_warnings::warn_user;
 
+use crate::cli::ExternalCommand;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
@@ -25,8 +26,7 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn run(
     extras: ExtrasSpecification,
     dev: bool,
-    target: Option<String>,
-    mut args: Vec<OsString>,
+    command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
     python: Option<String>,
     package: Option<PackageName>,
@@ -179,25 +179,25 @@ pub(crate) async fn run(
         )
     };
 
-    // Construct the command
-    let command = if let Some(target) = target {
+    let (target, args) = command.split();
+    let (command, prefix_args) = if let Some(target) = target {
         let target_path = PathBuf::from(&target);
         if target_path
             .extension()
             .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
             && target_path.exists()
         {
-            args.insert(0, target_path.as_os_str().into());
-            "python".to_string()
+            (OsString::from("python"), vec![target_path])
         } else {
-            target
+            (target.clone(), vec![])
         }
     } else {
-        "python".to_string()
+        (OsString::from("python"), vec![])
     };
 
     let mut process = Command::new(&command);
-    process.args(&args);
+    process.args(prefix_args);
+    process.args(args);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -250,12 +250,13 @@ pub(crate) async fn run(
     // TODO(zanieb): Throw a nicer error message if the command is not found
     let space = if args.is_empty() { "" } else { " " };
     debug!(
-        "Running `{command}{space}{}`",
+        "Running `{}{space}{}`",
+        command.to_string_lossy(),
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
     let mut handle = process
         .spawn()
-        .with_context(|| format!("Failed to spawn: `{command}`"))?;
+        .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command

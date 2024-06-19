@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -13,6 +12,7 @@ use uv_requirements::RequirementsSource;
 use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
 use uv_warnings::warn_user;
 
+use crate::cli::ExternalCommand;
 use crate::commands::project::update_environment;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -21,8 +21,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Run a command.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
-    target: String,
-    args: Vec<OsString>,
+    command: ExternalCommand,
     python: Option<String>,
     from: Option<String>,
     with: Vec<String>,
@@ -39,12 +38,24 @@ pub(crate) async fn run(
         warn_user!("`uv tool run` is experimental and may change without warning.");
     }
 
-    let requirements = [RequirementsSource::from_package(
-        from.unwrap_or_else(|| target.clone()),
-    )]
-    .into_iter()
-    .chain(with.into_iter().map(RequirementsSource::from_package))
-    .collect::<Vec<_>>();
+    let (target, args) = command.split();
+    let Some(target) = target else {
+        return Err(anyhow::anyhow!("No tool command provided"));
+    };
+
+    let from = if let Some(from) = from {
+        from
+    } else {
+        let Some(target) = target.to_str() else {
+            return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+        };
+        target.to_string()
+    };
+
+    let requirements = [RequirementsSource::from_package(from)]
+        .into_iter()
+        .chain(with.into_iter().map(RequirementsSource::from_package))
+        .collect::<Vec<_>>();
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
@@ -92,8 +103,8 @@ pub(crate) async fn run(
     let command = target;
 
     // Construct the command
-    let mut process = Command::new(&command);
-    process.args(&args);
+    let mut process = Command::new(command);
+    process.args(args);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -133,12 +144,13 @@ pub(crate) async fn run(
     // TODO(zanieb): Throw a nicer error message if the command is not found
     let space = if args.is_empty() { "" } else { " " };
     debug!(
-        "Running `{command}{space}{}`",
+        "Running `{}{space}{}`",
+        command.to_string_lossy(),
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
     let mut handle = process
         .spawn()
-        .with_context(|| format!("Failed to spawn: `{command}`"))?;
+        .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command

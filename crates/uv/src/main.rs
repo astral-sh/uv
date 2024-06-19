@@ -644,8 +644,7 @@ async fn run() -> Result<ExitStatus> {
             commands::run(
                 args.extras,
                 args.dev,
-                args.target,
-                args.args,
+                args.command,
                 requirements,
                 args.python,
                 args.package,
@@ -770,8 +769,7 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::run_tool(
-                args.target,
-                args.args,
+                args.command,
                 args.python,
                 args.from,
                 args.with,

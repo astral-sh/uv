@@ -179,9 +179,9 @@ impl RequirementSatisfaction {
                     trace!(
                         "Path mismatch: {:?} vs. {:?}",
                         requested_path,
-                        installed_path
+                        installed_path,
                     );
-                    return Ok(Self::Satisfied);
+                    return Ok(Self::Mismatch);
                 }
 
                 if !ArchiveTimestamp::up_to_date_with(
@@ -237,9 +237,9 @@ impl RequirementSatisfaction {
                     trace!(
                         "Path mismatch: {:?} vs. {:?}",
                         requested_path,
-                        installed_path
+                        installed_path,
                     );
-                    return Ok(Self::Satisfied);
+                    return Ok(Self::Mismatch);
                 }
 
                 if !ArchiveTimestamp::up_to_date_with(
