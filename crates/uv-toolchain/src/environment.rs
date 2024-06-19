@@ -6,9 +6,13 @@ use std::sync::Arc;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
+use crate::discovery::find_toolchain;
 use crate::toolchain::Toolchain;
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
-use crate::{Error, Interpreter, Prefix, Target};
+use crate::{
+    EnvironmentPreference, Error, Interpreter, Prefix, Target, ToolchainPreference,
+    ToolchainRequest,
+};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone)]
@@ -21,6 +25,22 @@ struct PythonEnvironmentShared {
 }
 
 impl PythonEnvironment {
+    /// Find a [`PythonEnvironment`] matching the given request and preference.
+    pub fn find(
+        request: Option<ToolchainRequest>,
+        preference: EnvironmentPreference,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let toolchain = find_toolchain(
+            &request.unwrap_or_default(),
+            preference,
+            // Ignore managed toolchains when looking for environments
+            ToolchainPreference::OnlySystem,
+            cache,
+        )??;
+        Ok(Self::from_toolchain(toolchain))
+    }
+
     /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
     pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let venv = match fs_err::canonicalize(root.as_ref()) {

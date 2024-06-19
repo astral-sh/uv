@@ -183,7 +183,7 @@ pub(crate) async fn find_interpreter(
     // Locate the Python interpreter to use in the environment
     let interpreter = Toolchain::find_or_fetch(
         python_request,
-        EnvironmentPreference::OnlySystem,
+        EnvironmentPreference::Any,
         ToolchainPreference::from_settings(PreviewMode::Enabled),
         client_builder,
         cache,

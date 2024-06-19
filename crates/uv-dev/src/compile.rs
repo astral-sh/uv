@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use tracing::info;
 use uv_cache::{Cache, CacheArgs};
-use uv_toolchain::{EnvironmentPreference, Toolchain, ToolchainPreference};
+use uv_toolchain::{EnvironmentPreference, PythonEnvironment};
 
 #[derive(Parser)]
 pub(crate) struct CompileArgs {
@@ -20,13 +20,9 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
     let interpreter = if let Some(python) = args.python {
         python
     } else {
-        let interpreter = Toolchain::find(
-            None,
-            EnvironmentPreference::OnlyVirtual,
-            ToolchainPreference::default(),
-            &cache,
-        )?
-        .into_interpreter();
+        let interpreter =
+            PythonEnvironment::find(None, EnvironmentPreference::OnlyVirtual, &cache)?
+                .into_interpreter();
         interpreter.sys_executable().to_path_buf()
     };
 
