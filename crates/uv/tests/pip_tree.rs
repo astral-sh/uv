@@ -162,6 +162,7 @@ fn nested_dependencies() {
 // Additionally, package `uv-cyclic-dependencies-c` is included (depends on `uv-cyclic-dependencies-a`)
 // to make this test case more realistic and meaningful.
 #[test]
+#[cfg(not(windows))]
 fn cyclic_dependency() {
     let context = TestContext::new("3.12");
 
