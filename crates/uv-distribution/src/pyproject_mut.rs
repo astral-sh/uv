@@ -1,8 +1,8 @@
-use std::fmt;
 use std::str::FromStr;
+use std::{fmt, mem};
 
 use thiserror::Error;
-use toml_edit::{Array, DocumentMut, InlineTable, Item, RawString, Table, TomlError, Value};
+use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 
 use pep508_rs::{PackageName, Requirement};
 use pypi_types::VerbatimParsedUrl;
@@ -21,6 +21,8 @@ pub struct PyProjectTomlMut {
 pub enum Error {
     #[error("Failed to parse `pyproject.toml`")]
     Parse(#[from] Box<TomlError>),
+    #[error("Failed to serialize `pyproject.toml`")]
+    Serialize(#[from] Box<toml::ser::Error>),
     #[error("Dependencies in `pyproject.toml` are malformed")]
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
@@ -72,7 +74,7 @@ impl PyProjectTomlMut {
                 .as_table_mut()
                 .ok_or(Error::MalformedSources)?;
 
-            add_source(req, source, sources);
+            add_source(req, source, sources)?;
         }
 
         Ok(())
@@ -113,7 +115,7 @@ impl PyProjectTomlMut {
                 .as_table_mut()
                 .ok_or(Error::MalformedSources)?;
 
-            add_source(req, source, sources);
+            add_source(req, source, sources)?;
         }
 
         Ok(())
@@ -244,21 +246,17 @@ fn find_dependencies(name: &PackageName, deps: &Array) -> Vec<usize> {
 }
 
 // Add a source to `tool.uv.sources`.
-fn add_source(req: &Requirement, source: &Source, sources: &mut Table) {
-    match source {
-        Source::Workspace {
-            workspace,
-            editable,
-        } => {
-            let mut value = InlineTable::new();
-            value.insert("workspace", Value::from(*workspace));
-            if let Some(editable) = editable {
-                value.insert("editable", Value::from(*editable));
-            }
-            sources.insert(req.name.as_ref(), Item::Value(Value::InlineTable(value)));
-        }
-        _ => unimplemented!(),
-    }
+fn add_source(req: &Requirement, source: &Source, sources: &mut Table) -> Result<(), Error> {
+    // Serialize as an inline table.
+    let mut doc = toml::to_string(source)
+        .map_err(Box::new)?
+        .parse::<DocumentMut>()
+        .unwrap();
+    let table = mem::take(doc.as_table_mut()).into_inline_table();
+
+    sources.insert(req.name.as_ref(), Item::Value(Value::InlineTable(table)));
+
+    Ok(())
 }
 
 impl fmt::Display for PyProjectTomlMut {

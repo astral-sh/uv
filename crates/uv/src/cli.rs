@@ -1638,6 +1638,28 @@ pub(crate) struct AddArgs {
     #[arg(long)]
     pub(crate) workspace: bool,
 
+    /// Add the requirements as editables.
+    #[arg(long, default_missing_value = "true", num_args(0..=1))]
+    pub(crate) editable: Option<bool>,
+
+    /// Add source requirements to the `project.dependencies` section of the `pyproject.toml`.
+    ///
+    /// Without this flag uv will try to use `tool.uv.sources` for any sources.
+    #[arg(long)]
+    pub(crate) raw: bool,
+
+    /// Specific commit to use when adding from Git.
+    #[arg(long)]
+    pub(crate) rev: Option<String>,
+
+    /// Tag to use when adding from git.
+    #[arg(long)]
+    pub(crate) tag: Option<String>,
+
+    /// Branch to use when adding from git.
+    #[arg(long)]
+    pub(crate) branch: Option<String>,
+
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
 
