@@ -495,9 +495,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .insert(version.clone())
                 {
                     // Retrieve that package dependencies.
-                    let package = state.next.clone();
                     let forked_deps = self.get_dependencies_forking(
-                        &package,
+                        &state.next,
                         &version,
                         &state.markers,
                         &mut state.priorities,
@@ -508,40 +507,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state
                                 .pubgrub
                                 .add_incompatibility(Incompatibility::custom_version(
-                                    package.clone(),
+                                    state.next.clone(),
                                     version.clone(),
                                     UnavailableReason::Version(reason),
                                 ));
                             forked_states.push(state);
                         }
-                        ForkedDependencies::Unforked(constraints) => {
-                            if constraints
-                                .iter()
-                                .any(|(dependency, _)| dependency == &package)
-                            {
-                                if enabled!(Level::DEBUG) {
-                                    prefetcher.log_tried_versions();
-                                }
-                                return Err(PubGrubError::SelfDependency {
-                                    package: package.clone(),
-                                    version: version.clone(),
-                                }
-                                .into());
-                            }
-
-                            // Add that package and version if the dependencies are not problematic.
-                            let dep_incompats =
-                                state.pubgrub.add_incompatibility_from_dependencies(
-                                    package.clone(),
-                                    version.clone(),
-                                    constraints,
-                                );
-                            state.pubgrub.partial_solution.add_version(
-                                package.clone(),
-                                version.clone(),
-                                dep_incompats,
-                                &state.pubgrub.incompatibility_store,
-                            );
+                        ForkedDependencies::Unforked(dependencies) => {
+                            state.add_package_version_dependencies(
+                                &version,
+                                dependencies,
+                                &prefetcher,
+                            )?;
                             forked_states.push(state);
                         }
                         ForkedDependencies::Forked {
@@ -565,21 +542,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let mut cur_state = Some(state);
                             let forks_len = forks.len();
                             for (i, fork) in forks.into_iter().enumerate() {
-                                if fork
-                                    .dependencies
-                                    .iter()
-                                    .any(|(dependency, _)| dependency == &package)
-                                {
-                                    if enabled!(Level::DEBUG) {
-                                        prefetcher.log_tried_versions();
-                                    }
-                                    return Err(PubGrubError::SelfDependency {
-                                        package: package.clone(),
-                                        version: version.clone(),
-                                    }
-                                    .into());
-                                }
-
                                 let is_last = i == forks_len - 1;
                                 let mut forked_state = cur_state.take().unwrap();
                                 if !is_last {
@@ -587,19 +549,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
                                 forked_state.markers.and(fork.markers);
 
-                                // Add that package and version if the dependencies are not problematic.
-                                let dep_incompats =
-                                    forked_state.pubgrub.add_incompatibility_from_dependencies(
-                                        package.clone(),
-                                        version.clone(),
-                                        fork.dependencies,
-                                    );
-                                forked_state.pubgrub.partial_solution.add_version(
-                                    package.clone(),
-                                    version.clone(),
-                                    dep_incompats,
-                                    &forked_state.pubgrub.incompatibility_store,
-                                );
+                                forked_state.add_package_version_dependencies(
+                                    &version,
+                                    fork.dependencies,
+                                    &prefetcher,
+                                )?;
                                 forked_states.push(forked_state);
                             }
                         }
@@ -1573,6 +1527,34 @@ struct SolveState {
 }
 
 impl SolveState {
+    /// Add the dependencies for the selected version of the current package.
+    fn add_package_version_dependencies(
+        &mut self,
+        version: &Version,
+        dependencies: Vec<(PubGrubPackage, Range<Version>)>,
+        prefetcher: &BatchPrefetcher,
+    ) -> Result<(), ResolveError> {
+        if dependencies
+            .iter()
+            .any(|(dependency, _)| dependency == &self.next)
+        {
+            if enabled!(Level::DEBUG) {
+                prefetcher.log_tried_versions();
+            }
+            return Err(PubGrubError::SelfDependency {
+                package: self.next.clone(),
+                version: version.clone(),
+            }
+            .into());
+        }
+        self.pubgrub.add_package_version_dependencies(
+            self.next.clone(),
+            version.clone(),
+            dependencies,
+        );
+        Ok(())
+    }
+
     fn into_resolution(self) -> Resolution {
         let solution = self.pubgrub.partial_solution.extract_solution();
         let mut dependencies: FxHashMap<
