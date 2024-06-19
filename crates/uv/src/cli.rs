@@ -1616,7 +1616,7 @@ pub(crate) struct AddArgs {
     pub(crate) workspace: bool,
 
     /// Add the requirements as editables.
-    #[arg(long, default_missing_value = "true")]
+    #[arg(long, default_missing_value = "true", num_args(0..=1))]
     pub(crate) editable: Option<bool>,
 
     /// Add source requirements to the `project.dependencies` section of the `pyproject.toml`.
