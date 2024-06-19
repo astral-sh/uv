@@ -3243,6 +3243,59 @@ fn path_name_version_change() {
     );
 }
 
+/// Install from a direct path (wheel) with the same name at a different path.
+#[test]
+fn path_changes_with_same_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let wheel = context
+        .workspace_root
+        .join("scripts/links/ok-1.0.0-py3-none-any.whl");
+
+    let one = context.temp_dir.child("one");
+    one.create_dir_all()?;
+    let one_wheel = one.child(wheel.file_name().unwrap());
+
+    let two = context.temp_dir.child("two");
+    two.create_dir_all()?;
+    let two_wheel = two.child(wheel.file_name().unwrap());
+
+    fs_err::copy(&wheel, &one_wheel)?;
+    fs_err::copy(&wheel, &two_wheel)?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg(one_wheel.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/one/ok-1.0.0-py3-none-any.whl)
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg(two_wheel.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - ok==1.0.0 (from file://[TEMP_DIR]/one/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from file://[TEMP_DIR]/two/ok-1.0.0-py3-none-any.whl)
+    "###
+    );
+
+    Ok(())
+}
+
 /// Ignore a URL dependency with a non-matching marker.
 #[test]
 fn editable_url_with_marker() -> Result<()> {
