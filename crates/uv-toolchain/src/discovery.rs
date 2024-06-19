@@ -1275,29 +1275,18 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // e.g. `3`, `38`, `312`
-        if let Some(request) = {
-            match s.chars().collect::<Vec<_>>().as_slice() {
-                [major] => {
-                    if let Some(Ok(major)) = major.to_digit(10).map(u8::try_from) {
-                        Some(VersionRequest::Major(major))
-                    } else {
-                        None
-                    }
-                }
-                [major, minor @ ..] => {
-                    if let (Some(Ok(major)), Ok(minor)) = (
-                        major.to_digit(10).map(u8::try_from),
-                        str::parse::<u8>(&minor.iter().collect::<String>()),
-                    ) {
-                        Some(VersionRequest::MajorMinor(major, minor))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
+        fn parse_nosep(s: &str) -> Option<VersionRequest> {
+            let mut chars = s.chars();
+            let major = chars.next()?.to_digit(10)?.try_into().ok()?;
+            if chars.as_str().is_empty() {
+                return Some(VersionRequest::Major(major));
             }
-        } {
+            let minor = chars.as_str().parse::<u8>().ok()?;
+            Some(VersionRequest::MajorMinor(major, minor))
+        }
+
+        // e.g. `3`, `38`, `312`
+        if let Some(request) = parse_nosep(s) {
             Ok(request)
         }
         // e.g. `3.12.1`
