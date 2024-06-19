@@ -170,7 +170,8 @@ fn cyclic_dependency() {
         .write_str("uv-cyclic-dependencies-c")
         .unwrap();
 
-    let command = Command::new(get_bin())
+    let mut command = Command::new(get_bin());
+    command
         .arg("pip")
         .arg("install")
         .arg("-r")
