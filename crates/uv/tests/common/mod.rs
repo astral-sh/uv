@@ -42,6 +42,11 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
     (r"uv.exe", "uv"),
+    // uv version display
+    (
+        r"uv \d+\.\d+\.\d+( \(.*\))?",
+        r"uv [VERSION] ([COMMIT] DATE)",
+    ),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",

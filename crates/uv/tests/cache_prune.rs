@@ -68,16 +68,7 @@ fn prune_no_op() -> Result<()> {
         .assert()
         .success();
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([(
-            r"uv \d+\.\d+\.\d+( \(.*\))?",
-            r"uv [VERSION] ([COMMIT] DATE)",
-        )])
-        .collect();
-
-    uv_snapshot!(filters, prune_command(&context).arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), prune_command(&context).arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -109,16 +100,7 @@ fn prune_stale_directory() -> Result<()> {
     let simple = context.cache_dir.child("simple-v4");
     simple.create_dir_all()?;
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([(
-            r"uv \d+\.\d+\.\d+( \(.*\))?",
-            r"uv [VERSION] ([COMMIT] DATE)",
-        )])
-        .collect();
-
-    uv_snapshot!(filters, prune_command(&context).arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), prune_command(&context).arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -155,10 +137,6 @@ fn prune_stale_symlink() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (
-                r"uv \d+\.\d+\.\d+( \(.*\))?",
-                r"uv [VERSION] ([COMMIT] DATE)",
-            ),
             // The cache entry does not have a stable key, so we filter it out
             (
                 r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
