@@ -186,8 +186,6 @@ pub enum Source {
 
 #[derive(Error, Debug)]
 pub enum SourceError {
-    #[error("Source path is not valid unicode.")]
-    InvalidPath,
     #[error("Cannot resolve git reference `{0}`.")]
     UnresolvedReference(String),
     #[error("Workspace dependency must be a local path.")]
@@ -219,28 +217,17 @@ impl Source {
             RequirementSource::Registry { .. } => return Ok(None),
             RequirementSource::Path { lock_path, .. } => Source::Path {
                 editable,
-                path: lock_path
-                    .to_str()
-                    .ok_or(SourceError::InvalidPath)?
-                    .to_owned(),
+                path: lock_path.to_string_lossy().into_owned(),
             },
             RequirementSource::Directory { lock_path, .. } => Source::Path {
                 editable,
-                path: lock_path
-                    .to_str()
-                    .ok_or(SourceError::InvalidPath)?
-                    .to_owned(),
+                path: lock_path.to_string_lossy().into_owned(),
             },
             RequirementSource::Url {
                 subdirectory, url, ..
             } => Source::Url {
                 url: url.to_url(),
-                subdirectory: subdirectory
-                    .map(|path| {
-                        let path = path.to_str().ok_or(SourceError::InvalidPath)?;
-                        Ok(path.to_owned())
-                    })
-                    .transpose()?,
+                subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
             },
             RequirementSource::Git {
                 repository,
@@ -272,12 +259,7 @@ impl Source {
                     tag,
                     branch,
                     git: repository,
-                    subdirectory: subdirectory
-                        .map(|path| {
-                            let path = path.to_str().ok_or(SourceError::InvalidPath)?;
-                            Ok(path.to_owned())
-                        })
-                        .transpose()?,
+                    subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
                 }
             }
         };
