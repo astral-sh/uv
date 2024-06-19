@@ -142,7 +142,6 @@ pub enum ToolchainSource {
     Managed,
     /// The toolchain was found via the invoking interpreter i.e. via `python -m uv ...`
     ParentInterpreter,
-    // TODO(zanieb): Add support for fetching the interpreter from a remote source
 }
 
 #[derive(Error, Debug)]
