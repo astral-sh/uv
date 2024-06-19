@@ -162,7 +162,6 @@ fn nested_dependencies() {
 // Additionally, package `uv-cyclic-dependencies-c` is included (depends on `uv-cyclic-dependencies-a`)
 // to make this test case more realistic and meaningful.
 #[test]
-#[cfg(not(windows))]
 fn cyclic_dependency() {
     let context = TestContext::new("3.12");
 
@@ -171,7 +170,7 @@ fn cyclic_dependency() {
         .write_str("uv-cyclic-dependencies-c")
         .unwrap();
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
+    let command = Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-r")
@@ -182,7 +181,14 @@ fn cyclic_dependency() {
         .arg("https://test.pypi.org/simple/")
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .current_dir(&context.temp_dir);
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(context.filters(), command, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
