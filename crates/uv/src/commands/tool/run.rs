@@ -68,8 +68,11 @@ pub(crate) async fn run(
     // Discover an interpreter.
     // Note we force preview on during `uv tool run` for now since the entire interface is in preview
     let interpreter = Toolchain::find(
-        python.as_deref().map(ToolchainRequest::parse),
-        EnvironmentPreference::Any,
+        &python
+            .as_deref()
+            .map(ToolchainRequest::parse)
+            .unwrap_or_default(),
+        EnvironmentPreference::OnlySystem,
         ToolchainPreference::from_settings(preview),
         cache,
     )?
