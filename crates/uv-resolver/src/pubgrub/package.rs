@@ -201,6 +201,34 @@ impl PubGrubPackage {
             }))
         }
     }
+
+    /// Returns the name of this PubGrub package, if it has one.
+    pub(crate) fn name(&self) -> Option<&PackageName> {
+        match &**self {
+            // A root can never be a dependency of another package, and a `Python` pubgrub
+            // package is never returned by `get_dependencies`. So these cases never occur.
+            PubGrubPackageInner::Root(None) | PubGrubPackageInner::Python(_) => None,
+            PubGrubPackageInner::Root(Some(name))
+            | PubGrubPackageInner::Package { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Marker { name, .. } => Some(name),
+        }
+    }
+
+    /// Returns the marker expression associated with this PubGrub package, if
+    /// it has one.
+    pub(crate) fn marker(&self) -> Option<&MarkerTree> {
+        match &**self {
+            // A root can never be a dependency of another package, and a `Python` pubgrub
+            // package is never returned by `get_dependencies`. So these cases never occur.
+            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => None,
+            PubGrubPackageInner::Package { marker, .. }
+            | PubGrubPackageInner::Extra { marker, .. }
+            | PubGrubPackageInner::Dev { marker, .. } => marker.as_ref(),
+            PubGrubPackageInner::Marker { marker, .. } => Some(marker),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
