@@ -105,8 +105,7 @@ fn render_line(installed_dist: &InstalledDist, indent: usize, is_visited: bool) 
     let mut line = String::new();
     if indent > 0 {
         line.push_str("    ".repeat(indent - 1).as_str());
-        line.push_str("└──");
-        line.push(' ');
+        line.push_str("└── ");
     }
     line.push_str((*installed_dist.name()).to_string().as_str());
     line.push_str(" v");
