@@ -5,7 +5,7 @@ use distribution_types::IndexUrl;
 use install_wheel_rs::linker::LinkMode;
 use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::PythonVersion;
+use uv_toolchain::{PythonVersion, ToolchainPreference};
 
 use crate::{FilesystemOptions, PipOptions};
 
@@ -69,6 +69,7 @@ impl_combine_or!(PythonVersion);
 impl_combine_or!(ResolutionMode);
 impl_combine_or!(String);
 impl_combine_or!(TargetTriple);
+impl_combine_or!(ToolchainPreference);
 impl_combine_or!(bool);
 
 impl<T> Combine for Option<Vec<T>> {

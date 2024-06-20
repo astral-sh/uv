@@ -6,7 +6,7 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::ProjectWorkspace;
-use uv_toolchain::ToolchainRequest;
+use uv_toolchain::{ToolchainPreference, ToolchainRequest};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::operations::Modifications;
@@ -20,6 +20,7 @@ pub(crate) async fn remove(
     requirements: Vec<PackageName>,
     dev: bool,
     python: Option<String>,
+    toolchain_preference: ToolchainPreference,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -85,6 +86,7 @@ pub(crate) async fn remove(
     let venv = project::init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
+        toolchain_preference,
         connectivity,
         native_tls,
         cache,

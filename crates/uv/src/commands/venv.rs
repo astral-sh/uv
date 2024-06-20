@@ -42,6 +42,7 @@ use crate::shell::Shell;
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
+    toolchain_preference: ToolchainPreference,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
@@ -69,6 +70,7 @@ pub(crate) async fn venv(
         connectivity,
         seed,
         preview,
+        toolchain_preference,
         allow_existing,
         exclude_newer,
         native_tls,
@@ -118,6 +120,7 @@ async fn venv_impl(
     connectivity: Connectivity,
     seed: bool,
     preview: PreviewMode,
+    toolchain_preference: ToolchainPreference,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
@@ -137,7 +140,7 @@ async fn venv_impl(
     let interpreter = Toolchain::find_or_fetch(
         interpreter_request,
         EnvironmentPreference::OnlySystem,
-        ToolchainPreference::from_settings(preview),
+        toolchain_preference,
         client_builder,
         cache,
     )

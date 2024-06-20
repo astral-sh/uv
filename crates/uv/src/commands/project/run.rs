@@ -35,6 +35,7 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     isolated: bool,
     preview: PreviewMode,
+    toolchain_preference: ToolchainPreference,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -65,6 +66,7 @@ pub(crate) async fn run(
         let venv = project::init_environment(
             project.workspace(),
             python.as_deref().map(ToolchainRequest::parse),
+            toolchain_preference,
             connectivity,
             native_tls,
             cache,
@@ -141,7 +143,7 @@ pub(crate) async fn run(
             Toolchain::find_or_fetch(
                 python.as_deref().map(ToolchainRequest::parse),
                 EnvironmentPreference::Any,
-                ToolchainPreference::from_settings(PreviewMode::Enabled),
+                toolchain_preference,
                 client_builder,
                 cache,
             )

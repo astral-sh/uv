@@ -228,6 +228,16 @@
         "$ref": "#/definitions/Source"
       }
     },
+    "toolchain-preference": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ToolchainPreference"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "upgrade": {
       "type": [
         "boolean",
@@ -1150,6 +1160,45 @@
           }
         }
       }
+    },
+    "ToolchainPreference": {
+      "oneOf": [
+        {
+          "description": "Only use managed interpreters, never use system interpreters.",
+          "type": "string",
+          "enum": [
+            "only-managed"
+          ]
+        },
+        {
+          "description": "Prefer installed managed interpreters, but use system interpreters if not found. If neither can be found, download a managed interpreter.",
+          "type": "string",
+          "enum": [
+            "prefer-installed-managed"
+          ]
+        },
+        {
+          "description": "Prefer managed interpreters, even if one needs to be downloaded, but use system interpreters if found.",
+          "type": "string",
+          "enum": [
+            "prefer-managed"
+          ]
+        },
+        {
+          "description": "Prefer system interpreters, only use managed interpreters if no system interpreter is found.",
+          "type": "string",
+          "enum": [
+            "prefer-system"
+          ]
+        },
+        {
+          "description": "Only use system interpreters, never use managed interpreters.",
+          "type": "string",
+          "enum": [
+            "only-system"
+          ]
+        }
+      ]
     }
   }
 }
