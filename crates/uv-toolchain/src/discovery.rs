@@ -58,6 +58,8 @@ pub enum ToolchainRequest {
 pub enum ToolchainPreference {
     /// Only use managed interpreters, never use system interpreters.
     OnlyManaged,
+    /// Only use installed managed interpreters, do not use system interpreters or download new ones.
+    OnlyInstalledManaged,
     /// Prefer installed managed interpreters, but use system interpreters if not found.
     /// If neither can be found, download a managed interpreter.
     #[default]
@@ -65,6 +67,7 @@ pub enum ToolchainPreference {
     /// Prefer managed interpreters, even if one needs to be downloaded, but use system interpreters if found.
     PreferManaged,
     /// Prefer system interpreters, only use managed interpreters if no system interpreter is found.
+    /// If neither can be found, download a managed interpreter.
     PreferSystem,
     /// Only use system interpreters, never use managed interpreters.
     OnlySystem,
@@ -317,7 +320,9 @@ fn python_executables_from_installed<'a>(
     .flatten();
 
     match preference {
-        ToolchainPreference::OnlyManaged => Box::new(from_managed_toolchains),
+        ToolchainPreference::OnlyManaged | ToolchainPreference::OnlyInstalledManaged => {
+            Box::new(from_managed_toolchains)
+        }
         ToolchainPreference::PreferInstalledManaged => Box::new(
             from_managed_toolchains
                 .chain(from_search_path)
@@ -1162,7 +1167,9 @@ impl ToolchainPreference {
         }
 
         match self {
-            ToolchainPreference::OnlyManaged => matches!(source, ToolchainSource::Managed),
+            ToolchainPreference::OnlyManaged | Self::OnlyInstalledManaged => {
+                matches!(source, ToolchainSource::Managed)
+            }
             ToolchainPreference::PreferInstalledManaged
             | Self::PreferManaged
             | Self::PreferSystem => matches!(
@@ -1192,7 +1199,8 @@ impl ToolchainPreference {
         }
     }
 
-    pub(crate) fn allows_managed(self) -> bool {
+    /// Returns true if this preference allows fetching a managed toolchain.
+    pub(crate) fn allows_fetch(self) -> bool {
         matches!(
             self,
             Self::PreferManaged | Self::PreferInstalledManaged | Self::OnlyManaged
@@ -1497,6 +1505,7 @@ impl fmt::Display for ToolchainPreference {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::OnlyManaged => f.write_str("managed toolchains"),
+            Self::OnlyInstalledManaged => f.write_str("installed managed toolchains"),
             Self::OnlySystem => f.write_str("system toolchains"),
             Self::PreferInstalledManaged | Self::PreferManaged | Self::PreferSystem => {
                 f.write_str("managed or system toolchains")

@@ -1171,6 +1171,13 @@
           ]
         },
         {
+          "description": "Only use installed managed interpreters, do not use system interpreters or download new ones.",
+          "type": "string",
+          "enum": [
+            "only-installed-managed"
+          ]
+        },
+        {
           "description": "Prefer installed managed interpreters, but use system interpreters if not found. If neither can be found, download a managed interpreter.",
           "type": "string",
           "enum": [
@@ -1185,7 +1192,7 @@
           ]
         },
         {
-          "description": "Prefer system interpreters, only use managed interpreters if no system interpreter is found.",
+          "description": "Prefer system interpreters, only use managed interpreters if no system interpreter is found. If neither can be found, download a managed interpreter.",
           "type": "string",
           "enum": [
             "prefer-system"

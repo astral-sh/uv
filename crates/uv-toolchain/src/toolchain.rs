@@ -87,7 +87,7 @@ impl Toolchain {
         match Self::find(&request, environments, preference, cache) {
             Ok(venv) => Ok(venv),
             Err(Error::NotFound(_))
-                if preference.allows_managed() && client_builder.connectivity.is_online() =>
+                if preference.allows_fetch() && client_builder.connectivity.is_online() =>
             {
                 debug!("Requested Python not found, checking for available download...");
                 Self::fetch(request, client_builder, cache).await
