@@ -6,7 +6,7 @@ use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_git::GitResolver;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
-use uv_toolchain::ToolchainRequest;
+use uv_toolchain::{ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use uv_cache::Cache;
@@ -34,6 +34,7 @@ pub(crate) async fn add(
     branch: Option<String>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
+    toolchain_preference: ToolchainPreference,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -52,6 +53,7 @@ pub(crate) async fn add(
     let venv = project::init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
+        toolchain_preference,
         connectivity,
         native_tls,
         cache,

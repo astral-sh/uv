@@ -30,6 +30,7 @@ pub(crate) async fn list(
     kinds: ToolchainListKinds,
     all_versions: bool,
     all_platforms: bool,
+    toolchain_preference: ToolchainPreference,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -56,7 +57,7 @@ pub(crate) async fn list(
     let installed = find_toolchains(
         &ToolchainRequest::Any,
         EnvironmentPreference::OnlySystem,
-        ToolchainPreference::from_settings(preview),
+        toolchain_preference,
         cache,
     )
     // Raise discovery errors if critical

@@ -16,7 +16,7 @@ use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
-use uv_toolchain::{PythonEnvironment, ToolchainRequest};
+use uv_toolchain::{PythonEnvironment, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -33,6 +33,7 @@ pub(crate) async fn sync(
     dev: bool,
     modifications: Modifications,
     python: Option<String>,
+    toolchain_preference: ToolchainPreference,
     settings: InstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -52,6 +53,7 @@ pub(crate) async fn sync(
     let venv = project::init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
+        toolchain_preference,
         connectivity,
         native_tls,
         cache,

@@ -51,12 +51,15 @@ pub enum ToolchainRequest {
     /// Generally these refer to uv-managed toolchain downloads.
     Key(PythonDownloadRequest),
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum ToolchainPreference {
     /// Only use managed interpreters, never use system interpreters.
     OnlyManaged,
     /// Prefer installed managed interpreters, but use system interpreters if not found.
+    /// If neither can be found, download a managed interpreter.
     #[default]
     PreferInstalledManaged,
     /// Prefer managed interpreters, even if one needs to be downloaded, but use system interpreters if found.
@@ -1177,8 +1180,8 @@ impl ToolchainPreference {
         }
     }
 
-    /// Return a [`ToolchainPreference`] based the given settings.
-    pub fn from_settings(preview: PreviewMode) -> Self {
+    /// Return a default [`ToolchainPreference`] based on the environment and preview mode.
+    pub fn default_from(preview: PreviewMode) -> Self {
         if env::var_os("UV_TEST_PYTHON_PATH").is_some() {
             debug!("Only considering system interpreters due to `UV_TEST_PYTHON_PATH`");
             Self::OnlySystem
