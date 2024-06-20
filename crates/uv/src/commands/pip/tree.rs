@@ -103,9 +103,13 @@ fn render_line(installed_dist: &InstalledDist, indent: usize, is_visited: bool) 
         line.push_str("    ".repeat(indent - 1).as_str());
         line.push_str("└── ");
     }
-    line.push_str((*installed_dist.name()).to_string().as_str());
-    line.push_str(" v");
-    line.push_str((*installed_dist.version()).to_string().as_str());
+    write!(
+        &mut line,
+        "{} v{}",
+        installed_dist.name(),
+        installed_dist.version()
+    )
+    .unwrap();
 
     if is_visited {
         line.push_str(" (*)");
