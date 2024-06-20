@@ -181,6 +181,8 @@ impl<'a> DisplayDependencyGraph<'a> {
         let mut visited: HashSet<String> = HashSet::new();
         let mut lines: Vec<String> = Vec::new();
         for site_package in self.site_packages.iter() {
+            // If the current package is not required by any other package, start the traversal
+            // with the current package as the root.
             if !self.required_packages.contains(site_package.name()) {
                 match self.visit(site_package, &mut visited, &mut Vec::new()) {
                     Ok(visited_lines) => lines.extend(visited_lines),
