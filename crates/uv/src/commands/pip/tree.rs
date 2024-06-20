@@ -157,7 +157,7 @@ impl<'a> DisplayDependencyGraph<'a> {
     ) -> Result<Vec<String>, Error> {
         let mut lines = Vec::new();
 
-        let package_name = installed_dist.name().to_string();
+        let package_name = installed_dist.name().as_ref();
         if path.contains(&package_name) {
             let cycle_start_index = path.iter().position(|r| r == &package_name).unwrap();
             return Err(Error::CyclicDependency(path[cycle_start_index..].to_vec()));
