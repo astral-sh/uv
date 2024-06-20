@@ -216,6 +216,8 @@ impl Display for Error {
             .unwrap();
             if i != self.cycle.len() - 1 {
                 writeln!(f, ",").unwrap();
+            } else {
+                write!(f, ".").unwrap()
             }
         }
         Ok(())

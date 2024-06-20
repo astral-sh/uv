@@ -217,7 +217,7 @@ fn cyclic_dependency() {
     ----- stdout -----
     
     ----- stderr -----
-    Unable to display the dependency tree; found cyclic dependency:
+    Unable to display the dependency tree due to cyclic dependency:
       `uv-cyclic-dependencies-a` depends on `uv-cyclic-dependencies-b`,
       `uv-cyclic-dependencies-b` depends on `uv-cyclic-dependencies-a`.
     "###
