@@ -10,9 +10,7 @@ use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
-use uv_toolchain::{
-    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
-};
+use uv_toolchain::{EnvironmentPreference, PythonEnvironment, ToolchainRequest};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -21,19 +19,18 @@ use crate::printer::Printer;
 pub(crate) fn pip_check(
     python: Option<&str>,
     system: bool,
-    preview: PreviewMode,
+    _preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = Instant::now();
 
     // Detect the current Python interpreter.
-    let environment = PythonEnvironment::from_toolchain(Toolchain::find(
-        python.map(ToolchainRequest::parse),
+    let environment = PythonEnvironment::find(
+        &python.map(ToolchainRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
-        ToolchainPreference::from_settings(preview),
         cache,
-    )?);
+    )?;
 
     debug!(
         "Using Python {} environment at {}",

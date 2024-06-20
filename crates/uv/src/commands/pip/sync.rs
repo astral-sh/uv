@@ -25,8 +25,7 @@ use uv_resolver::{
     ResolutionMode,
 };
 use uv_toolchain::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonVersion, Target, Toolchain,
-    ToolchainPreference, ToolchainRequest,
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonVersion, Target, ToolchainRequest,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -112,12 +111,14 @@ pub(crate) async fn pip_sync(
     }
 
     // Detect the current Python interpreter.
-    let environment = PythonEnvironment::from_toolchain(Toolchain::find(
-        python.as_deref().map(ToolchainRequest::parse),
+    let environment = PythonEnvironment::find(
+        &python
+            .as_deref()
+            .map(ToolchainRequest::parse)
+            .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
-        ToolchainPreference::from_settings(preview),
         &cache,
-    )?);
+    )?;
 
     debug!(
         "Using Python {} environment at {}",

@@ -26,7 +26,7 @@ pub(crate) async fn find(
         Some(request) => ToolchainRequest::parse(&request),
         None => ToolchainRequest::Any,
     };
-    let toolchain = Toolchain::find_requested(
+    let toolchain = Toolchain::find(
         &request,
         EnvironmentPreference::OnlySystem,
         ToolchainPreference::from_settings(PreviewMode::Enabled),
