@@ -179,11 +179,10 @@ impl<'a> DisplayDependencyGraph<'a> {
     // The starting nodes are the ones without incoming edges.
     fn render(&self) -> Result<Vec<String>, Error> {
         let mut visited: HashSet<String> = HashSet::new();
-        let mut path: Vec<String> = Vec::new();
         let mut lines: Vec<String> = Vec::new();
         for site_package in self.site_packages.iter() {
             if !self.required_packages.contains(site_package.name()) {
-                match self.visit(site_package, &mut visited, &mut path) {
+                match self.visit(site_package, &mut visited, &mut Vec::new()) {
                     Ok(visited_lines) => lines.extend(visited_lines),
                     Err(e) => return Err(e),
                 }
