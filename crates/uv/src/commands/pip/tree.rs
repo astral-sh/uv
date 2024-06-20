@@ -205,7 +205,7 @@ struct Error {
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "cyclic dependency:\n").unwrap();
+        writeln!(f, "cyclic dependency:").unwrap();
         for i in 0..self.cycle.len() {
             write!(
                 f,
@@ -215,7 +215,7 @@ impl Display for Error {
             )
             .unwrap();
             if i != self.cycle.len() - 1 {
-                write!(f, ",\n").unwrap();
+                writeln!(f, ",").unwrap();
             }
         }
         Ok(())
