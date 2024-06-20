@@ -332,8 +332,9 @@ pub fn relative_to(path: impl AsRef<Path>, base: impl AsRef<Path>) -> Result<Pat
         .as_ref()
         .ancestors()
         .find_map(|ancestor| {
-            path.as_ref()
-                .strip_prefix(ancestor)
+            // Simplifying removes the UNC path prefix on windows.
+            dunce::simplified(path.as_ref())
+                .strip_prefix(dunce::simplified(ancestor))
                 .ok()
                 .map(|stripped| (stripped, ancestor))
         })
@@ -342,8 +343,8 @@ pub fn relative_to(path: impl AsRef<Path>, base: impl AsRef<Path>) -> Result<Pat
                 io::ErrorKind::Other,
                 format!(
                     "Trivial strip failed: {} vs. {}",
-                    path.simplified_display(),
-                    base.simplified_display()
+                    path.as_ref().simplified_display(),
+                    base.as_ref().simplified_display()
                 ),
             )
         })?;
