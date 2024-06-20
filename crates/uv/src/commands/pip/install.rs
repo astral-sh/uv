@@ -26,7 +26,8 @@ use uv_resolver::{
     ResolutionMode,
 };
 use uv_toolchain::{
-    Prefix, PythonEnvironment, PythonVersion, SystemPython, Target, Toolchain, ToolchainRequest,
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonVersion, Target, Toolchain,
+    ToolchainPreference, ToolchainRequest,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -116,15 +117,10 @@ pub(crate) async fn pip_install(
         .collect();
 
     // Detect the current Python interpreter.
-    let system = if system {
-        SystemPython::Required
-    } else {
-        SystemPython::Explicit
-    };
     let environment = PythonEnvironment::from_toolchain(Toolchain::find(
         python.as_deref().map(ToolchainRequest::parse),
-        system,
-        preview,
+        EnvironmentPreference::from_system_flag(system, true),
+        ToolchainPreference::from_settings(preview),
         &cache,
     )?);
 

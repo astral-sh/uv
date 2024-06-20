@@ -2,8 +2,8 @@
 use thiserror::Error;
 
 pub use crate::discovery::{
-    find_toolchains, Error as DiscoveryError, SystemPython, ToolchainNotFound, ToolchainRequest,
-    ToolchainSource, ToolchainSources, VersionRequest,
+    find_toolchains, EnvironmentPreference, Error as DiscoveryError, SystemPython,
+    ToolchainNotFound, ToolchainPreference, ToolchainRequest, ToolchainSource, VersionRequest,
 };
 pub use crate::environment::PythonEnvironment;
 pub use crate::implementation::ImplementationName;
@@ -91,13 +91,15 @@ mod tests {
 
     use assert_fs::{fixture::ChildPath, prelude::*, TempDir};
     use uv_cache::Cache;
-    use uv_configuration::PreviewMode;
 
-    use crate::discovery::{find_default_toolchain, find_toolchain};
+    use crate::{
+        discovery::{find_toolchain, EnvironmentPreference},
+        ToolchainPreference,
+    };
     use crate::{
         implementation::ImplementationName, managed::InstalledToolchains, toolchain::Toolchain,
-        virtualenv::virtualenv_python_executable, Error, PythonVersion, SystemPython,
-        ToolchainNotFound, ToolchainRequest, ToolchainSource, ToolchainSources, VersionRequest,
+        virtualenv::virtualenv_python_executable, Error, PythonVersion, ToolchainNotFound,
+        ToolchainRequest, ToolchainSource, VersionRequest,
     };
 
     struct TestContext {
@@ -395,18 +397,32 @@ mod tests {
     }
 
     #[test]
-    fn find_default_interpreter_empty_path() -> Result<()> {
+    fn find_toolchain_empty_path() -> Result<()> {
         let mut context = TestContext::new()?;
 
         context.search_path = Some(vec![]);
-        let result = context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache));
+        let result = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::default(),
+                &context.cache,
+            )
+        });
         assert!(
             matches!(result, Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))),
             "With an empty path, no Python installation should be detected got {result:?}"
         );
 
         context.search_path = None;
-        let result = context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache));
+        let result = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::default(),
+                &context.cache,
+            )
+        });
         assert!(
             matches!(result, Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))),
             "With an unset path, no Python installation should be detected got {result:?}"
@@ -416,14 +432,21 @@ mod tests {
     }
 
     #[test]
-    fn find_default_interpreter_unexecutable_file() -> Result<()> {
+    fn find_toolchain_unexecutable_file() -> Result<()> {
         let mut context = TestContext::new()?;
         context
             .new_search_path_directory("path")?
             .child(format!("python{}", env::consts::EXE_SUFFIX))
             .touch()?;
 
-        let result = context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache));
+        let result = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::default(),
+                &context.cache,
+            )
+        });
         assert!(
             matches!(
                 result,
@@ -436,12 +459,18 @@ mod tests {
     }
 
     #[test]
-    fn find_default_interpreter_valid_executable() -> Result<()> {
+    fn find_toolchain_valid_executable() -> Result<()> {
         let mut context = TestContext::new()?;
         context.add_python_versions(&["3.12.1"])?;
 
-        let interpreter =
-            context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache))??;
+        let interpreter = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::default(),
+                &context.cache,
+            )
+        })??;
         assert!(
             matches!(
                 interpreter,
@@ -457,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn find_default_interpreter_valid_executable_after_invalid() -> Result<()> {
+    fn find_toolchain_valid_executable_after_invalid() -> Result<()> {
         let mut context = TestContext::new()?;
         let children = context.new_search_path_directories(&[
             "query-parse-error",
@@ -494,8 +523,14 @@ mod tests {
             true,
         )?;
 
-        let toolchain =
-            context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache))??;
+        let toolchain = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::default(),
+                &context.cache,
+            )
+        })??;
         assert!(
             matches!(
                 toolchain,
@@ -512,7 +547,7 @@ mod tests {
     }
 
     #[test]
-    fn find_default_interpreter_only_python2_executable() -> Result<()> {
+    fn find_toolchain_only_python2_executable() -> Result<()> {
         let mut context = TestContext::new()?;
         let python = context
             .new_search_path_directory("python2")?
@@ -520,7 +555,14 @@ mod tests {
         TestContext::create_mock_python2_interpreter(&python)?;
 
         let result = context
-            .run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache))
+            .run(|| {
+                find_toolchain(
+                    &ToolchainRequest::Any,
+                    EnvironmentPreference::OnlySystem,
+                    ToolchainPreference::default(),
+                    &context.cache,
+                )
+            })
             .expect("An toolchain should be toolchain");
         assert!(
             matches!(result, Err(ToolchainNotFound::NoPythonInstallation(..))),
@@ -532,7 +574,7 @@ mod tests {
     }
 
     #[test]
-    fn find_default_interpreter_skip_python2_executable() -> Result<()> {
+    fn find_toolchain_skip_python2_executable() -> Result<()> {
         let mut context = TestContext::new()?;
 
         let python2 = context
@@ -550,8 +592,14 @@ mod tests {
             true,
         )?;
 
-        let toolchain =
-            context.run(|| find_default_toolchain(PreviewMode::Disabled, &context.cache))??;
+        let toolchain = context.run(|| {
+            find_toolchain(
+                &ToolchainRequest::Any,
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::default(),
+                &context.cache,
+            )
+        })??;
         assert!(
             matches!(
                 toolchain,
@@ -578,8 +626,8 @@ mod tests {
         let toolchain = context.run(|| {
             find_toolchain(
                 &ToolchainRequest::Any,
-                SystemPython::Allowed,
-                &ToolchainSources::All(PreviewMode::Disabled),
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })??;
@@ -599,8 +647,8 @@ mod tests {
         let toolchain = context.run(|| {
             find_toolchain(
                 &ToolchainRequest::Any,
-                SystemPython::Allowed,
-                &ToolchainSources::All(PreviewMode::Disabled),
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })??;
@@ -624,8 +672,8 @@ mod tests {
         let toolchain = context.run(|| {
             find_toolchain(
                 &ToolchainRequest::Any,
-                SystemPython::Required,
-                &ToolchainSources::All(PreviewMode::Disabled),
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })??;
@@ -649,8 +697,8 @@ mod tests {
         let toolchain = context.run(|| {
             find_toolchain(
                 &ToolchainRequest::Any,
-                SystemPython::Allowed,
-                &ToolchainSources::All(PreviewMode::Disabled),
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })??;
@@ -671,8 +719,8 @@ mod tests {
         let toolchain = context.run(|| {
             find_toolchain(
                 &ToolchainRequest::parse("3.11"),
-                SystemPython::Allowed,
-                &ToolchainSources::All(PreviewMode::Disabled),
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })??;
@@ -704,8 +752,8 @@ mod tests {
         let toolchain = context.run(|| {
             find_toolchain(
                 &ToolchainRequest::parse("3.11.2"),
-                SystemPython::Allowed,
-                &ToolchainSources::All(PreviewMode::Disabled),
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })??;
@@ -737,8 +785,8 @@ mod tests {
         let result = context.run(|| {
             find_toolchain(
                 &ToolchainRequest::parse("3.9"),
-                SystemPython::Allowed,
-                &ToolchainSources::All(PreviewMode::Disabled),
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -764,8 +812,8 @@ mod tests {
         let result = context.run(|| {
             find_toolchain(
                 &ToolchainRequest::parse("3.11.9"),
-                SystemPython::Allowed,
-                &ToolchainSources::All(PreviewMode::Disabled),
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -791,8 +839,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find_best(
                 &ToolchainRequest::parse("3.11.3"),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -824,8 +872,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find_best(
                 &ToolchainRequest::parse("3.11.11"),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -860,8 +908,8 @@ mod tests {
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 Toolchain::find_best(
                     &ToolchainRequest::parse("3.10"),
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -890,8 +938,8 @@ mod tests {
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 Toolchain::find_best(
                     &ToolchainRequest::parse("3.10.2"),
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -924,8 +972,8 @@ mod tests {
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -949,8 +997,8 @@ mod tests {
                 // Note this toolchain is not treated as a system interpreter
                 Toolchain::find(
                     None,
-                    SystemPython::Disallowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::OnlyVirtual,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -979,8 +1027,8 @@ mod tests {
             || {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             },
@@ -998,8 +1046,8 @@ mod tests {
             context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -1024,8 +1072,8 @@ mod tests {
             .run(|| {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })
@@ -1042,8 +1090,8 @@ mod tests {
             .run(|| {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })
@@ -1070,8 +1118,8 @@ mod tests {
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -1103,8 +1151,8 @@ mod tests {
             || {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             },
@@ -1127,8 +1175,8 @@ mod tests {
             || {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             },
@@ -1139,7 +1187,7 @@ mod tests {
             "We should prefer the parent interpreter"
         );
 
-        // Test with `SystemPython::Explicit`
+        // Test with `EnvironmentPreference::ExplicitSystem`
         let toolchain = context.run_with_vars(
             &[
                 ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
@@ -1148,8 +1196,8 @@ mod tests {
             || {
                 Toolchain::find(
                     None,
-                    SystemPython::Explicit,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::ExplicitSystem,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             },
@@ -1160,7 +1208,7 @@ mod tests {
             "We should prefer the parent interpreter"
         );
 
-        // Test with `SystemPython::Disallowed`
+        // Test with `EnvironmentPreference::OnlyVirtual`
         let toolchain = context.run_with_vars(
             &[
                 ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
@@ -1169,8 +1217,8 @@ mod tests {
             || {
                 Toolchain::find(
                     None,
-                    SystemPython::Disallowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::OnlyVirtual,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             },
@@ -1196,8 +1244,8 @@ mod tests {
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 Toolchain::find(
                     None,
-                    SystemPython::Required,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::OnlySystem,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -1212,8 +1260,8 @@ mod tests {
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 Toolchain::find(
                     Some(ToolchainRequest::parse("3.12")),
-                    SystemPython::Required,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::OnlySystem,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -1227,8 +1275,8 @@ mod tests {
         let result = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
             Toolchain::find(
                 Some(ToolchainRequest::parse("3.12.3")),
-                SystemPython::Required,
-                PreviewMode::Disabled,
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         });
@@ -1248,8 +1296,8 @@ mod tests {
         let result = context.run(|| {
             Toolchain::find(
                 None,
-                SystemPython::Disallowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::OnlyVirtual,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         });
@@ -1257,7 +1305,8 @@ mod tests {
             matches!(
                 result,
                 Err(Error::NotFound(ToolchainNotFound::NoPythonInstallation(
-                    ToolchainSources::VirtualEnv,
+                    // TODO(zanieb): We need the environment preference in the error
+                    ToolchainPreference::OnlySystem,
                     None
                 )))
             ),
@@ -1270,8 +1319,8 @@ mod tests {
             || {
                 Toolchain::find(
                     Some(ToolchainRequest::parse("3.12.3")),
-                    SystemPython::Required,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::OnlySystem,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             },
@@ -1280,7 +1329,7 @@ mod tests {
             matches!(
                 result,
                 Err(Error::NotFound(ToolchainNotFound::NoMatchingVersion(
-                    ToolchainSources::System(PreviewMode::Disabled),
+                    ToolchainPreference::OnlySystem,
                     VersionRequest::MajorMinorPatch(3, 12, 3)
                 )))
             ),
@@ -1297,8 +1346,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("foobar")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1311,8 +1360,8 @@ mod tests {
         let result = context.run(|| {
             Toolchain::find(
                 None,
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         });
@@ -1324,8 +1373,8 @@ mod tests {
         let result = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("3.10.0")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         });
@@ -1351,8 +1400,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("./foo/bar")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1366,8 +1415,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("./foo/bar")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1394,8 +1443,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse(python.to_str().unwrap())),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1405,12 +1454,12 @@ mod tests {
             "We should find the `bar` executable"
         );
 
-        // With `SystemPython::Explicit
+        // With `EnvironmentPreference::ExplicitSystem`
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse(python.to_str().unwrap())),
-                SystemPython::Explicit,
-                PreviewMode::Disabled,
+                EnvironmentPreference::ExplicitSystem,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1420,31 +1469,27 @@ mod tests {
             "We should allow the `bar` executable with explicit system"
         );
 
-        let result = context.run(|| {
+        // With `EnvironmentPreference::OnlyVirtual`
+        let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse(python.to_str().unwrap())),
-                SystemPython::Disallowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::OnlyVirtual,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
-        });
-        assert!(
-            matches!(
-                result,
-                Err(Error::Discovery(
-                    crate::discovery::Error::SourceNotSelected(_, ToolchainSource::ProvidedPath, _)
-                ))
-            ),
-            // TODO(zanieb): We should allow this, just enforce it's a virtualenv
-            "We should not allow the direct path with disallowed system; got {result:?}"
+        })?;
+        assert_eq!(
+            toolchain.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should allow the `bar` executable and verify it is virtual"
         );
 
         context.add_python_versions(&["3.11.1"])?;
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse(python.to_str().unwrap())),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1466,8 +1511,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("../foo/.venv")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1480,8 +1525,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse(venv.to_str().unwrap())),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1504,8 +1549,8 @@ mod tests {
                 Some(ToolchainRequest::parse(
                     context.tempdir.child("bar").to_str().unwrap(),
                 )),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1522,8 +1567,8 @@ mod tests {
             context.run_with_vars(&[("VIRTUAL_ENV", Some(other_venv.as_os_str()))], || {
                 Toolchain::find(
                     Some(ToolchainRequest::parse(venv.to_str().unwrap())),
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })?;
@@ -1544,8 +1589,8 @@ mod tests {
         let result = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("./foo/bar")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         });
@@ -1576,8 +1621,8 @@ mod tests {
             .run(|| {
                 Toolchain::find(
                     Some(ToolchainRequest::parse("bar")),
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })
@@ -1599,8 +1644,8 @@ mod tests {
         let result = context.run(|| {
             Toolchain::find(
                 None,
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         });
@@ -1616,8 +1661,8 @@ mod tests {
             .run(|| {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })
@@ -1632,8 +1677,8 @@ mod tests {
             .run(|| {
                 Toolchain::find(
                     Some(ToolchainRequest::parse("pypy")),
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })
@@ -1659,8 +1704,8 @@ mod tests {
             .run(|| {
                 Toolchain::find(
                     Some(ToolchainRequest::parse("pypy")),
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })
@@ -1675,8 +1720,8 @@ mod tests {
             .run(|| {
                 Toolchain::find(
                     None,
-                    SystemPython::Allowed,
-                    PreviewMode::Disabled,
+                    EnvironmentPreference::Any,
+                    ToolchainPreference::OnlySystem,
                     &context.cache,
                 )
             })
@@ -1701,8 +1746,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("pypy3.10")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1727,8 +1772,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("pypy@3.10")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1764,8 +1809,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("pypy@3.10")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1783,8 +1828,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("pypy@3.10")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1816,8 +1861,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("pypy@3.10")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;
@@ -1845,8 +1890,8 @@ mod tests {
         let toolchain = context.run(|| {
             Toolchain::find(
                 Some(ToolchainRequest::parse("pypy@3.10")),
-                SystemPython::Allowed,
-                PreviewMode::Disabled,
+                EnvironmentPreference::Any,
+                ToolchainPreference::OnlySystem,
                 &context.cache,
             )
         })?;

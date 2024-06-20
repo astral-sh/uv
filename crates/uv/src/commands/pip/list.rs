@@ -14,7 +14,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_toolchain::{PythonEnvironment, SystemPython};
+use uv_toolchain::{EnvironmentPreference, PythonEnvironment, ToolchainPreference};
 use uv_toolchain::{Toolchain, ToolchainRequest};
 
 use crate::commands::ExitStatus;
@@ -36,15 +36,10 @@ pub(crate) fn pip_list(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
-    let system = if system {
-        SystemPython::Required
-    } else {
-        SystemPython::Allowed
-    };
     let environment = PythonEnvironment::from_toolchain(Toolchain::find(
         python.map(ToolchainRequest::parse),
-        system,
-        preview,
+        EnvironmentPreference::from_system_flag(system, false),
+        ToolchainPreference::from_settings(preview),
         cache,
     )?);
 

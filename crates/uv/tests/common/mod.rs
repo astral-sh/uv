@@ -14,12 +14,13 @@ use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
-use uv_configuration::PreviewMode;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_toolchain::managed::InstalledToolchains;
-use uv_toolchain::{PythonVersion, Toolchain, ToolchainRequest};
+use uv_toolchain::{
+    EnvironmentPreference, PythonVersion, Toolchain, ToolchainPreference, ToolchainRequest,
+};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -733,8 +734,8 @@ pub fn python_toolchains_for_versions(
                     Some(ToolchainRequest::parse(python_version)),
                     // Without required, we could pick the current venv here and the test fails
                     // because the venv subcommand requires a system interpreter.
-                    uv_toolchain::SystemPython::Required,
-                    PreviewMode::Enabled,
+                    EnvironmentPreference::OnlySystem,
+                    ToolchainPreference::PreferInstalledManaged,
                     &cache,
                 ) {
                     vec![toolchain
