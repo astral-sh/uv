@@ -1,13 +1,14 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
 use std::sync::Arc;
-use std::thread;
+use std::{iter, thread};
 
 use dashmap::DashMap;
+use either::Either;
 use futures::{FutureExt, StreamExt, TryFutureExt};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
@@ -938,27 +939,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<Dependencies, ResolveError> {
         let (dependencies, name) = match &**package {
             PubGrubPackageInner::Root(_) => {
-                // Add the root requirements.
-                let dependencies = PubGrubDependencies::from_requirements(
+                let no_dev_deps = BTreeMap::default();
+                let requirements = self.flatten_requirements(
                     &self.requirements,
-                    &BTreeMap::default(),
-                    &self.constraints,
-                    &self.overrides,
+                    &no_dev_deps,
                     None,
                     None,
+                    None,
+                    markers,
+                );
+
+                let dependencies = PubGrubDependencies::from_requirements(
+                    &requirements,
                     None,
                     &self.urls,
                     &self.locals,
                     &self.git,
-                    self.markers.as_ref(),
-                    self.requires_python.as_ref(),
-                    markers,
                 )?;
+
                 (dependencies, None)
             }
-
-            PubGrubPackageInner::Python(_) => return Ok(Dependencies::Available(Vec::default())),
-
             PubGrubPackageInner::Package {
                 name,
                 extra,
@@ -1072,43 +1072,45 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                let mut dependencies = PubGrubDependencies::from_requirements(
+                let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dev_dependencies,
-                    &self.constraints,
-                    &self.overrides,
-                    Some(name),
                     extra.as_ref(),
                     dev.as_ref(),
+                    Some(name),
+                    markers,
+                );
+
+                let mut dependencies = PubGrubDependencies::from_requirements(
+                    &requirements,
+                    Some(name),
                     &self.urls,
                     &self.locals,
                     &self.git,
-                    self.markers.as_ref(),
-                    self.requires_python.as_ref(),
-                    markers,
                 )?;
-
                 // If a package has metadata for an enabled dependency group,
                 // add a dependency from it to the same package with the group
                 // enabled.
                 if extra.is_none() && dev.is_none() {
-                    for dev in &self.dev {
-                        if metadata.dev_dependencies.contains_key(dev) {
-                            dependencies.push(
-                                PubGrubPackage::from(PubGrubPackageInner::Dev {
-                                    name: name.clone(),
-                                    dev: dev.clone(),
-                                    marker: marker.clone(),
-                                    url: url.clone(),
-                                }),
-                                Range::singleton(version.clone()),
-                            );
+                    for group in &self.dev {
+                        if !metadata.dev_dependencies.contains_key(group) {
+                            continue;
                         }
+                        dependencies.push(
+                            PubGrubPackage::from(PubGrubPackageInner::Dev {
+                                name: name.clone(),
+                                dev: group.clone(),
+                                marker: marker.clone(),
+                                url: url.clone(),
+                            }),
+                            Range::singleton(version.clone()),
+                        );
                     }
                 }
 
                 (dependencies, Some(name))
             }
+            PubGrubPackageInner::Python(_) => return Ok(Dependencies::Available(Vec::default())),
 
             // Add a dependency on both the marker and base package.
             PubGrubPackageInner::Marker { name, marker, url } => {
@@ -1195,6 +1197,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if let Some(name) = name {
                 debug!("Adding transitive dependency for {name}=={version}: {dep_package}{dep_version}");
             } else {
+                // A dependency from the root package or requirements.txt.
                 debug!("Adding direct dependency: {dep_package}{dep_version}");
             }
 
@@ -1206,6 +1209,130 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         Ok(Dependencies::Available(dependencies.into()))
+    }
+
+    /// The regular and dev dependencies filtered by Python version and the markers of this fork,
+    /// plus the extras dependencies of the current package (e.g., `black` depending on
+    /// `black[colorama]`).
+    fn flatten_requirements<'a>(
+        &'a self,
+        dependencies: &'a [Requirement],
+        dev_dependencies: &'a BTreeMap<GroupName, Vec<Requirement>>,
+        extra: Option<&'a ExtraName>,
+        dev: Option<&'a GroupName>,
+        name: Option<&PackageName>,
+        markers: &'a MarkerTree,
+    ) -> Vec<&'a Requirement> {
+        // Start with the requirements for the current extra of the package (for an extra
+        // requirement) or the non-extra (regular) dependencies (if extra is None), plus
+        // the constraints for the current package.
+        let regular_and_dev_dependencies = if let Some(dev) = dev {
+            Either::Left(dev_dependencies.get(dev).into_iter().flatten())
+        } else {
+            Either::Right(dependencies.iter())
+        };
+        let mut requirements: Vec<&Requirement> = self
+            .requirements_for_extra(regular_and_dev_dependencies, extra, markers)
+            .collect();
+
+        // Check if there are recursive self inclusions and we need to go into the expensive branch.
+        if !requirements
+            .iter()
+            .any(|req| name == Some(&req.name) && !req.extras.is_empty())
+        {
+            return requirements;
+        }
+
+        // Transitively process all extras that are recursively included, starting with the current
+        // extra.
+        let mut seen = FxHashSet::default();
+        let mut queue: VecDeque<_> = requirements
+            .iter()
+            .filter(|req| name == Some(&req.name))
+            .flat_map(|req| &req.extras)
+            .collect();
+        while let Some(extra) = queue.pop_front() {
+            if !seen.insert(extra) {
+                continue;
+            }
+            // Add each transitively included extra.
+            queue.extend(
+                self.requirements_for_extra(dependencies, Some(extra), markers)
+                    .filter(|req| name == Some(&req.name))
+                    .flat_map(|req| &req.extras),
+            );
+            // Add the requirements for that extra
+            requirements.extend(self.requirements_for_extra(dependencies, Some(extra), markers));
+        }
+        // Drop all the self-requirements now that we flattened them out.
+        requirements.retain(|req| name != Some(&req.name));
+
+        requirements
+    }
+
+    /// The set of the regular and dev dependencies, filtered by Python version,
+    /// the markers of this fork and the requested extra.
+    fn requirements_for_extra<'a>(
+        &'a self,
+        dependencies: impl IntoIterator<Item = &'a Requirement>,
+        extra: Option<&'a ExtraName>,
+        markers: &'a MarkerTree,
+    ) -> impl Iterator<Item = &'a Requirement> {
+        self.overrides
+            .apply(dependencies)
+            .flat_map(|requirement| {
+                iter::once(requirement).chain(
+                    // If the requirement was constrained, add those constraints.
+                    self.constraints
+                        .get(&requirement.name)
+                        .into_iter()
+                        .flatten(),
+                )
+            })
+            .filter(move |requirement| {
+                // If the requirement would not be selected with any Python version
+                // supported by the root, skip it.
+                if !satisfies_requires_python(self.requires_python.as_ref(), requirement) {
+                    trace!(
+                        "skipping {requirement} because of Requires-Python {requires_python}",
+                        // OK because this filter only applies when there is a present
+                        // Requires-Python specifier.
+                        requires_python = self.requires_python.as_ref().unwrap()
+                    );
+                    return false;
+                }
+
+                // If we're in universal mode, `fork_markers` might correspond to a
+                // non-trivial marker expression that provoked the resolver to fork.
+                // In that case, we should ignore any dependency that cannot possibly
+                // satisfy the markers that provoked the fork.
+                if !possible_to_satisfy_markers(markers, requirement) {
+                    trace!("skipping {requirement} because of context resolver markers {markers}");
+                    return false;
+                }
+
+                // If the requirement isn't relevant for the current platform, skip it.
+                match extra {
+                    Some(source_extra) => {
+                        // Only include requirements that are relevant for the current extra.
+                        if requirement.evaluate_markers(self.markers.as_ref(), &[]) {
+                            return false;
+                        }
+                        if !requirement.evaluate_markers(
+                            self.markers.as_ref(),
+                            std::slice::from_ref(source_extra),
+                        ) {
+                            return false;
+                        }
+                    }
+                    None => {
+                        if !requirement.evaluate_markers(self.markers.as_ref(), &[]) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            })
     }
 
     /// Fetch the metadata for a stream of packages and versions.
@@ -2289,4 +2416,29 @@ impl<'a> PossibleFork<'a> {
         }
         false
     }
+}
+
+/// Returns true if and only if the given requirement's marker expression has a
+/// possible true value given the `requires_python` specifier given.
+///
+/// While this is always called, a `requires_python` is only non-None when in
+/// universal resolution mode. In non-universal mode, `requires_python` is
+/// `None` and this always returns `true`.
+fn satisfies_requires_python(
+    requires_python: Option<&MarkerTree>,
+    requirement: &Requirement,
+) -> bool {
+    let Some(requires_python) = requires_python else {
+        return true;
+    };
+    possible_to_satisfy_markers(requires_python, requirement)
+}
+
+/// Returns true if and only if the given requirement's marker expression has a
+/// possible true value given the `markers` expression given.
+fn possible_to_satisfy_markers(markers: &MarkerTree, requirement: &Requirement) -> bool {
+    let Some(marker) = requirement.marker.as_ref() else {
+        return true;
+    };
+    !crate::marker::is_disjoint(markers, marker)
 }
