@@ -173,12 +173,8 @@ impl<'a> DisplayDependencyGraph<'a> {
         visited.insert(package_name.clone());
         for required in &required_with_no_extra(installed_dist) {
             if self.dist_by_package_name.contains_key(&required.name) {
-                match self.visit(self.dist_by_package_name[&required.name], visited, path) {
-                    Ok(visited_lines) => lines.extend(visited_lines),
-                    Err(e) => {
-                        return Err(e);
-                    }
-                }
+                let visited_lines = self.visit(self.dist_by_package_name[&required.name], visited, path)?;
+                lines.extend(visited_lines);
             }
         }
         path.pop();
