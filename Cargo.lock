@@ -391,6 +391,7 @@ name = "bench"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "codspeed-criterion-compat",
  "criterion",
  "distribution-filename",
