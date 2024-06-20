@@ -4984,6 +4984,7 @@ dependencies = [
  "anyhow",
  "assert_fs",
  "cache-key",
+ "clap",
  "configparser",
  "fs-err",
  "futures",

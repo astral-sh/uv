@@ -9,9 +9,9 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_toolchain::Toolchain;
+use uv_toolchain::EnvironmentPreference;
+use uv_toolchain::PythonEnvironment;
 use uv_toolchain::ToolchainRequest;
-use uv_toolchain::{PythonEnvironment, SystemPython};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -24,22 +24,16 @@ pub(crate) fn pip_tree(
     strict: bool,
     python: Option<&str>,
     system: bool,
-    preview: PreviewMode,
+    _preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     // Detect the current Python interpreter.
-    let system = if system {
-        SystemPython::Required
-    } else {
-        SystemPython::Allowed
-    };
-    let environment = PythonEnvironment::from_toolchain(Toolchain::find(
-        python.map(ToolchainRequest::parse),
-        system,
-        preview,
+    let environment = PythonEnvironment::find(
+        &python.map(ToolchainRequest::parse).unwrap_or_default(),
+        EnvironmentPreference::from_system_flag(system, false),
         cache,
-    )?);
+    )?;
 
     debug!(
         "Using Python {} environment at {}",
@@ -157,7 +151,7 @@ impl<'a> DisplayDependencyGraph<'a> {
     ) -> Result<Vec<String>, Error> {
         let mut lines = Vec::new();
 
-        let package_name = installed_dist.name().as_ref();
+        let package_name = installed_dist.name().to_string();
         if path.contains(&package_name) {
             let cycle_start_index = path.iter().position(|r| r == &package_name).unwrap();
             return Err(Error::CyclicDependency(path[cycle_start_index..].to_vec()));
@@ -172,7 +166,8 @@ impl<'a> DisplayDependencyGraph<'a> {
         visited.insert(package_name.clone());
         for required in &required_with_no_extra(installed_dist) {
             if self.dist_by_package_name.contains_key(&required.name) {
-                let visited_lines = self.visit(self.dist_by_package_name[&required.name], visited, path)?;
+                let visited_lines =
+                    self.visit(self.dist_by_package_name[&required.name], visited, path)?;
                 lines.extend(visited_lines);
             }
         }

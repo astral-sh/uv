@@ -22,14 +22,14 @@ use uv_settings::{
     Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
     ResolverOptions,
 };
-use uv_toolchain::{Prefix, PythonVersion, Target};
+use uv_toolchain::{Prefix, PythonVersion, Target, ToolchainPreference};
 
 use crate::cli::{
-    AddArgs, BuildArgs, ColorChoice, ExternalCommand, GlobalArgs, IndexArgs, InstallerArgs,
-    LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs,
-    PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs,
-    ResolverInstallerArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs,
-    ToolchainListArgs, VenvArgs,
+    AddArgs, BuildArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, IndexArgs,
+    InstallerArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, RefreshArgs, RemoveArgs,
+    ResolverArgs, ResolverInstallerArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs,
+    ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::ListFormat;
@@ -46,11 +46,35 @@ pub(crate) struct GlobalSettings {
     pub(crate) isolated: bool,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
+    pub(crate) toolchain_preference: ToolchainPreference,
 }
 
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        command: &Commands,
+        args: &GlobalArgs,
+        workspace: Option<&FilesystemOptions>,
+    ) -> Self {
+        let preview = PreviewMode::from(
+            flag(args.preview, args.no_preview)
+                .combine(workspace.and_then(|workspace| workspace.globals.preview))
+                .unwrap_or(false),
+        );
+
+        // Always use preview mode toolchain preferences during preview commands
+        // TODO(zanieb): There should be a cleaner way to do this, we should probably resolve
+        // force preview to true for these commands but it would break our experimental warning
+        // right now
+        let default_toolchain_preference = if matches!(
+            command,
+            Commands::Project(_) | Commands::Toolchain(_) | Commands::Tool(_)
+        ) {
+            ToolchainPreference::default_from(PreviewMode::Enabled)
+        } else {
+            ToolchainPreference::default_from(preview)
+        };
+
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
@@ -84,11 +108,11 @@ impl GlobalSettings {
             },
             isolated: args.isolated,
             show_settings: args.show_settings,
-            preview: PreviewMode::from(
-                flag(args.preview, args.no_preview)
-                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
-                    .unwrap_or(false),
-            ),
+            preview,
+            toolchain_preference: args
+                .toolchain_preference
+                .combine(workspace.and_then(|workspace| workspace.globals.toolchain_preference))
+                .unwrap_or(default_toolchain_preference),
         }
     }
 }

@@ -30,6 +30,7 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     _isolated: bool,
     preview: PreviewMode,
+    toolchain_preference: ToolchainPreference,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -73,7 +74,7 @@ pub(crate) async fn run(
             .map(ToolchainRequest::parse)
             .unwrap_or_default(),
         EnvironmentPreference::OnlySystem,
-        ToolchainPreference::from_settings(preview),
+        toolchain_preference,
         cache,
     )?
     .into_interpreter();
