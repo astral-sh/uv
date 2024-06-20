@@ -729,9 +729,10 @@ pub fn python_toolchains_for_versions(
                 })
                 .unwrap_or_default();
             if inner.is_empty() {
+                // TODO(zanieb): Collapse these two cases now that we support `ToolchainPreference`
                 // Fallback to a system lookup if we failed to find one in the toolchain directory
                 if let Ok(toolchain) = Toolchain::find(
-                    Some(ToolchainRequest::parse(python_version)),
+                    &ToolchainRequest::parse(python_version),
                     // Without required, we could pick the current venv here and the test fails
                     // because the venv subcommand requires a system interpreter.
                     EnvironmentPreference::OnlySystem,

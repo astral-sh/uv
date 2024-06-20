@@ -36,21 +36,17 @@ impl Toolchain {
 
     /// Find an installed [`Toolchain`].
     ///
-    /// This is the standard interface for discovering a Python toolchain for use with uv.
+    /// This is the standard interface for discovering a Python toolchain for creating
+    /// an environment. If interested in finding an existing environment, see
+    /// [`PythonEnvironment::find`] instead.
     ///
-    /// See [`uv-toolchain::discovery`] for implementation details.
+    /// Note we still require an [`EnvironmentPreference`] as this can either bypass virtual environments
+    /// or prefer them. In most cases, this should be [`EnvironmentPreference::OnlySystem`]
+    /// but if you want to allow an interpreter from a virtual environment if it satisfies the request,
+    /// then use [`EnvironmentPreference::Any`].
+    ///
+    /// See [`find_toolchain`] for implementation details.
     pub fn find(
-        python: Option<ToolchainRequest>,
-        environments: EnvironmentPreference,
-        preference: ToolchainPreference,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        let request = python.unwrap_or_default();
-        Self::find_requested(&request, environments, preference, cache)
-    }
-
-    /// Find an installed [`Toolchain`] that satisfies a request.
-    pub fn find_requested(
         request: &ToolchainRequest,
         environments: EnvironmentPreference,
         preference: ToolchainPreference,
@@ -80,24 +76,20 @@ impl Toolchain {
     ///
     /// Unlike [`Toolchain::find`], if the toolchain is not installed it will be installed automatically.
     pub async fn find_or_fetch<'a>(
-        python: Option<ToolchainRequest>,
+        request: Option<ToolchainRequest>,
         environments: EnvironmentPreference,
         preference: ToolchainPreference,
         client_builder: BaseClientBuilder<'a>,
         cache: &Cache,
     ) -> Result<Self, Error> {
+        let request = request.unwrap_or_default();
         // Perform a find first
-        match Self::find(python.clone(), environments, preference, cache) {
+        match Self::find(&request, environments, preference, cache) {
             Ok(venv) => Ok(venv),
             Err(Error::NotFound(_))
                 if preference.allows_managed() && client_builder.connectivity.is_online() =>
             {
                 debug!("Requested Python not found, checking for available download...");
-                let request = if let Some(request) = python {
-                    request
-                } else {
-                    ToolchainRequest::default()
-                };
                 Self::fetch(request, client_builder, cache).await
             }
             Err(err) => Err(err),
