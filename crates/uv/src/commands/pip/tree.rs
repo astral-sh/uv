@@ -1,3 +1,5 @@
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -51,7 +53,7 @@ pub(crate) fn pip_tree(
         Err(e) => {
             writeln!(
                 printer.stderr(),
-                "Unable to display the dependency tree; {e}",
+                "Unable to display the dependency tree due to {e}",
             )
             .unwrap();
             return Ok(ExitStatus::Failure);
@@ -154,7 +156,9 @@ impl<'a> DisplayDependencyGraph<'a> {
         let package_name = installed_dist.name().to_string();
         if path.contains(&package_name) {
             let cycle_start_index = path.iter().position(|r| r == &package_name).unwrap();
-            return Err(Error::CyclicDependency(path[cycle_start_index..].to_vec()));
+            return Err(Error {
+                cycle: path[cycle_start_index..].to_vec(),
+            });
         }
         let is_visited = visited.contains(&package_name);
         lines.push(render_line(installed_dist, path.len(), is_visited));
@@ -195,7 +199,25 @@ impl<'a> DisplayDependencyGraph<'a> {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum Error {
-    #[error("Cyclic dependency detected: {0:#?}")]
-    CyclicDependency(Vec<String>),
+struct Error {
+    cycle: Vec<String>,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "cyclic dependency:\n").unwrap();
+        for i in 0..self.cycle.len() {
+            write!(
+                f,
+                "  `{}` depends on `{}`",
+                self.cycle[i],
+                self.cycle[(i + 1) % self.cycle.len()]
+            )
+            .unwrap();
+            if i != self.cycle.len() - 1 {
+                write!(f, ",\n").unwrap();
+            }
+        }
+        Ok(())
+    }
 }
