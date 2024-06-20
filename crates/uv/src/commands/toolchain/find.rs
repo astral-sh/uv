@@ -14,6 +14,7 @@ use crate::printer::Printer;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn find(
     request: Option<String>,
+    toolchain_preference: ToolchainPreference,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -29,7 +30,7 @@ pub(crate) async fn find(
     let toolchain = Toolchain::find(
         &request,
         EnvironmentPreference::OnlySystem,
-        ToolchainPreference::from_settings(PreviewMode::Enabled),
+        toolchain_preference,
         cache,
     )?;
 

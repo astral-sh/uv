@@ -140,7 +140,7 @@ async fn run() -> Result<ExitStatus> {
     };
 
     // Resolve the global settings.
-    let globals = GlobalSettings::resolve(&cli.global_args, filesystem.as_ref());
+    let globals = GlobalSettings::resolve(&cli.command, &cli.global_args, filesystem.as_ref());
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(cli.cache_args, filesystem.as_ref());
@@ -280,6 +280,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.link_mode,
                 args.settings.python,
                 args.settings.system,
+                globals.toolchain_preference,
                 args.settings.concurrency,
                 globals.native_tls,
                 globals.quiet,
@@ -585,6 +586,7 @@ async fn run() -> Result<ExitStatus> {
             commands::venv(
                 &args.name,
                 args.settings.python.as_deref(),
+                globals.toolchain_preference,
                 args.settings.link_mode,
                 &args.settings.index_locations,
                 args.settings.index_strategy,
@@ -626,6 +628,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.isolated,
                 globals.preview,
+                globals.toolchain_preference,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -647,6 +650,7 @@ async fn run() -> Result<ExitStatus> {
                 args.dev,
                 args.modifications,
                 args.python,
+                globals.toolchain_preference,
                 args.settings,
                 globals.preview,
                 globals.connectivity,
@@ -669,6 +673,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.settings,
                 globals.preview,
+                globals.toolchain_preference,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -696,6 +701,7 @@ async fn run() -> Result<ExitStatus> {
                 args.branch,
                 args.python,
                 args.settings,
+                globals.toolchain_preference,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -717,6 +723,7 @@ async fn run() -> Result<ExitStatus> {
                 args.requirements,
                 args.dev,
                 args.python,
+                globals.toolchain_preference,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -756,6 +763,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.isolated,
                 globals.preview,
+                globals.toolchain_preference,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -778,6 +786,7 @@ async fn run() -> Result<ExitStatus> {
                 args.kinds,
                 args.all_versions,
                 args.all_platforms,
+                globals.toolchain_preference,
                 globals.preview,
                 &cache,
                 printer,
@@ -814,7 +823,14 @@ async fn run() -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::toolchain_find(args.request, globals.preview, &cache, printer).await
+            commands::toolchain_find(
+                args.request,
+                globals.toolchain_preference,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
         }
     }
 }
