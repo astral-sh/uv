@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.14
+
+### Enhancements
+
+- Support toolchain requests with platform-tag style Python implementations and version ([#4407](https://github.com/astral-sh/uv/pull/4407))
+
+### CLI
+
+- Use "Prepared" instead of "Downloaded" in logs ([#4394](https://github.com/astral-sh/uv/pull/4394))
+
+### Bug fixes
+
+- Treat mismatched directory and file urls as unsatisfied requirements ([#4393](https://github.com/astral-sh/uv/pull/4393))
+
 ## 0.2.13
 
 ### Enhancements
