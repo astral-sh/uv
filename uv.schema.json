@@ -16,6 +16,30 @@
         "null"
       ]
     },
+    "concurrent-builds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 1.0
+    },
+    "concurrent-downloads": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 1.0
+    },
+    "concurrent-installs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 1.0
+    },
     "config-settings": {
       "anyOf": [
         {
@@ -442,30 +466,6 @@
             "boolean",
             "null"
           ]
-        },
-        "concurrent-builds": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 1.0
-        },
-        "concurrent-downloads": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 1.0
-        },
-        "concurrent-installs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 1.0
         },
         "config-settings": {
           "anyOf": [

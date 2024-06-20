@@ -58,6 +58,9 @@ pub struct GlobalOptions {
     pub offline: Option<bool>,
     pub no_cache: Option<bool>,
     pub cache_dir: Option<PathBuf>,
+    pub concurrent_downloads: Option<NonZeroUsize>,
+    pub concurrent_builds: Option<NonZeroUsize>,
+    pub concurrent_installs: Option<NonZeroUsize>,
     pub preview: Option<bool>,
 }
 
@@ -189,7 +192,4 @@ pub struct PipOptions {
     pub upgrade_package: Option<Vec<PackageName>>,
     pub reinstall: Option<bool>,
     pub reinstall_package: Option<Vec<PackageName>>,
-    pub concurrent_downloads: Option<NonZeroUsize>,
-    pub concurrent_builds: Option<NonZeroUsize>,
-    pub concurrent_installs: Option<NonZeroUsize>,
 }

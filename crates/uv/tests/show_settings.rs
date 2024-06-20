@@ -56,6 +56,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -154,11 +159,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -182,6 +182,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -280,11 +285,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -309,6 +309,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -407,11 +412,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -468,6 +468,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -566,11 +571,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -596,6 +596,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -671,11 +676,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -710,6 +710,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -808,11 +813,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -861,6 +861,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -982,11 +987,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1012,6 +1012,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -1155,11 +1160,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1208,6 +1208,11 @@ fn resolve_find_links() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -1301,11 +1306,6 @@ fn resolve_find_links() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1353,6 +1353,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -1428,11 +1433,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1473,6 +1473,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -1593,11 +1598,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1621,6 +1621,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -1741,11 +1746,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1793,6 +1793,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -1868,11 +1873,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1903,6 +1903,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -1978,11 +1983,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2013,6 +2013,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -2088,11 +2093,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2125,6 +2125,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         connectivity: Online,
         isolated: false,
         show_settings: true,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         preview: Disabled,
     }
     CacheSettings {
@@ -2200,11 +2205,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             require_hashes: false,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 

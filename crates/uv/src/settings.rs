@@ -45,6 +45,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) isolated: bool,
     pub(crate) show_settings: bool,
+    pub(crate) concurrency: Concurrency,
     pub(crate) preview: PreviewMode,
 }
 
@@ -84,6 +85,20 @@ impl GlobalSettings {
             },
             isolated: args.isolated,
             show_settings: args.show_settings,
+            concurrency: Concurrency {
+                downloads: env(env::CONCURRENT_DOWNLOADS)
+                    .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
+                builds: env(env::CONCURRENT_BUILDS)
+                    .combine(workspace.and_then(|workspace| workspace.globals.concurrent_builds))
+                    .map(NonZeroUsize::get)
+                    .unwrap_or_else(Concurrency::threads),
+                installs: env(env::CONCURRENT_INSTALLS)
+                    .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
+                    .map(NonZeroUsize::get)
+                    .unwrap_or_else(Concurrency::threads),
+            },
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
                     .combine(workspace.and_then(|workspace| workspace.globals.preview))
@@ -561,9 +576,6 @@ impl PipCompileSettings {
                     emit_marker_expression: flag(emit_marker_expression, no_emit_marker_expression),
                     emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
                     annotation_style,
-                    concurrent_builds: env(env::CONCURRENT_BUILDS),
-                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
-                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(resolver)
                 },
                 filesystem,
@@ -642,9 +654,6 @@ impl PipSyncSettings {
                     python_version,
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
-                    concurrent_builds: env(env::CONCURRENT_BUILDS),
-                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
-                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(installer)
                 },
                 filesystem,
@@ -754,9 +763,6 @@ impl PipInstallSettings {
                     python_version,
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
-                    concurrent_builds: env(env::CONCURRENT_BUILDS),
-                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
-                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(installer)
                 },
                 filesystem,
@@ -1357,7 +1363,6 @@ pub(crate) struct PipSettings {
     pub(crate) require_hashes: bool,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
-    pub(crate) concurrency: Concurrency,
 }
 
 impl PipSettings {
@@ -1413,9 +1418,6 @@ impl PipSettings {
             upgrade_package,
             reinstall,
             reinstall_package,
-            concurrent_builds,
-            concurrent_downloads,
-            concurrent_installs,
         } = pip.unwrap_or_default();
 
         let ResolverInstallerOptions {
@@ -1576,23 +1578,6 @@ impl PipSettings {
                     .combine(reinstall_package)
                     .unwrap_or_default(),
             ),
-            concurrency: Concurrency {
-                downloads: args
-                    .concurrent_downloads
-                    .combine(concurrent_downloads)
-                    .map(NonZeroUsize::get)
-                    .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
-                builds: args
-                    .concurrent_builds
-                    .combine(concurrent_builds)
-                    .map(NonZeroUsize::get)
-                    .unwrap_or_else(Concurrency::threads),
-                installs: args
-                    .concurrent_installs
-                    .combine(concurrent_installs)
-                    .map(NonZeroUsize::get)
-                    .unwrap_or_else(Concurrency::threads),
-            },
             build_options: BuildOptions::new(
                 NoBinary::from_pip_args(args.no_binary.combine(no_binary).unwrap_or_default())
                     .combine(NoBinary::from_args(

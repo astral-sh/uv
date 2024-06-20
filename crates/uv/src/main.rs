@@ -13,7 +13,6 @@ use tracing::{debug, instrument};
 
 use cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
 use uv_cache::Cache;
-use uv_configuration::Concurrency;
 use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
 use uv_settings::Combine;
@@ -188,6 +187,11 @@ async fn run() -> Result<ExitStatus> {
         )
     }))?;
 
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(globals.concurrency.installs)
+        .build_global()
+        .expect("failed to initialize global rayon pool");
+
     debug!("uv {}", version::version());
 
     // Write out any resolved settings.
@@ -219,11 +223,6 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(args.settings.concurrency.installs)
-                .build_global()
-                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
@@ -280,7 +279,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.link_mode,
                 args.settings.python,
                 args.settings.system,
-                args.settings.concurrency,
+                globals.concurrency,
                 globals.native_tls,
                 globals.quiet,
                 globals.preview,
@@ -297,11 +296,6 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(args.settings.concurrency.installs)
-                .build_global()
-                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
@@ -341,7 +335,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.break_system_packages,
                 args.settings.target,
                 args.settings.prefix,
-                args.settings.concurrency,
+                globals.concurrency,
                 globals.native_tls,
                 globals.preview,
                 cache,
@@ -358,11 +352,6 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(args.settings.concurrency.installs)
-                .build_global()
-                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
@@ -419,7 +408,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.break_system_packages,
                 args.settings.target,
                 args.settings.prefix,
-                args.settings.concurrency,
+                globals.concurrency,
                 globals.native_tls,
                 globals.preview,
                 cache,
@@ -595,6 +584,7 @@ async fn run() -> Result<ExitStatus> {
                 args.seed,
                 args.allow_existing,
                 args.settings.exclude_newer,
+                globals.concurrency,
                 globals.native_tls,
                 globals.preview,
                 &cache,
@@ -627,7 +617,7 @@ async fn run() -> Result<ExitStatus> {
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -650,7 +640,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -670,7 +660,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -698,7 +688,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -719,7 +709,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -757,7 +747,7 @@ async fn run() -> Result<ExitStatus> {
                 globals.isolated,
                 globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,

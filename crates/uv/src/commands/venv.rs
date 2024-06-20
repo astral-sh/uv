@@ -52,6 +52,7 @@ pub(crate) async fn venv(
     seed: bool,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
+    concurrency: Concurrency,
     native_tls: bool,
     preview: PreviewMode,
     cache: &Cache,
@@ -71,6 +72,7 @@ pub(crate) async fn venv(
         preview,
         allow_existing,
         exclude_newer,
+        concurrency,
         native_tls,
         cache,
         printer,
@@ -120,6 +122,7 @@ async fn venv_impl(
     preview: PreviewMode,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
+    concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
@@ -214,9 +217,8 @@ async fn venv_impl(
         // Track in-flight downloads, builds, etc., across resolutions.
         let in_flight = InFlight::default();
 
-        // For seed packages, assume the default settings and concurrency is sufficient.
+        // For seed packages, assume the default settings is sufficient.
         let config_settings = ConfigSettings::default();
-        let concurrency = Concurrency::default();
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
