@@ -4,7 +4,7 @@ use std::fmt::Write;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
-use uv_toolchain::{SystemPython, Toolchain, ToolchainRequest};
+use uv_toolchain::{EnvironmentPreference, Toolchain, ToolchainPreference, ToolchainRequest};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -28,8 +28,8 @@ pub(crate) async fn find(
     };
     let toolchain = Toolchain::find_requested(
         &request,
-        SystemPython::Required,
-        PreviewMode::Enabled,
+        EnvironmentPreference::OnlySystem,
+        ToolchainPreference::from_settings(PreviewMode::Enabled),
         cache,
     )?;
 

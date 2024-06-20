@@ -4,19 +4,17 @@ use std::str::FromStr;
 use pep440_rs::Version;
 use tracing::{debug, info};
 use uv_client::BaseClientBuilder;
-use uv_configuration::PreviewMode;
 
 use uv_cache::Cache;
 
 use crate::discovery::{
-    find_best_toolchain, find_default_toolchain, find_toolchain, SystemPython, ToolchainRequest,
-    ToolchainSources,
+    find_best_toolchain, find_toolchain, EnvironmentPreference, ToolchainRequest,
 };
 use crate::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{InstalledToolchain, InstalledToolchains};
 use crate::platform::{Arch, Libc, Os};
-use crate::{Error, Interpreter, PythonVersion, ToolchainSource};
+use crate::{Error, Interpreter, PythonVersion, ToolchainPreference, ToolchainSource};
 
 /// A Python interpreter and accompanying tools.
 #[derive(Clone, Debug)]
@@ -43,45 +41,22 @@ impl Toolchain {
     /// See [`uv-toolchain::discovery`] for implementation details.
     pub fn find(
         python: Option<ToolchainRequest>,
-        system: SystemPython,
-        preview: PreviewMode,
+        environments: EnvironmentPreference,
+        preference: ToolchainPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        if let Some(request) = python {
-            Self::find_requested(&request, system, preview, cache)
-        } else if system.is_preferred() {
-            Self::find_default(preview, cache)
-        } else {
-            // First check for a parent interpreter
-            // We gate this check to avoid an extra log message when it is not set
-            if std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER").is_some() {
-                match Self::find_parent_interpreter(system, cache) {
-                    Ok(env) => return Ok(env),
-                    Err(Error::NotFound(_)) => {}
-                    Err(err) => return Err(err),
-                }
-            }
-
-            // Then a virtual environment
-            match Self::find_virtualenv(cache) {
-                Ok(venv) => Ok(venv),
-                Err(Error::NotFound(_)) if system.is_allowed() => {
-                    Self::find_default(preview, cache)
-                }
-                Err(err) => Err(err),
-            }
-        }
+        let request = python.unwrap_or_default();
+        Self::find_requested(&request, environments, preference, cache)
     }
 
     /// Find an installed [`Toolchain`] that satisfies a request.
     pub fn find_requested(
         request: &ToolchainRequest,
-        system: SystemPython,
-        preview: PreviewMode,
+        environments: EnvironmentPreference,
+        preference: ToolchainPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let sources = ToolchainSources::from_settings(system, preview);
-        let toolchain = find_toolchain(request, system, &sources, cache)??;
+        let toolchain = find_toolchain(request, environments, preference, cache)??;
         Ok(toolchain)
     }
 
@@ -89,46 +64,16 @@ impl Toolchain {
     /// be satisfied, fallback to the best available toolchain.
     pub fn find_best(
         request: &ToolchainRequest,
-        system: SystemPython,
-        preview: PreviewMode,
+        environments: EnvironmentPreference,
+        preference: ToolchainPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        Ok(find_best_toolchain(request, system, preview, cache)??)
-    }
-
-    /// Find an installed [`Toolchain`] in an existing virtual environment.
-    ///
-    /// Allows Conda environments (via `CONDA_PREFIX`) though they are not technically virtual environments.
-    pub fn find_virtualenv(cache: &Cache) -> Result<Self, Error> {
-        let sources = ToolchainSources::VirtualEnv;
-        let request = ToolchainRequest::Any;
-        let toolchain = find_toolchain(&request, SystemPython::Disallowed, &sources, cache)??;
-
-        debug_assert!(
-            toolchain.interpreter().is_virtualenv()
-                || matches!(toolchain.source(), ToolchainSource::CondaPrefix),
-            "Not a virtualenv (source: {}, prefix: {})",
-            toolchain.source(),
-            toolchain.interpreter().sys_base_prefix().display()
-        );
-
-        Ok(toolchain)
-    }
-
-    /// Find the [`Toolchain`] belonging to the parent interpreter i.e. from `python -m uv ...`
-    ///
-    /// If not spawned by `python -m uv`, the toolchain will not be found.
-    pub fn find_parent_interpreter(system: SystemPython, cache: &Cache) -> Result<Self, Error> {
-        let sources = ToolchainSources::from_sources([ToolchainSource::ParentInterpreter]);
-        let request = ToolchainRequest::Any;
-        let toolchain = find_toolchain(&request, system, &sources, cache)??;
-        Ok(toolchain)
-    }
-
-    /// Find the default installed [`Toolchain`].
-    pub fn find_default(preview: PreviewMode, cache: &Cache) -> Result<Self, Error> {
-        let toolchain = find_default_toolchain(preview, cache)??;
-        Ok(toolchain)
+        Ok(find_best_toolchain(
+            request,
+            environments,
+            preference,
+            cache,
+        )??)
     }
 
     /// Find or fetch a [`Toolchain`].
@@ -136,18 +81,16 @@ impl Toolchain {
     /// Unlike [`Toolchain::find`], if the toolchain is not installed it will be installed automatically.
     pub async fn find_or_fetch<'a>(
         python: Option<ToolchainRequest>,
-        system: SystemPython,
-        preview: PreviewMode,
+        environments: EnvironmentPreference,
+        preference: ToolchainPreference,
         client_builder: BaseClientBuilder<'a>,
         cache: &Cache,
     ) -> Result<Self, Error> {
         // Perform a find first
-        match Self::find(python.clone(), system, preview, cache) {
+        match Self::find(python.clone(), environments, preference, cache) {
             Ok(venv) => Ok(venv),
             Err(Error::NotFound(_))
-                if system.is_allowed()
-                    && preview.is_enabled()
-                    && client_builder.connectivity.is_online() =>
+                if preference.allows_managed() && client_builder.connectivity.is_online() =>
             {
                 debug!("Requested Python not found, checking for available download...");
                 let request = if let Some(request) = python {

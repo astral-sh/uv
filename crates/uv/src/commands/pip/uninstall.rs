@@ -14,9 +14,11 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_toolchain::EnvironmentPreference;
 use uv_toolchain::Toolchain;
+use uv_toolchain::ToolchainPreference;
 use uv_toolchain::ToolchainRequest;
-use uv_toolchain::{Prefix, PythonEnvironment, SystemPython, Target};
+use uv_toolchain::{Prefix, PythonEnvironment, Target};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -47,15 +49,10 @@ pub(crate) async fn pip_uninstall(
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Detect the current Python interpreter.
-    let system = if system {
-        SystemPython::Required
-    } else {
-        SystemPython::Explicit
-    };
     let environment = PythonEnvironment::from_toolchain(Toolchain::find(
         python.as_deref().map(ToolchainRequest::parse),
-        system,
-        preview,
+        EnvironmentPreference::from_system_flag(system, true),
+        ToolchainPreference::from_settings(preview),
         &cache,
     )?);
 

@@ -18,8 +18,8 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, RequiresPython};
 use uv_toolchain::{
-    request_from_version_file, Interpreter, PythonEnvironment, SystemPython, Toolchain,
-    ToolchainRequest, VersionRequest,
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
+    ToolchainPreference, ToolchainRequest, VersionRequest,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -183,8 +183,8 @@ pub(crate) async fn find_interpreter(
     // Locate the Python interpreter to use in the environment
     let interpreter = Toolchain::find_or_fetch(
         python_request,
-        SystemPython::Required,
-        PreviewMode::Enabled,
+        EnvironmentPreference::OnlySystem,
+        ToolchainPreference::from_settings(PreviewMode::Enabled),
         client_builder,
         cache,
     )

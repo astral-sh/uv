@@ -8,8 +8,8 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_toolchain::downloads::PythonDownloadRequest;
 use uv_toolchain::{
-    find_toolchains, DiscoveryError, SystemPython, Toolchain, ToolchainNotFound, ToolchainRequest,
-    ToolchainSource, ToolchainSources,
+    find_toolchains, DiscoveryError, EnvironmentPreference, Toolchain, ToolchainNotFound,
+    ToolchainPreference, ToolchainRequest, ToolchainSource,
 };
 use uv_warnings::warn_user;
 
@@ -55,8 +55,8 @@ pub(crate) async fn list(
 
     let installed = find_toolchains(
         &ToolchainRequest::Any,
-        SystemPython::Required,
-        &ToolchainSources::All(PreviewMode::Enabled),
+        EnvironmentPreference::OnlySystem,
+        ToolchainPreference::from_settings(preview),
         cache,
     )
     // Raise discovery errors if critical

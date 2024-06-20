@@ -9,7 +9,9 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_requirements::RequirementsSource;
-use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
+use uv_toolchain::{
+    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
+};
 use uv_warnings::warn_user;
 
 use crate::cli::ExternalCommand;
@@ -67,8 +69,8 @@ pub(crate) async fn run(
     // Note we force preview on during `uv tool run` for now since the entire interface is in preview
     let interpreter = Toolchain::find(
         python.as_deref().map(ToolchainRequest::parse),
-        SystemPython::Allowed,
-        PreviewMode::Enabled,
+        EnvironmentPreference::Any,
+        ToolchainPreference::from_settings(preview),
         cache,
     )?
     .into_interpreter();
