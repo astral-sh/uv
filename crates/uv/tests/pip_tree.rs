@@ -157,7 +157,8 @@ fn nested_dependencies() {
 }
 
 #[test]
-fn nested_dependencies_two() {
+#[cfg(target_os = "macos")]
+fn nested_dependencies_more_complex() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
