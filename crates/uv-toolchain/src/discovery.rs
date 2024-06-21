@@ -329,9 +329,9 @@ fn python_executables_from_installed<'a>(
                 .chain(from_py_launcher),
         ),
         ToolchainPreference::PreferSystem => Box::new(
-            from_managed_toolchains
-                .chain(from_search_path)
-                .chain(from_py_launcher),
+            from_search_path
+                .chain(from_py_launcher)
+                .chain(from_managed_toolchains),
         ),
         ToolchainPreference::OnlySystem => Box::new(from_search_path.chain(from_py_launcher)),
     }
