@@ -709,47 +709,21 @@ pub fn python_toolchains_for_versions(
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;
     let selected_pythons = python_versions
         .iter()
-        .flat_map(|python_version| {
-            let inner = InstalledToolchains::from_settings()
-                .map(|toolchains| {
-                    toolchains
-                        .find_version(
-                            &PythonVersion::from_str(python_version)
-                                .expect("Tests should use a valid Python version"),
-                        )
-                        .expect("Tests are run on a supported platform")
-                        .map(|toolchain| {
-                            toolchain
-                                .executable()
-                                .parent()
-                                .expect("Executables must exist in a directory")
-                                .to_path_buf()
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            if inner.is_empty() {
-                // TODO(zanieb): Collapse these two cases now that we support `ToolchainPreference`
-                // Fallback to a system lookup if we failed to find one in the toolchain directory
-                if let Ok(toolchain) = Toolchain::find(
-                    &ToolchainRequest::parse(python_version),
-                    // Without required, we could pick the current venv here and the test fails
-                    // because the venv subcommand requires a system interpreter.
-                    EnvironmentPreference::OnlySystem,
-                    ToolchainPreference::PreferInstalledManaged,
-                    &cache,
-                ) {
-                    vec![toolchain
-                        .into_interpreter()
-                        .sys_executable()
-                        .parent()
-                        .expect("Python executable should always be in a directory")
-                        .to_path_buf()]
-                } else {
-                    panic!("Could not find Python {python_version} for test");
-                }
+        .map(|python_version| {
+            if let Ok(toolchain) = Toolchain::find(
+                &ToolchainRequest::parse(python_version),
+                EnvironmentPreference::OnlySystem,
+                ToolchainPreference::PreferInstalledManaged,
+                &cache,
+            ) {
+                toolchain
+                    .into_interpreter()
+                    .sys_executable()
+                    .parent()
+                    .expect("Python executable should always be in a directory")
+                    .to_path_buf()
             } else {
-                inner
+                panic!("Could not find Python {python_version} for test");
             }
         })
         .collect::<Vec<_>>();
