@@ -43,14 +43,18 @@ pub(crate) fn pip_tree(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&environment)?;
 
-    writeln!(
-        printer.stdout(),
-        "{}",
-        DisplayDependencyGraph::new(&site_packages)
-            .render()
-            .join("\n")
-    )
-    .unwrap();
+    let rendered_tree = DisplayDependencyGraph::new(&site_packages)
+        .render()
+        .join("\n");
+    writeln!(printer.stdout(), "{}", rendered_tree).unwrap();
+    if rendered_tree.contains("*") {
+        writeln!(
+            printer.stdout(),
+            r#"{}: (*) indicates the package has been `de-duplicated`;
+The dependencies for the package have already been shown elsewhere in the graph, and so are not repeated."#,
+            "Note".yellow().bold()
+        )?;
+    }
 
     // Validate that the environment is consistent.
     if strict {
