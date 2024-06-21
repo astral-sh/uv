@@ -27,9 +27,9 @@ use uv_toolchain::{Prefix, PythonVersion, Target, ToolchainPreference};
 use crate::cli::{
     AddArgs, BuildArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, IndexArgs,
     InstallerArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
-    PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs,
-    ResolverInstallerArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs,
-    ToolchainListArgs, VenvArgs,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, RefreshArgs, RemoveArgs,
+    ResolverArgs, ResolverInstallerArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs,
+    ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::ListFormat;
@@ -936,6 +936,40 @@ impl PipShowSettings {
         Self {
             package,
             settings: PipSettings::combine(
+                PipOptions {
+                    python,
+                    system: flag(system, no_system),
+                    strict: flag(strict, no_strict),
+                    ..PipOptions::default()
+                },
+                filesystem,
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for a `pip show` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PipTreeSettings {
+    // CLI-only settings.
+    pub(crate) shared: PipSettings,
+}
+
+impl PipTreeSettings {
+    /// Resolve the [`PipTreeSettings`] from the CLI and workspace configuration.
+    pub(crate) fn resolve(args: PipTreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let PipTreeArgs {
+            strict,
+            no_strict,
+            python,
+            system,
+            no_system,
+        } = args;
+
+        Self {
+            // Shared settings.
+            shared: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),

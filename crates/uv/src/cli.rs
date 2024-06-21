@@ -227,6 +227,8 @@ pub(crate) enum PipCommand {
     List(PipListArgs),
     /// Show information about one or more installed packages.
     Show(PipShowArgs),
+    /// Display the dependency tree.
+    Tree(PipTreeArgs),
     /// Verify installed packages have compatible dependencies.
     Check(PipCheckArgs),
 }
@@ -1341,6 +1343,52 @@ pub(crate) struct PipShowArgs {
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"), hide = true)]
+    pub(crate) no_system: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct PipTreeArgs {
+    /// Validate the virtual environment, to detect packages with missing dependencies or other
+    /// issues.
+    #[arg(long, overrides_with("no_strict"))]
+    pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    pub(crate) python: Option<String>,
+
+    /// List packages for the system Python.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found. The `--system` option
+    /// instructs `uv` to use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
     pub(crate) no_system: bool,
 }
 
