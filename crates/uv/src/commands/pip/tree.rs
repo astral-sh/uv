@@ -46,8 +46,8 @@ pub(crate) fn pip_tree(
     let rendered_tree = DisplayDependencyGraph::new(&site_packages)
         .render()
         .join("\n");
-    writeln!(printer.stdout(), "{}", rendered_tree).unwrap();
-    if rendered_tree.contains("*") {
+    writeln!(printer.stdout(), "{rendered_tree}").unwrap();
+    if rendered_tree.contains('*') {
         writeln!(
             printer.stdout(),
             r#"{}: (*) indicates the package has been `de-duplicated`;
