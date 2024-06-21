@@ -94,9 +94,9 @@ fn single_package() {
     exit_code: 0
     ----- stdout -----
     requests v2.31.0
-    └── charset-normalizer v3.3.2
-    └── idna v3.6
-    └── urllib3 v2.2.1
+    ├── charset-normalizer v3.3.2
+    ├── idna v3.6
+    ├── urllib3 v2.2.1
     └── certifi v2024.2.2
 
     ----- stderr -----
@@ -145,11 +145,118 @@ fn nested_dependencies() {
     exit_code: 0
     ----- stdout -----
     scikit-learn v1.4.1.post1
-    └── numpy v1.26.4
-    └── scipy v1.12.0
-        └── numpy v1.26.4 (*)
-    └── joblib v1.3.2
+    ├── numpy v1.26.4
+    ├── scipy v1.12.0
+    │   └── numpy v1.26.4 (*)
+    ├── joblib v1.3.2
     └── threadpoolctl v3.4.0
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn nested_dependencies_two() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("packse").unwrap();
+
+    uv_snapshot!(install_command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 32 packages in [TIME]
+    Prepared 32 packages in [TIME]
+    Installed 32 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + chevron-blue==0.2.1
+     + docutils==0.20.1
+     + hatchling==1.22.4
+     + idna==3.6
+     + importlib-metadata==7.1.0
+     + jaraco-classes==3.3.1
+     + jaraco-context==4.3.0
+     + jaraco-functools==4.0.0
+     + keyring==25.0.0
+     + markdown-it-py==3.0.0
+     + mdurl==0.1.2
+     + more-itertools==10.2.0
+     + msgspec==0.18.6
+     + nh3==0.2.15
+     + packaging==24.0
+     + packse==0.3.12
+     + pathspec==0.12.1
+     + pkginfo==1.10.0
+     + pluggy==1.4.0
+     + pygments==2.17.2
+     + readme-renderer==43.0
+     + requests==2.31.0
+     + requests-toolbelt==1.0.0
+     + rfc3986==2.0.0
+     + rich==13.7.1
+     + setuptools==69.2.0
+     + trove-classifiers==2024.3.3
+     + twine==4.0.2
+     + urllib3==2.2.1
+     + zipp==3.18.1
+    "###
+    );
+
+    uv_snapshot!(context.filters(), Command::new(get_bin())
+        .arg("pip")
+        .arg("tree")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    packse v0.3.12
+    ├── chevron-blue v0.2.1
+    ├── hatchling v1.22.4
+    │   ├── packaging v24.0
+    │   ├── pathspec v0.12.1
+    │   ├── pluggy v1.4.0
+    │   └── trove-classifiers v2024.3.3
+    ├── msgspec v0.18.6
+    ├── setuptools v69.2.0
+    └── twine v4.0.2
+        ├── pkginfo v1.10.0
+        ├── readme-renderer v43.0
+        │   ├── nh3 v0.2.15
+        │   ├── docutils v0.20.1
+        │   └── pygments v2.17.2
+        ├── requests v2.31.0
+        │   ├── charset-normalizer v3.3.2
+        │   ├── idna v3.6
+        │   ├── urllib3 v2.2.1
+        │   └── certifi v2024.2.2
+        ├── requests-toolbelt v1.0.0
+        │   └── requests v2.31.0 (*)
+        ├── urllib3 v2.2.1 (*)
+        ├── importlib-metadata v7.1.0
+        │   └── zipp v3.18.1
+        ├── keyring v25.0.0
+        │   ├── jaraco-classes v3.3.1
+        │   │   └── more-itertools v10.2.0
+        │   ├── jaraco-functools v4.0.0
+        │   │   └── more-itertools v10.2.0 (*)
+        │   └── jaraco-context v4.3.0
+        ├── rfc3986 v2.0.0
+        └── rich v13.7.1
+            ├── markdown-it-py v3.0.0
+            │   └── mdurl v0.1.2
+            └── pygments v2.17.2 (*)
 
     ----- stderr -----
     "###
@@ -347,9 +454,9 @@ fn multiple_packages() {
     ----- stdout -----
     click v8.1.7
     requests v2.31.0
-    └── charset-normalizer v3.3.2
-    └── idna v3.6
-    └── urllib3 v2.2.1
+    ├── charset-normalizer v3.3.2
+    ├── idna v3.6
+    ├── urllib3 v2.2.1
     └── certifi v2024.2.2
 
     ----- stderr -----
@@ -411,15 +518,15 @@ fn multiple_packages_shared_descendant() {
     exit_code: 0
     ----- stdout -----
     boto3 v1.34.69
-    └── botocore v1.34.69
-        └── jmespath v1.0.1
-        └── python-dateutil v2.9.0.post0
-            └── six v1.16.0
-    └── jmespath v1.0.1 (*)
+    ├── botocore v1.34.69
+    │   ├── jmespath v1.0.1
+    │   └── python-dateutil v2.9.0.post0
+    │       └── six v1.16.0
+    ├── jmespath v1.0.1 (*)
     └── s3transfer v0.10.1
         └── botocore v1.34.69 (*)
     pendulum v3.0.0
-    └── python-dateutil v2.9.0.post0 (*)
+    ├── python-dateutil v2.9.0.post0 (*)
     └── tzdata v2024.1
     time-machine v2.14.1
     └── python-dateutil v2.9.0.post0 (*)

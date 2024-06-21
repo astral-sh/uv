@@ -89,12 +89,8 @@ fn required_with_no_extra(dist: &InstalledDist) -> Vec<pep508_rs::Requirement<Ve
 }
 
 // Render the line for the given installed distribution in the dependency tree.
-fn render_line(installed_dist: &InstalledDist, indent: usize, is_visited: bool) -> String {
+fn render_line(installed_dist: &InstalledDist, is_visited: bool) -> String {
     let mut line = String::new();
-    if indent > 0 {
-        line.push_str("    ".repeat(indent - 1).as_str());
-        line.push_str("└── ");
-    }
     write!(
         &mut line,
         "{} v{}",
@@ -150,19 +146,69 @@ impl<'a> DisplayDependencyGraph<'a> {
         let mut lines = Vec::new();
         let package_name = installed_dist.name().to_string();
         let is_visited = visited.contains(&package_name);
-        lines.push(render_line(installed_dist, path.len(), is_visited));
+        lines.push(render_line(installed_dist, is_visited));
         if is_visited {
             return lines;
         }
 
         path.push(package_name.clone());
         visited.insert(package_name.clone());
-        for required in &required_with_no_extra(installed_dist) {
-            if self.dist_by_package_name.contains_key(&required.name) {
-                let visited_lines =
-                    self.visit(self.dist_by_package_name[&required.name], visited, path);
-                lines.extend(visited_lines);
+        let required_packages = required_with_no_extra(installed_dist);
+        for (index, required_package) in required_packages.iter().enumerate() {
+            // Skip if the current package is not one of the installed distributions.
+            if !self
+                .dist_by_package_name
+                .contains_key(&required_package.name)
+            {
+                continue;
             }
+
+            // For sub-visited packages, add the prefix to make the tree display user-friendly.
+            // The key observation here is you can group the tree as follows when you're at the
+            // root of the tree:
+            // root_package
+            // ├── level_1_0          // Group 1
+            // │   ├── level_2_0      ...
+            // │   │   ├── level_3_0  ...
+            // │   │   └── level_3_1  ...
+            // │   └── level_2_1      ...
+            // ├── level_1_1          // Group 2
+            // │   ├── level_2_2      ...
+            // │   └── level_2_3      ...
+            // └── level_1_2          // Group 3
+            //     └── level_2_4      ...
+            //
+            // The lines in Group 1 and 2 have `├── ` at the top and `|   ` at the rest while
+            // those in Group 3 have `└── ` at the top and `    ` at the rest.
+            // This observation is true recursively even when looking at the subtree rooted
+            // at `level_1_0`.
+            let (prefix_top, prefix_rest) = if required_packages.len() - 1 == index {
+                ("└── ", "    ")
+            } else {
+                ("├── ", "│   ")
+            };
+
+            let mut prefixed_lines = Vec::new();
+            for (visited_index, visited_line) in self
+                .visit(
+                    self.dist_by_package_name[&required_package.name],
+                    visited,
+                    path,
+                )
+                .iter()
+                .enumerate()
+            {
+                prefixed_lines.push(format!(
+                    "{}{}",
+                    if visited_index == 0 {
+                        prefix_top
+                    } else {
+                        prefix_rest
+                    },
+                    visited_line
+                ));
+            }
+            lines.extend(prefixed_lines);
         }
         path.pop();
         lines
