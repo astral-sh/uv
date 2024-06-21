@@ -955,6 +955,7 @@ impl PipShowSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipTreeSettings {
     pub(crate) depth: u8,
+    pub(crate) prune: Vec<PackageName>,
     // CLI-only settings.
     pub(crate) shared: PipSettings,
 }
@@ -964,6 +965,7 @@ impl PipTreeSettings {
     pub(crate) fn resolve(args: PipTreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipTreeArgs {
             depth,
+            prune,
             strict,
             no_strict,
             python,
@@ -973,6 +975,7 @@ impl PipTreeSettings {
 
         Self {
             depth,
+            prune,
             // Shared settings.
             shared: PipSettings::combine(
                 PipOptions {

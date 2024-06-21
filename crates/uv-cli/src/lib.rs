@@ -1389,6 +1389,10 @@ pub struct PipTreeArgs {
     #[arg(long, short, default_value_t = 255)]
     pub depth: u8,
 
+    /// Prune the given package from the display of the dependency tree.
+    #[arg(long)]
+    pub(crate) prune: Vec<PackageName>,
+
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]

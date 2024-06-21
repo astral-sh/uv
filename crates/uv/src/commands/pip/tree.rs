@@ -21,6 +21,7 @@ use pypi_types::VerbatimParsedUrl;
 /// Display the installed packages in the current environment as a dependency tree.
 pub(crate) fn pip_tree(
     depth: u8,
+    prune: Vec<PackageName>,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -44,7 +45,7 @@ pub(crate) fn pip_tree(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&environment)?;
 
-    let rendered_tree = DisplayDependencyGraph::new(&site_packages, depth)
+    let rendered_tree = DisplayDependencyGraph::new(&site_packages, depth, prune)
         .render()
         .join("\n");
     writeln!(printer.stdout(), "{rendered_tree}").unwrap();
@@ -118,12 +119,20 @@ struct DisplayDependencyGraph<'a> {
     // dependency graph.
     required_packages: HashSet<PackageName>,
 
+    // Maximum display depth of the dependency tree
     depth: u8,
+
+    // Prune the given package from the display of the dependency tree.
+    prune: Vec<PackageName>,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
-    fn new(site_packages: &'a SitePackages, depth: u8) -> DisplayDependencyGraph<'a> {
+    fn new(
+        site_packages: &'a SitePackages,
+        depth: u8,
+        prune: Vec<PackageName>,
+    ) -> DisplayDependencyGraph<'a> {
         let mut dist_by_package_name = HashMap::new();
         let mut required_packages = HashSet::new();
         for site_package in site_packages.iter() {
@@ -140,6 +149,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             dist_by_package_name,
             required_packages,
             depth,
+            prune,
         }
     }
 
@@ -154,6 +164,12 @@ impl<'a> DisplayDependencyGraph<'a> {
         if path.len() > self.depth.into() {
             return Vec::new();
         }
+
+        // Short-circuit if the current package is given in the prune list.
+        if self.prune.contains(installed_dist.name()) {
+            return Vec::new();
+        }
+
         let mut lines = Vec::new();
         let package_name = installed_dist.name().to_string();
         let is_visited = visited.contains(&package_name);
