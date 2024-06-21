@@ -150,6 +150,7 @@ impl<'a> DisplayDependencyGraph<'a> {
         visited: &mut HashSet<String>,
         path: &mut Vec<String>,
     ) -> Vec<String> {
+        // Short-circuit if the current path is longer than the provided depth.
         if path.len() > self.depth.into() {
             return Vec::new();
         }
