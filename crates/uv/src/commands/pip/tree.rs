@@ -177,7 +177,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             // If the current package is not required by any other package, start the traversal
             // with the current package as the root.
             if !self.required_packages.contains(site_package.name()) {
-                lines.extend(self.visit(site_package, &mut visited, &mut Vec::new()))
+                lines.extend(self.visit(site_package, &mut visited, &mut Vec::new()));
             }
         }
         lines
