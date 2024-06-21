@@ -1,8 +1,5 @@
-use std::fmt::Display;
-use std::fmt::Formatter;
 use std::fmt::Write;
 
-use anyhow::Result;
 use distribution_types::{Diagnostic, InstalledDist, Name};
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -46,19 +43,14 @@ pub(crate) fn pip_tree(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&environment)?;
 
-    match DisplayDependencyGraph::new(&site_packages).render() {
-        Ok(lines) => {
-            writeln!(printer.stdout(), "{}", lines.join("\n"))?;
-        }
-        Err(e) => {
-            writeln!(
-                printer.stderr(),
-                "Unable to display the dependency tree due to {e}",
-            )
-            .unwrap();
-            return Ok(ExitStatus::Failure);
-        }
-    }
+    writeln!(
+        printer.stdout(),
+        "{}",
+        DisplayDependencyGraph::new(&site_packages)
+            .render()
+            .join("\n")
+    )
+    .unwrap();
 
     // Validate that the environment is consistent.
     if strict {
@@ -154,20 +146,13 @@ impl<'a> DisplayDependencyGraph<'a> {
         installed_dist: &InstalledDist,
         visited: &mut HashSet<String>,
         path: &mut Vec<String>,
-    ) -> Result<Vec<String>, Error> {
+    ) -> Vec<String> {
         let mut lines = Vec::new();
-
         let package_name = installed_dist.name().to_string();
-        if path.contains(&package_name) {
-            let cycle_start_index = path.iter().position(|r| r == &package_name).unwrap();
-            return Err(Error {
-                cycle: path[cycle_start_index..].to_vec(),
-            });
-        }
         let is_visited = visited.contains(&package_name);
         lines.push(render_line(installed_dist, path.len(), is_visited));
         if is_visited {
-            return Ok(lines);
+            return lines;
         }
 
         path.push(package_name.clone());
@@ -175,55 +160,26 @@ impl<'a> DisplayDependencyGraph<'a> {
         for required in &required_with_no_extra(installed_dist) {
             if self.dist_by_package_name.contains_key(&required.name) {
                 let visited_lines =
-                    self.visit(self.dist_by_package_name[&required.name], visited, path)?;
+                    self.visit(self.dist_by_package_name[&required.name], visited, path);
                 lines.extend(visited_lines);
             }
         }
         path.pop();
-        Ok(lines)
+        lines
     }
 
     // Depth-first traverse the nodes to render the tree.
     // The starting nodes are the ones without incoming edges.
-    fn render(&self) -> Result<Vec<String>, Error> {
+    fn render(&self) -> Vec<String> {
         let mut visited: HashSet<String> = HashSet::new();
         let mut lines: Vec<String> = Vec::new();
         for site_package in self.site_packages.iter() {
             // If the current package is not required by any other package, start the traversal
             // with the current package as the root.
             if !self.required_packages.contains(site_package.name()) {
-                match self.visit(site_package, &mut visited, &mut Vec::new()) {
-                    Ok(visited_lines) => lines.extend(visited_lines),
-                    Err(e) => return Err(e),
-                }
+                lines.extend(self.visit(site_package, &mut visited, &mut Vec::new()))
             }
         }
-        Ok(lines)
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
-struct Error {
-    cycle: Vec<String>,
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "cyclic dependency:").unwrap();
-        for i in 0..self.cycle.len() {
-            write!(
-                f,
-                "  `{}` depends on `{}`",
-                self.cycle[i],
-                self.cycle[(i + 1) % self.cycle.len()]
-            )
-            .unwrap();
-            if i != self.cycle.len() - 1 {
-                writeln!(f, ",").unwrap();
-            } else {
-                write!(f, ".").unwrap()
-            }
-        }
-        Ok(())
+        lines
     }
 }

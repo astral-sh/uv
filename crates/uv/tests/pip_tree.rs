@@ -212,14 +212,16 @@ fn cyclic_dependency() {
     .env("VIRTUAL_ENV", context.venv.as_os_str())
     .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
+    uv-cyclic-dependencies-c v0.1.0
+    └── uv-cyclic-dependencies-a v0.1.0
+        └── uv-cyclic-dependencies-b v0.1.0
+            └── uv-cyclic-dependencies-a v0.1.0 (*)
     
     ----- stderr -----
-    Unable to display the dependency tree due to cyclic dependency:
-      `uv-cyclic-dependencies-a` depends on `uv-cyclic-dependencies-b`,
-      `uv-cyclic-dependencies-b` depends on `uv-cyclic-dependencies-a`.
+
     "###
     );
 }
