@@ -4,6 +4,7 @@ use anstream::eprint;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -32,6 +33,7 @@ use crate::settings::ResolverSettings;
 pub(crate) async fn lock(
     python: Option<String>,
     settings: ResolverSettings,
+    overrides: Vec<Requirement>,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
     connectivity: Connectivity,
@@ -71,6 +73,7 @@ pub(crate) async fn lock(
         settings.prerelease,
         &settings.config_setting,
         settings.exclude_newer,
+        overrides,
         settings.link_mode,
         &settings.build_options,
         preview,
@@ -108,6 +111,7 @@ pub(super) async fn do_lock(
     prerelease: PreReleaseMode,
     config_setting: &ConfigSettings,
     exclude_newer: Option<ExcludeNewer>,
+    overrides: Vec<Requirement>,
     link_mode: LinkMode,
     build_options: &BuildOptions,
     preview: PreviewMode,
@@ -124,7 +128,10 @@ pub(super) async fn do_lock(
         .map(UnresolvedRequirementSpecification::from)
         .collect();
     let constraints = vec![];
-    let overrides = vec![];
+    let overrides = overrides
+        .into_iter()
+        .map(UnresolvedRequirementSpecification::from)
+        .collect();
     let dev = vec![DEV_DEPENDENCIES.clone()];
 
     let source_trees = vec![];

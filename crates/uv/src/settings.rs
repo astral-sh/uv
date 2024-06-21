@@ -151,6 +151,7 @@ pub(crate) struct RunSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) overrides_from_workspace: Vec<Requirement>,
 }
 
 impl RunSettings {
@@ -183,6 +184,7 @@ impl RunSettings {
             python,
             package,
             refresh: Refresh::from(refresh),
+            overrides_from_workspace: overrides_from_workspace(&filesystem),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
@@ -365,6 +367,7 @@ pub(crate) struct LockSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
+    pub(crate) overrides_from_workspace: Vec<Requirement>,
 }
 
 impl LockSettings {
@@ -381,6 +384,7 @@ impl LockSettings {
         Self {
             python,
             refresh: Refresh::from(refresh),
+            overrides_from_workspace: overrides_from_workspace(&filesystem),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
     }
@@ -391,6 +395,7 @@ impl LockSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<RequirementsSource>,
+    pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) dev: bool,
     pub(crate) workspace: bool,
     pub(crate) editable: Option<bool>,
@@ -438,6 +443,7 @@ impl AddSettings {
             branch,
             python,
             refresh: Refresh::from(refresh),
+            overrides_from_workspace: overrides_from_workspace(&filesystem),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
@@ -453,12 +459,13 @@ pub(crate) struct RemoveSettings {
     pub(crate) requirements: Vec<PackageName>,
     pub(crate) dev: bool,
     pub(crate) python: Option<String>,
+    pub(crate) overrides_from_workspace: Vec<Requirement>,
 }
 
 impl RemoveSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: RemoveArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: RemoveArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let RemoveArgs {
             dev,
             requirements,
@@ -469,6 +476,7 @@ impl RemoveSettings {
             requirements,
             dev,
             python,
+            overrides_from_workspace: overrides_from_workspace(&filesystem),
         }
     }
 }
@@ -537,19 +545,7 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace = if let Some(configuration) = &filesystem {
-            configuration
-                .override_dependencies
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|requirement| {
-                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let overrides_from_workspace = overrides_from_workspace(&filesystem);
 
         Self {
             src_file,
@@ -735,19 +731,7 @@ impl PipInstallSettings {
             compat_args: _,
         } = args;
 
-        let overrides_from_workspace = if let Some(configuration) = &filesystem {
-            configuration
-                .override_dependencies
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|requirement| {
-                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let overrides_from_workspace = overrides_from_workspace(&filesystem);
 
         Self {
             package,
@@ -1714,4 +1698,21 @@ where
 fn parse_failure(name: &str, expected: &str) -> ! {
     eprintln!("error: invalid value for {name}, expected {expected}");
     process::exit(1)
+}
+
+/// Used by multiple commands to extract dependency overrides
+fn overrides_from_workspace(filesystem: &Option<FilesystemOptions>) -> Vec<Requirement> {
+    if let Some(configuration) = &filesystem {
+        configuration
+            .override_dependencies
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|requirement| {
+                Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    }
 }

@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use pep508_rs::PackageName;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
@@ -18,6 +19,7 @@ use crate::settings::{InstallerSettings, ResolverSettings};
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn remove(
     requirements: Vec<PackageName>,
+    overrides: Vec<Requirement>,
     dev: bool,
     python: Option<String>,
     toolchain_preference: ToolchainPreference,
@@ -109,6 +111,7 @@ pub(crate) async fn remove(
         settings.prerelease,
         &settings.config_setting,
         settings.exclude_newer,
+        overrides,
         settings.link_mode,
         &settings.build_options,
         preview,

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use pypi_types::Requirement;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::pyproject::{Source, SourceError};
@@ -25,6 +26,7 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
+    overrides: Vec<Requirement>,
     workspace: bool,
     dev: bool,
     editable: Option<bool>,
@@ -194,6 +196,7 @@ pub(crate) async fn add(
         settings.prerelease,
         &settings.config_setting,
         settings.exclude_newer,
+        overrides,
         settings.link_mode,
         &settings.build_options,
         preview,

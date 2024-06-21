@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+use pypi_types::Requirement;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -30,6 +31,7 @@ pub(crate) async fn run(
     dev: bool,
     command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
+    overrides: Vec<Requirement>,
     python: Option<String>,
     package: Option<PackageName>,
     settings: ResolverInstallerSettings,
@@ -86,6 +88,7 @@ pub(crate) async fn run(
             settings.prerelease,
             &settings.config_setting,
             settings.exclude_newer,
+            overrides,
             settings.link_mode,
             &settings.build_options,
             preview,

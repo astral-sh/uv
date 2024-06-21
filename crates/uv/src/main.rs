@@ -647,6 +647,7 @@ async fn run() -> Result<ExitStatus> {
                 args.dev,
                 args.command,
                 requirements,
+                args.overrides_from_workspace,
                 args.python,
                 args.package,
                 args.settings,
@@ -696,6 +697,7 @@ async fn run() -> Result<ExitStatus> {
             commands::lock(
                 args.python,
                 args.settings,
+                args.overrides_from_workspace,
                 globals.preview,
                 globals.toolchain_preference,
                 globals.connectivity,
@@ -716,6 +718,7 @@ async fn run() -> Result<ExitStatus> {
 
             commands::add(
                 args.requirements,
+                args.overrides_from_workspace,
                 args.workspace,
                 args.dev,
                 args.editable,
@@ -745,6 +748,7 @@ async fn run() -> Result<ExitStatus> {
 
             commands::remove(
                 args.requirements,
+                args.overrides_from_workspace,
                 args.dev,
                 args.python,
                 globals.toolchain_preference,
