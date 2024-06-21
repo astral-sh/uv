@@ -150,7 +150,7 @@ fn nested_dependencies() {
     │   └── numpy v1.26.4 (*)
     ├── joblib v1.3.2
     └── threadpoolctl v3.4.0
-    Note: (*) indicates the package has been `de-duplicated`;
+    Note: (*) indicates the package has been `de-duplicated`.
     The dependencies for the package have already been shown elsewhere in the graph, and so are not repeated.
 
     ----- stderr -----
@@ -261,7 +261,7 @@ fn nested_dependencies_more_complex() {
             ├── markdown-it-py v3.0.0
             │   └── mdurl v0.1.2
             └── pygments v2.17.2 (*)
-    Note: (*) indicates the package has been `de-duplicated`;
+    Note: (*) indicates the package has been `de-duplicated`.
     The dependencies for the package have already been shown elsewhere in the graph, and so are not repeated.
 
     ----- stderr -----
@@ -332,7 +332,7 @@ fn cyclic_dependency() {
     └── uv-cyclic-dependencies-a v0.1.0
         └── uv-cyclic-dependencies-b v0.1.0
             └── uv-cyclic-dependencies-a v0.1.0 (*)
-    Note: (*) indicates the package has been `de-duplicated`;
+    Note: (*) indicates the package has been `de-duplicated`.
     The dependencies for the package have already been shown elsewhere in the graph, and so are not repeated.
 
     ----- stderr -----
@@ -539,7 +539,7 @@ fn multiple_packages_shared_descendant() {
     time-machine v2.14.1
     └── python-dateutil v2.9.0.post0 (*)
     urllib3 v2.2.1
-    Note: (*) indicates the package has been `de-duplicated`;
+    Note: (*) indicates the package has been `de-duplicated`.
     The dependencies for the package have already been shown elsewhere in the graph, and so are not repeated.
 
     ----- stderr -----

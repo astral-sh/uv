@@ -50,7 +50,7 @@ pub(crate) fn pip_tree(
     if rendered_tree.contains('*') {
         writeln!(
             printer.stdout(),
-            r#"{}: (*) indicates the package has been `de-duplicated`;
+            r#"{}: (*) indicates the package has been `de-duplicated`.
 The dependencies for the package have already been shown elsewhere in the graph, and so are not repeated."#,
             "Note".yellow().bold()
         )?;
