@@ -46,7 +46,7 @@ pub(crate) fn pip_tree(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&environment)?;
 
-    let rendered_tree = DisplayDependencyGraph::new(&site_packages, depth, prune)
+    let rendered_tree = DisplayDependencyGraph::new(&site_packages, depth.into(), prune)
         .render()
         .join("\n");
     writeln!(printer.stdout(), "{rendered_tree}").unwrap();
@@ -121,7 +121,7 @@ struct DisplayDependencyGraph<'a> {
     required_packages: HashSet<PackageName>,
 
     // Maximum display depth of the dependency tree
-    depth: u8,
+    depth: usize,
 
     // Prune the given package from the display of the dependency tree.
     prune: Vec<PackageName>,
@@ -131,7 +131,7 @@ impl<'a> DisplayDependencyGraph<'a> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
     fn new(
         site_packages: &'a SitePackages,
-        depth: u8,
+        depth: usize,
         prune: Vec<PackageName>,
     ) -> DisplayDependencyGraph<'a> {
         let mut dist_by_package_name = HashMap::new();
@@ -162,7 +162,7 @@ impl<'a> DisplayDependencyGraph<'a> {
         path: &mut Vec<String>,
     ) -> Vec<String> {
         // Short-circuit if the current path is longer than the provided depth.
-        if path.len() > self.depth.into() {
+        if path.len() > self.depth {
             return Vec::new();
         }
 
