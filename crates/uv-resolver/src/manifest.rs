@@ -100,39 +100,40 @@ impl Manifest {
     ) -> impl Iterator<Item = &Requirement> + 'a {
         match mode {
             // Include all direct and transitive requirements, with constraints and overrides applied.
-            DependencyMode::Transitive => Either::Left( self
-                .lookaheads
-                .iter()
-                .flat_map(move |lookahead| {
-                    self.overrides
-                        .apply(lookahead.requirements())
-                        .filter(move |requirement| {
-                            requirement.evaluate_markers(markers, lookahead.extras())
-                        })
-                })
-                .chain(
-                    self.overrides
-                        .apply(&self.requirements)
-                        .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
-                )
-                .chain(
-                    self.constraints
-                        .requirements()
-                        .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
-                )
-                .chain(
-                    self.overrides
-                        .requirements()
-                        .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
-                ))
-            ,
-
+            DependencyMode::Transitive => Either::Left(
+                self.lookaheads
+                    .iter()
+                    .flat_map(move |lookahead| {
+                        self.overrides
+                            .apply(lookahead.requirements())
+                            .filter(move |requirement| {
+                                requirement.evaluate_markers(markers, lookahead.extras())
+                            })
+                    })
+                    .chain(
+                        self.overrides
+                            .apply(&self.requirements)
+                            .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+                    )
+                    .chain(
+                        self.constraints
+                            .requirements()
+                            .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+                    )
+                    .chain(
+                        self.overrides
+                            .requirements()
+                            .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+                    ),
+            ),
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
-                self.overrides.apply(&self.requirements)
-                .chain(self.constraints.requirements())
-                .chain(self.overrides.requirements())
-                .filter(move |requirement| requirement.evaluate_markers(markers, &[]))),
+                self.overrides
+                    .apply(&self.requirements)
+                    .chain(self.constraints.requirements())
+                    .chain(self.overrides.requirements())
+                    .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+            ),
         }
     }
 

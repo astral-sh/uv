@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -13,7 +14,7 @@ use uv_configuration::{
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::PythonVersion;
+use uv_toolchain::{PythonVersion, ToolchainPreference};
 
 use crate::commands::{extra_name_with_clap_error, ListFormat, VersionFormat};
 use crate::compat;
@@ -87,6 +88,10 @@ pub(crate) struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub(crate) no_offline: bool,
+
+    /// Whether to use system or uv-managed Python toolchains.
+    #[arg(global = true, long)]
+    pub(crate) toolchain_preference: Option<ToolchainPreference>,
 
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
@@ -222,6 +227,8 @@ pub(crate) enum PipCommand {
     List(PipListArgs),
     /// Show information about one or more installed packages.
     Show(PipShowArgs),
+    /// Display the dependency tree.
+    Tree(PipTreeArgs),
     /// Verify installed packages have compatible dependencies.
     Check(PipCheckArgs),
 }
@@ -1341,6 +1348,52 @@ pub(crate) struct PipShowArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
+pub(crate) struct PipTreeArgs {
+    /// Validate the virtual environment, to detect packages with missing dependencies or other
+    /// issues.
+    #[arg(long, overrides_with("no_strict"))]
+    pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    pub(crate) python: Option<String>,
+
+    /// List packages for the system Python.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found. The `--system` option
+    /// instructs `uv` to use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
@@ -1457,6 +1510,31 @@ pub(crate) struct VenvArgs {
     pub(crate) compat_args: compat::VenvCompatArgs,
 }
 
+#[derive(Parser, Debug, Clone)]
+pub(crate) enum ExternalCommand {
+    #[command(external_subcommand)]
+    Cmd(Vec<OsString>),
+}
+
+impl Deref for ExternalCommand {
+    type Target = Vec<OsString>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Cmd(cmd) => cmd,
+        }
+    }
+}
+
+impl ExternalCommand {
+    pub(crate) fn split(&self) -> (Option<&OsString>, &[OsString]) {
+        match self.as_slice() {
+            [] => (None, &[]),
+            [cmd, args @ ..] => (Some(cmd), args),
+        }
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
@@ -1482,11 +1560,8 @@ pub(crate) struct RunArgs {
     pub(crate) no_dev: bool,
 
     /// The command to run.
-    pub(crate) target: Option<String>,
-
-    /// The arguments to the command.
-    #[arg(allow_hyphen_values = true)]
-    pub(crate) args: Vec<OsString>,
+    #[command(subcommand)]
+    pub(crate) command: ExternalCommand,
 
     /// Run with the given packages installed.
     #[arg(long)]
@@ -1615,6 +1690,28 @@ pub(crate) struct AddArgs {
     #[arg(long)]
     pub(crate) workspace: bool,
 
+    /// Add the requirements as editables.
+    #[arg(long, default_missing_value = "true", num_args(0..=1))]
+    pub(crate) editable: Option<bool>,
+
+    /// Add source requirements to the `project.dependencies` section of the `pyproject.toml`.
+    ///
+    /// Without this flag uv will try to use `tool.uv.sources` for any sources.
+    #[arg(long)]
+    pub(crate) raw: bool,
+
+    /// Specific commit to use when adding from Git.
+    #[arg(long)]
+    pub(crate) rev: Option<String>,
+
+    /// Tag to use when adding from git.
+    #[arg(long)]
+    pub(crate) tag: Option<String>,
+
+    /// Branch to use when adding from git.
+    #[arg(long)]
+    pub(crate) branch: Option<String>,
+
     #[command(flatten)]
     pub(crate) installer: ResolverInstallerArgs,
 
@@ -1684,11 +1781,8 @@ pub(crate) enum ToolCommand {
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ToolRunArgs {
     /// The command to run.
-    pub(crate) target: String,
-
-    /// The arguments to the command.
-    #[arg(allow_hyphen_values = true)]
-    pub(crate) args: Vec<OsString>,
+    #[command(subcommand)]
+    pub(crate) command: ExternalCommand,
 
     /// Use the given package to provide the command.
     ///

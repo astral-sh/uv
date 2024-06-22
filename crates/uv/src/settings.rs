@@ -1,5 +1,4 @@
 use std::env::VarError;
-use std::ffi::OsString;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
@@ -23,14 +22,14 @@ use uv_settings::{
     Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
     ResolverOptions,
 };
-use uv_toolchain::{Prefix, PythonVersion, Target};
+use uv_toolchain::{Prefix, PythonVersion, Target, ToolchainPreference};
 
 use crate::cli::{
-    AddArgs, BuildArgs, ColorChoice, GlobalArgs, IndexArgs, InstallerArgs, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipUninstallArgs, RefreshArgs, RemoveArgs, ResolverArgs, ResolverInstallerArgs,
-    RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs, ToolchainListArgs,
-    VenvArgs,
+    AddArgs, BuildArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, IndexArgs,
+    InstallerArgs, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, RefreshArgs, RemoveArgs,
+    ResolverArgs, ResolverInstallerArgs, RunArgs, SyncArgs, ToolRunArgs, ToolchainFindArgs,
+    ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::ListFormat;
@@ -47,11 +46,35 @@ pub(crate) struct GlobalSettings {
     pub(crate) isolated: bool,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
+    pub(crate) toolchain_preference: ToolchainPreference,
 }
 
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        command: &Commands,
+        args: &GlobalArgs,
+        workspace: Option<&FilesystemOptions>,
+    ) -> Self {
+        let preview = PreviewMode::from(
+            flag(args.preview, args.no_preview)
+                .combine(workspace.and_then(|workspace| workspace.globals.preview))
+                .unwrap_or(false),
+        );
+
+        // Always use preview mode toolchain preferences during preview commands
+        // TODO(zanieb): There should be a cleaner way to do this, we should probably resolve
+        // force preview to true for these commands but it would break our experimental warning
+        // right now
+        let default_toolchain_preference = if matches!(
+            command,
+            Commands::Project(_) | Commands::Toolchain(_) | Commands::Tool(_)
+        ) {
+            ToolchainPreference::default_from(PreviewMode::Enabled)
+        } else {
+            ToolchainPreference::default_from(preview)
+        };
+
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
@@ -85,11 +108,11 @@ impl GlobalSettings {
             },
             isolated: args.isolated,
             show_settings: args.show_settings,
-            preview: PreviewMode::from(
-                flag(args.preview, args.no_preview)
-                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
-                    .unwrap_or(false),
-            ),
+            preview,
+            toolchain_preference: args
+                .toolchain_preference
+                .combine(workspace.and_then(|workspace| workspace.globals.toolchain_preference))
+                .unwrap_or(default_toolchain_preference),
         }
     }
 }
@@ -123,8 +146,7 @@ impl CacheSettings {
 pub(crate) struct RunSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
-    pub(crate) target: Option<String>,
-    pub(crate) args: Vec<OsString>,
+    pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
     pub(crate) package: Option<PackageName>,
@@ -142,8 +164,7 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
-            target,
-            args,
+            command,
             with,
             installer,
             build,
@@ -158,8 +179,7 @@ impl RunSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
-            target,
-            args,
+            command,
             with,
             python,
             package,
@@ -176,8 +196,7 @@ impl RunSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolRunSettings {
-    pub(crate) target: String,
-    pub(crate) args: Vec<OsString>,
+    pub(crate) command: ExternalCommand,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
@@ -190,8 +209,7 @@ impl ToolRunSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolRunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolRunArgs {
-            target,
-            args,
+            command,
             from,
             with,
             installer,
@@ -201,8 +219,7 @@ impl ToolRunSettings {
         } = args;
 
         Self {
-            target,
-            args,
+            command,
             from,
             with,
             python,
@@ -375,8 +392,13 @@ impl LockSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<RequirementsSource>,
-    pub(crate) workspace: bool,
     pub(crate) dev: bool,
+    pub(crate) workspace: bool,
+    pub(crate) editable: Option<bool>,
+    pub(crate) raw: bool,
+    pub(crate) rev: Option<String>,
+    pub(crate) tag: Option<String>,
+    pub(crate) branch: Option<String>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -390,6 +412,11 @@ impl AddSettings {
             requirements,
             dev,
             workspace,
+            editable,
+            raw,
+            rev,
+            tag,
+            branch,
             installer,
             build,
             refresh,
@@ -405,6 +432,11 @@ impl AddSettings {
             requirements,
             workspace,
             dev,
+            editable,
+            raw,
+            rev,
+            tag,
+            branch,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -904,6 +936,40 @@ impl PipShowSettings {
         Self {
             package,
             settings: PipSettings::combine(
+                PipOptions {
+                    python,
+                    system: flag(system, no_system),
+                    strict: flag(strict, no_strict),
+                    ..PipOptions::default()
+                },
+                filesystem,
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for a `pip show` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PipTreeSettings {
+    // CLI-only settings.
+    pub(crate) shared: PipSettings,
+}
+
+impl PipTreeSettings {
+    /// Resolve the [`PipTreeSettings`] from the CLI and workspace configuration.
+    pub(crate) fn resolve(args: PipTreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let PipTreeArgs {
+            strict,
+            no_strict,
+            python,
+            system,
+            no_system,
+        } = args;
+
+        Self {
+            // Shared settings.
+            shared: PipSettings::combine(
                 PipOptions {
                     python,
                     system: flag(system, no_system),

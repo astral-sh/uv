@@ -18,7 +18,7 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let venv = PythonEnvironment::from_root("../../.venv", cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![Requirement::from(
-        pep508_rs::Requirement::from_str("jupyter").unwrap(),
+        pep508_rs::Requirement::from_str("jupyter==1.0.0").unwrap(),
     )]);
 
     let run = || {
@@ -47,7 +47,7 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     let venv = PythonEnvironment::from_root("../../.venv", cache).unwrap();
     let client = &RegistryClientBuilder::new(cache.clone()).build();
     let manifest = &Manifest::simple(vec![
-        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]").unwrap()),
+        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]==2.9.2").unwrap()),
         Requirement::from(
             pep508_rs::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
         ),
@@ -72,6 +72,7 @@ criterion_main!(uv);
 
 mod resolver {
     use anyhow::Result;
+    use chrono::NaiveDate;
     use once_cell::sync::Lazy;
 
     use distribution_types::IndexLocations;
@@ -87,7 +88,8 @@ mod resolver {
     use uv_distribution::DistributionDatabase;
     use uv_git::GitResolver;
     use uv_resolver::{
-        FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, ResolutionGraph, Resolver,
+        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, ResolutionGraph,
+        Resolver,
     };
     use uv_toolchain::PythonEnvironment;
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
@@ -157,9 +159,20 @@ mod resolver {
             PreviewMode::Disabled,
         );
 
+        let options = OptionsBuilder::new()
+            .exclude_newer(Some(
+                NaiveDate::from_ymd_opt(2024, 6, 20)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_utc()
+                    .into(),
+            ))
+            .build();
+
         let resolver = Resolver::new(
             manifest,
-            Options::default(),
+            options,
             &python_requirement,
             Some(&MARKERS),
             Some(&TAGS),

@@ -18,7 +18,7 @@ use uv_resolver::{
     ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode, RequiresPython,
     ResolutionMode,
 };
-use uv_toolchain::{Interpreter, ToolchainRequest};
+use uv_toolchain::{Interpreter, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -33,6 +33,7 @@ pub(crate) async fn lock(
     python: Option<String>,
     settings: ResolverSettings,
     preview: PreviewMode,
+    toolchain_preference: ToolchainPreference,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -50,6 +51,7 @@ pub(crate) async fn lock(
     let interpreter = project::find_interpreter(
         &workspace,
         python.as_deref().map(ToolchainRequest::parse),
+        toolchain_preference,
         connectivity,
         native_tls,
         cache,

@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_toolchain::{PythonEnvironment, SystemPython, Toolchain, ToolchainRequest};
+use uv_toolchain::{EnvironmentPreference, PythonEnvironment, ToolchainRequest};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -21,22 +21,16 @@ pub(crate) fn pip_freeze(
     strict: bool,
     python: Option<&str>,
     system: bool,
-    preview: PreviewMode,
+    _preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
-    let system = if system {
-        SystemPython::Required
-    } else {
-        SystemPython::Allowed
-    };
-    let environment = PythonEnvironment::from_toolchain(Toolchain::find(
-        python.map(ToolchainRequest::parse),
-        system,
-        preview,
+    let environment = PythonEnvironment::find(
+        &python.map(ToolchainRequest::parse).unwrap_or_default(),
+        EnvironmentPreference::from_system_flag(system, false),
         cache,
-    )?);
+    )?;
 
     debug!(
         "Using Python {} environment at {}",

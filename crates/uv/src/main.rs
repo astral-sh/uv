@@ -9,6 +9,7 @@ use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
+use settings::PipTreeSettings;
 use tracing::{debug, instrument};
 
 use cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
@@ -105,6 +106,12 @@ async fn run() -> Result<ExitStatus> {
                             ContextValue::String("uv pip show".to_string()),
                         );
                     }
+                    "tree" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("uv pip tree".to_string()),
+                        );
+                    }
                     _ => {}
                 }
             }
@@ -140,7 +147,7 @@ async fn run() -> Result<ExitStatus> {
     };
 
     // Resolve the global settings.
-    let globals = GlobalSettings::resolve(&cli.global_args, filesystem.as_ref());
+    let globals = GlobalSettings::resolve(&cli.command, &cli.global_args, filesystem.as_ref());
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(cli.cache_args, filesystem.as_ref());
@@ -280,6 +287,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.link_mode,
                 args.settings.python,
                 args.settings.system,
+                globals.toolchain_preference,
                 args.settings.concurrency,
                 globals.native_tls,
                 globals.quiet,
@@ -530,6 +538,24 @@ async fn run() -> Result<ExitStatus> {
             )
         }
         Commands::Pip(PipNamespace {
+            command: PipCommand::Tree(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipTreeSettings::resolve(args, filesystem);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::pip_tree(
+                args.shared.strict,
+                args.shared.python.as_deref(),
+                args.shared.system,
+                globals.preview,
+                &cache,
+                printer,
+            )
+        }
+        Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
@@ -585,6 +611,7 @@ async fn run() -> Result<ExitStatus> {
             commands::venv(
                 &args.name,
                 args.settings.python.as_deref(),
+                globals.toolchain_preference,
                 args.settings.link_mode,
                 &args.settings.index_locations,
                 args.settings.index_strategy,
@@ -619,14 +646,14 @@ async fn run() -> Result<ExitStatus> {
             commands::run(
                 args.extras,
                 args.dev,
-                args.target,
-                args.args,
+                args.command,
                 requirements,
                 args.python,
                 args.package,
                 args.settings,
                 globals.isolated,
                 globals.preview,
+                globals.toolchain_preference,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -648,6 +675,7 @@ async fn run() -> Result<ExitStatus> {
                 args.dev,
                 args.modifications,
                 args.python,
+                globals.toolchain_preference,
                 args.settings,
                 globals.preview,
                 globals.connectivity,
@@ -670,6 +698,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.settings,
                 globals.preview,
+                globals.toolchain_preference,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -690,8 +719,14 @@ async fn run() -> Result<ExitStatus> {
                 args.requirements,
                 args.workspace,
                 args.dev,
+                args.editable,
+                args.raw,
+                args.rev,
+                args.tag,
+                args.branch,
                 args.python,
                 args.settings,
+                globals.toolchain_preference,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -713,6 +748,7 @@ async fn run() -> Result<ExitStatus> {
                 args.requirements,
                 args.dev,
                 args.python,
+                globals.toolchain_preference,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -745,14 +781,14 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::run_tool(
-                args.target,
-                args.args,
+                args.command,
                 args.python,
                 args.from,
                 args.with,
                 args.settings,
                 globals.isolated,
                 globals.preview,
+                globals.toolchain_preference,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -775,6 +811,7 @@ async fn run() -> Result<ExitStatus> {
                 args.kinds,
                 args.all_versions,
                 args.all_platforms,
+                globals.toolchain_preference,
                 globals.preview,
                 &cache,
                 printer,
@@ -811,7 +848,14 @@ async fn run() -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::toolchain_find(args.request, globals.preview, &cache, printer).await
+            commands::toolchain_find(
+                args.request,
+                globals.toolchain_preference,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
         }
     }
 }

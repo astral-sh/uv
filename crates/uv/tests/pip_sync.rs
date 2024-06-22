@@ -34,6 +34,7 @@ fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
         .success();
 }
 
+// TODO(zanieb): This belongs in the `TestContext`
 /// Create a `pip sync` command with options shared across scenarios.
 fn sync_without_exclude_newer(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
@@ -44,6 +45,8 @@ fn sync_without_exclude_newer(context: &TestContext) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", &context.python_path())
+        .env("UV_TOOLCHAIN_DIR", "")
         .current_dir(&context.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {
@@ -71,6 +74,8 @@ fn uninstall_command(context: &TestContext) -> Command {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_TEST_PYTHON_PATH", &context.python_path())
+        .env("UV_TOOLCHAIN_DIR", "")
         .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir);
 
@@ -116,7 +121,7 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No Python interpreters found in virtual environments
+    error: No Python interpreters found in system toolchains
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));

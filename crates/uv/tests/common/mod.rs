@@ -14,12 +14,13 @@ use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
-use uv_configuration::PreviewMode;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_toolchain::managed::InstalledToolchains;
-use uv_toolchain::{PythonVersion, Toolchain, ToolchainRequest};
+use uv_toolchain::{
+    EnvironmentPreference, PythonVersion, Toolchain, ToolchainPreference, ToolchainRequest,
+};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -27,7 +28,7 @@ pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub const BUILD_VENDOR_LINKS_URL: &str =
-    "https://raw.githubusercontent.com/astral-sh/packse/0.3.27/vendor/links.html";
+    "https://raw.githubusercontent.com/astral-sh/packse/0.3.29/vendor/links.html";
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
@@ -42,6 +43,11 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
     (r"uv.exe", "uv"),
+    // uv version display
+    (
+        r"uv(-.*)? \d+\.\d+\.\d+( \(.*\))?",
+        r"uv [VERSION] ([COMMIT] DATE)",
+    ),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",
@@ -412,6 +418,41 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv tool run` command with options shared across scenarios.
+    pub fn tool_run(&self) -> std::process::Command {
+        let mut command = self.tool_run_without_exclude_newer();
+        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+        command
+    }
+
+    /// Create a `uv tool run` command with no `--exclude-newer` option.
+    ///
+    /// One should avoid using this in tests to the extent possible because
+    /// it can result in tests failing when the index state changes. Therefore,
+    /// if you use this, there should be some other kind of mitigation in place.
+    /// For example, pinning package versions.
+    pub fn tool_run_without_exclude_newer(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("tool")
+            .arg("run")
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
+    }
+
     /// Create a `uv add` command for the given requirements.
     pub fn add(&self, reqs: &[&str]) -> std::process::Command {
         let mut command = std::process::Command::new(get_bin());
@@ -688,13 +729,14 @@ pub fn python_toolchains_for_versions(
                 })
                 .unwrap_or_default();
             if inner.is_empty() {
+                // TODO(zanieb): Collapse these two cases now that we support `ToolchainPreference`
                 // Fallback to a system lookup if we failed to find one in the toolchain directory
                 if let Ok(toolchain) = Toolchain::find(
-                    Some(ToolchainRequest::parse(python_version)),
+                    &ToolchainRequest::parse(python_version),
                     // Without required, we could pick the current venv here and the test fails
                     // because the venv subcommand requires a system interpreter.
-                    uv_toolchain::SystemPython::Required,
-                    PreviewMode::Enabled,
+                    EnvironmentPreference::OnlySystem,
+                    ToolchainPreference::PreferInstalledManaged,
                     &cache,
                 ) {
                     vec![toolchain

@@ -495,9 +495,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .insert(version.clone())
                 {
                     // Retrieve that package dependencies.
-                    let package = state.next.clone();
                     let forked_deps = self.get_dependencies_forking(
-                        &package,
+                        &state.next,
                         &version,
                         &state.markers,
                         &mut state.priorities,
@@ -508,40 +507,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state
                                 .pubgrub
                                 .add_incompatibility(Incompatibility::custom_version(
-                                    package.clone(),
+                                    state.next.clone(),
                                     version.clone(),
                                     UnavailableReason::Version(reason),
                                 ));
                             forked_states.push(state);
                         }
-                        ForkedDependencies::Unforked(constraints) => {
-                            if constraints
-                                .iter()
-                                .any(|(dependency, _)| dependency == &package)
-                            {
-                                if enabled!(Level::DEBUG) {
-                                    prefetcher.log_tried_versions();
-                                }
-                                return Err(PubGrubError::SelfDependency {
-                                    package: package.clone(),
-                                    version: version.clone(),
-                                }
-                                .into());
-                            }
-
-                            // Add that package and version if the dependencies are not problematic.
-                            let dep_incompats =
-                                state.pubgrub.add_incompatibility_from_dependencies(
-                                    package.clone(),
-                                    version.clone(),
-                                    constraints,
-                                );
-                            state.pubgrub.partial_solution.add_version(
-                                package.clone(),
-                                version.clone(),
-                                dep_incompats,
-                                &state.pubgrub.incompatibility_store,
-                            );
+                        ForkedDependencies::Unforked(dependencies) => {
+                            state.add_package_version_dependencies(
+                                &version,
+                                dependencies,
+                                &prefetcher,
+                            )?;
                             forked_states.push(state);
                         }
                         ForkedDependencies::Forked {
@@ -565,21 +542,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let mut cur_state = Some(state);
                             let forks_len = forks.len();
                             for (i, fork) in forks.into_iter().enumerate() {
-                                if fork
-                                    .dependencies
-                                    .iter()
-                                    .any(|(dependency, _)| dependency == &package)
-                                {
-                                    if enabled!(Level::DEBUG) {
-                                        prefetcher.log_tried_versions();
-                                    }
-                                    return Err(PubGrubError::SelfDependency {
-                                        package: package.clone(),
-                                        version: version.clone(),
-                                    }
-                                    .into());
-                                }
-
                                 let is_last = i == forks_len - 1;
                                 let mut forked_state = cur_state.take().unwrap();
                                 if !is_last {
@@ -587,19 +549,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
                                 forked_state.markers.and(fork.markers);
 
-                                // Add that package and version if the dependencies are not problematic.
-                                let dep_incompats =
-                                    forked_state.pubgrub.add_incompatibility_from_dependencies(
-                                        package.clone(),
-                                        version.clone(),
-                                        fork.dependencies,
-                                    );
-                                forked_state.pubgrub.partial_solution.add_version(
-                                    package.clone(),
-                                    version.clone(),
-                                    dep_incompats,
-                                    &forked_state.pubgrub.incompatibility_store,
-                                );
+                                forked_state.add_package_version_dependencies(
+                                    &version,
+                                    fork.dependencies,
+                                    &prefetcher,
+                                )?;
                                 forked_states.push(forked_state);
                             }
                         }
@@ -1573,6 +1527,34 @@ struct SolveState {
 }
 
 impl SolveState {
+    /// Add the dependencies for the selected version of the current package.
+    fn add_package_version_dependencies(
+        &mut self,
+        version: &Version,
+        dependencies: Vec<(PubGrubPackage, Range<Version>)>,
+        prefetcher: &BatchPrefetcher,
+    ) -> Result<(), ResolveError> {
+        if dependencies
+            .iter()
+            .any(|(dependency, _)| dependency == &self.next)
+        {
+            if enabled!(Level::DEBUG) {
+                prefetcher.log_tried_versions();
+            }
+            return Err(PubGrubError::SelfDependency {
+                package: self.next.clone(),
+                version: version.clone(),
+            }
+            .into());
+        }
+        self.pubgrub.add_package_version_dependencies(
+            self.next.clone(),
+            version.clone(),
+            dependencies,
+        );
+        Ok(())
+    }
+
     fn into_resolution(self) -> Resolution {
         let solution = self.pubgrub.partial_solution.extract_solution();
         let mut dependencies: FxHashMap<
@@ -1921,15 +1903,12 @@ impl Dependencies {
 
         let mut by_name: FxHashMap<&PackageName, PossibleForks> = FxHashMap::default();
         for (index, (ref pkg, _)) in deps.iter().enumerate() {
-            let (name, marker) = match &**pkg {
-                // A root can never be a dependency of another package, and a `Python` pubgrub
-                // package is never returned by `get_dependencies`. So these cases never occur.
-                PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => unreachable!(),
-                PubGrubPackageInner::Package { name, marker, .. }
-                | PubGrubPackageInner::Extra { name, marker, .. }
-                | PubGrubPackageInner::Dev { name, marker, .. } => (name, marker.as_ref()),
-                PubGrubPackageInner::Marker { name, marker, .. } => (name, Some(marker)),
-            };
+            // A root can never be a dependency of another package,
+            // and a `Python` pubgrub package is never returned by
+            // `get_dependencies`. So a pubgrub package always has a
+            // name in this context.
+            let name = pkg.name().expect("dependency always has a name");
+            let marker = pkg.marker();
             let Some(marker) = marker else {
                 // When no marker is found, it implies there is a dependency on
                 // this package that is unconditional with respect to marker
@@ -2009,32 +1988,28 @@ impl Dependencies {
         }];
         let mut diverging_packages = Vec::new();
         for (name, possible_forks) in by_name {
-            let fork_groups = match possible_forks {
+            let fork_groups = match possible_forks.finish() {
+                // 'finish()' guarantees that 'PossiblyForking' implies
+                // 'DefinitelyForking'.
                 PossibleForks::PossiblyForking(fork_groups) => fork_groups,
                 PossibleForks::NoForkPossible(indices) => {
                     // No fork is provoked by this package, so just add
                     // everything in this group to each of the forks.
                     for index in indices {
                         for fork in &mut forks {
-                            fork.dependencies.push(deps[index].clone());
+                            fork.add_nonfork_package(deps[index].clone());
                         }
                     }
                     continue;
                 }
             };
+            assert!(fork_groups.forks.len() >= 2, "expected definitive fork");
             let mut new_forks: Vec<Fork> = vec![];
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
-                for (index, markers) in group.packages {
+                for (index, _) in group.packages {
                     for fork in &mut new_forks_for_group {
-                        fork.dependencies.push(deps[index].clone());
-                        // Each marker expression in a single fork is,
-                        // by construction, overlapping with at least
-                        // one other marker expression in this fork.
-                        // However, the symmetric differences may be
-                        // non-empty. Therefore, the markers need to be
-                        // combined on the corresponding fork
-                        fork.markers.and(markers.clone());
+                        fork.add_forked_package(deps[index].clone());
                     }
                 }
                 new_forks.extend(new_forks_for_group);
@@ -2089,6 +2064,11 @@ struct Fork {
     /// The list of dependencies for this fork, guaranteed to be conflict
     /// free. (i.e., There are no two packages with the same name with
     /// non-overlapping marker expressions.)
+    ///
+    /// Note that callers shouldn't mutate this sequence directly. Instead,
+    /// they should use `add_forked_package` or `add_nonfork_package`. Namely,
+    /// it should be impossible for a package with a marker expression that is
+    /// disjoint from the marker expression on this fork to be added.
     dependencies: Vec<(PubGrubPackage, Range<Version>)>,
     /// The markers that provoked this fork.
     ///
@@ -2098,6 +2078,68 @@ struct Fork {
     ///
     /// (This doesn't include any marker expressions from a parent fork.)
     markers: MarkerTree,
+}
+
+impl Fork {
+    /// Add the given dependency to this fork with the assumption that it
+    /// provoked this fork into existence.
+    ///
+    /// In particular, the markers given should correspond to the markers
+    /// associated with that dependency, and they are combined (via
+    /// conjunction) with the markers on this fork.
+    ///
+    /// Finally, and critically, any dependencies that are already in this
+    /// fork that are disjoint with the markers given are removed. This is
+    /// because a fork provoked by the given marker should not have packages
+    /// whose markers are disjoint with it. While it might seem harmless, this
+    /// can cause the resolver to explore otherwise impossible resolutions,
+    /// and also run into conflicts (and thus a failed resolution) that don't
+    /// actually exist.
+    fn add_forked_package(&mut self, (pkg, range): (PubGrubPackage, Range<Version>)) {
+        // OK because a package without a marker is unconditional and
+        // thus can never provoke a fork.
+        let marker = pkg
+            .marker()
+            .cloned()
+            .expect("forked package always has a marker");
+        self.remove_disjoint_packages(&marker);
+        self.dependencies.push((pkg, range));
+        // Each marker expression in a single fork is,
+        // by construction, overlapping with at least
+        // one other marker expression in this fork.
+        // However, the symmetric differences may be
+        // non-empty. Therefore, the markers need to be
+        // combined on the corresponding fork.
+        self.markers.and(marker);
+    }
+
+    /// Add the given dependency to this fork.
+    ///
+    /// This works by assuming the given package did *not* provoke a fork.
+    ///
+    /// It is only added if the markers on the given package are not disjoint
+    /// with this fork's markers.
+    fn add_nonfork_package(&mut self, (pkg, range): (PubGrubPackage, Range<Version>)) {
+        use crate::marker::is_disjoint;
+
+        if pkg
+            .marker()
+            .map_or(true, |marker| !is_disjoint(marker, &self.markers))
+        {
+            self.dependencies.push((pkg, range));
+        }
+    }
+
+    /// Removes any dependencies in this fork whose markers are disjoint with
+    /// the given markers.
+    fn remove_disjoint_packages(&mut self, fork_marker: &MarkerTree) {
+        use crate::marker::is_disjoint;
+
+        self.dependencies.retain(|(pkg, _)| {
+            pkg.marker()
+                .map_or(true, |pkg_marker| !is_disjoint(pkg_marker, fork_marker))
+        });
+    }
 }
 
 /// Intermediate state that represents a *possible* grouping of forks
@@ -2136,6 +2178,23 @@ impl<'a> PossibleForks<'a> {
             return false;
         };
         fork_groups.forks.len() > 1
+    }
+
+    /// Consumes this possible set of forks and converts a "possibly forking"
+    /// variant to a "no fork possible" variant if there are no actual forks.
+    ///
+    /// This should be called when all dependencies for one package have been
+    /// considered. It will normalize this value such that `PossiblyForking`
+    /// means `DefinitelyForking`.
+    fn finish(mut self) -> PossibleForks<'a> {
+        let PossibleForks::PossiblyForking(ref fork_groups) = self else {
+            return self;
+        };
+        if fork_groups.forks.len() == 1 {
+            self.make_no_forks_possible();
+            return self;
+        }
+        self
     }
 
     /// Pushes an unconditional index to a package.

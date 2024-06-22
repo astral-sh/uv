@@ -18,8 +18,8 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, RequiresPython};
 use uv_toolchain::{
-    request_from_version_file, Interpreter, PythonEnvironment, SystemPython, Toolchain,
-    ToolchainRequest, VersionRequest,
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
+    ToolchainPreference, ToolchainRequest, VersionRequest,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -139,6 +139,7 @@ pub(crate) fn interpreter_meets_requirements(
 pub(crate) async fn find_interpreter(
     workspace: &Workspace,
     python_request: Option<ToolchainRequest>,
+    toolchain_preference: ToolchainPreference,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
@@ -183,8 +184,8 @@ pub(crate) async fn find_interpreter(
     // Locate the Python interpreter to use in the environment
     let interpreter = Toolchain::find_or_fetch(
         python_request,
-        SystemPython::Required,
-        PreviewMode::Enabled,
+        EnvironmentPreference::OnlySystem,
+        toolchain_preference,
         client_builder,
         cache,
     )
@@ -215,6 +216,7 @@ pub(crate) async fn find_interpreter(
 pub(crate) async fn init_environment(
     workspace: &Workspace,
     python: Option<ToolchainRequest>,
+    toolchain_preference: ToolchainPreference,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
@@ -248,8 +250,16 @@ pub(crate) async fn init_environment(
     };
 
     // Find an interpreter to create the environment with
-    let interpreter =
-        find_interpreter(workspace, python, connectivity, native_tls, cache, printer).await?;
+    let interpreter = find_interpreter(
+        workspace,
+        python,
+        toolchain_preference,
+        connectivity,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?;
 
     let venv = workspace.venv();
     writeln!(

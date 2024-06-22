@@ -391,6 +391,7 @@ name = "bench"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "codspeed-criterion-compat",
  "criterion",
  "distribution-filename",
@@ -2695,7 +2696,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=a68cbd1a26e43986a31563e1d127e83bafca3a0c#a68cbd1a26e43986a31563e1d127e83bafca3a0c"
+source = "git+https://github.com/astral-sh/pubgrub?rev=b4435e2f3af10dab2336a0345b35dcd622699d06#b4435e2f3af10dab2336a0345b35dcd622699d06"
 dependencies = [
  "indexmap",
  "log",
@@ -4985,6 +4986,7 @@ dependencies = [
  "anyhow",
  "assert_fs",
  "cache-key",
+ "clap",
  "configparser",
  "fs-err",
  "futures",

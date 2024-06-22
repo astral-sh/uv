@@ -23,7 +23,10 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
-use uv_toolchain::{request_from_version_file, SystemPython, Toolchain, ToolchainRequest};
+use uv_toolchain::{
+    request_from_version_file, EnvironmentPreference, Toolchain, ToolchainPreference,
+    ToolchainRequest,
+};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::{pip, ExitStatus};
@@ -39,6 +42,7 @@ use crate::shell::Shell;
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
+    toolchain_preference: ToolchainPreference,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
@@ -66,6 +70,7 @@ pub(crate) async fn venv(
         connectivity,
         seed,
         preview,
+        toolchain_preference,
         allow_existing,
         exclude_newer,
         native_tls,
@@ -115,6 +120,7 @@ async fn venv_impl(
     connectivity: Connectivity,
     seed: bool,
     preview: PreviewMode,
+    toolchain_preference: ToolchainPreference,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
@@ -133,8 +139,8 @@ async fn venv_impl(
     // Locate the Python interpreter to use in the environment
     let interpreter = Toolchain::find_or_fetch(
         interpreter_request,
-        SystemPython::Required,
-        preview,
+        EnvironmentPreference::OnlySystem,
+        toolchain_preference,
         client_builder,
         cache,
     )

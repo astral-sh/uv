@@ -14,9 +14,9 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_toolchain::Toolchain;
+use uv_toolchain::EnvironmentPreference;
 use uv_toolchain::ToolchainRequest;
-use uv_toolchain::{Prefix, PythonEnvironment, SystemPython, Target};
+use uv_toolchain::{Prefix, PythonEnvironment, Target};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -33,7 +33,7 @@ pub(crate) async fn pip_uninstall(
     cache: Cache,
     connectivity: Connectivity,
     native_tls: bool,
-    preview: PreviewMode,
+    _preview: PreviewMode,
     keyring_provider: KeyringProviderType,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -47,17 +47,14 @@ pub(crate) async fn pip_uninstall(
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Detect the current Python interpreter.
-    let system = if system {
-        SystemPython::Required
-    } else {
-        SystemPython::Explicit
-    };
-    let environment = PythonEnvironment::from_toolchain(Toolchain::find(
-        python.as_deref().map(ToolchainRequest::parse),
-        system,
-        preview,
+    let environment = PythonEnvironment::find(
+        &python
+            .as_deref()
+            .map(ToolchainRequest::parse)
+            .unwrap_or_default(),
+        EnvironmentPreference::from_system_flag(system, true),
         &cache,
-    )?);
+    )?;
 
     debug!(
         "Using Python {} environment at {}",

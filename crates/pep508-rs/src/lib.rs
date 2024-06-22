@@ -153,6 +153,15 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     pub origin: Option<RequirementOrigin>,
 }
 
+impl<T: Pep508Url> Requirement<T> {
+    /// Removes the URL specifier from this requirement.
+    pub fn clear_url(&mut self) {
+        if matches!(self.version_or_url, Some(VersionOrUrl::Url(_))) {
+            self.version_or_url = None;
+        }
+    }
+}
+
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;

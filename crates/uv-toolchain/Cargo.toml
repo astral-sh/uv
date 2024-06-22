@@ -28,6 +28,7 @@ uv-state = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
+clap = { workspace = true, optional = true }
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 itertools = { workspace = true }

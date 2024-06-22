@@ -1,12 +1,12 @@
 use anyhow::Result;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::pyproject::Source;
+use uv_distribution::pyproject::{Source, SourceError};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_git::GitResolver;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
-use uv_toolchain::ToolchainRequest;
+use uv_toolchain::{ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use uv_cache::Cache;
@@ -22,13 +22,19 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
     workspace: bool,
     dev: bool,
+    editable: Option<bool>,
+    raw: bool,
+    rev: Option<String>,
+    tag: Option<String>,
+    branch: Option<String>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
+    toolchain_preference: ToolchainPreference,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -47,6 +53,7 @@ pub(crate) async fn add(
     let venv = project::init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
+        toolchain_preference,
         connectivity,
         native_tls,
         cache,
@@ -135,14 +142,34 @@ pub(crate) async fn add(
 
     // Add the requirements to the `pyproject.toml`.
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
-    for req in requirements.into_iter().map(pep508_rs::Requirement::from) {
-        let source = if workspace {
-            Some(Source::Workspace {
-                workspace: true,
-                editable: None,
-            })
+    for req in requirements {
+        let (req, source) = if raw {
+            // Use the PEP 508 requirement directly.
+            (pep508_rs::Requirement::from(req), None)
         } else {
-            None
+            // Otherwise, try to construct the source.
+            let result = Source::from_requirement(
+                req.source.clone(),
+                workspace,
+                editable,
+                rev.clone(),
+                tag.clone(),
+                branch.clone(),
+            );
+
+            let source = match result {
+                Ok(source) => source,
+                Err(SourceError::UnresolvedReference(rev)) => {
+                    anyhow::bail!("Cannot resolve Git reference `{rev}` for requirement `{}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw` flag.", req.name)
+                }
+                Err(err) => return Err(err.into()),
+            };
+
+            // Ignore the PEP 508 source.
+            let mut req = pep508_rs::Requirement::from(req);
+            req.clear_url();
+
+            (req, source)
         };
 
         if dev {

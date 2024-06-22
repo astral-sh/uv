@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::fmt::{self, Formatter};
 use std::{env, io};
 use std::{path::Path, path::PathBuf, str::FromStr};
@@ -44,26 +43,44 @@ pub enum ToolchainRequest {
     File(PathBuf),
     /// The name of a Python executable (i.e. for lookup in the PATH) e.g. `foopython3`
     ExecutableName(String),
-    /// A Python implementation without a version e.g. `pypy`
+    /// A Python implementation without a version e.g. `pypy` or `pp`
     Implementation(ImplementationName),
-    /// A Python implementation name and version e.g. `pypy3.8` or `pypy@3.8`
+    /// A Python implementation name and version e.g. `pypy3.8` or `pypy@3.8` or `pp38`
     ImplementationVersion(ImplementationName, VersionRequest),
     /// A request for a specific toolchain key e.g. `cpython-3.12-x86_64-linux-gnu`
     /// Generally these refer to uv-managed toolchain downloads.
     Key(PythonDownloadRequest),
 }
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum ToolchainPreference {
+    /// Only use managed interpreters, never use system interpreters.
+    OnlyManaged,
+    /// Prefer installed managed interpreters, but use system interpreters if not found.
+    /// If neither can be found, download a managed interpreter.
+    #[default]
+    PreferInstalledManaged,
+    /// Prefer managed interpreters, even if one needs to be downloaded, but use system interpreters if found.
+    PreferManaged,
+    /// Prefer system interpreters, only use managed interpreters if no system interpreter is found.
+    PreferSystem,
+    /// Only use system interpreters, never use managed interpreters.
+    OnlySystem,
+}
 
-/// The sources to consider when finding a Python toolchain.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ToolchainSources {
-    // Consider all toolchain sources.
-    All(PreviewMode),
-    // Only consider system toolchain sources
-    System(PreviewMode),
-    // Only consider virtual environment sources
-    VirtualEnv,
-    // Only consider a custom set of sources
-    Custom(HashSet<ToolchainSource>),
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EnvironmentPreference {
+    /// Only use virtual environments, never allow a system environment.
+    #[default]
+    OnlyVirtual,
+    /// Prefer virtual environments and allow a system environment if explicitly requested.
+    ExplicitSystem,
+    /// Only use a system environment, ignore virtual environments.
+    OnlySystem,
+    /// Allow any environment.
+    Any,
 }
 
 /// A Python toolchain version request.
@@ -102,15 +119,15 @@ type ToolchainResult = Result<Toolchain, ToolchainNotFound>;
 #[derive(Clone, Debug, Error)]
 pub enum ToolchainNotFound {
     /// No Python installations were found.
-    NoPythonInstallation(ToolchainSources, Option<VersionRequest>),
+    NoPythonInstallation(ToolchainPreference, Option<VersionRequest>),
     /// No Python installations with the requested version were found.
-    NoMatchingVersion(ToolchainSources, VersionRequest),
+    NoMatchingVersion(ToolchainPreference, VersionRequest),
     /// No Python installations with the requested key were found.
-    NoMatchingKey(ToolchainSources, PythonDownloadRequest),
+    NoMatchingKey(ToolchainPreference, PythonDownloadRequest),
     /// No Python installations with the requested implementation name were found.
-    NoMatchingImplementation(ToolchainSources, ImplementationName),
+    NoMatchingImplementation(ToolchainPreference, ImplementationName),
     /// No Python installations with the requested implementation name and version were found.
-    NoMatchingImplementationVersion(ToolchainSources, ImplementationName, VersionRequest),
+    NoMatchingImplementationVersion(ToolchainPreference, ImplementationName, VersionRequest),
     /// The requested file path does not exist.
     FileNotFound(PathBuf),
     /// The requested directory path does not exist.
@@ -123,10 +140,10 @@ pub enum ToolchainNotFound {
     FileNotExecutable(PathBuf),
 }
 
-/// The source of a discovered Python toolchain.
+/// A location for discovery of a Python toolchain.
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash, PartialOrd, Ord)]
 pub enum ToolchainSource {
-    /// The toolchain path was provided directly
+    /// The path was provided directly
     ProvidedPath,
     /// An environment was active e.g. via `VIRTUAL_ENV`
     ActiveEnvironment,
@@ -142,7 +159,6 @@ pub enum ToolchainSource {
     Managed,
     /// The toolchain was found via the invoking interpreter i.e. via `python -m uv ...`
     ParentInterpreter,
-    // TODO(zanieb): Add support for fetching the interpreter from a remote source
 }
 
 #[derive(Error, Debug)]
@@ -170,122 +186,179 @@ pub enum Error {
     #[error("Invalid version request: {0}")]
     InvalidVersionRequest(String),
 
-    #[error("Interpreter discovery for `{0}` requires `{1}` but it is not selected; the following are selected: {2}")]
-    SourceNotSelected(ToolchainRequest, ToolchainSource, ToolchainSources),
+    // TODO(zanieb): Is this error case necessary still? We should probably drop it.
+    #[error("Interpreter discovery for `{0}` requires `{1}` but only {2} is allowed")]
+    SourceNotAllowed(ToolchainRequest, ToolchainSource, ToolchainPreference),
+}
+
+/// Lazily iterate over Python executables in mutable environments.
+///
+/// The following sources are supported:
+///
+/// - Spawning interpreter (via `UV_INTERNAL__PARENT_INTERPRETER`)
+/// - Active virtual environment (via `VIRTUAL_ENV`)
+/// - Active conda environment (via `CONDA_PREFIX`)
+/// - Discovered virtual environment (e.g. `.venv` in a parent directory)
+///
+/// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
+fn python_executables_from_environments<'a>(
+) -> impl Iterator<Item = Result<(ToolchainSource, PathBuf), Error>> + 'a {
+    let from_parent_interpreter = std::iter::once_with(|| {
+        std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
+            .into_iter()
+            .map(|path| Ok((ToolchainSource::ParentInterpreter, PathBuf::from(path))))
+    })
+    .flatten();
+
+    let from_virtual_environment = std::iter::once_with(|| {
+        virtualenv_from_env()
+            .into_iter()
+            .map(virtualenv_python_executable)
+            .map(|path| Ok((ToolchainSource::ActiveEnvironment, path)))
+    })
+    .flatten();
+
+    let from_conda_environment = std::iter::once_with(|| {
+        conda_prefix_from_env()
+            .into_iter()
+            .map(virtualenv_python_executable)
+            .map(|path| Ok((ToolchainSource::CondaPrefix, path)))
+    })
+    .flatten();
+
+    let from_discovered_environment = std::iter::once_with(|| {
+        virtualenv_from_working_dir()
+            .map(|path| {
+                path.map(virtualenv_python_executable)
+                    .map(|path| (ToolchainSource::DiscoveredEnvironment, path))
+                    .into_iter()
+            })
+            .map_err(Error::from)
+    })
+    .flatten_ok();
+
+    from_parent_interpreter
+        .chain(from_virtual_environment)
+        .chain(from_conda_environment)
+        .chain(from_discovered_environment)
+}
+
+/// Lazily iterate over Python executables installed on the system.
+///
+/// The following sources are supported:
+///
+/// - Managed toolchains (e.g. `uv toolchain install`)
+/// - The search path (i.e. `PATH`)
+/// - The `py` launcher (Windows only)
+///
+/// The ordering and presence of each source is determined by the [`ToolchainPreference`].
+///
+/// If a [`VersionRequest`] is provided, we will skip executables that we know do not satisfy the request
+/// and (as discussed in [`python_executables_from_search_path`]) additional version-specific executables may
+/// be included. However, the caller MUST query the returned executables to ensure they satisfy the request;
+/// this function does not guarantee that the executables provide any particular version. See
+/// [`find_toolchain`] instead.
+///
+/// This function does not guarantee that the executables are valid Python interpreters.
+/// See [`python_interpreters_from_executables`].
+fn python_executables_from_installed<'a>(
+    version: Option<&'a VersionRequest>,
+    implementation: Option<&'a ImplementationName>,
+    preference: ToolchainPreference,
+) -> Box<dyn Iterator<Item = Result<(ToolchainSource, PathBuf), Error>> + 'a> {
+    let from_managed_toolchains = std::iter::once_with(move || {
+        InstalledToolchains::from_settings()
+            .map_err(Error::from)
+            .and_then(|installed_toolchains| {
+                debug!(
+                    "Searching for managed toolchains at `{}`",
+                    installed_toolchains.root().user_display()
+                );
+                let toolchains = installed_toolchains.find_matching_current_platform()?;
+                // Check that the toolchain version satisfies the request to avoid unnecessary interpreter queries later
+                Ok(toolchains
+                    .into_iter()
+                    .filter(move |toolchain| {
+                        version.is_none()
+                            || version.is_some_and(|version| {
+                                version.matches_version(&toolchain.version())
+                            })
+                    })
+                    .inspect(|toolchain| debug!("Found managed toolchain `{toolchain}`"))
+                    .map(|toolchain| (ToolchainSource::Managed, toolchain.executable())))
+            })
+    })
+    .flatten_ok();
+
+    let from_search_path = std::iter::once_with(move || {
+        python_executables_from_search_path(version, implementation)
+            .map(|path| Ok((ToolchainSource::SearchPath, path)))
+    })
+    .flatten();
+
+    // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
+    let from_py_launcher = std::iter::once_with(move || {
+        (cfg!(windows) && env::var_os("UV_TEST_PYTHON_PATH").is_none())
+            .then(|| {
+                py_list_paths()
+                    .map(|entries|
+                // We can avoid querying the interpreter using versions from the py launcher output unless a patch is requested
+                entries.into_iter().filter(move |entry|
+                    version.is_none() || version.is_some_and(|version|
+                        version.has_patch() || version.matches_major_minor(entry.major, entry.minor)
+                    )
+                )
+                .map(|entry| (ToolchainSource::PyLauncher, entry.executable_path)))
+                    .map_err(Error::from)
+            })
+            .into_iter()
+            .flatten_ok()
+    })
+    .flatten();
+
+    match preference {
+        ToolchainPreference::OnlyManaged => Box::new(from_managed_toolchains),
+        ToolchainPreference::PreferInstalledManaged => Box::new(
+            from_managed_toolchains
+                .chain(from_search_path)
+                .chain(from_py_launcher),
+        ),
+        ToolchainPreference::PreferManaged => Box::new(
+            from_managed_toolchains
+                .chain(from_search_path)
+                .chain(from_py_launcher),
+        ),
+        ToolchainPreference::PreferSystem => Box::new(
+            from_managed_toolchains
+                .chain(from_search_path)
+                .chain(from_py_launcher),
+        ),
+        ToolchainPreference::OnlySystem => Box::new(from_search_path.chain(from_py_launcher)),
+    }
 }
 
 /// Lazily iterate over all discoverable Python executables.
 ///
-/// In order, we look in:
+/// Note that Python executables may be excluded by the given [`EnvironmentPreference`] and [`ToolchainPreference`].
 ///
-/// - The spawning interpreter
-/// - The active environment
-/// - A discovered environment (e.g. `.venv`)
-/// - Installed managed toolchains
-/// - The search path (i.e. PATH)
-/// - `py` launcher output
-///
-/// Each location is only queried if the previous location is exhausted.
-/// Locations may be omitted using `sources`, sources that are not selected will not be queried.
-///
-/// If a [`VersionRequest`] is provided, we will skip executables that we know do not satisfy the request
-/// and (as discussed in [`python_executables_from_search_path`]) additional version specific executables may
-/// be included. However, the caller MUST query the returned executables to ensure they satisfy the request;
-/// this function does not guarantee that the executables provide any particular version. See
-/// [`find_interpreter`] instead.
+/// See [`python_executables_from_installed`] and [`python_executables_from_environments`]
+/// for more information on discovery.
 fn python_executables<'a>(
     version: Option<&'a VersionRequest>,
     implementation: Option<&'a ImplementationName>,
-    sources: &ToolchainSources,
-) -> impl Iterator<Item = Result<(ToolchainSource, PathBuf), Error>> + 'a {
-    // Note we are careful to ensure the iterator chain is lazy to avoid unnecessary work
+    environments: EnvironmentPreference,
+    preference: ToolchainPreference,
+) -> Box<dyn Iterator<Item = Result<(ToolchainSource, PathBuf), Error>> + 'a> {
+    let from_environments = python_executables_from_environments();
+    let from_installed = python_executables_from_installed(version, implementation, preference);
 
-    // (1) The parent interpreter
-    sources.contains(ToolchainSource::ParentInterpreter).then(||
-        std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
-        .into_iter()
-        .map(|path| Ok((ToolchainSource::ParentInterpreter, PathBuf::from(path))))
-    ).into_iter().flatten()
-    // (2) An active virtual environment
-    .chain(
-        sources.contains(ToolchainSource::ActiveEnvironment).then(||
-            virtualenv_from_env()
-            .into_iter()
-            .map(virtualenv_python_executable)
-            .map(|path| Ok((ToolchainSource::ActiveEnvironment, path)))
-        ).into_iter().flatten()
-    )
-    // (3) An active conda environment
-    .chain(
-        sources.contains(ToolchainSource::CondaPrefix).then(||
-            conda_prefix_from_env()
-            .into_iter()
-            .map(virtualenv_python_executable)
-            .map(|path| Ok((ToolchainSource::CondaPrefix, path)))
-        ).into_iter().flatten()
-    )
-    // (4) A discovered environment
-    .chain(
-        sources.contains(ToolchainSource::DiscoveredEnvironment).then(||
-            std::iter::once(
-                virtualenv_from_working_dir()
-                .map(|path|
-                    path
-                    .map(virtualenv_python_executable)
-                    .map(|path| (ToolchainSource::DiscoveredEnvironment, path))
-                    .into_iter()
-                )
-                .map_err(Error::from)
-            ).flatten_ok()
-        ).into_iter().flatten()
-    )
-    // (5) Managed toolchains
-    .chain(
-        sources.contains(ToolchainSource::Managed).then(move ||
-            std::iter::once(
-                InstalledToolchains::from_settings().map_err(Error::from).and_then(|installed_toolchains| {
-                    debug!("Searching for managed toolchains at `{}`", installed_toolchains.root().user_display());
-                    let toolchains = installed_toolchains.find_matching_current_platform()?;
-                    // Check that the toolchain version satisfies the request to avoid unnecessary interpreter queries later
-                    Ok(
-                        toolchains.into_iter().filter(move |toolchain|
-                            version.is_none() || version.is_some_and(|version|
-                                version.matches_version(&toolchain.version())
-                            )
-                        )
-                        .inspect(|toolchain| debug!("Found managed toolchain `{toolchain}`"))
-                        .map(|toolchain| (ToolchainSource::Managed, toolchain.executable()))
-                    )
-                })
-            ).flatten_ok()
-        ).into_iter().flatten()
-    )
-    // (6) The search path
-    .chain(
-        sources.contains(ToolchainSource::SearchPath).then(move ||
-            python_executables_from_search_path(version, implementation)
-            .map(|path| Ok((ToolchainSource::SearchPath, path))),
-        ).into_iter().flatten()
-    )
-    // (7) The `py` launcher (windows only)
-    // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
-    .chain(
-        (sources.contains(ToolchainSource::PyLauncher) && cfg!(windows)).then(||
-            std::iter::once(
-                py_list_paths()
-                .map(|entries|
-                    // We can avoid querying the interpreter using versions from the py launcher output unless a patch is requested
-                    entries.into_iter().filter(move |entry|
-                        version.is_none() || version.is_some_and(|version|
-                            version.has_patch() || version.matches_major_minor(entry.major, entry.minor)
-                        )
-                    )
-                    .map(|entry| (ToolchainSource::PyLauncher, entry.executable_path))
-                )
-                .map_err(Error::from)
-            ).flatten_ok()
-        ).into_iter().flatten()
-    )
+    match environments {
+        EnvironmentPreference::OnlyVirtual => Box::new(from_environments),
+        EnvironmentPreference::ExplicitSystem | EnvironmentPreference::Any => {
+            Box::new(from_environments.chain(from_installed))
+        }
+        EnvironmentPreference::OnlySystem => Box::new(from_installed),
+    }
 }
 
 /// Lazily iterate over Python executables in the `PATH`.
@@ -359,17 +432,21 @@ fn python_executables_from_search_path<'a>(
 
 /// Lazily iterate over all discoverable Python interpreters.
 ///
+/// Note interpreters may be excluded by the given [`EnvironmentPreference`] and [`ToolchainPreference`].
+///
 /// See [`python_executables`] for more information on discovery.
 fn python_interpreters<'a>(
     version: Option<&'a VersionRequest>,
     implementation: Option<&'a ImplementationName>,
-    sources: &ToolchainSources,
+    environments: EnvironmentPreference,
+    preference: ToolchainPreference,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(ToolchainSource, Interpreter), Error>> + 'a {
     python_interpreters_from_executables(
-        python_executables(version, implementation, sources),
+        python_executables(version, implementation, environments, preference),
         cache,
     )
+    .filter(move |result| result_satisfies_environment_preference(result, environments))
 }
 
 /// Lazily convert Python executables into interpreters.
@@ -394,63 +471,63 @@ fn python_interpreters_from_executables<'a>(
     })
 }
 
-/// Returns true if a interpreter matches the system Python policy.
-fn satisfies_system_python(
+/// Returns true if a interpreter matches the [`EnvironmentPreference`].
+fn satisfies_environment_preference(
     source: ToolchainSource,
     interpreter: &Interpreter,
-    system: SystemPython,
+    preference: EnvironmentPreference,
 ) -> bool {
     match (
-        system,
-        // Conda environments are not conformant virtual environments but we should not treat them as system interpreters
+        preference,
+        // Conda environments are not conformant virtual environments but we treat them as such
         interpreter.is_virtualenv() || matches!(source, ToolchainSource::CondaPrefix),
     ) {
-        (SystemPython::Allowed, _) => true,
-        (SystemPython::Explicit, false) => {
+        (EnvironmentPreference::Any, _) => true,
+        (EnvironmentPreference::OnlyVirtual, true) => true,
+        (EnvironmentPreference::OnlyVirtual, false) => {
+            debug!(
+                "Ignoring Python interpreter at `{}`: only virtual environments allowed",
+                interpreter.sys_executable().display()
+            );
+            false
+        }
+        (EnvironmentPreference::ExplicitSystem, true) => true,
+        (EnvironmentPreference::ExplicitSystem, false) => {
             if matches!(
                 source,
                 ToolchainSource::ProvidedPath | ToolchainSource::ParentInterpreter
             ) {
                 debug!(
-                    "Allowing system Python interpreter at `{}`",
+                    "Allowing explicitly requested system Python interpreter at `{}`",
                     interpreter.sys_executable().display()
                 );
                 true
             } else {
                 debug!(
-                    "Ignoring Python interpreter at `{}`: system interpreter not explicit",
+                    "Ignoring Python interpreter at `{}`: system interpreter not explicitly requested",
                     interpreter.sys_executable().display()
                 );
                 false
             }
         }
-        (SystemPython::Explicit, true) => true,
-        (SystemPython::Disallowed, false) => {
-            debug!(
-                "Ignoring Python interpreter at `{}`: system interpreter not allowed",
-                interpreter.sys_executable().display()
-            );
-            false
-        }
-        (SystemPython::Disallowed, true) => true,
-        (SystemPython::Required, true) => {
+        (EnvironmentPreference::OnlySystem, true) => {
             debug!(
                 "Ignoring Python interpreter at `{}`: system interpreter required",
                 interpreter.sys_executable().display()
             );
             false
         }
-        (SystemPython::Required, false) => true,
+        (EnvironmentPreference::OnlySystem, false) => true,
     }
 }
 
-/// Utility for applying [`satisfies_system_python`] to a result type.
-fn result_satisfies_system_python(
+/// Utility for applying [`satisfies_environment_preference`] to a result type.
+fn result_satisfies_environment_preference(
     result: &Result<(ToolchainSource, Interpreter), Error>,
-    system: SystemPython,
+    preference: EnvironmentPreference,
 ) -> bool {
     result.as_ref().ok().map_or(true, |(source, interpreter)| {
-        satisfies_system_python(*source, interpreter, system)
+        satisfies_environment_preference(*source, interpreter, preference)
     })
 }
 
@@ -528,62 +605,60 @@ fn python_interpreters_with_executable_name<'a>(
 /// Iterate over all toolchains that satisfy the given request.
 pub fn find_toolchains<'a>(
     request: &'a ToolchainRequest,
-    system: SystemPython,
-    sources: &'a ToolchainSources,
+    environments: EnvironmentPreference,
+    preference: ToolchainPreference,
     cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<ToolchainResult, Error>> + 'a> {
     match request {
         ToolchainRequest::File(path) => Box::new(std::iter::once({
-            if sources.contains(ToolchainSource::ProvidedPath) {
+            if preference.allows(ToolchainSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
                 find_toolchain_at_file(path, cache)
             } else {
-                Err(Error::SourceNotSelected(
+                Err(Error::SourceNotAllowed(
                     request.clone(),
                     ToolchainSource::ProvidedPath,
-                    sources.clone(),
+                    preference,
                 ))
             }
         })),
         ToolchainRequest::Directory(path) => Box::new(std::iter::once({
             debug!("Checking for Python interpreter in {request}");
-            if sources.contains(ToolchainSource::ProvidedPath) {
+            if preference.allows(ToolchainSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
                 find_toolchain_at_directory(path, cache)
             } else {
-                Err(Error::SourceNotSelected(
+                Err(Error::SourceNotAllowed(
                     request.clone(),
                     ToolchainSource::ProvidedPath,
-                    sources.clone(),
+                    preference,
                 ))
             }
         })),
         ToolchainRequest::ExecutableName(name) => {
             debug!("Searching for Python interpreter with {request}");
-            if sources.contains(ToolchainSource::SearchPath) {
+            if preference.allows(ToolchainSource::SearchPath) {
                 debug!("Checking for Python interpreter at {request}");
                 Box::new(
                     python_interpreters_with_executable_name(name, cache)
                         .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok)),
                 )
             } else {
-                Box::new(std::iter::once(Err(Error::SourceNotSelected(
+                Box::new(std::iter::once(Err(Error::SourceNotAllowed(
                     request.clone(),
                     ToolchainSource::SearchPath,
-                    sources.clone(),
+                    preference,
                 ))))
             }
         }
         ToolchainRequest::Any => Box::new({
-            debug!("Searching for Python interpreter in {sources}");
-            python_interpreters(None, None, sources, cache)
-                .filter(move |result| result_satisfies_system_python(result, system))
+            debug!("Searching for Python interpreter in {preference}");
+            python_interpreters(None, None, environments, preference, cache)
                 .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
         ToolchainRequest::Version(version) => Box::new({
-            debug!("Searching for {request} in {sources}");
-            python_interpreters(Some(version), None, sources, cache)
-                .filter(move |result| result_satisfies_system_python(result, system))
+            debug!("Searching for {request} in {preference}");
+            python_interpreters(Some(version), None, environments, preference, cache)
                 .filter(|result| match result {
                     Err(_) => true,
                     Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
@@ -591,9 +666,8 @@ pub fn find_toolchains<'a>(
                 .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
         ToolchainRequest::Implementation(implementation) => Box::new({
-            debug!("Searching for a {request} interpreter in {sources}");
-            python_interpreters(None, Some(implementation), sources, cache)
-                .filter(move |result| result_satisfies_system_python(result, system))
+            debug!("Searching for a {request} interpreter in {preference}");
+            python_interpreters(None, Some(implementation), environments, preference, cache)
                 .filter(|result| match result {
                     Err(_) => true,
                     Ok((_source, interpreter)) => interpreter
@@ -603,29 +677,39 @@ pub fn find_toolchains<'a>(
                 .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
         ToolchainRequest::ImplementationVersion(implementation, version) => Box::new({
-            debug!("Searching for {request} in {sources}");
-            python_interpreters(Some(version), Some(implementation), sources, cache)
-                .filter(move |result| result_satisfies_system_python(result, system))
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => {
-                        version.matches_interpreter(interpreter)
-                            && interpreter
-                                .implementation_name()
-                                .eq_ignore_ascii_case(implementation.into())
-                    }
-                })
-                .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
+            debug!("Searching for {request} in {preference}");
+            python_interpreters(
+                Some(version),
+                Some(implementation),
+                environments,
+                preference,
+                cache,
+            )
+            .filter(|result| match result {
+                Err(_) => true,
+                Ok((_source, interpreter)) => {
+                    version.matches_interpreter(interpreter)
+                        && interpreter
+                            .implementation_name()
+                            .eq_ignore_ascii_case(implementation.into())
+                }
+            })
+            .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
         ToolchainRequest::Key(request) => Box::new({
-            debug!("Searching for {request} in {sources}");
-            python_interpreters(request.version(), request.implementation(), sources, cache)
-                .filter(move |result| result_satisfies_system_python(result, system))
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
-                })
-                .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
+            debug!("Searching for {request} in {preference}");
+            python_interpreters(
+                request.version(),
+                request.implementation(),
+                environments,
+                preference,
+                cache,
+            )
+            .filter(|result| match result {
+                Err(_) => true,
+                Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
+            })
+            .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok))
         }),
     }
 }
@@ -636,11 +720,11 @@ pub fn find_toolchains<'a>(
 /// the error will raised instead of attempting further candidates.
 pub(crate) fn find_toolchain(
     request: &ToolchainRequest,
-    system: SystemPython,
-    sources: &ToolchainSources,
+    environments: EnvironmentPreference,
+    preference: ToolchainPreference,
     cache: &Cache,
 ) -> Result<ToolchainResult, Error> {
-    let mut toolchains = find_toolchains(request, system, sources, cache);
+    let mut toolchains = find_toolchains(request, environments, preference, cache);
     if let Some(result) = toolchains.find(|result| {
         // Return the first critical discovery error or toolchain result
         result.as_ref().err().map_or(true, Error::is_critical)
@@ -649,52 +733,30 @@ pub(crate) fn find_toolchain(
     } else {
         let err = match request {
             ToolchainRequest::Implementation(implementation) => {
-                ToolchainNotFound::NoMatchingImplementation(sources.clone(), *implementation)
+                ToolchainNotFound::NoMatchingImplementation(preference, *implementation)
             }
             ToolchainRequest::ImplementationVersion(implementation, version) => {
                 ToolchainNotFound::NoMatchingImplementationVersion(
-                    sources.clone(),
+                    preference,
                     *implementation,
                     version.clone(),
                 )
             }
             ToolchainRequest::Version(version) => {
-                ToolchainNotFound::NoMatchingVersion(sources.clone(), version.clone())
+                ToolchainNotFound::NoMatchingVersion(preference, version.clone())
             }
             ToolchainRequest::ExecutableName(name) => {
                 ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone())
             }
-            ToolchainRequest::Key(key) => {
-                ToolchainNotFound::NoMatchingKey(sources.clone(), key.clone())
-            }
+            ToolchainRequest::Key(key) => ToolchainNotFound::NoMatchingKey(preference, key.clone()),
             // TODO(zanieb): As currently implemented, these are unreachable as they are handled in `find_toolchains`
             // We should avoid this duplication
             ToolchainRequest::Directory(path) => ToolchainNotFound::DirectoryNotFound(path.clone()),
             ToolchainRequest::File(path) => ToolchainNotFound::FileNotFound(path.clone()),
-            ToolchainRequest::Any => ToolchainNotFound::NoPythonInstallation(sources.clone(), None),
+            ToolchainRequest::Any => ToolchainNotFound::NoPythonInstallation(preference, None),
         };
         Ok(ToolchainResult::Err(err))
     }
-}
-
-/// Find the default Python toolchain on the system.
-///
-/// Virtual environments are not included in discovery.
-///
-/// See [`find_toolchain`] for more details on toolchain discovery.
-pub(crate) fn find_default_toolchain(
-    preview: PreviewMode,
-    cache: &Cache,
-) -> Result<ToolchainResult, Error> {
-    let request = ToolchainRequest::default();
-    let sources = ToolchainSources::System(preview);
-
-    let result = find_toolchain(&request, SystemPython::Required, &sources, cache)?;
-    if let Ok(ref toolchain) = result {
-        warn_on_unsupported_python(toolchain.interpreter());
-    }
-
-    Ok(result)
 }
 
 /// Find the best-matching Python toolchain.
@@ -710,18 +772,15 @@ pub(crate) fn find_default_toolchain(
 #[instrument(skip_all, fields(request))]
 pub fn find_best_toolchain(
     request: &ToolchainRequest,
-    system: SystemPython,
-    preview: PreviewMode,
+    environments: EnvironmentPreference,
+    preference: ToolchainPreference,
     cache: &Cache,
 ) -> Result<ToolchainResult, Error> {
     debug!("Starting toolchain discovery for {}", request);
 
-    // Determine if we should be allowed to look outside of virtual environments.
-    let sources = ToolchainSources::from_settings(system, preview);
-
     // First, check for an exact match (or the first available version if no Python versfion was provided)
     debug!("Looking for exact match for request {request}");
-    let result = find_toolchain(request, system, &sources, cache)?;
+    let result = find_toolchain(request, environments, preference, cache)?;
     if let Ok(ref toolchain) = result {
         warn_on_unsupported_python(toolchain.interpreter());
         return Ok(result);
@@ -746,7 +805,7 @@ pub fn find_best_toolchain(
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
-        let result = find_toolchain(&request, system, &sources, cache)?;
+        let result = find_toolchain(&request, environments, preference, cache)?;
         if let Ok(ref toolchain) = result {
             warn_on_unsupported_python(toolchain.interpreter());
             return Ok(result);
@@ -756,18 +815,16 @@ pub fn find_best_toolchain(
     // If a Python version was requested but cannot be fulfilled, just take any version
     debug!("Looking for Python toolchain with any version");
     let request = ToolchainRequest::Any;
-    Ok(find_toolchain(
-        // TODO(zanieb): Add a dedicated `Default` variant to `ToolchainRequest`
-        &request, system, &sources, cache,
-    )?
-    .map_err(|err| {
-        // Use a more general error in this case since we looked for multiple versions
-        if matches!(err, ToolchainNotFound::NoMatchingVersion(..)) {
-            ToolchainNotFound::NoPythonInstallation(sources.clone(), None)
-        } else {
-            err
-        }
-    }))
+    Ok(
+        find_toolchain(&request, environments, preference, cache)?.map_err(|err| {
+            // Use a more general error in this case since we looked for multiple versions
+            if matches!(err, ToolchainNotFound::NoMatchingVersion(..)) {
+                ToolchainNotFound::NoPythonInstallation(preference, None)
+            } else {
+                err
+            }
+        }),
+    )
 }
 
 /// Display a warning if the Python version of the [`Interpreter`] is unsupported by uv.
@@ -920,7 +977,7 @@ impl ToolchainRequest {
     ///
     /// This cannot fail, which means weird inputs will be parsed as [`ToolchainRequest::File`] or [`ToolchainRequest::ExecutableName`].
     pub fn parse(value: &str) -> Self {
-        // e.g. `3.12.1`
+        // e.g. `3.12.1`, `312`, or `>=3.12`
         if let Ok(version) = VersionRequest::from_str(value) {
             return Self::Version(version);
         }
@@ -938,18 +995,25 @@ impl ToolchainRequest {
                 }
             }
         }
-        for implementation in ImplementationName::iter() {
+        for implementation in ImplementationName::possible_names() {
             if let Some(remainder) = value
                 .to_ascii_lowercase()
                 .strip_prefix(Into::<&str>::into(implementation))
             {
                 // e.g. `pypy`
                 if remainder.is_empty() {
-                    return Self::Implementation(*implementation);
+                    return Self::Implementation(
+                        // Safety: The name matched the possible names above
+                        ImplementationName::from_str(implementation).unwrap(),
+                    );
                 }
-                // e.g. `pypy3.12`
+                // e.g. `pypy3.12` or `pp312`
                 if let Ok(version) = VersionRequest::from_str(remainder) {
-                    return Self::ImplementationVersion(*implementation, version);
+                    return Self::ImplementationVersion(
+                        // Safety: The name matched the possible names above
+                        ImplementationName::from_str(implementation).unwrap(),
+                        version,
+                    );
                 }
             }
         }
@@ -1083,6 +1147,68 @@ impl ToolchainRequest {
                         .eq_ignore_ascii_case(implementation.into())
             }
             ToolchainRequest::Key(request) => request.satisfied_by_interpreter(interpreter),
+        }
+    }
+}
+
+impl ToolchainPreference {
+    fn allows(self, source: ToolchainSource) -> bool {
+        // If not dealing with a system interpreter source, we don't care about the preference
+        if !matches!(
+            source,
+            ToolchainSource::Managed | ToolchainSource::SearchPath | ToolchainSource::PyLauncher
+        ) {
+            return true;
+        }
+
+        match self {
+            ToolchainPreference::OnlyManaged => matches!(source, ToolchainSource::Managed),
+            ToolchainPreference::PreferInstalledManaged
+            | Self::PreferManaged
+            | Self::PreferSystem => matches!(
+                source,
+                ToolchainSource::Managed
+                    | ToolchainSource::SearchPath
+                    | ToolchainSource::PyLauncher
+            ),
+            ToolchainPreference::OnlySystem => {
+                matches!(
+                    source,
+                    ToolchainSource::SearchPath | ToolchainSource::PyLauncher
+                )
+            }
+        }
+    }
+
+    /// Return a default [`ToolchainPreference`] based on the environment and preview mode.
+    pub fn default_from(preview: PreviewMode) -> Self {
+        if env::var_os("UV_TEST_PYTHON_PATH").is_some() {
+            debug!("Only considering system interpreters due to `UV_TEST_PYTHON_PATH`");
+            Self::OnlySystem
+        } else if preview.is_enabled() {
+            Self::default()
+        } else {
+            Self::OnlySystem
+        }
+    }
+
+    pub(crate) fn allows_managed(self) -> bool {
+        matches!(
+            self,
+            Self::PreferManaged | Self::PreferInstalledManaged | Self::OnlyManaged
+        )
+    }
+}
+
+impl EnvironmentPreference {
+    pub fn from_system_flag(system: bool, mutable: bool) -> Self {
+        match (system, mutable) {
+            // When the system flag is provided, ignore virtual environments.
+            (true, _) => Self::OnlySystem,
+            // For mutable operations, only allow discovery of the system with explicit selection.
+            (false, true) => Self::ExplicitSystem,
+            // For immutable operations, we allow discovery of the system environment
+            (false, false) => Self::Any,
         }
     }
 }
@@ -1268,8 +1394,22 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        fn parse_nosep(s: &str) -> Option<VersionRequest> {
+            let mut chars = s.chars();
+            let major = chars.next()?.to_digit(10)?.try_into().ok()?;
+            if chars.as_str().is_empty() {
+                return Some(VersionRequest::Major(major));
+            }
+            let minor = chars.as_str().parse::<u8>().ok()?;
+            Some(VersionRequest::MajorMinor(major, minor))
+        }
+
+        // e.g. `3`, `38`, `312`
+        if let Some(request) = parse_nosep(s) {
+            Ok(request)
+        }
         // e.g. `3.12.1`
-        if let Ok(versions) = s
+        else if let Ok(versions) = s
             .splitn(3, '.')
             .map(str::parse::<u8>)
             .collect::<Result<Vec<_>, _>>()
@@ -1285,6 +1425,7 @@ impl FromStr for VersionRequest {
             };
 
             Ok(selector)
+
         // e.g. `>=3.12.1,<3.12`
         } else if let Ok(specifiers) = VersionSpecifiers::from_str(s) {
             if specifiers.is_empty() {
@@ -1318,80 +1459,6 @@ impl fmt::Display for VersionRequest {
     }
 }
 
-impl ToolchainSources {
-    /// Create a new [`SourceSelector::Some`] from an iterator.
-    pub(crate) fn from_sources(iter: impl IntoIterator<Item = ToolchainSource>) -> Self {
-        let inner = HashSet::from_iter(iter);
-        assert!(!inner.is_empty(), "Source selectors cannot be empty");
-        Self::Custom(inner)
-    }
-
-    /// Return true if this selector includes the given [`ToolchainSource`].
-    fn contains(&self, source: ToolchainSource) -> bool {
-        match self {
-            Self::All(preview) => {
-                // Always return `true` except for `ManagedToolchain` which requires preview mode
-                source != ToolchainSource::Managed || preview.is_enabled()
-            }
-            Self::System(preview) => {
-                [
-                    ToolchainSource::ProvidedPath,
-                    ToolchainSource::SearchPath,
-                    #[cfg(windows)]
-                    ToolchainSource::PyLauncher,
-                    ToolchainSource::ParentInterpreter,
-                ]
-                .contains(&source)
-                    // Allow `ManagedToolchain` in preview
-                    || (source == ToolchainSource::Managed
-                        && preview.is_enabled())
-            }
-            Self::VirtualEnv => [
-                ToolchainSource::DiscoveredEnvironment,
-                ToolchainSource::ActiveEnvironment,
-                ToolchainSource::CondaPrefix,
-            ]
-            .contains(&source),
-            Self::Custom(sources) => sources.contains(&source),
-        }
-    }
-
-    /// Return a [`SourceSelector`] based the settings.
-    pub fn from_settings(system: SystemPython, preview: PreviewMode) -> Self {
-        if env::var_os("UV_FORCE_MANAGED_PYTHON").is_some() {
-            debug!("Only considering managed toolchains due to `UV_FORCE_MANAGED_PYTHON`");
-            Self::from_sources([ToolchainSource::Managed])
-        } else if env::var_os("UV_TEST_PYTHON_PATH").is_some() {
-            debug!(
-                "Only considering search path, provided path, and active environments due to `UV_TEST_PYTHON_PATH`"
-            );
-            Self::from_sources([
-                ToolchainSource::ActiveEnvironment,
-                ToolchainSource::SearchPath,
-                ToolchainSource::ProvidedPath,
-            ])
-        } else {
-            match system {
-                SystemPython::Allowed | SystemPython::Explicit => Self::All(preview),
-                SystemPython::Required => Self::System(preview),
-                SystemPython::Disallowed => Self::VirtualEnv,
-            }
-        }
-    }
-}
-
-impl SystemPython {
-    /// Returns true if a system Python is allowed.
-    pub fn is_allowed(&self) -> bool {
-        matches!(self, SystemPython::Allowed | SystemPython::Required)
-    }
-
-    /// Returns true if a system Python is preferred.
-    pub fn is_preferred(&self) -> bool {
-        matches!(self, SystemPython::Required)
-    }
-}
-
 impl fmt::Display for ToolchainRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -1422,6 +1489,18 @@ impl fmt::Display for ToolchainSource {
             Self::PyLauncher => f.write_str("`py` launcher output"),
             Self::Managed => f.write_str("managed toolchains"),
             Self::ParentInterpreter => f.write_str("parent interpreter"),
+        }
+    }
+}
+
+impl fmt::Display for ToolchainPreference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OnlyManaged => f.write_str("managed toolchains"),
+            Self::OnlySystem => f.write_str("system toolchains"),
+            Self::PreferInstalledManaged | Self::PreferManaged | Self::PreferSystem => {
+                f.write_str("managed or system toolchains")
+            }
         }
     }
 }
@@ -1490,59 +1569,6 @@ impl fmt::Display for ToolchainNotFound {
     }
 }
 
-impl fmt::Display for ToolchainSources {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::All(_) => f.write_str("all sources"),
-            Self::VirtualEnv => f.write_str("virtual environments"),
-            Self::System(preview) => {
-                if cfg!(windows) {
-                    if preview.is_disabled() {
-                        write!(
-                            f,
-                            "{} or {}",
-                            ToolchainSource::SearchPath,
-                            ToolchainSource::PyLauncher
-                        )
-                    } else {
-                        write!(
-                            f,
-                            "{}, {}, or {}",
-                            ToolchainSource::SearchPath,
-                            ToolchainSource::PyLauncher,
-                            ToolchainSource::Managed
-                        )
-                    }
-                } else {
-                    if preview.is_disabled() {
-                        write!(f, "{}", ToolchainSource::SearchPath)
-                    } else {
-                        write!(
-                            f,
-                            "{} or {}",
-                            ToolchainSource::SearchPath,
-                            ToolchainSource::Managed
-                        )
-                    }
-                }
-            }
-            Self::Custom(sources) => {
-                let sources: Vec<_> = sources
-                    .iter()
-                    .sorted()
-                    .map(ToolchainSource::to_string)
-                    .collect();
-                match sources[..] {
-                    [] => unreachable!("Source selectors must contain at least one source"),
-                    [ref one] => f.write_str(one),
-                    [ref first, ref second] => write!(f, "{first} or {second}"),
-                    [ref first @ .., ref last] => write!(f, "{}, or {last}", first.join(", ")),
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{path::PathBuf, str::FromStr};
@@ -1550,6 +1576,7 @@ mod tests {
     use assert_fs::{prelude::*, TempDir};
     use test_log::test;
 
+    use super::Error;
     use crate::{
         discovery::{ToolchainRequest, VersionRequest},
         implementation::ImplementationName,
@@ -1589,10 +1616,32 @@ mod tests {
             ToolchainRequest::Implementation(ImplementationName::PyPy)
         );
         assert_eq!(
+            ToolchainRequest::parse("pp"),
+            ToolchainRequest::Implementation(ImplementationName::PyPy)
+        );
+        assert_eq!(
+            ToolchainRequest::parse("cp"),
+            ToolchainRequest::Implementation(ImplementationName::CPython)
+        );
+        assert_eq!(
             ToolchainRequest::parse("pypy3.10"),
             ToolchainRequest::ImplementationVersion(
                 ImplementationName::PyPy,
                 VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            ToolchainRequest::parse("pp310"),
+            ToolchainRequest::ImplementationVersion(
+                ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            ToolchainRequest::parse("cp38"),
+            ToolchainRequest::ImplementationVersion(
+                ImplementationName::CPython,
+                VersionRequest::from_str("3.8").unwrap()
             )
         );
         assert_eq!(
@@ -1604,7 +1653,10 @@ mod tests {
         );
         assert_eq!(
             ToolchainRequest::parse("pypy310"),
-            ToolchainRequest::ExecutableName("pypy310".to_string())
+            ToolchainRequest::ImplementationVersion(
+                ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
         );
 
         let tempdir = TempDir::new().unwrap();
@@ -1646,5 +1698,28 @@ mod tests {
             VersionRequest::MajorMinorPatch(3, 12, 1)
         );
         assert!(VersionRequest::from_str("1.foo.1").is_err());
+        assert_eq!(
+            VersionRequest::from_str("3").unwrap(),
+            VersionRequest::Major(3)
+        );
+        assert_eq!(
+            VersionRequest::from_str("38").unwrap(),
+            VersionRequest::MajorMinor(3, 8)
+        );
+        assert_eq!(
+            VersionRequest::from_str("312").unwrap(),
+            VersionRequest::MajorMinor(3, 12)
+        );
+        assert_eq!(
+            VersionRequest::from_str("3100").unwrap(),
+            VersionRequest::MajorMinor(3, 100)
+        );
+        assert!(
+            // Test for overflow
+            matches!(
+                VersionRequest::from_str("31000"),
+                Err(Error::InvalidVersionRequest(_))
+            )
+        );
     }
 }

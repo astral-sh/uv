@@ -208,12 +208,17 @@ pub(crate) fn lower_requirement(
                 .get(&requirement.name)
                 .ok_or(LoweringError::UndeclaredWorkspacePackage)?
                 .clone();
-            directory_source(
-                path.root(),
-                workspace.root(),
-                workspace.root(),
-                editable.unwrap_or(true),
-            )?
+            // The lockfile is relative to the workspace root.
+            let relative_to_workspace =
+                relative_to(path.root(), workspace.root()).map_err(LoweringError::RelativeTo)?;
+            let url = VerbatimUrl::parse_absolute_path(path.root())?
+                .with_given(relative_to_workspace.to_string_lossy());
+            RequirementSource::Directory {
+                install_path: path.root().clone(),
+                lock_path: relative_to_workspace,
+                url,
+                editable: editable.unwrap_or(true),
+            }
         }
         Source::CatchAll { .. } => {
             // Emit a dedicated error message, which is an improvement over Serde's default error.
@@ -273,34 +278,4 @@ fn path_source(
             url,
         })
     }
-}
-
-/// Convert a path string to a directory source.
-fn directory_source(
-    path: impl AsRef<Path>,
-    project_dir: &Path,
-    workspace_root: &Path,
-    editable: bool,
-) -> Result<RequirementSource, LoweringError> {
-    let path = path.as_ref();
-    let url = VerbatimUrl::parse_path(path, project_dir)?.with_given(path.to_string_lossy());
-    let absolute_path = path
-        .to_path_buf()
-        .absolutize_from(project_dir)
-        .map_err(|err| LoweringError::Absolutize(path.to_path_buf(), err))?
-        .to_path_buf();
-    let relative_to_workspace = if path.is_relative() {
-        // Relative paths in a project are relative to the project root, but the lockfile is
-        // relative to the workspace root.
-        relative_to(&absolute_path, workspace_root).map_err(LoweringError::RelativeTo)?
-    } else {
-        // If the user gave us an absolute path, we respect that.
-        path.to_path_buf()
-    };
-    Ok(RequirementSource::Directory {
-        install_path: absolute_path,
-        lock_path: relative_to_workspace,
-        url,
-        editable,
-    })
 }

@@ -40,7 +40,8 @@ use uv_resolver::{
     Resolver,
 };
 use uv_toolchain::{
-    PythonEnvironment, PythonVersion, SystemPython, Toolchain, ToolchainRequest, VersionRequest,
+    EnvironmentPreference, PythonEnvironment, PythonVersion, Toolchain, ToolchainPreference,
+    ToolchainRequest, VersionRequest,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -88,6 +89,7 @@ pub(crate) async fn pip_compile(
     link_mode: LinkMode,
     python: Option<String>,
     system: bool,
+    toolchain_preference: ToolchainPreference,
     concurrency: Concurrency,
     native_tls: bool,
     quiet: bool,
@@ -153,14 +155,10 @@ pub(crate) async fn pip_compile(
     }
 
     // Find an interpreter to use for building distributions
-    let system = if system {
-        SystemPython::Required
-    } else {
-        SystemPython::Allowed
-    };
+    let environments = EnvironmentPreference::from_system_flag(system, false);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = ToolchainRequest::parse(python);
-        Toolchain::find_requested(&request, system, preview, &cache)
+        Toolchain::find(&request, environments, toolchain_preference, &cache)
     } else {
         // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
         // `Toolchain::find(...)` here.
@@ -170,7 +168,7 @@ pub(crate) async fn pip_compile(
         } else {
             ToolchainRequest::default()
         };
-        Toolchain::find_best(&request, system, preview, &cache)
+        Toolchain::find_best(&request, environments, toolchain_preference, &cache)
     }?
     .into_interpreter();
 
