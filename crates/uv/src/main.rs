@@ -547,6 +547,7 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::pip_tree(
+                args.no_dedupe,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
