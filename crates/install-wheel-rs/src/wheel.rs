@@ -240,7 +240,7 @@ fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
         python_executable
             .parent()
             .map(|parent| parent.join("pythonw.exe"))
-            .filter(|path| path.exists() && path.is_file())
+            .filter(|path| path.is_file())
             .unwrap_or_else(|| python_executable.to_path_buf())
     } else {
         python_executable.to_path_buf()
