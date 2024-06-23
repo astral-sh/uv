@@ -152,8 +152,7 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
-/// stored zip file. The launcher will look for `python[w].exe` adjacent to it in the same directory
-/// to start the embedded script.
+/// stored zip file.
 ///
 /// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
 #[allow(unused_variables)]
