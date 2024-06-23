@@ -3,13 +3,11 @@ use std::fmt::Write;
 use std::io::stdout;
 use std::ops::Deref;
 use std::path::Path;
-use std::str::FromStr;
 
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pypi_types::Requirement;
 use tracing::debug;
 
 use distribution_types::{
@@ -17,6 +15,7 @@ use distribution_types::{
     Verbatim,
 };
 use install_wheel_rs::linker::LinkMode;
+use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -29,7 +28,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::PackageName;
 use uv_requirements::{
     upgrade::read_requirements_txt, LookaheadResolver, NamedRequirementsResolver,
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
@@ -719,15 +718,6 @@ impl OutputWriter {
 
         Ok(())
     }
-}
-
-pub(crate) fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
-    ExtraName::from_str(arg).map_err(|_err| {
-        anyhow!(
-            "Extra names must start and end with a letter or digit and may only \
-            contain -, _, ., and alphanumeric characters"
-        )
-    })
 }
 
 /// An owned or unowned [`InMemoryIndex`].
