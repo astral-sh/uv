@@ -2029,7 +2029,7 @@ pub(crate) struct InstallerArgs {
 
     #[arg(
         long,
-        alias = "no_compile",
+        alias = "no-compile",
         overrides_with("compile_bytecode"),
         hide = true
     )]
@@ -2210,7 +2210,7 @@ pub(crate) struct ResolverInstallerArgs {
 
     #[arg(
         long,
-        alias = "no_compile",
+        alias = "no-compile",
         overrides_with("compile_bytecode"),
         hide = true
     )]
