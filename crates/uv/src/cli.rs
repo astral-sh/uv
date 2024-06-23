@@ -215,19 +215,19 @@ pub(crate) struct PipNamespace {
 pub(crate) enum PipCommand {
     /// Compile a `requirements.in` file to a `requirements.txt` file.
     Compile(PipCompileArgs),
-    /// Sync dependencies from a `requirements.txt` file.
+    /// Sync an environment with a `requirements.txt` file.
     Sync(PipSyncArgs),
-    /// Install packages into the current environment.
+    /// Install packages into an environment.
     Install(PipInstallArgs),
-    /// Uninstall packages from the current environment.
+    /// Uninstall packages from an environment.
     Uninstall(PipUninstallArgs),
-    /// Enumerate the installed packages in the current environment.
+    /// Enumerate the installed packages in an environment.
     Freeze(PipFreezeArgs),
-    /// Enumerate the installed packages in the current environment.
+    /// Enumerate the installed packages in an environment.
     List(PipListArgs),
     /// Show information about one or more installed packages.
     Show(PipShowArgs),
-    /// Display the dependency tree.
+    /// Display the dependency tree for an environment.
     Tree(PipTreeArgs),
     /// Verify installed packages have compatible dependencies.
     Check(PipCheckArgs),
