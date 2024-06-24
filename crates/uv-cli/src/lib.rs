@@ -577,6 +577,13 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("emit_find_links"), hide = true)]
     pub no_emit_find_links: bool,
 
+    /// Include `--no-binary` and `--only-binary` entries in the generated output file.
+    #[arg(long, overrides_with("no_emit_build_options"))]
+    pub emit_build_options: bool,
+
+    #[arg(long, overrides_with("emit_build_options"), hide = true)]
+    pub no_emit_build_options: bool,
+
     /// Whether to emit a marker string indicating when it is known that the
     /// resulting set of pinned dependencies is valid.
     ///

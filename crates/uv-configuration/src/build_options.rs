@@ -78,14 +78,14 @@ impl BuildOptions {
         }
     }
 
-    pub fn no_build(&self, package_name: Option<&PackageName>) -> bool {
+    pub fn no_build_requirement(&self, package_name: Option<&PackageName>) -> bool {
         match package_name {
             Some(name) => self.no_build_package(name),
             None => self.no_build_all(),
         }
     }
 
-    pub fn no_binary(&self, package_name: Option<&PackageName>) -> bool {
+    pub fn no_binary_requirement(&self, package_name: Option<&PackageName>) -> bool {
         match package_name {
             Some(name) => self.no_binary_package(name),
             None => self.no_binary_all(),
@@ -98,6 +98,16 @@ impl BuildOptions {
 
     pub fn no_binary_all(&self) -> bool {
         matches!(self.no_binary, NoBinary::All)
+    }
+
+    /// Return the [`NoBuild`] strategy to use.
+    pub fn no_build(&self) -> &NoBuild {
+        &self.no_build
+    }
+
+    /// Return the [`NoBinary`] strategy to use.
+    pub fn no_binary(&self) -> &NoBinary {
+        &self.no_binary
     }
 }
 

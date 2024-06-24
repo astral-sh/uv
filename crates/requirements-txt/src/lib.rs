@@ -89,7 +89,7 @@ enum RequirementsTxtStatement {
     NoIndex,
     /// `--no-binary`
     NoBinary(NoBinary),
-    /// `only-binary`
+    /// `--only-binary`
     OnlyBinary(NoBuild),
 }
 

@@ -21,7 +21,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
-    Overrides, PreviewMode, SetupPyStrategy, Upgrade,
+    NoBinary, NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -71,6 +71,7 @@ pub(crate) async fn pip_compile(
     custom_compile_command: Option<String>,
     include_index_url: bool,
     include_find_links: bool,
+    include_build_options: bool,
     include_marker_expression: bool,
     include_index_annotation: bool,
     index_locations: IndexLocations,
@@ -539,18 +540,17 @@ pub(crate) async fn pip_compile(
         writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
     }
 
-    // Write the index locations to the output channel.
-    let mut wrote_index = false;
+    let mut wrote_preamble = false;
 
     // If necessary, include the `--index-url` and `--extra-index-url` locations.
     if include_index_url {
         if let Some(index) = index_locations.index() {
             writeln!(writer, "--index-url {}", index.verbatim())?;
-            wrote_index = true;
+            wrote_preamble = true;
         }
         for extra_index in index_locations.extra_index() {
             writeln!(writer, "--extra-index-url {}", extra_index.verbatim())?;
-            wrote_index = true;
+            wrote_preamble = true;
         }
     }
 
@@ -558,12 +558,42 @@ pub(crate) async fn pip_compile(
     if include_find_links {
         for flat_index in index_locations.flat_index() {
             writeln!(writer, "--find-links {flat_index}")?;
-            wrote_index = true;
+            wrote_preamble = true;
+        }
+    }
+
+    // If necessary, include the `--no-binary` and `--only-binary` options.
+    if include_build_options {
+        match build_options.no_binary() {
+            NoBinary::None => {}
+            NoBinary::All => {
+                writeln!(writer, "--no-binary :all:")?;
+                wrote_preamble = true;
+            }
+            NoBinary::Packages(packages) => {
+                for package in packages {
+                    writeln!(writer, "--no-binary {package}")?;
+                    wrote_preamble = true;
+                }
+            }
+        }
+        match build_options.no_build() {
+            NoBuild::None => {}
+            NoBuild::All => {
+                writeln!(writer, "--only-binary :all:")?;
+                wrote_preamble = true;
+            }
+            NoBuild::Packages(packages) => {
+                for package in packages {
+                    writeln!(writer, "--only-binary {package}")?;
+                    wrote_preamble = true;
+                }
+            }
         }
     }
 
     // If we wrote an index, add a newline to separate it from the requirements
-    if wrote_index {
+    if wrote_preamble {
         writeln!(writer)?;
     }
 
