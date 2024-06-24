@@ -14,18 +14,6 @@ details; and in others, they may be bugs.
 This document outlines the known differences between uv and `pip`, along with rationale,
 workarounds, and a statement of intent for compatibility in the future.
 
-## PEP 517 Build Isolation
-`uv pip install` behaves like `pip install --use-pep517`, following `pypa/build`'s decision and anticipating the `pip` default changing [pypa/pip#9175](https://github.com/pypa/pip/issues/9175).
-
-If you see a failure caused by a missing build-time dependency, check if newer versions fix the issue (by fully describing their setup requirements).
-
-If upgrading does not fix the problem (or is an exercise you'd prefer to postpone) pre-installing the dependency and running with `--no-build-isolation` should work around the issue. For example:
-```
-uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
-```
-
-[#2252](https://github.com/astral-sh/uv/issues/2252) documents packages known to fail.
-
 ## Configuration files and environment variables
 
 uv does not read configuration files or environment variables that are specific to `pip`, like
@@ -158,6 +146,24 @@ While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users t
 In the future, uv will support pinning packages to dedicated indexes (see: [#171](https://github.com/astral-sh/uv/issues/171)).
 Additionally, [PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to
 address the "dependency confusion" issue across package registries and installers.
+
+## PEP 517 build isolation
+
+uv uses [PEP 517](https://peps.python.org/pep-0517/) build isolation by default (akin to `pip install --use-pep517`),
+following `pypa/build` and in anticipation of `pip` defaulting to PEP 517 builds in the future ([pypa/pip#9175](https://github.com/pypa/pip/issues/9175)).
+
+If a package fails to install due to a missing build-time dependency, try using a newer version of the package; if the
+problem persists, consider filing an issue with the package maintainer, requesting that they update the packaging setup
+to declare the correct PEP 517 build-time dependencies.
+
+As an escape hatch, you can preinstall a package's build dependencies, then run `uv pip install` with
+`--no-build-isolation`, as in:
+
+```shell
+uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
+```
+
+For a list of packages that are known to fail under PEP 517 build isolation, see [#2252](https://github.com/astral-sh/uv/issues/2252).
 
 ## Transitive direct URL dependencies for constraints and overrides
 
