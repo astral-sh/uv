@@ -14,6 +14,18 @@ details; and in others, they may be bugs.
 This document outlines the known differences between uv and `pip`, along with rationale,
 workarounds, and a statement of intent for compatibility in the future.
 
+## PEP 517 Build Isolation
+`uv pip install` behaves like `pip install --use-pep517`, following `pypa/build`'s decision and anticipating the `pip` default changing [pypa/pip#9175](https://github.com/pypa/pip/issues/9175).
+
+If you see a failure caused by a missing build-time dependency, check if newer versions fix the issue (by fully describing their setup requirements).
+
+If upgrading does not fix the problem (or is an exercise you'd prefer to postpone) pre-installing the dependency and running with `--no-build-isolation` should work around the issue. For example:
+```
+uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
+```
+
+[#2252](https://github.com/astral-sh/uv/issues/2252) documents packages known to fail.
+
 ## Configuration files and environment variables
 
 uv does not read configuration files or environment variables that are specific to `pip`, like
