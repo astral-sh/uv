@@ -1,10 +1,10 @@
+use std::collections::BTreeSet;
 use std::iter::Flatten;
 use std::path::PathBuf;
-use std::{collections::BTreeSet, hash::BuildHasherDefault};
 
 use anyhow::{Context, Result};
 use fs_err as fs;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
 use distribution_types::{
@@ -257,8 +257,7 @@ impl SitePackages {
         constraints: &[Requirement],
     ) -> Result<SatisfiesResult> {
         let mut stack = Vec::with_capacity(requirements.len());
-        let mut seen =
-            FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
+        let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
 
         // Add the direct requirements to the queue.
         for entry in requirements {

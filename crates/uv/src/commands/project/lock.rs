@@ -65,13 +65,13 @@ pub(crate) async fn lock(
         &interpreter,
         &settings.upgrade,
         &settings.index_locations,
-        &settings.index_strategy,
-        &settings.keyring_provider,
-        &settings.resolution,
-        &settings.prerelease,
+        settings.index_strategy,
+        settings.keyring_provider,
+        settings.resolution,
+        settings.prerelease,
         &settings.config_setting,
-        settings.exclude_newer.as_ref(),
-        &settings.link_mode,
+        settings.exclude_newer,
+        settings.link_mode,
         &settings.build_options,
         preview,
         connectivity,
@@ -102,13 +102,13 @@ pub(super) async fn do_lock(
     interpreter: &Interpreter,
     upgrade: &Upgrade,
     index_locations: &IndexLocations,
-    index_strategy: &IndexStrategy,
-    keyring_provider: &KeyringProviderType,
-    resolution: &ResolutionMode,
-    prerelease: &PreReleaseMode,
+    index_strategy: IndexStrategy,
+    keyring_provider: KeyringProviderType,
+    resolution: ResolutionMode,
+    prerelease: PreReleaseMode,
     config_setting: &ConfigSettings,
-    exclude_newer: Option<&ExcludeNewer>,
-    link_mode: &LinkMode,
+    exclude_newer: Option<ExcludeNewer>,
+    link_mode: LinkMode,
     build_options: &BuildOptions,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -152,17 +152,17 @@ pub(super) async fn do_lock(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
-        .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
+        .index_strategy(index_strategy)
+        .keyring(keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     let options = OptionsBuilder::new()
-        .resolution_mode(*resolution)
-        .prerelease_mode(*prerelease)
-        .exclude_newer(exclude_newer.copied())
-        .index_strategy(*index_strategy)
+        .resolution_mode(resolution)
+        .prerelease_mode(prerelease)
+        .exclude_newer(exclude_newer)
+        .index_strategy(index_strategy)
         .build();
     let hasher = HashStrategy::Generate;
 
@@ -199,11 +199,13 @@ pub(super) async fn do_lock(
         &index,
         &git,
         &in_flight,
+        index_strategy,
         setup_py,
         config_setting,
         build_isolation,
-        *link_mode,
+        link_mode,
         build_options,
+        exclude_newer,
         concurrency,
         preview,
     );

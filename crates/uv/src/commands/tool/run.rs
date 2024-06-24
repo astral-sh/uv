@@ -6,6 +6,7 @@ use tokio::process::Command;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_cli::ExternalCommand;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_requirements::RequirementsSource;
@@ -14,7 +15,6 @@ use uv_toolchain::{
 };
 use uv_warnings::warn_user;
 
-use crate::cli::ExternalCommand;
 use crate::commands::project::update_environment;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

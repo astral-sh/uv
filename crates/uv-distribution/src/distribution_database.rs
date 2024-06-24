@@ -413,7 +413,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Optimization: Skip source dist download when we must not build them anyway.
-        if self.build_context.build_options().no_build(source.name()) {
+        if self
+            .build_context
+            .build_options()
+            .no_build_requirement(source.name())
+        {
             if source.is_editable() {
                 debug!("Allowing build for editable source distribution: {source}");
             } else {

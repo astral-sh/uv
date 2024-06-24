@@ -1,10 +1,9 @@
 use std::collections::BTreeSet;
-use std::hash::BuildHasherDefault;
 
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use distribution_types::{Name, SourceAnnotations};
 use uv_normalize::PackageName;
@@ -93,7 +92,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 );
             let mut inverse = FxHashMap::with_capacity_and_hasher(
                 self.resolution.petgraph.node_count(),
-                BuildHasherDefault::default(),
+                FxBuildHasher,
             );
 
             // Re-add the nodes to the reduced graph.

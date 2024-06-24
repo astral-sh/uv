@@ -1390,7 +1390,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         debug!("Building: {source}");
 
         // Guard against build of source distributions when disabled.
-        if self.build_context.build_options().no_build(source.name()) {
+        if self
+            .build_context
+            .build_options()
+            .no_build_requirement(source.name())
+        {
             if source.is_editable() {
                 debug!("Allowing build for editable source distribution: {source}");
             } else {

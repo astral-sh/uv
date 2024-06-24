@@ -3,7 +3,7 @@ use clap::{Args, ValueEnum};
 
 use uv_warnings::warn_user;
 
-pub(crate) trait CompatArgs {
+pub trait CompatArgs {
     fn validate(&self) -> Result<()>;
 }
 
@@ -14,7 +14,7 @@ pub(crate) trait CompatArgs {
 /// nice user experience to warn, rather than fail, when users pass `--allow-unsafe`.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipCompileCompatArgs {
+pub struct PipCompileCompatArgs {
     #[clap(long, hide = true)]
     allow_unsafe: bool,
 
@@ -175,7 +175,7 @@ impl CompatArgs for PipCompileCompatArgs {
 /// These represent a subset of the `pip list` interface that uv supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipListCompatArgs {
+pub struct PipListCompatArgs {
     #[clap(long, hide = true)]
     outdated: bool,
 }
@@ -200,7 +200,7 @@ impl CompatArgs for crate::compat::PipListCompatArgs {
 /// These represent a subset of the `pip-sync` interface that uv supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipSyncCompatArgs {
+pub struct PipSyncCompatArgs {
     #[clap(short, long, hide = true)]
     ask: bool,
 
@@ -299,7 +299,7 @@ enum Resolver {
 /// These represent a subset of the `virtualenv` interface that uv supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct VenvCompatArgs {
+pub struct VenvCompatArgs {
     #[clap(long, hide = true)]
     clear: bool,
 
@@ -358,7 +358,7 @@ impl CompatArgs for VenvCompatArgs {
 /// These represent a subset of the `pip install` interface that uv supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipInstallCompatArgs {
+pub struct PipInstallCompatArgs {
     #[clap(long, hide = false)]
     user: bool,
 }

@@ -244,15 +244,16 @@ pub(crate) async fn pip_sync(
         &index,
         &git,
         &in_flight,
+        index_strategy,
         setup_py,
         config_settings,
         build_isolation,
         link_mode,
         &build_options,
+        exclude_newer,
         concurrency,
         preview,
-    )
-    .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+    );
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&environment)?;
@@ -320,15 +321,16 @@ pub(crate) async fn pip_sync(
             &index,
             &git,
             &in_flight,
+            index_strategy,
             setup_py,
             config_settings,
             build_isolation,
             link_mode,
             &build_options,
+            exclude_newer,
             concurrency,
             preview,
         )
-        .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
 
     // Sync the environment.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.15
+
+<!-- No changes -->
+
+## 0.2.14
+
+### Preview features
+
+- Expose `toolchain-preference` as a CLI and configuration file option ([#4424](https://github.com/astral-sh/uv/pull/4424))
+- Improve handling of command arguments in `uv run` and `uv tool run` ([#4404](https://github.com/astral-sh/uv/pull/4404))
+- Add `tool.uv.sources` support for `uv add` ([#4406](https://github.com/astral-sh/uv/pull/4406))
+- Use correct lock path for workspace dependencies ([#4421](https://github.com/astral-sh/uv/pull/4421))
+- Filter out sibling dependencies in resolver forks ([#4415](https://github.com/astral-sh/uv/pull/4415))
+
 ## 0.2.13
 
 ### Preview features

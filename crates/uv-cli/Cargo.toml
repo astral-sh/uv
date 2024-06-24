@@ -1,0 +1,43 @@
+[package]
+name = "uv-cli"
+version = "0.0.1"
+description = "The command line interface for the uv binary."
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+distribution-types = { workspace = true }
+install-wheel-rs = { workspace = true, features = ["clap"], default-features = false }
+uv-cache = { workspace = true, features = ["clap"] }
+uv-configuration = { workspace = true, features = ["clap"] }
+uv-normalize = { workspace = true }
+uv-resolver = { workspace = true, features = ["clap"] }
+uv-settings = { workspace = true, features = ["schemars"] }
+uv-toolchain = { workspace = true, features = ["clap", "schemars"]}
+uv-version = { workspace = true }
+uv-warnings = { workspace = true }
+
+anstream = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+clap_complete_command = { workspace = true }
+serde = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.36.1", features = ["filters", "json"] }
+
+[features]
+default = []
+self-update = []
+
+[build-dependencies]
+fs-err = { workspace = true }

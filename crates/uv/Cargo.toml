@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.2.13"
+version = "0.2.15"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -15,15 +15,16 @@ workspace = true
 
 [dependencies]
 distribution-types = { workspace = true }
-install-wheel-rs = { workspace = true, features = ["clap"], default-features = false }
+install-wheel-rs = { workspace = true, default-features = false }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-auth = { workspace = true }
-uv-cache = { workspace = true, features = ["clap"] }
+uv-cache = { workspace = true }
+uv-cli = { workspace = true }
 uv-client = { workspace = true }
-uv-configuration = { workspace = true, features = ["clap"] }
+uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
@@ -31,9 +32,9 @@ uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
 uv-requirements = { workspace = true }
-uv-resolver = { workspace = true, features = ["clap"] }
+uv-resolver = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
-uv-toolchain = { workspace = true, features = ["clap", "schemars"]}
+uv-toolchain = { workspace = true, features = ["schemars"]}
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
@@ -43,7 +44,6 @@ anyhow = { workspace = true }
 axoupdater = { workspace = true, features = ["github_releases", "tokio"], optional = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
-clap_complete_command = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
@@ -100,7 +100,5 @@ pypi = []
 # Introduces a dependency on Git.
 git = []
 # Adds self-update functionality.
-self-update = ["axoupdater"]
+self-update = ["axoupdater", "uv-cli/self-update"]
 
-[build-dependencies]
-fs-err = { workspace = true }

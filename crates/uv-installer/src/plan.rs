@@ -1,10 +1,9 @@
 use std::collections::hash_map::Entry;
-use std::hash::BuildHasherDefault;
 use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use distribution_filename::WheelFilename;
@@ -71,10 +70,7 @@ impl<'a> Planner<'a> {
         let mut remote = vec![];
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
-        let mut seen = FxHashMap::with_capacity_and_hasher(
-            self.requirements.len(),
-            BuildHasherDefault::default(),
-        );
+        let mut seen = FxHashMap::with_capacity_and_hasher(self.requirements.len(), FxBuildHasher);
 
         for requirement in self.requirements {
             // Filter out incompatible requirements.

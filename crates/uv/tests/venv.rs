@@ -511,7 +511,10 @@ fn windows_shims() -> Result<()> {
     fs_err::create_dir(&shim_path)?;
     fs_err::write(
         shim_path.child("python.bat"),
-        format!("@echo off\r\n{}/python.exe %*", py38.1.display()),
+        format!(
+            "@echo off\r\n{}/python.exe %*",
+            py38.1.parent().unwrap().display()
+        ),
     )?;
 
     // Create a virtual environment at `.venv` with the shim

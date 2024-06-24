@@ -294,15 +294,16 @@ pub(crate) async fn pip_install(
         &index,
         &git,
         &in_flight,
+        index_strategy,
         setup_py,
         config_settings,
         build_isolation,
         link_mode,
         &build_options,
+        exclude_newer,
         concurrency,
         preview,
-    )
-    .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+    );
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
@@ -368,15 +369,16 @@ pub(crate) async fn pip_install(
             &index,
             &git,
             &in_flight,
+            index_strategy,
             setup_py,
             config_settings,
             build_isolation,
             link_mode,
             &build_options,
+            exclude_newer,
             concurrency,
             preview,
         )
-        .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
 
     // Sync the environment.

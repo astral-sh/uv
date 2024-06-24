@@ -4,7 +4,7 @@
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{ChildPath, PathChild};
+use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir, SymlinkToFile};
 use predicates::prelude::predicate;
 use regex::Regex;
 use std::borrow::BorrowMut;
@@ -64,6 +64,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 pub struct TestContext {
     pub temp_dir: assert_fs::TempDir,
     pub cache_dir: assert_fs::TempDir,
+    pub python_dir: assert_fs::TempDir,
     pub venv: ChildPath,
     pub workspace_root: PathBuf,
 
@@ -97,6 +98,7 @@ impl TestContext {
     pub fn new_with_versions(python_versions: &[&str]) -> Self {
         let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
         let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
+        let python_dir = assert_fs::TempDir::new().expect("Failed to create test Python dir");
 
         // Canonicalize the temp dir for consistent snapshot behavior
         let canonical_temp_dir = temp_dir.canonicalize().unwrap();
@@ -128,6 +130,16 @@ impl TestContext {
             )
             .collect();
 
+        // Construct directories for each Python executable on Unix where the executable names
+        // need to be normalized
+        if cfg!(unix) {
+            for (version, executable) in &python_versions {
+                let parent = python_dir.child(version.to_string());
+                parent.create_dir_all().unwrap();
+                parent.child("python3").symlink_to_file(executable).unwrap();
+            }
+        }
+
         let mut filters = Vec::new();
 
         filters.extend(
@@ -152,7 +164,14 @@ impl TestContext {
             filters.extend(
                 Self::path_patterns(executable)
                     .into_iter()
-                    .map(|pattern| (format!("{pattern}python.*"), format!("[PYTHON-{version}]"))),
+                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+            );
+
+            // And for the symlink we created in the test the Python path
+            filters.extend(
+                Self::path_patterns(&python_dir.join(version.to_string()))
+                    .into_iter()
+                    .map(|pattern| (format!("{pattern}.*"), format!("[PYTHON-{version}]"))),
             );
 
             // Add Python patch version filtering unless explicitly requested to ensure
@@ -168,6 +187,11 @@ impl TestContext {
             Self::path_patterns(&temp_dir)
                 .into_iter()
                 .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
+        );
+        filters.extend(
+            Self::path_patterns(&python_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[PYTHON_DIR]/".to_string())),
         );
         filters.extend(
             Self::path_patterns(&workspace_root)
@@ -206,6 +230,7 @@ impl TestContext {
         Self {
             temp_dir,
             cache_dir,
+            python_dir,
             venv,
             workspace_root,
             python_version,
@@ -563,7 +588,23 @@ impl TestContext {
     }
 
     pub fn python_path(&self) -> OsString {
-        std::env::join_paths(self.python_versions.iter().map(|(_, path)| path)).unwrap()
+        if cfg!(unix) {
+            // On Unix, we needed to normalize the Python executable names to `python3` for the tests
+            std::env::join_paths(
+                self.python_versions
+                    .iter()
+                    .map(|(version, _)| self.python_dir.join(version.to_string())),
+            )
+            .unwrap()
+        } else {
+            // On Windows, just join the parent directories of the executables
+            std::env::join_paths(
+                self.python_versions
+                    .iter()
+                    .map(|(_, executable)| executable.parent().unwrap().to_path_buf()),
+            )
+            .unwrap()
+        }
     }
 
     /// Standard snapshot filters _plus_ those for this test context.
@@ -693,13 +734,14 @@ pub fn python_path_with_versions(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    Ok(std::env::join_paths(python_toolchains_for_versions(
-        temp_dir,
-        python_versions,
-    )?)?)
+    Ok(std::env::join_paths(
+        python_toolchains_for_versions(temp_dir, python_versions)?
+            .into_iter()
+            .map(|path| path.parent().unwrap().to_path_buf()),
+    )?)
 }
 
-/// Create a `PATH` with the requested Python versions available in order.
+/// Returns a list of Python executables for the given versions.
 ///
 /// Generally this should be used with `UV_TEST_PYTHON_PATH`.
 pub fn python_toolchains_for_versions(
@@ -716,12 +758,7 @@ pub fn python_toolchains_for_versions(
                 ToolchainPreference::PreferInstalledManaged,
                 &cache,
             ) {
-                toolchain
-                    .into_interpreter()
-                    .sys_executable()
-                    .parent()
-                    .expect("Python executable should always be in a directory")
-                    .to_path_buf()
+                toolchain.into_interpreter().sys_executable().to_owned()
             } else {
                 panic!("Could not find Python {python_version} for test");
             }

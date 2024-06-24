@@ -11,7 +11,8 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
-    BuildKind, BuildOptions, Concurrency, ConfigSettings, PreviewMode, SetupPyStrategy,
+    BuildKind, BuildOptions, Concurrency, ConfigSettings, IndexStrategy, PreviewMode,
+    SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
@@ -59,11 +60,13 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
+    let exclude_newer = None;
     let flat_index = FlatIndex::default();
     let git = GitResolver::default();
     let in_flight = InFlight::default();
     let index = InMemoryIndex::default();
     let index_urls = IndexLocations::default();
+    let index_strategy = IndexStrategy::default();
     let setup_py = SetupPyStrategy::default();
     let toolchain = PythonEnvironment::find(
         &ToolchainRequest::default(),
@@ -81,11 +84,13 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &index,
         &git,
         &in_flight,
+        index_strategy,
         setup_py,
         &config_settings,
         BuildIsolation::Isolated,
         install_wheel_rs::linker::LinkMode::default(),
         &build_options,
+        exclude_newer,
         concurrency,
         PreviewMode::Enabled,
     );

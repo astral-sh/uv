@@ -493,6 +493,12 @@
             "null"
           ]
         },
+        "emit-build-options": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "emit-find-links": {
           "type": [
             "boolean",

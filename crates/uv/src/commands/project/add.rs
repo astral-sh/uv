@@ -5,7 +5,7 @@ use uv_distribution::pyproject::{Source, SourceError};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_git::GitResolver;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_resolver::{FlatIndex, InMemoryIndex};
 use uv_toolchain::{ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -115,18 +115,15 @@ pub(crate) async fn add(
         &index,
         &git,
         &in_flight,
+        settings.index_strategy,
         setup_py,
         &settings.config_setting,
         build_isolation,
         settings.link_mode,
         &settings.build_options,
+        settings.exclude_newer,
         concurrency,
         preview,
-    )
-    .with_options(
-        OptionsBuilder::new()
-            .exclude_newer(settings.exclude_newer)
-            .build(),
     );
 
     // Resolve any unnamed requirements.
@@ -191,13 +188,13 @@ pub(crate) async fn add(
         venv.interpreter(),
         &settings.upgrade,
         &settings.index_locations,
-        &settings.index_strategy,
-        &settings.keyring_provider,
-        &settings.resolution,
-        &settings.prerelease,
+        settings.index_strategy,
+        settings.keyring_provider,
+        settings.resolution,
+        settings.prerelease,
         &settings.config_setting,
-        settings.exclude_newer.as_ref(),
-        &settings.link_mode,
+        settings.exclude_newer,
+        settings.link_mode,
         &settings.build_options,
         preview,
         connectivity,
@@ -223,11 +220,11 @@ pub(crate) async fn add(
         Modifications::Sufficient,
         &settings.reinstall,
         &settings.index_locations,
-        &settings.index_strategy,
-        &settings.keyring_provider,
+        settings.index_strategy,
+        settings.keyring_provider,
         &settings.config_setting,
-        &settings.link_mode,
-        &settings.compile_bytecode,
+        settings.link_mode,
+        settings.compile_bytecode,
         &settings.build_options,
         preview,
         connectivity,

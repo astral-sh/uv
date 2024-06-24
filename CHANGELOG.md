@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.15
+
+### Enhancements
+
+- Add `--emit-build-options` flag to `uv pip compile` interface ([#4463](https://github.com/astral-sh/uv/pull/4463))
+- Add `pythonw` support for gui scripts on Windows ([#4409](https://github.com/astral-sh/uv/pull/4409))
+- Add `uv pip tree` ([#3859](https://github.com/astral-sh/uv/pull/3859))
+
+### CLI
+
+- Adjust the docs for the pip CLI commands ([#4445](https://github.com/astral-sh/uv/pull/4445))
+- Fix casing of `--no-compile` alias ([#4453](https://github.com/astral-sh/uv/pull/4453))
+
+### Bug fixes
+
+- Fix ordering of prefer-system toolchain preference ([#4441](https://github.com/astral-sh/uv/pull/4441))
+- Respect index strategy in source distribution builds ([#4468](https://github.com/astral-sh/uv/pull/4468))
+
+### Documentation
+
+- Add documentation for using uv in a Docker image ([#4433](https://github.com/astral-sh/uv/pull/4433))
+
+## 0.2.14
+
+### Enhancements
+
+- Support toolchain requests with platform-tag style Python implementations and version ([#4407](https://github.com/astral-sh/uv/pull/4407))
+
+### CLI
+
+- Use "Prepared" instead of "Downloaded" in logs ([#4394](https://github.com/astral-sh/uv/pull/4394))
+
+### Bug fixes
+
+- Treat mismatched directory and file urls as unsatisfied requirements ([#4393](https://github.com/astral-sh/uv/pull/4393))
+
 ## 0.2.13
 
 ### Enhancements

@@ -1,9 +1,7 @@
-use std::hash::BuildHasherDefault;
-
 use either::Either;
-use pypi_types::Requirement;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
+use pypi_types::Requirement;
 use uv_normalize::PackageName;
 
 /// A set of overrides for a set of requirements.
@@ -14,7 +12,7 @@ impl Overrides {
     /// Create a new set of overrides from a set of requirements.
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
         let mut overrides: FxHashMap<PackageName, Vec<Requirement>> =
-            FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
+            FxHashMap::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
         for requirement in requirements {
             overrides
                 .entry(requirement.name.clone())

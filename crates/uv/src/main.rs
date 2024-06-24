@@ -9,23 +9,23 @@ use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
-use settings::PipTreeSettings;
 use tracing::{debug, instrument};
 
-use cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
+use settings::PipTreeSettings;
 use uv_cache::Cache;
+use uv_cli::{
+    compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
+    ProjectCommand,
+};
+#[cfg(feature = "self-update")]
+use uv_cli::{SelfCommand, SelfNamespace};
+use uv_cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
 use uv_configuration::Concurrency;
 use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
 use uv_settings::Combine;
 
-use crate::cli::{
-    CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand,
-};
-#[cfg(feature = "self-update")]
-use crate::cli::{SelfCommand, SelfNamespace};
 use crate::commands::ExitStatus;
-use crate::compat::CompatArgs;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
@@ -47,9 +47,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-mod cli;
 mod commands;
-mod compat;
 mod logging;
 mod printer;
 mod settings;
@@ -270,6 +268,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.custom_compile_command,
                 args.settings.emit_index_url,
                 args.settings.emit_find_links,
+                args.settings.emit_build_options,
                 args.settings.emit_marker_expression,
                 args.settings.emit_index_annotation,
                 args.settings.index_locations,
