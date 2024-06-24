@@ -7,7 +7,7 @@ use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
 
-use pep508_rs::VerbatimUrl;
+use pep508_rs::{RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource};
 use uv_fs::{absolutize_path, Simplified};
 use uv_normalize::PackageName;
@@ -188,6 +188,38 @@ impl Workspace {
                     },
                     origin: None,
                 })
+            })
+            .collect()
+    }
+
+    /// Returns the set of overrides for the workspace.
+    pub fn overrides(&self) -> Vec<Requirement> {
+        let Some(workspace_package) = self
+            .packages
+            .values()
+            .find(|workspace_package| workspace_package.root() == self.root())
+        else {
+            return vec![];
+        };
+
+        let Some(overrides) = workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.override_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        overrides
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
             })
             .collect()
     }
