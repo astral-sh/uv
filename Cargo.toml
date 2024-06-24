@@ -114,7 +114,7 @@ reqwest-retry = { version = "0.5.0" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }
 rust-netrc = { version = "0.1.1" }
-rustc-hash = { version = "1.1.0" }
+rustc-hash = { version = "2.0.0" }
 same-file = { version = "1.0.6" }
 schemars = { version = "0.8.16", features = ["url"] }
 seahash = { version = "4.1.0" }
