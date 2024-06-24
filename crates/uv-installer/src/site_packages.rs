@@ -38,7 +38,7 @@ pub struct SitePackages {
 
 impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
-    pub fn from_executable(venv: &PythonEnvironment) -> Result<SitePackages> {
+    pub fn from_environment(venv: &PythonEnvironment) -> Result<SitePackages> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();

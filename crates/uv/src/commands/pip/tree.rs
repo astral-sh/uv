@@ -42,7 +42,7 @@ pub(crate) fn pip_tree(
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?;
 
     let rendered_tree = DisplayDependencyGraph::new(&site_packages, no_dedupe)
         .render()

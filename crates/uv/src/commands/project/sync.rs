@@ -191,7 +191,7 @@ pub(super) async fn do_sync(
         preview,
     );
 
-    let site_packages = SitePackages::from_executable(venv)?;
+    let site_packages = SitePackages::from_environment(venv)?;
 
     // Sync the environment.
     pip::operations::install(

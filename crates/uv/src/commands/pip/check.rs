@@ -39,7 +39,7 @@ pub(crate) fn pip_check(
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?;
     let packages: Vec<&InstalledDist> = site_packages.iter().collect();
 
     let s = if packages.len() == 1 { "" } else { "s" };
