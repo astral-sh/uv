@@ -1385,6 +1385,14 @@ pub struct PipShowArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipTreeArgs {
+    /// Do not de-duplicate repeated dependencies.
+    /// Usually, when a package has already displayed its dependencies,
+    /// further occurrences will not re-display its dependencies,
+    /// and will include a (*) to indicate it has already been shown.
+    /// This flag will cause those duplicates to be repeated.
+    #[arg(long)]
+    pub no_dedupe: bool,
+
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]
