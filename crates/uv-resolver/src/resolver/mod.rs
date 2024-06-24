@@ -213,7 +213,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             constraints: manifest.constraints,
             overrides: manifest.overrides,
             dev: manifest.dev,
-            preferences: Preferences::from_iter(manifest.preferences, markers),
+            preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
             markers: markers.cloned(),
