@@ -21,6 +21,7 @@ cargo-util = { workspace = true }
 dashmap = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 reqwest = { workspace = true, features = ["blocking"] }
+reqwest-middleware = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

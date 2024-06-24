@@ -182,7 +182,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git(source, &GitSourceUrl::from(dist), tags, hashes)
+                self.git(source, &GitSourceUrl::from(dist), tags, hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -234,7 +234,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git(source, resource, tags, hashes)
+                self.git(source, resource, tags, hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -356,7 +356,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git_metadata(source, &GitSourceUrl::from(dist), hashes)
+                self.git_metadata(source, &GitSourceUrl::from(dist), hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -401,7 +401,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git_metadata(source, resource, hashes)
+                self.git_metadata(source, resource, hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -1089,6 +1089,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitSourceUrl<'_>,
         tags: &Tags,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
@@ -1101,6 +1102,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .resolve(
                 resource.git,
+                client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1117,6 +1119,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 &url,
+                client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1173,9 +1176,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitSourceUrl<'_>,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        debug!("Fetching Git metadata for: {source}");
-
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
@@ -1187,6 +1189,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .resolve(
                 resource.git,
+                client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1197,33 +1200,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Cow::Borrowed(resource.git)
         };
 
-        debug!("XXX resolved URL: {source}");
-
         // Fetch the Git repository.
         let fetch = self
             .build_context
             .git()
             .fetch(
                 &url,
+                client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
             .await?;
 
-        debug!("XXX fetched repo: {source}");
-
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
-
-        debug!("XXX got precise: {source}");
-
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
             WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
 
         let _lock = lock_shard(&cache_shard).await?;
-
-        debug!("XXX locked shard: {source}");
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);

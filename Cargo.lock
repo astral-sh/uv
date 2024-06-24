@@ -4829,6 +4829,7 @@ dependencies = [
  "dashmap",
  "fs-err",
  "reqwest",
+ "reqwest-middleware",
  "thiserror",
  "tokio",
  "tracing",

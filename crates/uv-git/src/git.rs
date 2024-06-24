@@ -7,8 +7,8 @@ use std::str::{self};
 
 use anyhow::{anyhow, Context, Result};
 use cargo_util::{paths, ProcessBuilder};
-use reqwest::Client;
 use reqwest::StatusCode;
+use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 use url::Url;
 use uv_fs::Simplified;
@@ -218,7 +218,7 @@ impl GitRemote {
         db: Option<GitDatabase>,
         reference: &GitReference,
         locked_rev: Option<GitOid>,
-        client: &Client,
+        client: &ClientWithMiddleware,
     ) -> Result<(GitDatabase, GitOid)> {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
@@ -381,7 +381,6 @@ impl GitCheckout {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
-                debug!("is_fresh: {:?}", self.repo.path);
                 self.repo.path.join(CHECKOUT_READY_LOCK).exists()
             }
             _ => false,
@@ -441,7 +440,7 @@ pub(crate) fn fetch(
     repo: &mut GitRepository,
     remote_url: &str,
     reference: &GitReference,
-    client: &Client,
+    client: &ClientWithMiddleware,
 ) -> Result<()> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
         Ok(FastPathRev::UpToDate) => return Ok(()),
@@ -640,7 +639,7 @@ fn github_fast_path(
     repo: &mut GitRepository,
     url: &str,
     reference: &GitReference,
-    client: &Client,
+    client: &ClientWithMiddleware,
 ) -> Result<FastPathRev> {
     let url = Url::parse(url)?;
     if !is_github(&url) {
