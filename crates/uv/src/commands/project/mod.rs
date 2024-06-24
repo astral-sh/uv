@@ -318,7 +318,7 @@ pub(crate) async fn update_environment(
         RequirementsSpecification::from_sources(requirements, &[], &[], &client_builder).await?;
 
     // Check if the current environment satisfies the requirements
-    let site_packages = SitePackages::from_executable(&venv)?;
+    let site_packages = SitePackages::from_environment(&venv)?;
     if spec.source_trees.is_empty() {
         match site_packages.satisfies(&spec.requirements, &spec.constraints)? {
             // If the requirements are already satisfied, we're done.

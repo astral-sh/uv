@@ -195,7 +195,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let tags = self.interpreter.tags()?;
 
         // Determine the set of installed packages.
-        let site_packages = SitePackages::from_executable(venv)?;
+        let site_packages = SitePackages::from_environment(venv)?;
 
         let requirements = resolution.requirements().collect::<Vec<_>>();
 

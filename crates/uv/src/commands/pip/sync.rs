@@ -256,7 +256,7 @@ pub(crate) async fn pip_sync(
     );
 
     // Determine the set of installed packages.
-    let site_packages = SitePackages::from_executable(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?;
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)

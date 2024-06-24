@@ -49,7 +49,7 @@ pub(crate) fn pip_list(
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?;
 
     // Filter if `--editable` is specified; always sort by name.
     let results = site_packages

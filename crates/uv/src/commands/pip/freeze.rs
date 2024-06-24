@@ -39,7 +39,7 @@ pub(crate) fn pip_freeze(
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?;
     for dist in site_packages
         .iter()
         .filter(|dist| !(exclude_editable && dist.is_editable()))

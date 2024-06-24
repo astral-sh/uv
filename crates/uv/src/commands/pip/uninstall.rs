@@ -104,7 +104,7 @@ pub(crate) async fn pip_uninstall(
     let _lock = environment.lock()?;
 
     // Index the current `site-packages` directory.
-    let site_packages = uv_installer::SitePackages::from_executable(&environment)?;
+    let site_packages = uv_installer::SitePackages::from_environment(&environment)?;
 
     // Partition the requirements into named and unnamed requirements.
     let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement<VerbatimParsedUrl>>) = spec
