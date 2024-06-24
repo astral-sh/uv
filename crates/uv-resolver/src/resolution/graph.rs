@@ -1,8 +1,9 @@
+use indexmap::IndexSet;
 use petgraph::{
     graph::{Graph, NodeIndex},
     Directed,
 };
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
@@ -344,7 +345,7 @@ impl ResolutionGraph {
         }
 
         /// Add all marker parameters from the given tree to the given set.
-        fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut FxHashSet<MarkerParam>) {
+        fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut IndexSet<MarkerParam>) {
             match marker_tree {
                 MarkerTree::Expression(
                     MarkerExpression::Version { key, .. }
@@ -374,7 +375,7 @@ impl ResolutionGraph {
             }
         }
 
-        let mut seen_marker_values = FxHashSet::default();
+        let mut seen_marker_values = IndexSet::default();
         for i in self.petgraph.node_indices() {
             let dist = &self.petgraph[i];
             let version_id = match dist.version_or_url() {
