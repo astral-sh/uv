@@ -52,11 +52,18 @@ impl GitSource {
         let ident = digest(&RepositoryUrl::new(&self.git.repository));
         let db_path = self.cache.join("db").join(&ident);
 
+        debug!("Crating Git remote: {:?}", self.git.repository);
         let remote = GitRemote::new(&self.git.repository);
-        let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
+        debug!("Opening db: {:?}", self.git.repository);
+        let x = remote.db_at(&db_path).ok();
+        debug!("Checking if rev is contained in db: {:?}", self.git.repository);
+        let (db, actual_rev, task) = match (self.git.precise, x) {
             // If we have a locked revision, and we have a preexisting database
             // which has that revision, then no update needs to happen.
-            (Some(rev), Some(db)) if db.contains(rev.into()) => (db, rev, None),
+            (Some(rev), Some(db)) if db.contains(rev.into()) => {
+                debug!("Using existing git source `{:?}`", self.git.repository);
+            (    db, rev, None)
+            },
 
             // ... otherwise we use this state to update the git database. Note
             // that we still check for being offline here, for example in the

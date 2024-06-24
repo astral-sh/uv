@@ -344,13 +344,13 @@ impl GitCheckout {
     /// is done. Use [`GitCheckout::is_fresh`] to check.
     ///
     /// * The `repo` will be the checked out Git repository.
-    fn new(revision: GitOid, repo: GitRepository) -> GitCheckout {
-        GitCheckout { revision, repo }
+    fn new(revision: GitOid, repo: GitRepository) -> Self {
+        Self { revision, repo }
     }
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
-    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<GitCheckout> {
+    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
         let dirname = into.parent().unwrap();
         paths::create_dir_all(dirname)?;
         if into.exists() {
@@ -381,6 +381,7 @@ impl GitCheckout {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
+                debug!("is_fresh: {:?}", self.repo.path);
                 self.repo.path.join(CHECKOUT_READY_LOCK).exists()
             }
             _ => false,

@@ -65,12 +65,17 @@ impl GitResolver {
             &repository_url,
         )?;
 
+        debug!("Created lock for Git repository: {url}");
+
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
             GitSource::new(url.clone(), cache).with_reporter(reporter)
         } else {
             GitSource::new(url.clone(), cache)
         };
+
+        debug!("Initialized Git source: {url}");
+
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
             .map_err(GitResolverError::Git)?;
