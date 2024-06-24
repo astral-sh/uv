@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.15
+
+### Enhancements
+
+- Add `--emit-build-options` flag to `uv pip compile` interface ([#4463](https://github.com/astral-sh/uv/pull/4463))
+- Add `pythonw` support for gui scripts on Windows ([#4409](https://github.com/astral-sh/uv/pull/4409))
+- Add `uv pip tree` ([#3859](https://github.com/astral-sh/uv/pull/3859))
+
+### CLI
+
+- Adjust the docs for the pip CLI commands ([#4445](https://github.com/astral-sh/uv/pull/4445))
+- Fix casing of `--no-compile` alias ([#4453](https://github.com/astral-sh/uv/pull/4453))
+
+### Bug fixes
+
+- Fix ordering of prefer-system toolchain preference ([#4441](https://github.com/astral-sh/uv/pull/4441))
+- Respect index strategy in source distribution builds ([#4468](https://github.com/astral-sh/uv/pull/4468))
+
+### Documentation
+
+- Add documentation for using uv in a Docker image ([#4433](https://github.com/astral-sh/uv/pull/4433))
+
 ## 0.2.14
 
 ### Enhancements
