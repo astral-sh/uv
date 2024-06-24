@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
-use petgraph::visit::{EdgeRef, Topo};
 use petgraph::Direction;
+use petgraph::visit::{EdgeRef, Topo};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use distribution_types::{Name, SourceAnnotation, SourceAnnotations};
@@ -10,8 +10,8 @@ use pep508_rs::MarkerEnvironment;
 use pep508_rs::MarkerTree;
 use uv_normalize::PackageName;
 
-use crate::resolution::RequirementsTxtDist;
 use crate::{marker, ResolutionGraph};
+use crate::resolution::RequirementsTxtDist;
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
@@ -27,6 +27,8 @@ pub struct DisplayResolutionGraph<'a> {
     show_hashes: bool,
     /// Whether to include extras in the output (e.g., `black[colorama]`).
     include_extras: bool,
+    /// Whether to include environment markers in the output (e.g., `black ; sys_platform == "win32"`).
+    include_markers: bool,
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
@@ -45,6 +47,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
             &[],
             false,
             false,
+            false,
             true,
             false,
             AnnotationStyle::default(),
@@ -61,6 +64,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
+        include_markers: bool,
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
@@ -71,6 +75,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             no_emit_packages,
             show_hashes,
             include_extras,
+            include_markers,
             include_annotations,
             include_index_annotation,
             annotation_style,
@@ -169,7 +174,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // marker, we need to propagate it to all downstream nodes.
         let mut topo = Topo::new(&petgraph);
         while let Some(index) = topo.next(&petgraph) {
-            let mut marker_tree: Option<MarkerTree> = {
+            let marker_tree: Option<MarkerTree> = {
                 // Fold over the edges to combine the marker trees. If any edge is `None`, then
                 // the combined marker tree is `None`.
                 let mut edges = petgraph.edges_directed(index, Direction::Incoming);
@@ -206,10 +211,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 }
             }
 
-            if let Some(marker_tree) = marker_tree.as_mut() {
-                marker::normalize(marker_tree);
-            }
-            petgraph[index].markers = marker_tree;
+            petgraph[index].markers = marker_tree.and_then(marker::normalize);
         }
 
         // Reduce the graph, such that all nodes for a single package are combined, regardless of
@@ -225,10 +227,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             >::with_capacity(
                 petgraph.node_count(), petgraph.edge_count()
             );
-            let mut inverse = FxHashMap::with_capacity_and_hasher(
-                petgraph.node_count(),
-                BuildHasherDefault::default(),
-            );
+            let mut inverse =
+                FxHashMap::with_capacity_and_hasher(petgraph.node_count(), FxBuildHasher);
 
             // Re-add the nodes to the reduced graph.
             for index in petgraph.node_indices() {

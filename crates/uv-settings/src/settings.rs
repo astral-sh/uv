@@ -168,6 +168,7 @@ pub struct PipOptions {
     pub prerelease: Option<PreReleaseMode>,
     pub output_file: Option<PathBuf>,
     pub no_strip_extras: Option<bool>,
+    pub no_strip_markers: Option<bool>,
     pub no_annotate: Option<bool>,
     pub no_header: Option<bool>,
     pub custom_compile_command: Option<String>,

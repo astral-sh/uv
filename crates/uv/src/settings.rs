@@ -501,6 +501,8 @@ impl PipCompileSettings {
             output_file,
             no_strip_extras,
             strip_extras,
+            no_strip_markers,
+            strip_markers,
             no_annotate,
             annotate,
             no_header,
@@ -573,6 +575,7 @@ impl PipCompileSettings {
                     no_deps: flag(no_deps, deps),
                     output_file,
                     no_strip_extras: flag(no_strip_extras, strip_extras),
+                    no_strip_markers: flag(no_strip_markers, strip_markers),
                     no_annotate: flag(no_annotate, annotate),
                     no_header: flag(no_header, header),
                     custom_compile_command,
@@ -1487,6 +1490,7 @@ pub(crate) struct PipSettings {
     pub(crate) prerelease: PreReleaseMode,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) no_strip_extras: bool,
+    pub(crate) no_strip_markers: bool,
     pub(crate) no_annotate: bool,
     pub(crate) no_header: bool,
     pub(crate) custom_compile_command: Option<String>,
@@ -1542,6 +1546,7 @@ impl PipSettings {
             prerelease,
             output_file,
             no_strip_extras,
+            no_strip_markers,
             no_annotate,
             no_header,
             custom_compile_command,
@@ -1638,6 +1643,10 @@ impl PipSettings {
             no_strip_extras: args
                 .no_strip_extras
                 .combine(no_strip_extras)
+                .unwrap_or_default(),
+            no_strip_markers: args
+                .no_strip_markers
+                .combine(no_strip_markers)
                 .unwrap_or_default(),
             no_annotate: args.no_annotate.combine(no_annotate).unwrap_or_default(),
             no_header: args.no_header.combine(no_header).unwrap_or_default(),

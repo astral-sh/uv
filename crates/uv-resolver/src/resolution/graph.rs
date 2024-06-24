@@ -254,6 +254,10 @@ impl ResolutionGraph {
                     versions.to_dev.as_ref(),
                 )];
 
+                println!("from_index: {:?}", from_index);
+                println!("to_index: {:?}", to_index);
+                println!("versions.marker: {:?}", versions.marker);
+
                 if let Some(edge) = petgraph
                     .find_edge(from_index, to_index)
                     .and_then(|edge| petgraph.edge_weight_mut(edge))

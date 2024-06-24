@@ -1,0 +1,5 @@
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["anyio==3.7.0 ; sys_platform == 'darwin'"]
