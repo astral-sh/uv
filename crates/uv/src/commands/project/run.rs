@@ -78,7 +78,7 @@ pub(crate) async fn run(
         let lock = project::lock::do_lock(
             project.workspace(),
             venv.interpreter(),
-            settings.clone().into(),
+            settings.as_ref().into(),
             preview,
             connectivity,
             concurrency,
@@ -95,7 +95,7 @@ pub(crate) async fn run(
             extras,
             dev,
             Modifications::Sufficient,
-            settings.clone().into(),
+            settings.as_ref().into(),
             preview,
             connectivity,
             concurrency,
