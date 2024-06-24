@@ -565,8 +565,7 @@ fn prune_big_tree() {
             ├── markdown-it-py v3.0.0
             │   └── mdurl v0.1.2
             └── pygments v2.17.2 (*)
-    Note: (*) indicates the package has been `de-duplicated`.
-    The dependencies for the package have already been shown elsewhere in the graph, and so are not repeated.
+    (*) Package tree already displayed
 
     ----- stderr -----
     "###
@@ -635,8 +634,8 @@ fn cyclic_dependency() {
     uv-cyclic-dependencies-c v0.1.0
     └── uv-cyclic-dependencies-a v0.1.0
         └── uv-cyclic-dependencies-b v0.1.0
-            └── uv-cyclic-dependencies-a v0.1.0 (*)
-    (*) Package tree already displayed
+            └── uv-cyclic-dependencies-a v0.1.0 (#)
+    (#) Dependency cycle
 
     ----- stderr -----
     "###
@@ -842,6 +841,202 @@ fn multiple_packages_shared_descendant() {
     └── python-dateutil v2.9.0.post0 (*)
     urllib3 v2.2.1
     (*) Package tree already displayed
+
+    ----- stderr -----
+    "###
+    );
+}
+
+// Ensure that --no-dedupe behaves as expected
+// in the presence of dependency cycles.
+#[test]
+#[cfg(not(windows))]
+fn no_dedupe_and_cycle() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(
+            r"
+        pendulum==3.0.0
+        boto3==1.34.69
+    ",
+        )
+        .unwrap();
+
+    uv_snapshot!(install_command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 10 packages in [TIME]
+    Installed 10 packages in [TIME]
+     + boto3==1.34.69
+     + botocore==1.34.69
+     + jmespath==1.0.1
+     + pendulum==3.0.0
+     + python-dateutil==2.9.0.post0
+     + s3transfer==0.10.1
+     + six==1.16.0
+     + time-machine==2.14.1
+     + tzdata==2024.1
+     + urllib3==2.2.1
+
+    "###
+    );
+
+    let mut command = Command::new(get_bin());
+    command
+        .arg("pip")
+        .arg("install")
+        .arg("uv-cyclic-dependencies-c==0.1.0")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir);
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(context.filters(), command, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + uv-cyclic-dependencies-a==0.1.0
+     + uv-cyclic-dependencies-b==0.1.0
+     + uv-cyclic-dependencies-c==0.1.0
+    "###
+    );
+
+    uv_snapshot!(context.filters(), Command::new(get_bin())
+        .arg("pip")
+        .arg("tree")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--no-dedupe")
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    boto3 v1.34.69
+    ├── botocore v1.34.69
+    │   ├── jmespath v1.0.1
+    │   └── python-dateutil v2.9.0.post0
+    │       └── six v1.16.0
+    ├── jmespath v1.0.1
+    └── s3transfer v0.10.1
+        └── botocore v1.34.69
+            ├── jmespath v1.0.1
+            └── python-dateutil v2.9.0.post0
+                └── six v1.16.0
+    pendulum v3.0.0
+    ├── python-dateutil v2.9.0.post0
+    │   └── six v1.16.0
+    └── tzdata v2024.1
+    time-machine v2.14.1
+    └── python-dateutil v2.9.0.post0
+        └── six v1.16.0
+    urllib3 v2.2.1
+    uv-cyclic-dependencies-c v0.1.0
+    └── uv-cyclic-dependencies-a v0.1.0
+        └── uv-cyclic-dependencies-b v0.1.0
+            └── uv-cyclic-dependencies-a v0.1.0 (#)
+    (#) Dependency cycle
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+#[cfg(not(windows))]
+fn no_dedupe() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(
+            r"
+        pendulum==3.0.0
+        boto3==1.34.69
+    ",
+        )
+        .unwrap();
+
+    uv_snapshot!(install_command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 10 packages in [TIME]
+    Installed 10 packages in [TIME]
+     + boto3==1.34.69
+     + botocore==1.34.69
+     + jmespath==1.0.1
+     + pendulum==3.0.0
+     + python-dateutil==2.9.0.post0
+     + s3transfer==0.10.1
+     + six==1.16.0
+     + time-machine==2.14.1
+     + tzdata==2024.1
+     + urllib3==2.2.1
+
+    "###
+    );
+
+    uv_snapshot!(context.filters(), Command::new(get_bin())
+        .arg("pip")
+        .arg("tree")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--no-dedupe")
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    boto3 v1.34.69
+    ├── botocore v1.34.69
+    │   ├── jmespath v1.0.1
+    │   └── python-dateutil v2.9.0.post0
+    │       └── six v1.16.0
+    ├── jmespath v1.0.1
+    └── s3transfer v0.10.1
+        └── botocore v1.34.69
+            ├── jmespath v1.0.1
+            └── python-dateutil v2.9.0.post0
+                └── six v1.16.0
+    pendulum v3.0.0
+    ├── python-dateutil v2.9.0.post0
+    │   └── six v1.16.0
+    └── tzdata v2024.1
+    time-machine v2.14.1
+    └── python-dateutil v2.9.0.post0
+        └── six v1.16.0
+    urllib3 v2.2.1
 
     ----- stderr -----
     "###

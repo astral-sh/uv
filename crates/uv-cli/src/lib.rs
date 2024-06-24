@@ -1392,6 +1392,13 @@ pub struct PipTreeArgs {
     /// Prune the given package from the display of the dependency tree.
     #[arg(long)]
     pub prune: Vec<PackageName>,
+    /// Do not de-duplicate repeated dependencies.
+    /// Usually, when a package has already displayed its dependencies,
+    /// further occurrences will not re-display its dependencies,
+    /// and will include a (*) to indicate it has already been shown.
+    /// This flag will cause those duplicates to be repeated.
+    #[arg(long)]
+    pub no_dedupe: bool,
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.

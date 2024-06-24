@@ -23,6 +23,7 @@ use pypi_types::VerbatimParsedUrl;
 pub(crate) fn pip_tree(
     depth: u8,
     prune: Vec<PackageName>,
+    no_dedupe: bool,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -46,7 +47,7 @@ pub(crate) fn pip_tree(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&environment)?;
 
-    let rendered_tree = DisplayDependencyGraph::new(&site_packages, depth.into(), prune)
+    let rendered_tree = DisplayDependencyGraph::new(&site_packages, depth.into(), prune, no_dedupe)
         .render()
         .join("\n");
     writeln!(printer.stdout(), "{rendered_tree}").unwrap();
@@ -56,6 +57,9 @@ pub(crate) fn pip_tree(
             "{}",
             "(*) Package tree already displayed".italic()
         )?;
+    }
+    if rendered_tree.contains('#') {
+        writeln!(printer.stdout(), "{}", "(#) Dependency cycle".italic())?;
     }
 
     // Validate that the environment is consistent.
@@ -94,22 +98,6 @@ fn required_with_no_extra(dist: &InstalledDist) -> Vec<pep508_rs::Requirement<Ve
         .collect::<Vec<_>>();
 }
 
-// Render the line for the given installed distribution in the dependency tree.
-fn render_line(installed_dist: &InstalledDist, is_visited: bool) -> String {
-    let mut line = String::new();
-    write!(
-        &mut line,
-        "{} v{}",
-        installed_dist.name(),
-        installed_dist.version()
-    )
-    .unwrap();
-
-    if is_visited {
-        line.push_str(" (*)");
-    }
-    line
-}
 #[derive(Debug)]
 struct DisplayDependencyGraph<'a> {
     site_packages: &'a SitePackages,
@@ -125,6 +113,9 @@ struct DisplayDependencyGraph<'a> {
 
     // Prune the given package from the display of the dependency tree.
     prune: Vec<PackageName>,
+
+    // Whether to de-duplicate the displayed dependencies.
+    no_dedupe: bool,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
@@ -133,6 +124,7 @@ impl<'a> DisplayDependencyGraph<'a> {
         site_packages: &'a SitePackages,
         depth: usize,
         prune: Vec<PackageName>,
+        no_dedupe: bool,
     ) -> DisplayDependencyGraph<'a> {
         let mut dist_by_package_name = HashMap::new();
         let mut required_packages = HashSet::new();
@@ -151,6 +143,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             required_packages,
             depth,
             prune,
+            no_dedupe,
         }
     }
 
@@ -171,13 +164,21 @@ impl<'a> DisplayDependencyGraph<'a> {
             return Vec::new();
         }
 
-        let mut lines = Vec::new();
         let package_name = installed_dist.name().to_string();
         let is_visited = visited.contains(&package_name);
-        lines.push(render_line(installed_dist, is_visited));
-        if is_visited {
-            return lines;
+        let line = format!("{} v{}", package_name, installed_dist.version());
+
+        if path.contains(&package_name) {
+            return vec![format!("{} (#)", line)];
         }
+
+        // If the package has been visited and de-duplication is enabled (default),
+        // skip the traversal.
+        if is_visited && !self.no_dedupe {
+            return vec![format!("{} (*)", line)];
+        }
+
+        let mut lines = vec![line];
 
         path.push(package_name.clone());
         visited.insert(package_name.clone());

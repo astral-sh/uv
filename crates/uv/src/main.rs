@@ -548,6 +548,7 @@ async fn run() -> Result<ExitStatus> {
             commands::pip_tree(
                 args.depth,
                 args.prune,
+                args.no_dedupe,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
