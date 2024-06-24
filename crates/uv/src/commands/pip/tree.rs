@@ -20,6 +20,7 @@ use pypi_types::VerbatimParsedUrl;
 
 /// Display the installed packages in the current environment as a dependency tree.
 pub(crate) fn pip_tree(
+    depth: u8,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -43,7 +44,7 @@ pub(crate) fn pip_tree(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&environment)?;
 
-    let rendered_tree = DisplayDependencyGraph::new(&site_packages)
+    let rendered_tree = DisplayDependencyGraph::new(&site_packages, depth)
         .render()
         .join("\n");
     writeln!(printer.stdout(), "{rendered_tree}").unwrap();
@@ -116,11 +117,13 @@ struct DisplayDependencyGraph<'a> {
     // It is used to determine the starting nodes when recursing the
     // dependency graph.
     required_packages: HashSet<PackageName>,
+
+    depth: u8,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
-    fn new(site_packages: &'a SitePackages) -> DisplayDependencyGraph<'a> {
+    fn new(site_packages: &'a SitePackages, depth: u8) -> DisplayDependencyGraph<'a> {
         let mut dist_by_package_name = HashMap::new();
         let mut required_packages = HashSet::new();
         for site_package in site_packages.iter() {
@@ -136,6 +139,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             site_packages,
             dist_by_package_name,
             required_packages,
+            depth,
         }
     }
 
@@ -146,6 +150,9 @@ impl<'a> DisplayDependencyGraph<'a> {
         visited: &mut HashSet<String>,
         path: &mut Vec<String>,
     ) -> Vec<String> {
+        if path.len() > self.depth.into() {
+            return Vec::new();
+        }
         let mut lines = Vec::new();
         let package_name = installed_dist.name().to_string();
         let is_visited = visited.contains(&package_name);
