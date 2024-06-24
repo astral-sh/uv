@@ -2,23 +2,16 @@ use std::collections::Bound;
 
 use anstream::eprint;
 
-use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
-use install_wheel_rs::linker::LinkMode;
+use distribution_types::UnresolvedRequirementSpecification;
 use pep508_rs::RequirementOrigin;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
-    KeyringProviderType, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
-use uv_resolver::{
-    ExcludeNewer, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PreReleaseMode, RequiresPython,
-    ResolutionMode,
-};
+use uv_resolver::{FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
 use uv_toolchain::{Interpreter, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -64,16 +57,7 @@ pub(crate) async fn lock(
     match do_lock(
         &workspace,
         &interpreter,
-        &settings.upgrade,
-        &settings.index_locations,
-        settings.index_strategy,
-        settings.keyring_provider,
-        settings.resolution,
-        settings.prerelease,
-        &settings.config_setting,
-        settings.exclude_newer,
-        settings.link_mode,
-        &settings.build_options,
+        settings,
         preview,
         connectivity,
         concurrency,
@@ -101,16 +85,7 @@ pub(crate) async fn lock(
 pub(super) async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
-    upgrade: &Upgrade,
-    index_locations: &IndexLocations,
-    index_strategy: IndexStrategy,
-    keyring_provider: KeyringProviderType,
-    resolution: ResolutionMode,
-    prerelease: PreReleaseMode,
-    config_setting: &ConfigSettings,
-    exclude_newer: Option<ExcludeNewer>,
-    link_mode: LinkMode,
-    build_options: &BuildOptions,
+    settings: ResolverSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -118,6 +93,20 @@ pub(super) async fn do_lock(
     cache: &Cache,
     printer: Printer,
 ) -> Result<Lock, ProjectError> {
+    // Extract the project settings.
+    let ResolverSettings {
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease,
+        config_setting,
+        exclude_newer,
+        link_mode,
+        upgrade,
+        build_options,
+    } = settings;
+
     // When locking, include the project itself (as editable).
     let requirements = workspace
         .members_as_requirements()
@@ -204,11 +193,11 @@ pub(super) async fn do_lock(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+        FlatIndex::from_entries(entries, None, &hasher, &build_options)
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = read_lockfile(workspace, upgrade).await?;
+    let LockedRequirements { preferences, git } = read_lockfile(workspace, &upgrade).await?;
 
     // Create the Git resolver.
     let git = GitResolver::from_refs(git);
@@ -218,17 +207,17 @@ pub(super) async fn do_lock(
         &client,
         cache,
         interpreter,
-        index_locations,
+        &index_locations,
         &flat_index,
         &index,
         &git,
         &in_flight,
         index_strategy,
         setup_py,
-        config_setting,
+        &config_setting,
         build_isolation,
         link_mode,
-        build_options,
+        &build_options,
         exclude_newer,
         concurrency,
         preview,
@@ -247,7 +236,7 @@ pub(super) async fn do_lock(
         EmptyInstalledPackages,
         &hasher,
         &Reinstall::default(),
-        upgrade,
+        &upgrade,
         interpreter,
         None,
         None,

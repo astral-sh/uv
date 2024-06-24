@@ -1681,6 +1681,38 @@ impl PipSettings {
     }
 }
 
+impl From<ResolverInstallerSettings> for ResolverSettings {
+    fn from(settings: ResolverInstallerSettings) -> Self {
+        Self {
+            index_locations: settings.index_locations,
+            index_strategy: settings.index_strategy,
+            keyring_provider: settings.keyring_provider,
+            resolution: settings.resolution,
+            prerelease: settings.prerelease,
+            config_setting: settings.config_setting,
+            exclude_newer: settings.exclude_newer,
+            link_mode: settings.link_mode,
+            upgrade: settings.upgrade,
+            build_options: settings.build_options,
+        }
+    }
+}
+
+impl From<ResolverInstallerSettings> for InstallerSettings {
+    fn from(settings: ResolverInstallerSettings) -> Self {
+        Self {
+            index_locations: settings.index_locations,
+            index_strategy: settings.index_strategy,
+            keyring_provider: settings.keyring_provider,
+            config_setting: settings.config_setting,
+            link_mode: settings.link_mode,
+            compile_bytecode: settings.compile_bytecode,
+            reinstall: settings.reinstall,
+            build_options: settings.build_options,
+        }
+    }
+}
+
 // Environment variables that are not exposed as CLI arguments.
 mod env {
     pub(super) const CONCURRENT_DOWNLOADS: (&str, &str) =

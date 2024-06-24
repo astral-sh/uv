@@ -2,14 +2,9 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use distribution_types::IndexLocations;
-use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
-    KeyringProviderType, PreviewMode, Reinstall, SetupPyStrategy,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
@@ -77,14 +72,7 @@ pub(crate) async fn sync(
         extras,
         dev,
         modifications,
-        &settings.reinstall,
-        &settings.index_locations,
-        settings.index_strategy,
-        settings.keyring_provider,
-        &settings.config_setting,
-        settings.link_mode,
-        settings.compile_bytecode,
-        &settings.build_options,
+        settings,
         preview,
         connectivity,
         concurrency,
@@ -107,14 +95,7 @@ pub(super) async fn do_sync(
     extras: ExtrasSpecification,
     dev: bool,
     modifications: Modifications,
-    reinstall: &Reinstall,
-    index_locations: &IndexLocations,
-    index_strategy: IndexStrategy,
-    keyring_provider: KeyringProviderType,
-    config_setting: &ConfigSettings,
-    link_mode: LinkMode,
-    compile_bytecode: bool,
-    build_options: &BuildOptions,
+    settings: InstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -122,6 +103,18 @@ pub(super) async fn do_sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
+    // Extract the project settings.
+    let InstallerSettings {
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        config_setting,
+        link_mode,
+        compile_bytecode,
+        reinstall,
+        build_options,
+    } = settings;
+
     // Validate that the Python version is supported by the lockfile.
     if let Some(requires_python) = lock.requires_python() {
         if !requires_python.contains(venv.interpreter().python_version()) {
@@ -174,7 +167,7 @@ pub(super) async fn do_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
     };
 
     // Create a build dispatch.
@@ -182,17 +175,17 @@ pub(super) async fn do_sync(
         &client,
         cache,
         venv.interpreter(),
-        index_locations,
+        &index_locations,
         &flat_index,
         &index,
         &git,
         &in_flight,
         index_strategy,
         setup_py,
-        config_setting,
+        &config_setting,
         build_isolation,
         link_mode,
-        build_options,
+        &build_options,
         exclude_newer,
         concurrency,
         preview,
@@ -205,11 +198,11 @@ pub(super) async fn do_sync(
         &resolution,
         site_packages,
         modifications,
-        reinstall,
-        build_options,
+        &reinstall,
+        &build_options,
         link_mode,
         compile_bytecode,
-        index_locations,
+        &index_locations,
         &hasher,
         tags,
         &client,
