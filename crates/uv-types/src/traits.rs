@@ -7,11 +7,9 @@ use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, 
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, IndexStrategy, SetupPyStrategy};
+use uv_configuration::{BuildKind, BuildOptions};
 use uv_git::GitResolver;
 use uv_toolchain::{Interpreter, PythonEnvironment};
-
-use crate::BuildIsolation;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -63,9 +61,6 @@ pub trait BuildContext {
     /// it's metadata (e.g. wheel compatibility tags).
     fn interpreter(&self) -> &Interpreter;
 
-    /// Whether to enforce build isolation when building source distributions.
-    fn build_isolation(&self) -> BuildIsolation;
-
     /// Whether source distribution building or pre-built wheels is disabled.
     ///
     /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
@@ -74,12 +69,6 @@ pub trait BuildContext {
 
     /// The index locations being searched.
     fn index_locations(&self) -> &IndexLocations;
-
-    /// The strategy to use when resolving package versions.
-    fn index_strategy(&self) -> IndexStrategy;
-
-    /// The strategy to use when building source distributions that lack a `pyproject.toml`.
-    fn setup_py_strategy(&self) -> SetupPyStrategy;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
@@ -95,7 +84,7 @@ pub trait BuildContext {
         venv: &'a PythonEnvironment,
     ) -> impl Future<Output = Result<Vec<CachedDist>>> + 'a;
 
-    /// Setup a source distribution build by installing the required dependencies. A wrapper for
+    /// Set up a source distribution build by installing the required dependencies. A wrapper for
     /// `uv_build::SourceBuild::setup`.
     ///
     /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.

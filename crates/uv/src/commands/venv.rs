@@ -22,7 +22,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex};
 use uv_toolchain::{
     request_from_version_file, EnvironmentPreference, Toolchain, ToolchainPreference,
     ToolchainRequest,
@@ -240,10 +240,10 @@ async fn venv_impl(
             BuildIsolation::Isolated,
             link_mode,
             &build_options,
+            exclude_newer,
             concurrency,
             preview,
-        )
-        .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+        );
 
         // Resolve the seed packages.
         let requirements = if interpreter.python_tuple() < (3, 12) {

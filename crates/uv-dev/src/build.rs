@@ -60,6 +60,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let concurrency = Concurrency::default();
     let config_settings = ConfigSettings::default();
+    let exclude_newer = None;
     let flat_index = FlatIndex::default();
     let git = GitResolver::default();
     let in_flight = InFlight::default();
@@ -89,6 +90,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         BuildIsolation::Isolated,
         install_wheel_rs::linker::LinkMode::default(),
         &build_options,
+        exclude_newer,
         concurrency,
         PreviewMode::Enabled,
     );

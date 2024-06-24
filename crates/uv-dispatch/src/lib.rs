@@ -23,7 +23,9 @@ use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
+use uv_resolver::{
+    ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
+};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -44,8 +46,8 @@ pub struct BuildDispatch<'a> {
     link_mode: install_wheel_rs::linker::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
+    exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
-    options: Options,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     concurrency: Concurrency,
     preview_mode: PreviewMode,
@@ -68,6 +70,7 @@ impl<'a> BuildDispatch<'a> {
         build_isolation: BuildIsolation<'a>,
         link_mode: install_wheel_rs::linker::LinkMode,
         build_options: &'a BuildOptions,
+        exclude_newer: Option<ExcludeNewer>,
         concurrency: Concurrency,
         preview_mode: PreviewMode,
     ) -> Self {
@@ -86,18 +89,12 @@ impl<'a> BuildDispatch<'a> {
             build_isolation,
             link_mode,
             build_options,
+            exclude_newer,
             concurrency,
             source_build_context: SourceBuildContext::default(),
-            options: Options::default(),
             build_extra_env_vars: FxHashMap::default(),
             preview_mode,
         }
-    }
-
-    #[must_use]
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.options = options;
-        self
     }
 
     /// Set the environment variables to be used when building a source distribution.
@@ -131,10 +128,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.interpreter
     }
 
-    fn build_isolation(&self) -> BuildIsolation {
-        self.build_isolation
-    }
-
     fn build_options(&self) -> &BuildOptions {
         self.build_options
     }
@@ -143,21 +136,16 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.index_locations
     }
 
-    fn index_strategy(&self) -> IndexStrategy {
-        self.index_strategy
-    }
-
-    fn setup_py_strategy(&self) -> SetupPyStrategy {
-        self.setup_py
-    }
-
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()),
-            self.options,
+            OptionsBuilder::new()
+                .exclude_newer(self.exclude_newer)
+                .index_strategy(self.index_strategy)
+                .build(),
             &python_requirement,
             Some(markers),
             Some(tags),

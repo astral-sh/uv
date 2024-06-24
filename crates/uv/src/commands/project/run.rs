@@ -85,7 +85,7 @@ pub(crate) async fn run(
             settings.resolution,
             settings.prerelease,
             &settings.config_setting,
-            settings.exclude_newer.as_ref(),
+            settings.exclude_newer,
             settings.link_mode,
             &settings.build_options,
             preview,

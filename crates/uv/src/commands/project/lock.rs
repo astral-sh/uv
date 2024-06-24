@@ -70,7 +70,7 @@ pub(crate) async fn lock(
         settings.resolution,
         settings.prerelease,
         &settings.config_setting,
-        settings.exclude_newer.as_ref(),
+        settings.exclude_newer,
         settings.link_mode,
         &settings.build_options,
         preview,
@@ -107,7 +107,7 @@ pub(super) async fn do_lock(
     resolution: ResolutionMode,
     prerelease: PreReleaseMode,
     config_setting: &ConfigSettings,
-    exclude_newer: Option<&ExcludeNewer>,
+    exclude_newer: Option<ExcludeNewer>,
     link_mode: LinkMode,
     build_options: &BuildOptions,
     preview: PreviewMode,
@@ -161,7 +161,7 @@ pub(super) async fn do_lock(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
-        .exclude_newer(exclude_newer.copied())
+        .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
         .build();
     let hasher = HashStrategy::Generate;
@@ -205,6 +205,7 @@ pub(super) async fn do_lock(
         build_isolation,
         link_mode,
         build_options,
+        exclude_newer,
         concurrency,
         preview,
     );

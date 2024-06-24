@@ -166,6 +166,7 @@ pub(super) async fn do_sync(
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
     let dry_run = false;
+    let exclude_newer = None;
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
 
@@ -192,6 +193,7 @@ pub(super) async fn do_sync(
         build_isolation,
         link_mode,
         build_options,
+        exclude_newer,
         concurrency,
         preview,
     );

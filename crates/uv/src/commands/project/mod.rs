@@ -402,6 +402,7 @@ pub(crate) async fn update_environment(
         build_isolation,
         *link_mode,
         build_options,
+        *exclude_newer,
         concurrency,
         preview,
     );
@@ -462,6 +463,7 @@ pub(crate) async fn update_environment(
             build_isolation,
             *link_mode,
             build_options,
+            *exclude_newer,
             concurrency,
             preview,
         )

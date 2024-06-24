@@ -5,7 +5,7 @@ use uv_distribution::pyproject::{Source, SourceError};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_git::GitResolver;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_resolver::{FlatIndex, InMemoryIndex};
 use uv_toolchain::{ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -121,13 +121,9 @@ pub(crate) async fn add(
         build_isolation,
         settings.link_mode,
         &settings.build_options,
+        settings.exclude_newer,
         concurrency,
         preview,
-    )
-    .with_options(
-        OptionsBuilder::new()
-            .exclude_newer(settings.exclude_newer)
-            .build(),
     );
 
     // Resolve any unnamed requirements.
@@ -197,7 +193,7 @@ pub(crate) async fn add(
         settings.resolution,
         settings.prerelease,
         &settings.config_setting,
-        settings.exclude_newer.as_ref(),
+        settings.exclude_newer,
         settings.link_mode,
         &settings.build_options,
         preview,
