@@ -22,7 +22,7 @@ use uv_installer::SitePackages;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
-    ResolutionMode,
+    PythonRequirement, ResolutionMode,
 };
 use uv_toolchain::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonVersion, Target, ToolchainRequest,
@@ -169,6 +169,13 @@ pub(crate) async fn pip_sync(
 
     let interpreter = environment.interpreter();
 
+    // Determine the Python requirement, if the user requested a specific version.
+    let python_requirement = if let Some(python_version) = python_version.as_ref() {
+        PythonRequirement::from_python_version(interpreter, python_version)
+    } else {
+        PythonRequirement::from_interpreter(interpreter)
+    };
+
     // Determine the environment for the resolution.
     let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
 
@@ -279,10 +286,9 @@ pub(crate) async fn pip_sync(
         &hasher,
         &reinstall,
         &upgrade,
-        interpreter,
         Some(&tags),
         Some(&markers),
-        None,
+        python_requirement,
         &client,
         &flat_index,
         &index,

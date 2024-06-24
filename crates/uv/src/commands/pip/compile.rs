@@ -211,9 +211,11 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the Python requirement, if the user requested a specific version.
-    let python_requirement = python_version
-        .as_ref()
-        .map(|python_version| PythonRequirement::from_python_version(&interpreter, python_version));
+    let python_requirement = if let Some(python_version) = python_version.as_ref() {
+        PythonRequirement::from_python_version(&interpreter, python_version)
+    } else {
+        PythonRequirement::from_interpreter(&interpreter)
+    };
 
     // Determine the environment for the resolution.
     let (tags, markers) = resolution_environment(python_version, python_platform, &interpreter)?;
@@ -316,7 +318,6 @@ pub(crate) async fn pip_compile(
         &hasher,
         &Reinstall::None,
         &upgrade,
-        &interpreter,
         Some(&tags),
         Some(&markers),
         python_requirement,
