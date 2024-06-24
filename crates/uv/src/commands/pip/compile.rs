@@ -281,15 +281,16 @@ pub(crate) async fn pip_compile(
         &source_index,
         &git,
         &in_flight,
+        index_strategy,
         setup_py,
         &config_settings,
         build_isolation,
         link_mode,
         &build_options,
+        exclude_newer,
         concurrency,
         preview,
-    )
-    .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+    );
 
     // Resolve the requirements from the provided sources.
     let requirements = {

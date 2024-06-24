@@ -79,11 +79,11 @@ pub(crate) async fn sync(
         modifications,
         &settings.reinstall,
         &settings.index_locations,
-        &settings.index_strategy,
-        &settings.keyring_provider,
+        settings.index_strategy,
+        settings.keyring_provider,
         &settings.config_setting,
-        &settings.link_mode,
-        &settings.compile_bytecode,
+        settings.link_mode,
+        settings.compile_bytecode,
         &settings.build_options,
         preview,
         connectivity,
@@ -109,11 +109,11 @@ pub(super) async fn do_sync(
     modifications: Modifications,
     reinstall: &Reinstall,
     index_locations: &IndexLocations,
-    index_strategy: &IndexStrategy,
-    keyring_provider: &KeyringProviderType,
+    index_strategy: IndexStrategy,
+    keyring_provider: KeyringProviderType,
     config_setting: &ConfigSettings,
-    link_mode: &LinkMode,
-    compile_bytecode: &bool,
+    link_mode: LinkMode,
+    compile_bytecode: bool,
     build_options: &BuildOptions,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -151,8 +151,8 @@ pub(super) async fn do_sync(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
-        .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
+        .index_strategy(index_strategy)
+        .keyring(keyring_provider)
         .markers(markers)
         .platform(venv.interpreter().platform())
         .build();
@@ -166,6 +166,7 @@ pub(super) async fn do_sync(
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
     let dry_run = false;
+    let exclude_newer = None;
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
 
@@ -186,11 +187,13 @@ pub(super) async fn do_sync(
         &index,
         &git,
         &in_flight,
+        index_strategy,
         setup_py,
         config_setting,
         build_isolation,
-        *link_mode,
+        link_mode,
         build_options,
+        exclude_newer,
         concurrency,
         preview,
     );
@@ -204,8 +207,8 @@ pub(super) async fn do_sync(
         modifications,
         reinstall,
         build_options,
-        *link_mode,
-        *compile_bytecode,
+        link_mode,
+        compile_bytecode,
         index_locations,
         &hasher,
         tags,
