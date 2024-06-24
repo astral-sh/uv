@@ -4438,7 +4438,6 @@ dependencies = [
  "byteorder",
  "chrono",
  "clap",
- "clap_complete_command",
  "distribution-types",
  "filetime",
  "flate2",
@@ -4477,6 +4476,7 @@ dependencies = [
  "url",
  "uv-auth",
  "uv-cache",
+ "uv-cli",
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
@@ -4568,6 +4568,30 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "walkdir",
+]
+
+[[package]]
+name = "uv-cli"
+version = "0.0.1"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "clap",
+ "clap_complete_command",
+ "distribution-types",
+ "fs-err",
+ "insta",
+ "install-wheel-rs",
+ "serde",
+ "url",
+ "uv-cache",
+ "uv-configuration",
+ "uv-normalize",
+ "uv-resolver",
+ "uv-settings",
+ "uv-toolchain",
+ "uv-version",
+ "uv-warnings",
 ]
 
 [[package]]
