@@ -44,8 +44,8 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
-    PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPackageInner,
-    PubGrubPriorities, PubGrubPython, PubGrubSpecifier,
+    PubGrubDependency, PubGrubDistribution, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
+    PubGrubPython, PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
@@ -943,13 +943,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     markers,
                 );
 
-                let dependencies = PubGrubDependencies::from_requirements(
-                    &requirements,
-                    None,
-                    &self.urls,
-                    &self.locals,
-                    &self.git,
-                )?;
+                let dependencies = requirements
+                    .iter()
+                    .flat_map(|requirement| {
+                        PubGrubDependency::from_requirement(
+                            requirement,
+                            None,
+                            &self.urls,
+                            &self.locals,
+                            &self.git,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 (dependencies, None)
             }
@@ -1075,13 +1080,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     markers,
                 );
 
-                let mut dependencies = PubGrubDependencies::from_requirements(
-                    &requirements,
-                    Some(name),
-                    &self.urls,
-                    &self.locals,
-                    &self.git,
-                )?;
+                let mut dependencies = requirements
+                    .iter()
+                    .flat_map(|requirement| {
+                        PubGrubDependency::from_requirement(
+                            requirement,
+                            Some(name),
+                            &self.urls,
+                            &self.locals,
+                            &self.git,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
                 // If a package has metadata for an enabled dependency group,
                 // add a dependency from it to the same package with the group
                 // enabled.
@@ -1090,15 +1100,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if !metadata.dev_dependencies.contains_key(group) {
                             continue;
                         }
-                        dependencies.push(
-                            PubGrubPackage::from(PubGrubPackageInner::Dev {
+                        dependencies.push(PubGrubDependency {
+                            package: PubGrubPackage::from(PubGrubPackageInner::Dev {
                                 name: name.clone(),
                                 dev: group.clone(),
                                 marker: marker.clone(),
                                 url: url.clone(),
                             }),
-                            Range::singleton(version.clone()),
-                        );
+                            version: Range::singleton(version.clone()),
+                        });
                     }
                 }
 
@@ -1111,17 +1121,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 return Ok(Dependencies::Available(
                     [None, Some(marker)]
                         .into_iter()
-                        .map(move |marker| {
-                            (
-                                PubGrubPackage::from(PubGrubPackageInner::Package {
-                                    name: name.clone(),
-                                    extra: None,
-                                    dev: None,
-                                    marker: marker.cloned(),
-                                    url: url.clone(),
-                                }),
-                                Range::singleton(version.clone()),
-                            )
+                        .map(move |marker| PubGrubDependency {
+                            package: PubGrubPackage::from(PubGrubPackageInner::Package {
+                                name: name.clone(),
+                                extra: None,
+                                dev: None,
+                                marker: marker.cloned(),
+                                url: url.clone(),
+                            }),
+                            version: Range::singleton(version.clone()),
                         })
                         .collect(),
                 ))
@@ -1139,18 +1147,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
-                            [None, Some(extra)].into_iter().map(move |extra| {
-                                (
-                                    PubGrubPackage::from(PubGrubPackageInner::Package {
+                            [None, Some(extra)]
+                                .into_iter()
+                                .map(move |extra| PubGrubDependency {
+                                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                         name: name.clone(),
                                         extra: extra.cloned(),
                                         dev: None,
                                         marker: marker.cloned(),
                                         url: url.clone(),
                                     }),
-                                    Range::singleton(version.clone()),
-                                )
-                            })
+                                    version: Range::singleton(version.clone()),
+                                })
                         })
                         .collect(),
                 ))
@@ -1169,40 +1177,41 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
-                            [None, Some(dev)].into_iter().map(move |dev| {
-                                (
-                                    PubGrubPackage::from(PubGrubPackageInner::Package {
+                            [None, Some(dev)]
+                                .into_iter()
+                                .map(move |dev| PubGrubDependency {
+                                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                         name: name.clone(),
                                         extra: None,
                                         dev: dev.cloned(),
                                         marker: marker.cloned(),
                                         url: url.clone(),
                                     }),
-                                    Range::singleton(version.clone()),
-                                )
-                            })
+                                    version: Range::singleton(version.clone()),
+                                })
                         })
                         .collect(),
                 ))
             }
         };
 
-        for (dep_package, dep_version) in dependencies.iter() {
+        for dependency in &dependencies {
+            let PubGrubDependency { package, version } = dependency;
             if let Some(name) = name {
-                debug!("Adding transitive dependency for {name}=={version}: {dep_package}{dep_version}");
+                debug!("Adding transitive dependency for {name}=={version}: {package}{version}");
             } else {
                 // A dependency from the root package or requirements.txt.
-                debug!("Adding direct dependency: {dep_package}{dep_version}");
+                debug!("Adding direct dependency: {package}{version}");
             }
 
             // Update the package priorities.
-            priorities.insert(dep_package, dep_version);
+            priorities.insert(package, version);
 
             // Emit a request to fetch the metadata for this package.
-            self.visit_package(dep_package, request_sink)?;
+            self.visit_package(package, request_sink)?;
         }
 
-        Ok(Dependencies::Available(dependencies.into()))
+        Ok(Dependencies::Available(dependencies))
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,
@@ -1648,12 +1657,12 @@ impl SolveState {
     fn add_package_version_dependencies(
         &mut self,
         version: &Version,
-        dependencies: Vec<(PubGrubPackage, Range<Version>)>,
+        dependencies: Vec<PubGrubDependency>,
         prefetcher: &BatchPrefetcher,
     ) -> Result<(), ResolveError> {
         if dependencies
             .iter()
-            .any(|(dependency, _)| dependency == &self.next)
+            .any(|dependency| dependency.package == self.next)
         {
             if enabled!(Level::DEBUG) {
                 prefetcher.log_tried_versions();
@@ -1667,7 +1676,10 @@ impl SolveState {
         self.pubgrub.add_package_version_dependencies(
             self.next.clone(),
             version.clone(),
-            dependencies,
+            dependencies.into_iter().map(|dependency| {
+                let PubGrubDependency { package, version } = dependency;
+                (package, version)
+            }),
         );
         Ok(())
     }
@@ -1994,7 +2006,6 @@ enum Response {
 /// This effectively distills the dependency metadata of a package down into
 /// its pubgrub specific constituent parts: each dependency package has a range
 /// of possible versions.
-#[derive(Clone)]
 enum Dependencies {
     /// Package dependencies are not available.
     Unavailable(UnavailableVersion),
@@ -2003,7 +2014,7 @@ enum Dependencies {
     /// Note that in universal mode, it is possible and allowed for multiple
     /// `PubGrubPackage` values in this list to have the same package name.
     /// These conflicts are resolved via `Dependencies::fork`.
-    Available(Vec<(PubGrubPackage, Range<Version>)>),
+    Available(Vec<PubGrubDependency>),
 }
 
 impl Dependencies {
@@ -2022,13 +2033,16 @@ impl Dependencies {
         };
 
         let mut by_name: FxHashMap<&PackageName, PossibleForks> = FxHashMap::default();
-        for (index, (ref pkg, _)) in deps.iter().enumerate() {
+        for (index, dependency) in deps.iter().enumerate() {
             // A root can never be a dependency of another package,
             // and a `Python` pubgrub package is never returned by
             // `get_dependencies`. So a pubgrub package always has a
             // name in this context.
-            let name = pkg.name().expect("dependency always has a name");
-            let marker = pkg.marker();
+            let name = dependency
+                .package
+                .name()
+                .expect("dependency always has a name");
+            let marker = dependency.package.marker();
             let Some(marker) = marker else {
                 // When no marker is found, it implies there is a dependency on
                 // this package that is unconditional with respect to marker
@@ -2157,7 +2171,7 @@ enum ForkedDependencies {
     /// No forking occurred.
     ///
     /// This is the same as `Dependencies::Available`.
-    Unforked(Vec<(PubGrubPackage, Range<Version>)>),
+    Unforked(Vec<PubGrubDependency>),
     /// Forked containers for all available package versions.
     ///
     /// Note that there is always at least two forks. If there would
@@ -2189,7 +2203,7 @@ struct Fork {
     /// they should use `add_forked_package` or `add_nonfork_package`. Namely,
     /// it should be impossible for a package with a marker expression that is
     /// disjoint from the marker expression on this fork to be added.
-    dependencies: Vec<(PubGrubPackage, Range<Version>)>,
+    dependencies: Vec<PubGrubDependency>,
     /// The markers that provoked this fork.
     ///
     /// So in the example above, the `a<2` fork would have
@@ -2215,15 +2229,16 @@ impl Fork {
     /// can cause the resolver to explore otherwise impossible resolutions,
     /// and also run into conflicts (and thus a failed resolution) that don't
     /// actually exist.
-    fn add_forked_package(&mut self, (pkg, range): (PubGrubPackage, Range<Version>)) {
+    fn add_forked_package(&mut self, dependency: PubGrubDependency) {
         // OK because a package without a marker is unconditional and
         // thus can never provoke a fork.
-        let marker = pkg
+        let marker = dependency
+            .package
             .marker()
             .cloned()
             .expect("forked package always has a marker");
         self.remove_disjoint_packages(&marker);
-        self.dependencies.push((pkg, range));
+        self.dependencies.push(dependency);
         // Each marker expression in a single fork is,
         // by construction, overlapping with at least
         // one other marker expression in this fork.
@@ -2239,14 +2254,15 @@ impl Fork {
     ///
     /// It is only added if the markers on the given package are not disjoint
     /// with this fork's markers.
-    fn add_nonfork_package(&mut self, (pkg, range): (PubGrubPackage, Range<Version>)) {
+    fn add_nonfork_package(&mut self, dependency: PubGrubDependency) {
         use crate::marker::is_disjoint;
 
-        if pkg
+        if dependency
+            .package
             .marker()
             .map_or(true, |marker| !is_disjoint(marker, &self.markers))
         {
-            self.dependencies.push((pkg, range));
+            self.dependencies.push(dependency);
         }
     }
 
@@ -2255,8 +2271,10 @@ impl Fork {
     fn remove_disjoint_packages(&mut self, fork_marker: &MarkerTree) {
         use crate::marker::is_disjoint;
 
-        self.dependencies.retain(|(pkg, _)| {
-            pkg.marker()
+        self.dependencies.retain(|dependency| {
+            dependency
+                .package
+                .marker()
                 .map_or(true, |pkg_marker| !is_disjoint(pkg_marker, fork_marker))
         });
     }

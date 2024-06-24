@@ -15,76 +15,59 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::{Locals, Urls};
 use crate::{PubGrubSpecifier, ResolveError};
 
-#[derive(Debug)]
-pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
+#[derive(Clone, Debug)]
+pub(crate) struct PubGrubDependency {
+    pub(crate) package: PubGrubPackage,
+    pub(crate) version: Range<Version>,
+}
 
-impl PubGrubDependencies {
-    /// Generate a set of PubGrub dependencies from a set of requirements.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn from_requirements(
-        flattened_requirements: &[&Requirement],
-        source_name: Option<&PackageName>,
-        urls: &Urls,
-        locals: &Locals,
-        git: &GitResolver,
-    ) -> Result<Self, ResolveError> {
-        let mut dependencies = Vec::new();
-        for requirement in flattened_requirements {
-            // Add the package, plus any extra variants.
-            for result in std::iter::once(PubGrubRequirement::from_requirement(
-                requirement,
-                None,
-                urls,
-                locals,
-                git,
-            ))
-            .chain(requirement.extras.clone().into_iter().map(|extra| {
-                PubGrubRequirement::from_requirement(requirement, Some(extra), urls, locals, git)
-            })) {
-                let PubGrubRequirement { package, version } = result?;
+impl PubGrubDependency {
+    pub(crate) fn from_requirement<'a>(
+        requirement: &'a Requirement,
+        source_name: Option<&'a PackageName>,
+        urls: &'a Urls,
+        locals: &'a Locals,
+        git: &'a GitResolver,
+    ) -> impl Iterator<Item = Result<Self, ResolveError>> + 'a {
+        // Add the package, plus any extra variants.
+        std::iter::once(None)
+            .chain(requirement.extras.clone().into_iter().map(Some))
+            .map(|extra| {
+                PubGrubRequirement::from_requirement(requirement, extra, urls, locals, git)
+            })
+            .filter_map_ok(move |pubgrub_requirement| {
+                let PubGrubRequirement { package, version } = pubgrub_requirement;
 
                 match &*package {
                     PubGrubPackageInner::Package { name, .. } => {
                         // Detect self-dependencies.
                         if source_name.is_some_and(|source_name| source_name == name) {
                             warn!("{name} has a dependency on itself");
-                            continue;
+                            return None;
                         }
 
-                        dependencies.push((package.clone(), version.clone()));
+                        Some(PubGrubDependency {
+                            package: package.clone(),
+                            version: version.clone(),
+                        })
                     }
-                    PubGrubPackageInner::Marker { .. } => {
-                        dependencies.push((package.clone(), version.clone()));
-                    }
+                    PubGrubPackageInner::Marker { .. } => Some(PubGrubDependency {
+                        package: package.clone(),
+                        version: version.clone(),
+                    }),
                     PubGrubPackageInner::Extra { name, .. } => {
                         debug_assert!(
                             !source_name.is_some_and(|source_name| source_name == name),
                             "extras not flattened for {name}"
                         );
-                        dependencies.push((package.clone(), version.clone()));
+                        Some(PubGrubDependency {
+                            package: package.clone(),
+                            version: version.clone(),
+                        })
                     }
-                    _ => {}
+                    _ => None,
                 }
-            }
-        }
-        Ok(Self(dependencies))
-    }
-
-    /// Add a [`PubGrubPackage`] and [`PubGrubVersion`] range into the dependencies.
-    pub(crate) fn push(&mut self, package: PubGrubPackage, version: Range<Version>) {
-        self.0.push((package, version));
-    }
-
-    /// Iterate over the dependencies.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, Range<Version>)> {
-        self.0.iter()
-    }
-}
-
-/// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
-impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
-    fn from(dependencies: PubGrubDependencies) -> Self {
-        dependencies.0
+            })
     }
 }
 
