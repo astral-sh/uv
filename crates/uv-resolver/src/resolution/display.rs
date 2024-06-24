@@ -5,7 +5,8 @@ use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use distribution_types::{Name, SourceAnnotations};
+use distribution_types::{Name, SourceAnnotation, SourceAnnotations};
+use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
 use crate::resolution::RequirementsTxtDist;
@@ -17,6 +18,8 @@ use crate::ResolutionGraph;
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
+    /// The marker environment, used to determine the markers that apply to each package.
+    marker_env: Option<&'a MarkerEnvironment>,
     /// The packages to exclude from the output.
     no_emit_packages: &'a [PackageName],
     /// Whether to include hashes in the output.
@@ -31,21 +34,19 @@ pub struct DisplayResolutionGraph<'a> {
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
-    /// External sources for each package: requirements, constraints, and overrides.
-    sources: SourceAnnotations,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
         Self::new(
             resolution,
+            None,
             &[],
             false,
             false,
             true,
             false,
             AnnotationStyle::default(),
-            SourceAnnotations::default(),
         )
     }
 }
@@ -55,23 +56,23 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
     pub fn new(
         underlying: &'a ResolutionGraph,
+        marker_env: Option<&'a MarkerEnvironment>,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
-        sources: SourceAnnotations,
     ) -> DisplayResolutionGraph<'a> {
         Self {
             resolution: underlying,
+            marker_env,
             no_emit_packages,
             show_hashes,
             include_extras,
             include_annotations,
             include_index_annotation,
             annotation_style,
-            sources,
         }
     }
 }
@@ -79,6 +80,57 @@ impl<'a> DisplayResolutionGraph<'a> {
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
 impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Determine the annotation sources for each package.
+        let sources = if self.include_annotations {
+            let mut sources = SourceAnnotations::default();
+
+            for requirement in self
+                .resolution
+                .requirements
+                .iter()
+                .filter(|requirement| requirement.evaluate_markers(self.marker_env, &[]))
+            {
+                if let Some(origin) = &requirement.origin {
+                    sources.add(
+                        &requirement.name,
+                        SourceAnnotation::Requirement(origin.clone()),
+                    );
+                }
+            }
+
+            for requirement in self
+                .resolution
+                .constraints
+                .requirements()
+                .filter(|requirement| requirement.evaluate_markers(self.marker_env, &[]))
+            {
+                if let Some(origin) = &requirement.origin {
+                    sources.add(
+                        &requirement.name,
+                        SourceAnnotation::Constraint(origin.clone()),
+                    );
+                }
+            }
+
+            for requirement in self
+                .resolution
+                .overrides
+                .requirements()
+                .filter(|requirement| requirement.evaluate_markers(self.marker_env, &[]))
+            {
+                if let Some(origin) = &requirement.origin {
+                    sources.add(
+                        &requirement.name,
+                        SourceAnnotation::Override(origin.clone()),
+                    );
+                }
+            }
+
+            sources
+        } else {
+            SourceAnnotations::default()
+        };
+
         // Reduce the graph, such that all nodes for a single package are combined, regardless of
         // the extras.
         //
@@ -171,7 +223,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
 
                 // Include all external sources (e.g., requirements files).
                 let default = BTreeSet::default();
-                let source = self.sources.get(node.name()).unwrap_or(&default);
+                let source = sources.get(node.name()).unwrap_or(&default);
 
                 match self.annotation_style {
                     AnnotationStyle::Line => match edges.as_slice() {

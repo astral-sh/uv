@@ -573,8 +573,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             combined.union(resolution);
         }
         ResolutionGraph::from_state(
-            &self.index,
+            &self.requirements,
+            &self.constraints,
+            &self.overrides,
             &self.preferences,
+            &self.index,
             &self.git,
             &self.python_requirement,
             combined,

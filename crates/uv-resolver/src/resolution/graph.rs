@@ -10,7 +10,8 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
-use pypi_types::{ParsedUrlError, Yanked};
+use pypi_types::{ParsedUrlError, Requirement, Yanked};
+use uv_configuration::{Constraints, Overrides};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
@@ -21,7 +22,7 @@ use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::{Resolution, ResolutionPackage};
 use crate::{
-    InMemoryIndex, Manifest, MetadataResponse, PythonRequirement, RequiresPython, ResolveError,
+    InMemoryIndex, MetadataResponse, PythonRequirement, RequiresPython, ResolveError,
     VersionsResponse,
 };
 
@@ -35,6 +36,12 @@ pub struct ResolutionGraph {
     pub(crate) requires_python: Option<RequiresPython>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
+    /// The requirements that were used to build the graph.
+    pub(crate) requirements: Vec<Requirement>,
+    /// The constraints that were used to build the graph.
+    pub(crate) constraints: Constraints,
+    /// The overrides that were used to build the graph.
+    pub(crate) overrides: Overrides,
 }
 
 type NodeKey<'a> = (
@@ -46,9 +53,13 @@ type NodeKey<'a> = (
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
-        index: &InMemoryIndex,
+        requirements: &[Requirement],
+        constraints: &Constraints,
+        overrides: &Overrides,
         preferences: &Preferences,
+        index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
         resolution: Resolution,
@@ -274,6 +285,9 @@ impl ResolutionGraph {
             petgraph,
             requires_python,
             diagnostics,
+            requirements: requirements.to_vec(),
+            constraints: constraints.clone(),
+            overrides: overrides.clone(),
         })
     }
 
@@ -305,7 +319,7 @@ impl ResolutionGraph {
 
     /// Return the marker tree specific to this resolution.
     ///
-    /// This accepts a manifest, in-memory-index and marker environment. All
+    /// This accepts an in-memory-index and marker environment, all
     /// of which should be the same values given to the resolver that produced
     /// this graph.
     ///
@@ -325,7 +339,6 @@ impl ResolutionGraph {
     /// to compute in some cases.)
     pub fn marker_tree(
         &self,
-        manifest: &Manifest,
         index: &InMemoryIndex,
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
@@ -394,7 +407,10 @@ impl ResolutionGraph {
                     dist.version_id()
                 )
             };
-            for req in manifest.apply(archive.metadata.requires_dist.iter()) {
+            for req in self
+                .constraints
+                .apply(self.overrides.apply(archive.metadata.requires_dist.iter()))
+            {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
                 };
@@ -403,7 +419,10 @@ impl ResolutionGraph {
         }
 
         // Ensure that we consider markers from direct dependencies.
-        for direct_req in manifest.apply(manifest.requirements.iter()) {
+        for direct_req in self
+            .constraints
+            .apply(self.overrides.apply(self.requirements.iter()))
+        {
             let Some(ref marker_tree) = direct_req.marker else {
                 continue;
             };

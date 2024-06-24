@@ -10,7 +10,9 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
-use uv_resolver::{FlatIndex, InMemoryIndex, Lock, OptionsBuilder, RequiresPython};
+use uv_resolver::{
+    FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython,
+};
 use uv_toolchain::{Interpreter, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -139,6 +141,8 @@ pub(super) async fn do_lock(
         default
     };
 
+    let python_requirement = PythonRequirement::from_requires_python(interpreter, &requires_python);
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
@@ -219,7 +223,7 @@ pub(super) async fn do_lock(
         interpreter,
         None,
         None,
-        Some(&requires_python),
+        Some(python_requirement),
         &client,
         &flat_index,
         &index,

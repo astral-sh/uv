@@ -1,5 +1,4 @@
 use std::env;
-use std::fmt::Write;
 use std::io::stdout;
 use std::ops::Deref;
 use std::path::Path;
@@ -10,33 +9,27 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{
-    IndexLocations, SourceAnnotation, SourceAnnotations, UnresolvedRequirementSpecification,
-    Verbatim,
-};
+use distribution_types::{IndexLocations, UnresolvedRequirementSpecification, Verbatim};
 use install_wheel_rs::linker::LinkMode;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, Overrides, PreviewMode, SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary,
+    NoBuild, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_requirements::{
-    upgrade::read_requirements_txt, LookaheadResolver, NamedRequirementsResolver,
-    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
+    upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex,
-    InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
-    Resolver,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
+    InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
 };
 use uv_toolchain::{
     EnvironmentPreference, PythonEnvironment, PythonVersion, Toolchain, ToolchainPreference,
@@ -46,8 +39,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::reporters::ResolverReporter;
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -97,8 +89,6 @@ pub(crate) async fn pip_compile(
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let start = std::time::Instant::now();
-
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
@@ -114,7 +104,7 @@ pub(crate) async fn pip_compile(
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
-        mut project,
+        project,
         requirements,
         constraints,
         overrides,
@@ -133,6 +123,16 @@ pub(crate) async fn pip_compile(
         &client_builder,
     )
     .await?;
+
+    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
+        .iter()
+        .cloned()
+        .chain(
+            overrides_from_workspace
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from),
+        )
+        .collect();
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -210,12 +210,10 @@ pub(crate) async fn pip_compile(
         InMemoryIndexRef::Borrowed(&source_index)
     };
 
-    // Determine the Python requirement, based on the interpreter and the requested version.
-    let python_requirement = if let Some(python_version) = python_version.as_ref() {
-        PythonRequirement::from_python_version(&interpreter, python_version)
-    } else {
-        PythonRequirement::from_interpreter(&interpreter)
-    };
+    // Determine the Python requirement, if the user requested a specific version.
+    let python_requirement = python_version
+        .as_ref()
+        .map(|python_version| PythonRequirement::from_python_version(&interpreter, python_version));
 
     // Determine the environment for the resolution.
     let (tags, markers) = resolution_environment(python_version, python_platform, &interpreter)?;
@@ -226,6 +224,9 @@ pub(crate) async fn pip_compile(
     } else {
         HashStrategy::None
     };
+
+    // Ignore development dependencies.
+    let dev = Vec::default();
 
     // Incorporate any index locations from the provided sources.
     let index_locations =
@@ -293,173 +294,6 @@ pub(crate) async fn pip_compile(
         preview,
     );
 
-    // Resolve the requirements from the provided sources.
-    let requirements = {
-        // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(
-            requirements,
-            &hasher,
-            &top_level_index,
-            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
-
-        // Resolve any source trees into requirements.
-        if !source_trees.is_empty() {
-            let resolutions = SourceTreeResolver::new(
-                source_trees,
-                &extras,
-                &hasher,
-                &top_level_index,
-                DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
-            )
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve()
-            .await?;
-
-            // If we resolved a single project, use it for the project name.
-            project = project.or_else(|| {
-                if let [resolution] = &resolutions[..] {
-                    Some(resolution.project.clone())
-                } else {
-                    None
-                }
-            });
-
-            // If any of the extras were unused, surface a warning.
-            if let ExtrasSpecification::Some(extras) = extras {
-                let mut unused_extras = extras
-                    .iter()
-                    .filter(|extra| {
-                        !resolutions
-                            .iter()
-                            .any(|resolution| resolution.extras.contains(extra))
-                    })
-                    .collect::<Vec<_>>();
-                if !unused_extras.is_empty() {
-                    unused_extras.sort_unstable();
-                    unused_extras.dedup();
-                    let s = if unused_extras.len() == 1 { "" } else { "s" };
-                    return Err(anyhow!(
-                        "Requested extra{s} not found: {}",
-                        unused_extras.iter().join(", ")
-                    ));
-                }
-            }
-
-            // Extend the requirements with the resolved source trees.
-            requirements.extend(
-                resolutions
-                    .into_iter()
-                    .flat_map(|resolution| resolution.requirements),
-            );
-        }
-
-        requirements
-    };
-
-    // Merge workspace overrides.
-    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
-        .iter()
-        .cloned()
-        .chain(
-            overrides_from_workspace
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from),
-        )
-        .collect();
-
-    // Resolve the overrides from the provided sources.
-    let overrides = NamedRequirementsResolver::new(
-        overrides,
-        &hasher,
-        &top_level_index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve()
-    .await?;
-
-    // Generate a map from requirement to originating source file.
-    let mut sources = SourceAnnotations::default();
-
-    for requirement in requirements
-        .iter()
-        .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
-    {
-        if let Some(origin) = &requirement.origin {
-            sources.add(
-                &requirement.name,
-                SourceAnnotation::Requirement(origin.clone()),
-            );
-        }
-    }
-
-    for requirement in constraints
-        .iter()
-        .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
-    {
-        if let Some(origin) = &requirement.origin {
-            sources.add(
-                &requirement.name,
-                SourceAnnotation::Constraint(origin.clone()),
-            );
-        }
-    }
-
-    for requirement in overrides
-        .iter()
-        .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
-    {
-        if let Some(origin) = &requirement.origin {
-            sources.add(
-                &requirement.name,
-                SourceAnnotation::Override(origin.clone()),
-            );
-        }
-    }
-
-    // Collect constraints and overrides.
-    let constraints = Constraints::from_requirements(constraints);
-    let overrides = Overrides::from_requirements(overrides);
-
-    // Ignore development dependencies.
-    let dev = Vec::default();
-
-    // Determine any lookahead requirements.
-    let lookaheads = match dependency_mode {
-        DependencyMode::Transitive => {
-            LookaheadResolver::new(
-                &requirements,
-                &constraints,
-                &overrides,
-                &dev,
-                &hasher,
-                &top_level_index,
-                DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
-            )
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve(Some(&markers))
-            .await?
-        }
-        DependencyMode::Direct => Vec::new(),
-    };
-
-    // Create a manifest of the requirements.
-    let manifest = Manifest::new(
-        requirements,
-        constraints,
-        overrides,
-        dev,
-        preferences,
-        project,
-        // Do not consider any installed packages during resolution.
-        Exclusions::All,
-        lookaheads,
-    );
-
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
@@ -468,43 +302,44 @@ pub(crate) async fn pip_compile(
         .index_strategy(index_strategy)
         .build();
 
-    // Resolve the dependencies.
-    let resolver = Resolver::new(
-        manifest.clone(),
-        options,
-        &python_requirement,
-        Some(&markers),
+    // Resolve the requirements.
+    let resolution = match operations::resolve(
+        requirements,
+        constraints,
+        overrides,
+        dev,
+        source_trees,
+        project,
+        &extras,
+        preferences,
+        EmptyInstalledPackages,
+        &hasher,
+        &Reinstall::None,
+        &upgrade,
+        &interpreter,
         Some(&tags),
+        Some(&markers),
+        python_requirement,
+        &client,
         &flat_index,
         &top_level_index,
-        &hasher,
         &build_dispatch,
-        EmptyInstalledPackages,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
-    )?
-    .with_reporter(ResolverReporter::from(printer));
-
-    let resolution = match resolver.resolve().await {
-        Err(uv_resolver::ResolveError::NoSolution(err)) => {
+        concurrency,
+        options,
+        printer,
+        preview,
+    )
+    .await
+    {
+        Ok(resolution) => resolution,
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
             let report = miette::Report::msg(format!("{err}"))
                 .context("No solution found when resolving dependencies:");
             eprint!("{report:?}");
             return Ok(ExitStatus::Failure);
         }
-        result => result,
-    }?;
-
-    let s = if resolution.len() == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Resolved {} in {}",
-            format!("{} package{}", resolution.len(), s).bold(),
-            elapsed(start.elapsed())
-        )
-        .dimmed()
-    )?;
+        Err(err) => return Err(err.into()),
+    };
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file)?;
@@ -531,7 +366,7 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        let relevant_markers = resolution.marker_tree(&manifest, &top_level_index, &markers)?;
+        let relevant_markers = resolution.marker_tree(&top_level_index, &markers)?;
         writeln!(
             writer,
             "{}",
@@ -602,13 +437,13 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
+            Some(&markers),
             &no_emit_packages,
             generate_hashes,
             include_extras,
             include_annotations,
             include_index_annotation,
             annotation_style,
-            sources,
         )
     )?;
 
