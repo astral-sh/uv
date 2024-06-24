@@ -3,7 +3,6 @@ use std::collections::Bound;
 use anstream::eprint;
 
 use distribution_types::UnresolvedRequirementSpecification;
-use pep508_rs::RequirementOrigin;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
@@ -113,33 +112,13 @@ pub(super) async fn do_lock(
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
         .collect();
+    let overrides = workspace
+        .overrides()
+        .into_iter()
+        .map(UnresolvedRequirementSpecification::from)
+        .collect();
     let constraints = vec![];
-
-    let mut overrides: Vec<UnresolvedRequirementSpecification> = vec![];
-    for workspace_package in workspace.packages().values() {
-        if workspace_package.root() == workspace.root() {
-            if let Some(override_dependencies) = workspace_package
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.override_dependencies.as_ref())
-            {
-                for override_dependency in override_dependencies {
-                    let req = pypi_types::Requirement::from(
-                        override_dependency
-                            .clone()
-                            .with_origin(RequirementOrigin::Workspace),
-                    );
-                    overrides.push(UnresolvedRequirementSpecification::from(req));
-                }
-            }
-            break;
-        }
-    }
-
     let dev = vec![DEV_DEPENDENCIES.clone()];
-
     let source_trees = vec![];
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
