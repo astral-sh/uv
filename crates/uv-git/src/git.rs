@@ -278,7 +278,6 @@ impl GitDatabase {
             Some(co) => co,
             None => GitCheckout::clone_into(destination, self, rev)?,
         };
-        checkout.update_submodules()?;
         Ok(checkout)
     }
 
@@ -414,12 +413,7 @@ impl GitCheckout {
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
-        paths::create(ok_file)?;
-        Ok(())
-    }
-
-    /// Runs `git submodule update --recursive` on this git checkout.
-    fn update_submodules(&self) -> Result<()> {
+        // Update submodules (`git submodule update --recursive`).
         ProcessBuilder::new("git")
             .arg("submodule")
             .arg("update")
@@ -427,7 +421,10 @@ impl GitCheckout {
             .arg("--init")
             .cwd(&self.repo.path)
             .exec_with_output()
-            .map(drop)
+            .map(drop)?;
+
+        paths::create(ok_file)?;
+        Ok(())
     }
 }
 
