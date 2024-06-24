@@ -1,10 +1,8 @@
-use std::hash::BuildHasherDefault;
-
 use petgraph::{
     graph::{Graph, NodeIndex},
     Directed,
 };
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
@@ -56,10 +54,8 @@ impl ResolutionGraph {
     ) -> Result<Self, ResolveError> {
         let mut petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed> =
             Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
-        let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> = FxHashMap::with_capacity_and_hasher(
-            resolution.packages.len(),
-            BuildHasherDefault::default(),
-        );
+        let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> =
+            FxHashMap::with_capacity_and_hasher(resolution.packages.len(), FxBuildHasher);
         let mut diagnostics = Vec::new();
 
         // Add every package to the graph.
