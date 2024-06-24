@@ -1087,6 +1087,18 @@ pub(crate) struct InstallerSettings {
     pub(crate) build_options: BuildOptions,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct InstallerSettingsRef<'a> {
+    pub(crate) index_locations: &'a IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) compile_bytecode: bool,
+    pub(crate) reinstall: &'a Reinstall,
+    pub(crate) build_options: &'a BuildOptions,
+}
+
 impl InstallerSettings {
     /// Resolve the [`InstallerSettings`] from the CLI and filesystem configuration.
     pub(crate) fn combine(args: InstallerOptions, filesystem: Option<FilesystemOptions>) -> Self {
@@ -1164,6 +1176,19 @@ impl InstallerSettings {
             ),
         }
     }
+
+    pub(crate) fn as_ref(&self) -> InstallerSettingsRef {
+        InstallerSettingsRef {
+            index_locations: &self.index_locations,
+            index_strategy: self.index_strategy,
+            keyring_provider: self.keyring_provider,
+            config_setting: &self.config_setting,
+            link_mode: self.link_mode,
+            compile_bytecode: self.compile_bytecode,
+            reinstall: &self.reinstall,
+            build_options: &self.build_options,
+        }
+    }
 }
 
 /// The resolved settings to use for an invocation of the `uv` CLI when resolving dependencies.
@@ -1183,6 +1208,20 @@ pub(crate) struct ResolverSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: Upgrade,
     pub(crate) build_options: BuildOptions,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolverSettingsRef<'a> {
+    pub(crate) index_locations: &'a IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) resolution: ResolutionMode,
+    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) upgrade: &'a Upgrade,
+    pub(crate) build_options: &'a BuildOptions,
 }
 
 impl ResolverSettings {
@@ -1261,6 +1300,21 @@ impl ResolverSettings {
             ),
         }
     }
+
+    pub(crate) fn as_ref(&self) -> ResolverSettingsRef {
+        ResolverSettingsRef {
+            index_locations: &self.index_locations,
+            index_strategy: self.index_strategy,
+            keyring_provider: self.keyring_provider,
+            resolution: self.resolution,
+            prerelease: self.prerelease,
+            config_setting: &self.config_setting,
+            exclude_newer: self.exclude_newer,
+            link_mode: self.link_mode,
+            upgrade: &self.upgrade,
+            build_options: &self.build_options,
+        }
+    }
 }
 
 /// The resolved settings to use for an invocation of the `uv` CLI with both resolver and installer
@@ -1283,6 +1337,22 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
     pub(crate) build_options: BuildOptions,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolverInstallerSettingsRef<'a> {
+    pub(crate) index_locations: &'a IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) resolution: ResolutionMode,
+    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) compile_bytecode: bool,
+    pub(crate) upgrade: &'a Upgrade,
+    pub(crate) reinstall: &'a Reinstall,
+    pub(crate) build_options: &'a BuildOptions,
 }
 
 impl ResolverInstallerSettings {
@@ -1372,6 +1442,23 @@ impl ResolverInstallerSettings {
                         .unwrap_or_default(),
                 ),
             ),
+        }
+    }
+
+    pub(crate) fn as_ref(&self) -> ResolverInstallerSettingsRef {
+        ResolverInstallerSettingsRef {
+            index_locations: &self.index_locations,
+            index_strategy: self.index_strategy,
+            keyring_provider: self.keyring_provider,
+            resolution: self.resolution,
+            prerelease: self.prerelease,
+            config_setting: &self.config_setting,
+            exclude_newer: self.exclude_newer,
+            link_mode: self.link_mode,
+            compile_bytecode: self.compile_bytecode,
+            upgrade: &self.upgrade,
+            reinstall: &self.reinstall,
+            build_options: &self.build_options,
         }
     }
 }
@@ -1681,8 +1768,8 @@ impl PipSettings {
     }
 }
 
-impl From<ResolverInstallerSettings> for ResolverSettings {
-    fn from(settings: ResolverInstallerSettings) -> Self {
+impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
+    fn from(settings: ResolverInstallerSettingsRef<'a>) -> Self {
         Self {
             index_locations: settings.index_locations,
             index_strategy: settings.index_strategy,
@@ -1698,8 +1785,8 @@ impl From<ResolverInstallerSettings> for ResolverSettings {
     }
 }
 
-impl From<ResolverInstallerSettings> for InstallerSettings {
-    fn from(settings: ResolverInstallerSettings) -> Self {
+impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
+    fn from(settings: ResolverInstallerSettingsRef<'a>) -> Self {
         Self {
             index_locations: settings.index_locations,
             index_strategy: settings.index_strategy,

@@ -101,7 +101,7 @@ pub(crate) async fn remove(
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
-        settings,
+        settings.as_ref(),
         preview,
         connectivity,
         concurrency,
@@ -125,7 +125,7 @@ pub(crate) async fn remove(
         extras,
         dev,
         Modifications::Exact,
-        settings,
+        settings.as_ref(),
         preview,
         connectivity,
         concurrency,

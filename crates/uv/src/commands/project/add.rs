@@ -186,7 +186,7 @@ pub(crate) async fn add(
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
-        settings.clone().into(),
+        settings.as_ref().into(),
         preview,
         connectivity,
         concurrency,
@@ -209,7 +209,7 @@ pub(crate) async fn add(
         extras,
         dev,
         Modifications::Sufficient,
-        settings.into(),
+        settings.as_ref().into(),
         preview,
         connectivity,
         concurrency,

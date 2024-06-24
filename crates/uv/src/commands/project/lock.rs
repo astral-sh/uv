@@ -19,7 +19,7 @@ use uv_warnings::warn_user;
 use crate::commands::project::{find_requires_python, ProjectError};
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::ResolverSettings;
+use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
 /// Resolve the project requirements into a lockfile.
 #[allow(clippy::too_many_arguments)]
@@ -57,7 +57,7 @@ pub(crate) async fn lock(
     match do_lock(
         &workspace,
         &interpreter,
-        settings,
+        settings.as_ref(),
         preview,
         connectivity,
         concurrency,
@@ -85,7 +85,7 @@ pub(crate) async fn lock(
 pub(super) async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
-    settings: ResolverSettings,
+    settings: ResolverSettingsRef<'_>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -94,7 +94,7 @@ pub(super) async fn do_lock(
     printer: Printer,
 ) -> Result<Lock, ProjectError> {
     // Extract the project settings.
-    let ResolverSettings {
+    let ResolverSettingsRef {
         index_locations,
         index_strategy,
         keyring_provider,
@@ -193,11 +193,11 @@ pub(super) async fn do_lock(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &hasher, &build_options)
+        FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = read_lockfile(workspace, &upgrade).await?;
+    let LockedRequirements { preferences, git } = read_lockfile(workspace, upgrade).await?;
 
     // Create the Git resolver.
     let git = GitResolver::from_refs(git);
@@ -207,17 +207,17 @@ pub(super) async fn do_lock(
         &client,
         cache,
         interpreter,
-        &index_locations,
+        index_locations,
         &flat_index,
         &index,
         &git,
         &in_flight,
         index_strategy,
         setup_py,
-        &config_setting,
+        config_setting,
         build_isolation,
         link_mode,
-        &build_options,
+        build_options,
         exclude_newer,
         concurrency,
         preview,
@@ -236,7 +236,7 @@ pub(super) async fn do_lock(
         EmptyInstalledPackages,
         &hasher,
         &Reinstall::default(),
-        &upgrade,
+        upgrade,
         interpreter,
         None,
         None,

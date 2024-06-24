@@ -19,7 +19,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::ProjectError;
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::InstallerSettings;
+use crate::settings::{InstallerSettings, InstallerSettingsRef};
 
 /// Sync the project environment.
 #[allow(clippy::too_many_arguments)]
@@ -72,7 +72,7 @@ pub(crate) async fn sync(
         extras,
         dev,
         modifications,
-        settings,
+        settings.as_ref(),
         preview,
         connectivity,
         concurrency,
@@ -95,7 +95,7 @@ pub(super) async fn do_sync(
     extras: ExtrasSpecification,
     dev: bool,
     modifications: Modifications,
-    settings: InstallerSettings,
+    settings: InstallerSettingsRef<'_>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -104,7 +104,7 @@ pub(super) async fn do_sync(
     printer: Printer,
 ) -> Result<(), ProjectError> {
     // Extract the project settings.
-    let InstallerSettings {
+    let InstallerSettingsRef {
         index_locations,
         index_strategy,
         keyring_provider,
@@ -167,7 +167,7 @@ pub(super) async fn do_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -175,17 +175,17 @@ pub(super) async fn do_sync(
         &client,
         cache,
         venv.interpreter(),
-        &index_locations,
+        index_locations,
         &flat_index,
         &index,
         &git,
         &in_flight,
         index_strategy,
         setup_py,
-        &config_setting,
+        config_setting,
         build_isolation,
         link_mode,
-        &build_options,
+        build_options,
         exclude_newer,
         concurrency,
         preview,
@@ -198,11 +198,11 @@ pub(super) async fn do_sync(
         &resolution,
         site_packages,
         modifications,
-        &reinstall,
-        &build_options,
+        reinstall,
+        build_options,
         link_mode,
         compile_bytecode,
-        &index_locations,
+        index_locations,
         &hasher,
         tags,
         &client,
