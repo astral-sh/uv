@@ -11,7 +11,7 @@ use std::str::FromStr;
 use either::Either;
 use path_slash::PathExt;
 use petgraph::visit::EdgeRef;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Deserializer};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
@@ -410,24 +410,54 @@ impl TryFrom<LockWire> for Lock {
             }
         }
 
+        // Build up a map from ID to extras.
+        let mut extras_by_id = FxHashMap::default();
+        for dist in &wire.distributions {
+            for extra in dist.optional_dependencies.keys() {
+                extras_by_id
+                    .entry(dist.id.clone())
+                    .or_insert_with(FxHashSet::default)
+                    .insert(extra.clone());
+            }
+        }
+
+        // Remove any non-existent extras (e.g., extras that were requested but don't exist).
+        for dist in &mut wire.distributions {
+            dist.dependencies.retain(|dep| {
+                dep.extra.as_ref().map_or(true, |extra| {
+                    extras_by_id
+                        .get(&dep.distribution_id)
+                        .is_some_and(|extras| extras.contains(extra))
+                })
+            });
+
+            for (extra, dependencies) in &mut dist.optional_dependencies {
+                dependencies.retain(|dep| {
+                    dep.extra.as_ref().map_or(true, |extra| {
+                        extras_by_id
+                            .get(&dep.distribution_id)
+                            .is_some_and(|extras| extras.contains(extra))
+                    })
+                });
+            }
+
+            for (group, dependencies) in &mut dist.dev_dependencies {
+                dependencies.retain(|dep| {
+                    dep.extra.as_ref().map_or(true, |extra| {
+                        extras_by_id
+                            .get(&dep.distribution_id)
+                            .is_some_and(|extras| extras.contains(extra))
+                    })
+                });
+            }
+        }
+
         // Check that every dependency has an entry in `by_id`. If any don't,
         // it implies we somehow have a dependency with no corresponding locked
         // distribution.
         for dist in &wire.distributions {
             for dep in &dist.dependencies {
-                if let Some(index) = by_id.get(&dep.distribution_id) {
-                    let dep_dist = &wire.distributions[*index];
-                    if let Some(extra) = &dep.extra {
-                        if !dep_dist.optional_dependencies.contains_key(extra) {
-                            return Err(LockErrorKind::UnrecognizedExtra {
-                                id: dist.id.clone(),
-                                dependency: dep.clone(),
-                                extra: extra.clone(),
-                            }
-                            .into());
-                        }
-                    }
-                } else {
+                if !by_id.contains_key(&dep.distribution_id) {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
                         dependency: dep.clone(),
@@ -439,19 +469,7 @@ impl TryFrom<LockWire> for Lock {
             // Perform the same validation for optional dependencies.
             for (extra, dependencies) in &dist.optional_dependencies {
                 for dep in dependencies {
-                    if let Some(index) = by_id.get(&dep.distribution_id) {
-                        let dep_dist = &wire.distributions[*index];
-                        if let Some(extra) = &dep.extra {
-                            if !dep_dist.optional_dependencies.contains_key(extra) {
-                                return Err(LockErrorKind::UnrecognizedExtra {
-                                    id: dist.id.clone(),
-                                    dependency: dep.clone(),
-                                    extra: extra.clone(),
-                                }
-                                .into());
-                            }
-                        }
-                    } else {
+                    if !by_id.contains_key(&dep.distribution_id) {
                         return Err(LockErrorKind::UnrecognizedDependency {
                             id: dist.id.clone(),
                             dependency: dep.clone(),
@@ -464,19 +482,7 @@ impl TryFrom<LockWire> for Lock {
             // Perform the same validation for dev dependencies.
             for (group, dependencies) in &dist.dev_dependencies {
                 for dep in dependencies {
-                    if let Some(index) = by_id.get(&dep.distribution_id) {
-                        let dep_dist = &wire.distributions[*index];
-                        if let Some(extra) = &dep.extra {
-                            if !dep_dist.optional_dependencies.contains_key(extra) {
-                                return Err(LockErrorKind::UnrecognizedExtra {
-                                    id: dist.id.clone(),
-                                    dependency: dep.clone(),
-                                    extra: extra.clone(),
-                                }
-                                .into());
-                            }
-                        }
-                    } else {
+                    if !by_id.contains_key(&dep.distribution_id) {
                         return Err(LockErrorKind::UnrecognizedDependency {
                             id: dist.id.clone(),
                             dependency: dep.clone(),
@@ -1823,18 +1829,6 @@ enum LockErrorKind {
         /// The ID of the dependency that doesn't have a corresponding distribution
         /// entry.
         dependency: Dependency,
-    },
-    /// An error that occurs when the caller provides a distribution with
-    /// an extra that doesn't exist for the dependency.
-    #[error("for distribution `{id}`, found dependency `{dependency}` with unrecognized extra `{extra}`")]
-    UnrecognizedExtra {
-        /// The ID of the distribution that has an unrecognized dependency.
-        id: DistributionId,
-        /// The ID of the dependency that doesn't have a corresponding distribution
-        /// entry.
-        dependency: Dependency,
-        /// The extra name that requested.
-        extra: ExtraName,
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
