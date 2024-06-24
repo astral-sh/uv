@@ -1940,8 +1940,8 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
 
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
-    - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.2
     - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1
+    - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.2
     "###
     );
 
@@ -8496,6 +8496,8 @@ requires-python = ">3.8"
 
 /// Allow URL dependencies recursively for local source trees, but respect both overrides _and_
 /// constraints.
+///
+/// We have app -> lib -> anyio and root has a directory requirement on app.
 #[test]
 fn allow_recursive_url_local_path_override_constraint() -> Result<()> {
     let context = TestContext::new("3.12");

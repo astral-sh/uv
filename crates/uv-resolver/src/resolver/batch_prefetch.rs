@@ -58,7 +58,6 @@ impl BatchPrefetcher {
             extra: None,
             dev: None,
             marker: None,
-            url: None,
         } = &**next
         else {
             return Ok(());

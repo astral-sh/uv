@@ -17,6 +17,7 @@ use pep440_rs::Version;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::fork_urls::ForkUrls;
 use crate::python_requirement::{PythonRequirement, PythonTarget};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 use crate::RequiresPython;
@@ -407,18 +408,16 @@ impl PubGrubReportFormatter<'_> {
         index_locations: &Option<IndexLocations>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        fork_urls: &ForkUrls,
     ) -> IndexSet<PubGrubHint> {
         let mut hints = IndexSet::default();
         match derivation_tree {
             DerivationTree::External(
                 External::Custom(package, set, _) | External::NoVersions(package, set),
             ) => {
-                if let PubGrubPackageInner::Package {
-                    name, url: None, ..
-                } = &**package
-                {
+                if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
-                    if let Some(selector) = selector {
+                    if let (None, Some(selector)) = (fork_urls.get(name), selector) {
                         self.prerelease_available_hint(package, name, set, selector, &mut hints);
                     }
                 }
@@ -470,6 +469,7 @@ impl PubGrubReportFormatter<'_> {
                     index_locations,
                     unavailable_packages,
                     incomplete_packages,
+                    fork_urls,
                 ));
                 hints.extend(self.hints(
                     &derived.cause2,
@@ -477,6 +477,7 @@ impl PubGrubReportFormatter<'_> {
                     index_locations,
                     unavailable_packages,
                     incomplete_packages,
+                    fork_urls,
                 ));
             }
         }

@@ -40,6 +40,7 @@ use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
 use crate::error::ResolveError;
+use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
@@ -78,7 +79,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 }
 
 /// State that is shared between the prefetcher and the PubGrub solver during
-/// resolution.
+/// resolution, across all forks.
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
@@ -318,6 +319,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
             next: root,
             pins: FilePins::default(),
+            urls: ForkUrls::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
             markers: MarkerTree::And(vec![]),
@@ -343,6 +345,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if self.dependency_mode.is_transitive() {
                     Self::pre_visit(
                         state.pubgrub.partial_solution.prioritized_packages(),
+                        &self.urls,
                         &request_sink,
                     )?;
                 }
@@ -376,6 +379,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.next,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
+                    &state.urls,
                     visited,
                     &request_sink,
                 )?;
@@ -472,14 +476,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                prefetcher.prefetch_batches(
-                    &state.next,
-                    &version,
-                    term_intersection.unwrap_positive(),
-                    &request_sink,
-                    &self.index,
-                    &self.selector,
-                )?;
+                // Only consider registry packages for prefetch.
+                if state
+                    .next
+                    .name()
+                    .and_then(|name| state.urls.get(name))
+                    .is_none()
+                {
+                    prefetcher.prefetch_batches(
+                        &state.next,
+                        &version,
+                        term_intersection.unwrap_positive(),
+                        &request_sink,
+                        &self.index,
+                        &self.selector,
+                    )?;
+                }
 
                 self.on_progress(&state.next, &version);
 
@@ -489,13 +501,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .or_default()
                     .insert(version.clone())
                 {
+                    let for_package = if let PubGrubPackageInner::Root(_) = &*state.next {
+                        None
+                    } else {
+                        state.next.name().map(|name| format!("{name}=={version}"))
+                    };
                     // Retrieve that package dependencies.
                     let forked_deps = self.get_dependencies_forking(
                         &state.next,
                         &version,
+                        &state.urls,
                         &state.markers,
-                        &mut state.priorities,
-                        &request_sink,
                     )?;
                     match forked_deps {
                         ForkedDependencies::Unavailable(reason) => {
@@ -510,10 +526,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                         ForkedDependencies::Unforked(dependencies) => {
                             state.add_package_version_dependencies(
+                                for_package.as_deref(),
                                 &version,
-                                dependencies,
+                                &self.urls,
+                                dependencies.clone(),
+                                &self.git,
                                 &prefetcher,
                             )?;
+                            for dependency in &dependencies {
+                                let PubGrubDependency {
+                                    package,
+                                    version: _,
+                                    url,
+                                } = dependency;
+                                // Emit a request to fetch the metadata for each registry package.
+                                self.visit_package(package, url.as_ref(), &request_sink)?;
+                            }
                             forked_states.push(state);
                         }
                         ForkedDependencies::Forked {
@@ -545,10 +573,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 forked_state.markers.and(fork.markers);
 
                                 forked_state.add_package_version_dependencies(
+                                    for_package.as_deref(),
                                     &version,
-                                    fork.dependencies,
+                                    &self.urls,
+                                    fork.dependencies.clone(),
+                                    &self.git,
                                     &prefetcher,
                                 )?;
+                                for dependency in &fork.dependencies {
+                                    let PubGrubDependency {
+                                        package,
+                                        version: _,
+                                        url,
+                                    } = dependency;
+                                    // Emit a request to fetch the metadata for each registry package.
+                                    self.visit_package(package, url.as_ref(), &request_sink)?;
+                                }
                                 forked_states.push(forked_state);
                             }
                         }
@@ -584,23 +624,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn visit_package(
         &self,
         package: &PubGrubPackage,
+        url: Option<&VerbatimParsedUrl>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
-        match &**package {
-            PubGrubPackageInner::Root(_) => {}
-            PubGrubPackageInner::Python(_) => {}
-            PubGrubPackageInner::Marker {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Extra {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Dev {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Package {
-                name, url: None, ..
-            } => {
+        match (&**package, url) {
+            (PubGrubPackageInner::Root(_), _) => {}
+            (PubGrubPackageInner::Python(_), _) => {}
+            (
+                PubGrubPackageInner::Marker { name, .. }
+                | PubGrubPackageInner::Extra { name, .. }
+                | PubGrubPackageInner::Dev { name, .. }
+                | PubGrubPackageInner::Package { name, .. },
+                None,
+            ) => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_package(name) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
@@ -611,26 +647,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     request_sink.blocking_send(Request::Package(name.clone()))?;
                 }
             }
-            PubGrubPackageInner::Marker {
-                name,
-                url: Some(url),
-                ..
-            }
-            | PubGrubPackageInner::Extra {
-                name,
-                url: Some(url),
-                ..
-            }
-            | PubGrubPackageInner::Dev {
-                name,
-                url: Some(url),
-                ..
-            }
-            | PubGrubPackageInner::Package {
-                name,
-                url: Some(url),
-                ..
-            } => {
+            (
+                PubGrubPackageInner::Marker { name, .. }
+                | PubGrubPackageInner::Extra { name, .. }
+                | PubGrubPackageInner::Dev { name, .. }
+                | PubGrubPackageInner::Package { name, .. },
+                Some(url),
+            ) => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_url(&url.verbatim) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
@@ -650,6 +673,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// metadata for all packages in parallel.
     fn pre_visit<'data>(
         packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
+        urls: &Urls,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
@@ -660,11 +684,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 extra: None,
                 dev: None,
                 marker: None,
-                url: None,
             } = &**package
             else {
                 continue;
             };
+            // Avoid pre-visiting packages that have any URLs in any fork. At this point we can't
+            // tell whether they are registry distributions or which url they use.
+            if urls.any_url(name) {
+                continue;
+            }
             request_sink.blocking_send(Request::Prefetch(name.clone(), range.clone()))?;
         }
         Ok(())
@@ -680,40 +708,30 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
+        fork_urls: &ForkUrls,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
-        match &**package {
-            PubGrubPackageInner::Root(_) => {
+        let url = package.name().and_then(|name| fork_urls.get(name));
+        match (&**package, url) {
+            (PubGrubPackageInner::Root(_), _) => {
                 Ok(Some(ResolverVersion::Available(MIN_VERSION.clone())))
             }
 
-            PubGrubPackageInner::Python(_) => {
+            (PubGrubPackageInner::Python(_), _) => {
                 // Dependencies on Python are only added when a package is incompatible; as such,
+                // we don't need to do anything here.
                 // we don't need to do anything here.
                 Ok(None)
             }
 
-            PubGrubPackageInner::Marker {
-                name,
-                url: Some(url),
-                ..
-            }
-            | PubGrubPackageInner::Extra {
-                name,
-                url: Some(url),
-                ..
-            }
-            | PubGrubPackageInner::Dev {
-                name,
-                url: Some(url),
-                ..
-            }
-            | PubGrubPackageInner::Package {
-                name,
-                url: Some(url),
-                ..
-            } => {
+            (
+                PubGrubPackageInner::Marker { name, .. }
+                | PubGrubPackageInner::Extra { name, .. }
+                | PubGrubPackageInner::Dev { name, .. }
+                | PubGrubPackageInner::Package { name, .. },
+                Some(url),
+            ) => {
                 debug!(
                     "Searching for a compatible version of {package} @ {} ({range})",
                     url.verbatim
@@ -800,18 +818,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
-            PubGrubPackageInner::Marker {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Extra {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Dev {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Package {
-                name, url: None, ..
-            } => {
+            (
+                PubGrubPackageInner::Marker { name, .. }
+                | PubGrubPackageInner::Extra { name, .. }
+                | PubGrubPackageInner::Dev { name, .. }
+                | PubGrubPackageInner::Package { name, .. },
+                None,
+            ) => {
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
@@ -907,11 +920,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         version: &Version,
+        fork_urls: &ForkUrls,
         markers: &MarkerTree,
-        priorities: &mut PubGrubPriorities,
-        request_sink: &Sender<Request>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let result = self.get_dependencies(package, version, markers, priorities, request_sink);
+        let result = self.get_dependencies(package, version, fork_urls, markers);
         if self.markers.is_some() {
             return result.map(|deps| match deps {
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
@@ -927,11 +939,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         version: &Version,
+        fork_urls: &ForkUrls,
         markers: &MarkerTree,
-        priorities: &mut PubGrubPriorities,
-        request_sink: &Sender<Request>,
     ) -> Result<Dependencies, ResolveError> {
-        let (dependencies, name) = match &**package {
+        let url = package.name().and_then(|name| fork_urls.get(name));
+        let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let no_dev_deps = BTreeMap::default();
                 let requirements = self.flatten_requirements(
@@ -943,27 +955,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     markers,
                 );
 
-                let dependencies = requirements
+                requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(
-                            requirement,
-                            None,
-                            &self.urls,
-                            &self.locals,
-                            &self.git,
-                        )
+                        PubGrubDependency::from_requirement(requirement, None, &self.locals)
                     })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                (dependencies, None)
+                    .collect::<Vec<_>>()?
             }
             PubGrubPackageInner::Package {
                 name,
                 extra,
                 dev,
                 marker,
-                url,
             } => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
@@ -1083,41 +1086,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let mut dependencies = requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(
-                            requirement,
-                            Some(name),
-                            &self.urls,
-                            &self.locals,
-                            &self.git,
-                        )
+                        PubGrubDependency::from_requirement(requirement, Some(name), &self.locals)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 // If a package has metadata for an enabled dependency group,
                 // add a dependency from it to the same package with the group
                 // enabled.
-                if extra.is_none() && dev.is_none() {
-                    for group in &self.dev {
-                        if !metadata.dev_dependencies.contains_key(group) {
-                            continue;
-                        }
-                        dependencies.push(PubGrubDependency {
-                            package: PubGrubPackage::from(PubGrubPackageInner::Dev {
-                                name: name.clone(),
-                                dev: group.clone(),
-                                marker: marker.clone(),
-                                url: url.clone(),
-                            }),
-                            version: Range::singleton(version.clone()),
+
+                    if extra.is_none() && dev.is_none() {
+                        for group in &self.dev {
+                            if !metadata.dev_dependencies.contains_key(group) {
+                                continue;
+                            }
+                            dependencies.push(PubGrubDependency {
+                                package: PubGrubPackage::from(PubGrubPackageInner::Dev {
+                                    name: name.clone(),
+                                    dev: group.clone(),
+                                    marker: marker.clone(),
+                                }),
+                                version: Range::singleton(version.clone()),
+                                url: None,
                         });
                     }
                 }
 
-                (dependencies, Some(name))
+                dependencies
             }
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Available(Vec::default())),
 
             // Add a dependency on both the marker and base package.
-            PubGrubPackageInner::Marker { name, marker, url } => {
+            PubGrubPackageInner::Marker { name, marker } => {
                 return Ok(Dependencies::Available(
                     [None, Some(marker)]
                         .into_iter()
@@ -1127,9 +1125,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 extra: None,
                                 dev: None,
                                 marker: marker.cloned(),
-                                url: url.clone(),
                             }),
                             version: Range::singleton(version.clone()),
+                            url: None,
                         })
                         .collect(),
                 ))
@@ -1140,7 +1138,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 name,
                 extra,
                 marker,
-                url,
             } => {
                 return Ok(Dependencies::Available(
                     [None, marker.as_ref()]
@@ -1155,9 +1152,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         extra: extra.cloned(),
                                         dev: None,
                                         marker: marker.cloned(),
-                                        url: url.clone(),
                                     }),
                                     version: Range::singleton(version.clone()),
+                                    url: None,
                                 })
                         })
                         .collect(),
@@ -1166,12 +1163,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Add a dependency on both the development dependency group and base package, with and
             // without the marker.
-            PubGrubPackageInner::Dev {
-                name,
-                dev,
-                marker,
-                url,
-            } => {
+            PubGrubPackageInner::Dev { name, dev, marker } => {
                 return Ok(Dependencies::Available(
                     [None, marker.as_ref()]
                         .into_iter()
@@ -1185,31 +1177,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         extra: None,
                                         dev: dev.cloned(),
                                         marker: marker.cloned(),
-                                        url: url.clone(),
                                     }),
                                     version: Range::singleton(version.clone()),
+                                    url: None,
                                 })
                         })
                         .collect(),
                 ))
             }
         };
-
-        for dependency in &dependencies {
-            let PubGrubDependency { package, version } = dependency;
-            if let Some(name) = name {
-                debug!("Adding transitive dependency for {name}=={version}: {package}{version}");
-            } else {
-                // A dependency from the root package or requirements.txt.
-                debug!("Adding direct dependency: {package}{version}");
-            }
-
-            // Update the package priorities.
-            priorities.insert(package, version);
-
-            // Emit a request to fetch the metadata for this package.
-            self.visit_package(package, request_sink)?;
-        }
 
         Ok(Dependencies::Available(dependencies))
     }
@@ -1580,16 +1556,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 PubGrubPackageInner::Marker { .. } => {}
                 PubGrubPackageInner::Extra { .. } => {}
                 PubGrubPackageInner::Dev { .. } => {}
-                PubGrubPackageInner::Package {
-                    name,
-                    url: Some(url),
-                    ..
-                } => {
-                    reporter.on_progress(name, &VersionOrUrlRef::Url(&url.verbatim));
-                }
-                PubGrubPackageInner::Package {
-                    name, url: None, ..
-                } => {
+                PubGrubPackageInner::Package { name, .. } => {
                     reporter.on_progress(name, &VersionOrUrlRef::Version(version));
                 }
             }
@@ -1603,7 +1570,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 }
 
-/// State that is used during unit propagation in the resolver.
+/// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
 struct SolveState {
     /// The internal state used by the resolver.
@@ -1620,12 +1587,18 @@ struct SolveState {
     ///
     /// The key of this map is a package name, and each package name maps to
     /// a set of versions for that package. Each version in turn is mapped
-    /// to a single `ResolvedDist`. That `ResolvedDist` represents, at time
+    /// to a single [`ResolvedDist`]. That [`ResolvedDist`] represents, at time
     /// of writing (2024/05/09), at most one wheel. The idea here is that
-    /// `FilePins` tracks precisely which wheel was selected during resolution.
+    /// [`FilePins`] tracks precisely which wheel was selected during resolution.
     /// After resolution is finished, this maps is consulted in order to select
     /// the wheel chosen during resolution.
     pins: FilePins,
+    /// Ensure we don't have duplicate urls in any branch.
+    ///
+    /// Unlike [`Urls`], we add only the URLs we have seen in this branch, and there can be only
+    /// one URL per package. By prioritizing direct URL dependencies over registry dependencies,
+    /// this map is populated for all direct URL packages before we look at any registry packages.
+    urls: ForkUrls,
     /// When dependencies for a package are retrieved, this map of priorities
     /// is updated based on how each dependency was specified. Certain types
     /// of dependencies have more "priority" than others (like direct URL
@@ -1653,13 +1626,18 @@ struct SolveState {
 }
 
 impl SolveState {
-    /// Add the dependencies for the selected version of the current package.
+    /// Add the dependencies for the selected version of the current package, checking for
+    /// self-dependencies, and handling URLs.
     fn add_package_version_dependencies(
         &mut self,
+        for_package: Option<&str>,
         version: &Version,
+        urls: &Urls,
         dependencies: Vec<PubGrubDependency>,
+        git: &GitResolver,
         prefetcher: &BatchPrefetcher,
     ) -> Result<(), ResolveError> {
+        // Check for self-dependencies.
         if dependencies
             .iter()
             .any(|dependency| dependency.package == self.next)
@@ -1673,11 +1651,51 @@ impl SolveState {
             }
             .into());
         }
+
+        for dependency in &dependencies {
+            let PubGrubDependency {
+                package,
+                version,
+                url,
+            } = dependency;
+
+            // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
+            // requirement was a URL requirement. `Urls` applies canonicalization to this and
+            // override URLs to both URL and registry requirements, which we then check for
+            // conflicts using [`ForkUrl`].
+            if let Some(name) = package.name() {
+                if let Some(url) = urls.get_url(name, url.as_ref(), git)? {
+                    self.urls.insert(name, url, &self.markers)?;
+                };
+            }
+
+            if let Some(for_package) = for_package {
+                if self.markers == MarkerTree::And(Vec::new()) {
+                    debug!("Adding transitive dependency for {for_package}: {package}{version}",);
+                } else {
+                    debug!(
+                        "Adding transitive dependency for {for_package}{{{}}}: {package}{version}",
+                        self.markers
+                    );
+                }
+            } else {
+                // A dependency from the root package or requirements.txt.
+                debug!("Adding direct dependency: {package}{version}");
+            }
+
+            // Update the package priorities.
+            self.priorities.insert(package, version, &self.urls);
+        }
+
         self.pubgrub.add_package_version_dependencies(
             self.next.clone(),
             version.clone(),
             dependencies.into_iter().map(|dependency| {
-                let PubGrubDependency { package, version } = dependency;
+                let PubGrubDependency {
+                    package,
+                    version,
+                    url: _,
+                } = dependency;
                 (package, version)
             }),
         );
@@ -1839,7 +1857,6 @@ impl SolveState {
                     name,
                     extra,
                     dev,
-                    url,
                     marker: None,
                 } = &*package
                 {
@@ -1848,7 +1865,7 @@ impl SolveState {
                             name: name.clone(),
                             extra: extra.clone(),
                             dev: dev.clone(),
-                            url: url.clone(),
+                            url: self.urls.get(name).cloned(),
                         },
                         FxHashSet::from_iter([version]),
                     ))
