@@ -180,6 +180,7 @@ pub struct PipOptions {
     pub no_emit_package: Option<Vec<PackageName>>,
     pub emit_index_url: Option<bool>,
     pub emit_find_links: Option<bool>,
+    pub emit_build_options: Option<bool>,
     pub emit_marker_expression: Option<bool>,
     pub emit_index_annotation: Option<bool>,
     pub annotation_style: Option<AnnotationStyle>,

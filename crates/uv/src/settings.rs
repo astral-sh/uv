@@ -528,6 +528,8 @@ impl PipCompileSettings {
             no_emit_index_url,
             emit_find_links,
             no_emit_find_links,
+            emit_build_options,
+            no_emit_build_options,
             emit_marker_expression,
             no_emit_marker_expression,
             emit_index_annotation,
@@ -581,6 +583,7 @@ impl PipCompileSettings {
                     no_emit_package,
                     emit_index_url: flag(emit_index_url, no_emit_index_url),
                     emit_find_links: flag(emit_find_links, no_emit_find_links),
+                    emit_build_options: flag(emit_build_options, no_emit_build_options),
                     emit_marker_expression: flag(emit_marker_expression, no_emit_marker_expression),
                     emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
                     annotation_style,
@@ -1406,6 +1409,7 @@ pub(crate) struct PipSettings {
     pub(crate) no_emit_package: Vec<PackageName>,
     pub(crate) emit_index_url: bool,
     pub(crate) emit_find_links: bool,
+    pub(crate) emit_build_options: bool,
     pub(crate) emit_marker_expression: bool,
     pub(crate) emit_index_annotation: bool,
     pub(crate) annotation_style: AnnotationStyle,
@@ -1460,6 +1464,7 @@ impl PipSettings {
             no_emit_package,
             emit_index_url,
             emit_find_links,
+            emit_build_options,
             emit_marker_expression,
             emit_index_annotation,
             annotation_style,
@@ -1594,6 +1599,10 @@ impl PipSettings {
             emit_find_links: args
                 .emit_find_links
                 .combine(emit_find_links)
+                .unwrap_or_default(),
+            emit_build_options: args
+                .emit_build_options
+                .combine(emit_build_options)
                 .unwrap_or_default(),
             emit_marker_expression: args
                 .emit_marker_expression

@@ -308,7 +308,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         // unless all builds are disabled.
         if self
             .build_options
-            .no_build(dist.map(distribution_types::Name::name))
+            .no_build_requirement(dist.map(distribution_types::Name::name))
             // We always allow editable builds
             && !matches!(build_kind, BuildKind::Editable)
         {

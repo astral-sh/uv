@@ -268,6 +268,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.custom_compile_command,
                 args.settings.emit_index_url,
                 args.settings.emit_find_links,
+                args.settings.emit_build_options,
                 args.settings.emit_marker_expression,
                 args.settings.emit_index_annotation,
                 args.settings.index_locations,
