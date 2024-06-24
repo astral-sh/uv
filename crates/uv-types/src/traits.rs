@@ -7,7 +7,7 @@ use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, 
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, SetupPyStrategy};
+use uv_configuration::{BuildKind, BuildOptions, IndexStrategy, SetupPyStrategy};
 use uv_git::GitResolver;
 use uv_toolchain::{Interpreter, PythonEnvironment};
 
@@ -75,6 +75,9 @@ pub trait BuildContext {
     /// The index locations being searched.
     fn index_locations(&self) -> &IndexLocations;
 
+    /// The strategy to use when resolving package versions.
+    fn index_strategy(&self) -> IndexStrategy;
+
     /// The strategy to use when building source distributions that lack a `pyproject.toml`.
     fn setup_py_strategy(&self) -> SetupPyStrategy;
 
@@ -141,7 +144,7 @@ pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
 pub struct EmptyInstalledPackages;
 
 impl InstalledPackagesProvider for EmptyInstalledPackages {
-    fn get_packages(&self, _name: &pep508_rs::PackageName) -> Vec<&InstalledDist> {
+    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
         Vec::new()
     }
 

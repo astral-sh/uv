@@ -82,7 +82,7 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, PreviewMode, SetupPyStrategy,
+        BuildOptions, Concurrency, ConfigSettings, IndexStrategy, PreviewMode, SetupPyStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -150,6 +150,7 @@ mod resolver {
             &index,
             &git,
             &in_flight,
+            IndexStrategy::default(),
             SetupPyStrategy::default(),
             &config_settings,
             build_isolation,

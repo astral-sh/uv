@@ -16,7 +16,9 @@ use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{BuildKind, BuildOptions, ConfigSettings, Reinstall, SetupPyStrategy};
+use uv_configuration::{
+    BuildKind, BuildOptions, ConfigSettings, IndexStrategy, Reinstall, SetupPyStrategy,
+};
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
@@ -32,6 +34,7 @@ pub struct BuildDispatch<'a> {
     cache: &'a Cache,
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
+    index_strategy: IndexStrategy,
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
@@ -59,6 +62,7 @@ impl<'a> BuildDispatch<'a> {
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
         in_flight: &'a InFlight,
+        index_strategy: IndexStrategy,
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
@@ -76,6 +80,7 @@ impl<'a> BuildDispatch<'a> {
             index,
             git,
             in_flight,
+            index_strategy,
             setup_py,
             config_settings,
             build_isolation,
@@ -136,6 +141,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn index_locations(&self) -> &IndexLocations {
         self.index_locations
+    }
+
+    fn index_strategy(&self) -> IndexStrategy {
+        self.index_strategy
     }
 
     fn setup_py_strategy(&self) -> SetupPyStrategy {

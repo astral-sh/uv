@@ -234,6 +234,7 @@ async fn venv_impl(
             &index,
             &git,
             &in_flight,
+            index_strategy,
             SetupPyStrategy::default(),
             &config_settings,
             BuildIsolation::Isolated,

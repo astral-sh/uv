@@ -281,6 +281,7 @@ pub(crate) async fn pip_compile(
         &source_index,
         &git,
         &in_flight,
+        index_strategy,
         setup_py,
         &config_settings,
         build_isolation,
