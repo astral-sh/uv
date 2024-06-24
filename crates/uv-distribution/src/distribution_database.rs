@@ -455,14 +455,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
 
-        // Fetch the archive from the cache, or download it if necessary.
-        let req = self.request(url.clone())?;
-
-        // Extract the size from the `Content-Length` header, if not provided by the registry.
-        let size = size.or_else(|| content_length(&req));
-
         let download = |response: reqwest::Response| {
             async {
+                let size = size.or_else(|| content_length(&response));
+
                 let progress = self
                     .reporter
                     .as_ref()
@@ -519,6 +515,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Fetch the archive from the cache, or download it if necessary.
         let req = self.request(url.clone())?;
+
         let cache_control = match self.client.unmanaged.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -576,13 +573,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
 
-        let req = self.request(url.clone())?;
-
-        // Extract the size from the `Content-Length` header, if not provided by the registry.
-        let size = size.or_else(|| content_length(&req));
-
         let download = |response: reqwest::Response| {
             async {
+                let size = size.or_else(|| content_length(&response));
+
                 let progress = self
                     .reporter
                     .as_ref()
@@ -669,7 +663,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .instrument(info_span!("wheel", wheel = %dist))
         };
 
+        // Fetch the archive from the cache, or download it if necessary.
         let req = self.request(url.clone())?;
+
         let cache_control = match self.client.unmanaged.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -889,9 +885,10 @@ impl<'a> ManagedClient<'a> {
     }
 }
 
-/// Returns the value of the `Content-Length` header from the [`reqwest::Request`], if present.
-fn content_length(req: &reqwest::Request) -> Option<u64> {
-    req.headers()
+/// Returns the value of the `Content-Length` header from the [`reqwest::Response`], if present.
+fn content_length(response: &reqwest::Response) -> Option<u64> {
+    response
+        .headers()
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
         .and_then(|val| val.parse::<u64>().ok())
