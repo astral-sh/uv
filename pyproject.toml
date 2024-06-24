@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.2.14"
+version = "0.2.15"
 description = "An extremely fast Python package installer and resolver, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -66,6 +66,5 @@ changelog_contributors = false
 version_files = [
   "README.md",
   "crates/uv/Cargo.toml",
-  "crates/uv-cli/Cargo.toml",
   "crates/uv-version/Cargo.toml",
 ]
