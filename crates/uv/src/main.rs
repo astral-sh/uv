@@ -797,6 +797,32 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Install(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolInstallSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::tool_install(
+                args.name,
+                args.python,
+                args.from,
+                args.with,
+                args.settings,
+                globals.preview,
+                globals.toolchain_preference,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
         Commands::Toolchain(ToolchainNamespace {
             command: ToolchainCommand::List(args),
         }) => {

@@ -13,8 +13,8 @@ use uv_cli::options::{flag, installer_options, resolver_installer_options, resol
 use uv_cli::{
     AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolRunArgs,
-    ToolchainFindArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
+    PipSyncArgs, PipTreeArgs, PipUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs,
+    ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs, ToolchainListArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -219,6 +219,46 @@ impl ToolRunSettings {
 
         Self {
             command,
+            from,
+            with,
+            python,
+            refresh: Refresh::from(refresh),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for a `tool install` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolInstallSettings {
+    pub(crate) name: String,
+    pub(crate) from: Option<String>,
+    pub(crate) with: Vec<String>,
+    pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverInstallerSettings,
+}
+
+impl ToolInstallSettings {
+    /// Resolve the [`ToolInstallSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let ToolInstallArgs {
+            name,
+            from,
+            with,
+            installer,
+            build,
+            refresh,
+            python,
+        } = args;
+
+        Self {
+            name,
             from,
             with,
             python,

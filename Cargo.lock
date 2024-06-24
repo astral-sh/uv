@@ -4488,6 +4488,7 @@ dependencies = [
  "uv-requirements",
  "uv-resolver",
  "uv-settings",
+ "uv-tool",
  "uv-toolchain",
  "uv-types",
  "uv-virtualenv",
@@ -5008,6 +5009,27 @@ dependencies = [
  "directories",
  "fs-err",
  "tempfile",
+]
+
+[[package]]
+name = "uv-tool"
+version = "0.0.1"
+dependencies = [
+ "dirs-sys",
+ "fs-err",
+ "install-wheel-rs",
+ "pep440_rs",
+ "pep508_rs",
+ "pypi-types",
+ "serde",
+ "thiserror",
+ "toml",
+ "toml_edit",
+ "tracing",
+ "uv-fs",
+ "uv-state",
+ "uv-toolchain",
+ "uv-virtualenv",
 ]
 
 [[package]]

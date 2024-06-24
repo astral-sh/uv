@@ -92,7 +92,7 @@ impl InstalledToolchains {
     pub fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
-        // Create the cache directory, if it doesn't exist.
+        // Create the toolchain directory, if it doesn't exist.
         fs::create_dir_all(root)?;
 
         // Add a .gitignore.

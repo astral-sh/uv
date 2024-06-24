@@ -1819,6 +1819,8 @@ pub struct ToolNamespace {
 pub enum ToolCommand {
     /// Run a tool
     Run(ToolRunArgs),
+    /// Install a tool
+    Install(ToolInstallArgs),
 }
 
 #[derive(Args)]
@@ -1852,6 +1854,46 @@ pub struct ToolRunArgs {
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
     /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
     /// option allows you to specify a different interpreter.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    pub python: Option<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ToolInstallArgs {
+    /// The command to install.
+    pub name: String,
+
+    /// Use the given package to provide the command.
+    ///
+    /// By default, the package name is assumed to match the command name.
+    #[arg(long)]
+    pub from: Option<String>,
+
+    /// Include the following extra requirements.
+    #[arg(long)]
+    pub with: Vec<String>,
+
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// The Python interpreter to use to build the tool environment.
+    ///
+    /// By default, uv will search for a Python executable in the `PATH`. uv ignores virtual
+    /// environments while looking for interpreter for tools. The `--python` option allows
+    /// you to specify a different interpreter.
     ///
     /// Supported formats:
     /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or

@@ -35,6 +35,7 @@ uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-toolchain = { workspace = true, features = ["schemars"]}
+uv-tool = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }

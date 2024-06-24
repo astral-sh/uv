@@ -17,6 +17,7 @@ use zip::ZipWriter;
 use pypi_types::DirectUrl;
 use uv_fs::{relative_to, Simplified};
 
+use crate::linker::entrypoint_path;
 use crate::record::RecordEntry;
 use crate::script::Script;
 use crate::{Error, Layout};
@@ -255,20 +256,7 @@ pub(crate) fn write_script_entrypoints(
     is_gui: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
-        let entrypoint_absolute = if cfg!(windows) {
-            // On windows we actually build an .exe wrapper
-            let script_name = entrypoint
-                .name
-                // FIXME: What are the in-reality rules here for names?
-                .strip_suffix(".py")
-                .unwrap_or(&entrypoint.name)
-                .to_string()
-                + ".exe";
-
-            layout.scheme.scripts.join(script_name)
-        } else {
-            layout.scheme.scripts.join(&entrypoint.name)
-        };
+        let entrypoint_absolute = entrypoint_path(entrypoint, layout);
 
         let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
             .ok_or_else(|| {
@@ -320,7 +308,7 @@ pub(crate) fn write_script_entrypoints(
 
 /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LibKind {
+pub enum LibKind {
     /// Install into the `purelib` directory.
     Pure,
     /// Install into the `platlib` directory.
@@ -331,7 +319,7 @@ pub(crate) enum LibKind {
 ///
 /// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
 /// > basic key: value format:
-pub(crate) fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
+pub fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
     // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same basic key: value format:
     let data = parse_key_value_file(&mut wheel_text.as_bytes(), "WHEEL")?;
 
