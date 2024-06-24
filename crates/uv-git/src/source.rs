@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use reqwest::Client;
+use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 use url::Url;
 
@@ -18,7 +18,7 @@ pub struct GitSource {
     /// The Git reference from the manifest file.
     git: GitUrl,
     /// The HTTP client to use for fetching.
-    client: Client,
+    client: ClientWithMiddleware,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -27,10 +27,14 @@ pub struct GitSource {
 
 impl GitSource {
     /// Initialize a new Git source.
-    pub fn new(git: GitUrl, cache: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        git: GitUrl,
+        client: impl Into<ClientWithMiddleware>,
+        cache: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             git,
-            client: Client::new(),
+            client: client.into(),
             cache: cache.into(),
             reporter: None,
         }
@@ -56,7 +60,10 @@ impl GitSource {
         let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
             // If we have a locked revision, and we have a preexisting database
             // which has that revision, then no update needs to happen.
-            (Some(rev), Some(db)) if db.contains(rev.into()) => (db, rev, None),
+            (Some(rev), Some(db)) if db.contains(rev.into()) => {
+                debug!("Using existing git source `{:?}`", self.git.repository);
+                (db, rev, None)
+            }
 
             // ... otherwise we use this state to update the git database. Note
             // that we still check for being offline here, for example in the
