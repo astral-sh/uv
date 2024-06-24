@@ -6,7 +6,8 @@ use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{GroupName, PackageName};
 use uv_types::RequestedRequirements;
 
-use crate::{preferences::Preference, DependencyMode, Exclusions};
+use crate::preferences::Preferences;
+use crate::{DependencyMode, Exclusions};
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
@@ -29,7 +30,7 @@ pub struct Manifest {
     /// These represent "preferred" versions of a given package. For example, they may be the
     /// versions that are already installed in the environment, or already pinned in an existing
     /// lockfile.
-    pub(crate) preferences: Vec<Preference>,
+    pub(crate) preferences: Preferences,
 
     /// The name of the project.
     pub(crate) project: Option<PackageName>,
@@ -55,7 +56,7 @@ impl Manifest {
         constraints: Constraints,
         overrides: Overrides,
         dev: Vec<GroupName>,
-        preferences: Vec<Preference>,
+        preferences: Preferences,
         project: Option<PackageName>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
@@ -78,7 +79,7 @@ impl Manifest {
             constraints: Constraints::default(),
             overrides: Overrides::default(),
             dev: Vec::new(),
-            preferences: Vec::new(),
+            preferences: Preferences::default(),
             project: None,
             exclusions: Exclusions::default(),
             lookaheads: Vec::new(),

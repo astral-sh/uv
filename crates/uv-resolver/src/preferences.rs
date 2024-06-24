@@ -98,8 +98,8 @@ impl Preference {
 }
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
-#[derive(Debug, Clone)]
-pub(crate) struct Preferences(Arc<FxHashMap<PackageName, Pin>>);
+#[derive(Debug, Clone, Default)]
+pub struct Preferences(Arc<FxHashMap<PackageName, Pin>>);
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
@@ -107,7 +107,7 @@ impl Preferences {
     ///
     /// The provided [`MarkerEnvironment`] will be used to filter  the preferences
     /// to an applicable subset.
-    pub(crate) fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
+    pub fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
         preferences: PreferenceIterator,
         markers: Option<&MarkerEnvironment>,
     ) -> Self {
@@ -135,6 +135,11 @@ impl Preferences {
             .collect();
 
         Self(Arc::new(preferences))
+    }
+
+    /// Returns an iterator over the preferences.
+    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &Version)> {
+        self.0.iter().map(|(name, pin)| (name, pin.version()))
     }
 
     /// Return the pinned version for a package, if any.

@@ -6,7 +6,7 @@ pub use flat_index::FlatIndex;
 pub use lock::{Lock, LockError};
 pub use manifest::Manifest;
 pub use options::{Options, OptionsBuilder};
-pub use preferences::{Preference, PreferenceError};
+pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease_mode::PreReleaseMode;
 pub use pubgrub::{PubGrubSpecifier, PubGrubSpecifierError};
 pub use python_requirement::PythonRequirement;

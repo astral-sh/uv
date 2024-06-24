@@ -35,7 +35,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    PythonRequirement, ResolutionGraph, Resolver,
+    Preferences, PythonRequirement, ResolutionGraph, Resolver,
 };
 use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
@@ -184,6 +184,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
+    let preferences = Preferences::from_iter(preferences, markers);
 
     // Determine the Python requirement, defaulting to that of the interpreter.
     let python_requirement =
