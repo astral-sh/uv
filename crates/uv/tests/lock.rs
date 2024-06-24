@@ -583,6 +583,56 @@ fn lock_project_extra() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn lock_project_with_overrides() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["flask==3.0.0"]
+
+        [tool.uv]
+        override-dependencies = ["werkzeug==2.3.8"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 9 packages in [TIME]
+    "###);
+
+    // Install the base dependencies from the lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning.
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + werkzeug==2.3.8
+    "###);
+
+    Ok(())
+}
 /// Lock a project with a dependency that has an extra.
 #[test]
 fn lock_dependency_extra() -> Result<()> {
