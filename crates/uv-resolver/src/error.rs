@@ -36,8 +36,8 @@ pub enum ResolveError {
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
-    #[error("Attempted to wait on an unregistered task")]
-    Unregistered,
+    #[error("Attempted to wait on an unregistered task: `{_0}`")]
+    UnregisteredTask(String),
 
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
