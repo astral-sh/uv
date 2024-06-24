@@ -35,7 +35,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    PythonRequirement, RequiresPython, ResolutionGraph, Resolver,
+    PythonRequirement, ResolutionGraph, Resolver,
 };
 use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
@@ -90,7 +90,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     interpreter: &Interpreter,
     tags: Option<&Tags>,
     markers: Option<&MarkerEnvironment>,
-    requires_python: Option<&RequiresPython>,
+    python_requirement: Option<PythonRequirement>,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
@@ -184,11 +184,10 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
-    let python_requirement = if let Some(requires_python) = requires_python {
-        PythonRequirement::from_requires_python(interpreter, requires_python)
-    } else {
-        PythonRequirement::from_interpreter(interpreter)
-    };
+
+    // Determine the Python requirement, defaulting to that of the interpreter.
+    let python_requirement =
+        python_requirement.unwrap_or_else(|| PythonRequirement::from_interpreter(interpreter));
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
