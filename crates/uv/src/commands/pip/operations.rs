@@ -37,7 +37,7 @@ use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     Preferences, PythonRequirement, ResolutionGraph, Resolver,
 };
-use uv_toolchain::{Interpreter, PythonEnvironment};
+use uv_toolchain::PythonEnvironment;
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
@@ -87,10 +87,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     hasher: &HashStrategy,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
-    interpreter: &Interpreter,
     tags: Option<&Tags>,
     markers: Option<&MarkerEnvironment>,
-    python_requirement: Option<PythonRequirement>,
+    python_requirement: PythonRequirement,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
@@ -185,10 +184,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
     let preferences = Preferences::from_iter(preferences, markers);
-
-    // Determine the Python requirement, defaulting to that of the interpreter.
-    let python_requirement =
-        python_requirement.unwrap_or_else(|| PythonRequirement::from_interpreter(interpreter));
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {

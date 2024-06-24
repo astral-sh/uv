@@ -16,7 +16,7 @@ use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, RequiresPython};
+use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, RequiresPython};
 use uv_toolchain::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
     ToolchainPreference, ToolchainRequest, VersionRequest,
@@ -345,6 +345,7 @@ pub(crate) async fn update_environment(
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
+    let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -421,10 +422,9 @@ pub(crate) async fn update_environment(
         &hasher,
         reinstall,
         upgrade,
-        interpreter,
         Some(tags),
         Some(markers),
-        None,
+        python_requirement,
         &client,
         &flat_index,
         &index,
