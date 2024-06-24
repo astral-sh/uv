@@ -1,6 +1,6 @@
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -507,4 +507,39 @@ fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
         ],
     )?;
     Ok(())
+}
+
+#[test]
+fn test_sibling_member() {
+    let context = TestContext::new("3.12");
+    let work_dir = context.temp_dir.join("shared-lib-ws");
+    copy_dir_ignore(workspaces_dir().join("shared-lib"), &work_dir)
+        .expect("Could not copy to temp dir");
+
+    for (app_name, numpy_version) in [("app1", "2.0.0"), ("app2", "1.26.4")] {
+        let app_dir = work_dir.join(app_name);
+
+        let mut filters = context.filters();
+
+        filters.push((app_name, "[app_name]"));
+        filters.push((numpy_version, "[numpy_version]"));
+
+        insta::allow_duplicates! {
+                uv_snapshot!(filters, context.run().env_remove("UV_EXCLUDE_NEWER")
+        .arg("--preview")
+        .arg(format!("{app_name}/app.py")).stderr(Stdio::null())
+        .current_dir(&app_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        shared-lib is loaded from [TEMP_DIR]/shared-lib-ws/shared_lib/shared_lib/__init__.py
+        six 1.16.0
+        shared-corelib is loaded from [TEMP_DIR]/shared-lib-ws/shared_corelib/shared_corelib/__init__.py
+        tqdm 4.66.2
+        numpy [numpy_version]
+
+        ----- stderr -----
+        "###);
+        }
+    }
 }

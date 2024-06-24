@@ -9,7 +9,7 @@ use tracing::{debug, trace};
 
 use pep508_rs::{RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource};
-use uv_fs::{absolutize_path, Simplified};
+use uv_fs::{absolutize_path, relative_to, Simplified};
 use uv_normalize::PackageName;
 use uv_warnings::warn_user;
 
@@ -178,11 +178,16 @@ impl Workspace {
                     marker: None,
                     source: RequirementSource::Directory {
                         install_path: member.root.clone(),
-                        lock_path: member
-                            .root
-                            .strip_prefix(&self.root)
-                            .expect("Project must be below workspace root")
-                            .to_path_buf(),
+                        lock_path: relative_to(&member.root, &self.root)
+                            .map_err(|e| {
+                                format!(
+                                    "Cannot get relative path to {} from {}: {}",
+                                    &member.root.display(),
+                                    &self.root.display(),
+                                    e
+                                )
+                            })
+                            .unwrap(),
                         editable: true,
                         url,
                     },
