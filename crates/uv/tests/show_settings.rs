@@ -140,6 +140,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -269,6 +270,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -399,6 +401,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -561,6 +564,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -669,6 +673,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -809,6 +814,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -986,6 +992,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1162,6 +1169,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1311,6 +1319,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1441,6 +1450,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1609,6 +1619,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1760,6 +1771,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1890,6 +1902,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -2003,6 +2016,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -2116,6 +2130,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -2231,6 +2246,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -2371,6 +2387,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,

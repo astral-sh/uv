@@ -77,6 +77,7 @@ pub(crate) async fn pip_compile(
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    universal: bool,
     exclude_newer: Option<ExcludeNewer>,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
@@ -219,7 +220,13 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the environment for the resolution.
-    let (tags, markers) = resolution_environment(python_version, python_platform, &interpreter)?;
+    let (tags, markers) = if universal {
+        (None, None)
+    } else {
+        let (tags, markers) =
+            resolution_environment(python_version, python_platform, &interpreter)?;
+        (Some(tags), Some(markers))
+    };
 
     // Generate, but don't enforce hashes for the requirements.
     let hasher = if generate_hashes {
@@ -247,7 +254,7 @@ pub(crate) async fn pip_compile(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(&markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -262,7 +269,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -319,8 +326,8 @@ pub(crate) async fn pip_compile(
         &hasher,
         &Reinstall::None,
         &upgrade,
-        Some(&tags),
-        Some(&markers),
+        tags.as_deref(),
+        markers.as_deref(),
         python_requirement,
         &client,
         &flat_index,
@@ -368,13 +375,15 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        let relevant_markers = resolution.marker_tree(&top_level_index, &markers)?;
-        writeln!(
-            writer,
-            "{}",
-            "# Pinned dependencies known to be valid for:".green()
-        )?;
-        writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
+        if let Some(markers) = markers.as_deref() {
+            let relevant_markers = resolution.marker_tree(&top_level_index, markers)?;
+            writeln!(
+                writer,
+                "{}",
+                "# Pinned dependencies known to be valid for:".green()
+            )?;
+            writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
+        }
     }
 
     let mut wrote_preamble = false;
@@ -439,11 +448,11 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
-            Some(&markers),
+            markers.as_deref(),
             &no_emit_packages,
             generate_hashes,
             include_extras,
-            include_markers,
+            include_markers || universal,
             include_annotations,
             include_index_annotation,
             annotation_style,

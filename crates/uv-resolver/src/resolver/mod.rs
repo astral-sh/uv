@@ -48,7 +48,6 @@ use crate::pubgrub::{
     PubGrubPriorities, PubGrubPython, PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
-use crate::requires_python::RequiresPython;
 use crate::resolution::ResolutionGraph;
 pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
@@ -193,12 +192,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let requires_python = if markers.is_some() {
             None
         } else {
-            Some(
-                python_requirement
-                    .requires_python()
-                    .map(RequiresPython::to_marker_tree)
-                    .unwrap_or_else(|| MarkerTree::And(vec![])),
-            )
+            Some(python_requirement.to_marker_tree())
         };
         let state = ResolverState {
             index: index.clone(),

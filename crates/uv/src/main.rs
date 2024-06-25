@@ -282,6 +282,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
+                args.settings.universal,
                 args.settings.exclude_newer,
                 args.settings.annotation_style,
                 args.settings.link_mode,

@@ -568,6 +568,15 @@ pub struct PipCompileArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
+    /// Perform a universal resolution, attempting to generate a single `requirements.txt` output
+    /// file that is compatible with all operating systems, architectures and supported Python
+    /// versions.
+    #[arg(long, overrides_with("no_universal"))]
+    pub universal: bool,
+
+    #[arg(long, overrides_with("universal"), hide = true)]
+    pub no_universal: bool,
+
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
     #[arg(long, alias = "unsafe-package")]
