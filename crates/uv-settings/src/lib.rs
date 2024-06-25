@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 use uv_fs::Simplified;
+use uv_warnings::warn_user;
 
 pub use crate::combine::*;
 pub use crate::settings::*;
@@ -57,22 +58,25 @@ impl FilesystemOptions {
 
     /// Find the [`FilesystemOptions`] for the given path.
     ///
-    /// The search starts at the given path and goes up the directory tree until a `uv.toml` file is
-    /// found.
+    /// The search starts at the given path and goes up the directory tree until a `uv.toml` file or
+    /// `pyproject.toml` file is found.
     pub fn find(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         for ancestor in path.as_ref().ancestors() {
-            // Read a `uv.toml` file in the current directory.
-            let path = ancestor.join("uv.toml");
-            match fs_err::read_to_string(&path) {
-                Ok(content) => {
-                    let options: Options = toml::from_str(&content)
-                        .map_err(|err| Error::UvToml(path.user_display().to_string(), err))?;
-
-                    debug!("Found workspace configuration at `{}`", path.display());
-                    return Ok(Some(Self(options)));
+            match Self::from_directory(ancestor) {
+                Ok(Some(options)) => {
+                    return Ok(Some(options));
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) => return Err(err.into()),
+                Ok(None) => {
+                    // Continue traversing the directory tree.
+                }
+                Err(Error::PyprojectToml(file, _err)) => {
+                    // If we see an invalid `pyproject.toml`, warn but continue.
+                    warn_user!("Failed to parse `{file}` during settings discovery; skipping...");
+                }
+                Err(err) => {
+                    // Otherwise, warn and stop.
+                    return Err(err);
+                }
             }
         }
         Ok(None)
@@ -103,9 +107,17 @@ impl FilesystemOptions {
                 let pyproject: PyProjectToml = toml::from_str(&content)
                     .map_err(|err| Error::PyprojectToml(path.user_display().to_string(), err))?;
                 let Some(tool) = pyproject.tool else {
+                    debug!(
+                        "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
+                        dir.as_ref().display()
+                    );
                     return Ok(None);
                 };
                 let Some(options) = tool.uv else {
+                    debug!(
+                        "Skipping `pyproject.toml` in `{}` (no `[tool.uv]` section)",
+                        dir.as_ref().display()
+                    );
                     return Ok(None);
                 };
 
