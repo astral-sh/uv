@@ -6296,7 +6296,7 @@ fn universal() -> Result<()> {
         trio ; sys_platform == 'win32'
     "})?;
 
-    uv_snapshot!(context.compile()
+    uv_snapshot!(context.pip_compile()
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -6341,7 +6341,7 @@ fn universal_conflicting() -> Result<()> {
         trio==0.10.0 ; sys_platform == 'win32'
     "})?;
 
-    uv_snapshot!(context.compile()
+    uv_snapshot!(context.pip_compile()
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
