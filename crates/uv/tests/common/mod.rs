@@ -494,6 +494,42 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv tool install` command with options shared across scenarios.
+    pub fn tool_install(&self) -> std::process::Command {
+        let mut command = self.tool_install_without_exclude_newer();
+        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+        command
+    }
+
+    /// Create a `uv tool install` command with no `--exclude-newer` option.
+    ///
+    /// One should avoid using this in tests to the extent possible because
+    /// it can result in tests failing when the index state changes. Therefore,
+    /// if you use this, there should be some other kind of mitigation in place.
+    /// For example, pinning package versions.
+    pub fn tool_install_without_exclude_newer(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("tool")
+            .arg("install")
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
+            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_TEST_PYTHON_PATH", &self.python_path())
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
+    }
+
     /// Create a `uv add` command for the given requirements.
     pub fn add(&self, reqs: &[&str]) -> std::process::Command {
         let mut command = std::process::Command::new(get_bin());
