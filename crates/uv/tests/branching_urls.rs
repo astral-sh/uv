@@ -327,7 +327,6 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     name = "a"
     version = "0.1.0"
     source = "editable+."
-    sdist = { path = "." }
 
     [[distribution.dependencies]]
     name = "iniconfig"
@@ -398,7 +397,6 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     name = "a"
     version = "0.1.0"
     source = "editable+."
-    sdist = { path = "." }
 
     [[distribution.dependencies]]
     name = "iniconfig"
@@ -422,7 +420,6 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     name = "iniconfig"
     version = "2.0.0"
     source = "git+https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a"
-    sdist = { url = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" }
     "###);
 
     Ok(())

@@ -102,7 +102,6 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -206,7 +205,6 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -297,7 +295,6 @@ fn fork_basic() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -522,7 +519,6 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -655,7 +651,6 @@ fn fork_marker_accrue() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -867,7 +862,6 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -1008,7 +1002,6 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -1150,7 +1143,6 @@ fn fork_marker_inherit_combined() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -1271,7 +1263,6 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -1406,7 +1397,6 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -1516,7 +1506,6 @@ fn fork_marker_inherit() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -1649,7 +1638,6 @@ fn fork_marker_limited_inherit() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -1783,7 +1771,6 @@ fn fork_marker_selection() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -1946,7 +1933,6 @@ fn fork_marker_track() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -2080,7 +2066,6 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -2306,7 +2291,6 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
         "###
         );
     });
@@ -2379,7 +2363,6 @@ fn fork_requires_python_full() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
         "###
         );
     });
@@ -2462,7 +2445,6 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "package-a"
@@ -2537,7 +2519,6 @@ fn fork_requires_python() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
         "###
         );
     });
