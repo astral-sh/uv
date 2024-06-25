@@ -65,6 +65,7 @@ pub struct TestContext {
     pub temp_dir: assert_fs::TempDir,
     pub cache_dir: assert_fs::TempDir,
     pub python_dir: assert_fs::TempDir,
+    pub home_dir: assert_fs::TempDir,
     pub venv: ChildPath,
     pub workspace_root: PathBuf,
 
@@ -96,9 +97,10 @@ impl TestContext {
     ///
     /// See [`TestContext::new`] if only a single version is desired.
     pub fn new_with_versions(python_versions: &[&str]) -> Self {
-        let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
-        let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
-        let python_dir = assert_fs::TempDir::new().expect("Failed to create test Python dir");
+        let temp_dir = assert_fs::TempDir::new().expect("Failed to create test working directory");
+        let cache_dir = assert_fs::TempDir::new().expect("Failed to create test cache directory");
+        let python_dir = assert_fs::TempDir::new().expect("Failed to create test Python directory");
+        let home_dir = assert_fs::TempDir::new().expect("Failed to create test home directory");
 
         // Canonicalize the temp dir for consistent snapshot behavior
         let canonical_temp_dir = temp_dir.canonicalize().unwrap();
@@ -194,6 +196,11 @@ impl TestContext {
                 .map(|pattern| (pattern, "[PYTHON_DIR]/".to_string())),
         );
         filters.extend(
+            Self::path_patterns(&home_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[HOME]/".to_string())),
+        );
+        filters.extend(
             Self::path_patterns(&workspace_root)
                 .into_iter()
                 .map(|pattern| (pattern, "[WORKSPACE]/".to_string())),
@@ -231,6 +238,7 @@ impl TestContext {
             temp_dir,
             cache_dir,
             python_dir,
+            home_dir,
             venv,
             workspace_root,
             python_version,
@@ -260,6 +268,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(self.temp_dir.path());
@@ -284,6 +293,7 @@ impl TestContext {
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
             .current_dir(self.temp_dir.as_os_str());
         command
@@ -311,6 +321,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
@@ -334,6 +345,7 @@ impl TestContext {
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
 
@@ -371,6 +383,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
@@ -394,6 +407,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .env("UV_PREVIEW", "1")
@@ -430,6 +444,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
@@ -465,6 +480,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .current_dir(&self.temp_dir);
@@ -488,6 +504,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
@@ -509,6 +526,7 @@ impl TestContext {
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
+            .env("HOME", self.home_dir.as_os_str())
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {
