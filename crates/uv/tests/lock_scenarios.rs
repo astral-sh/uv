@@ -210,8 +210,6 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-a"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         "###
         );
     });
@@ -540,14 +538,10 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-b"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "sys_platform == 'linux'"
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "sys_platform == 'darwin'"
         "###
         );
@@ -637,8 +631,6 @@ fn fork_marker_accrue() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "sys_platform == 'linux'"
 
         [[distribution]]
@@ -650,8 +642,6 @@ fn fork_marker_accrue() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "sys_platform == 'darwin'"
 
         [[distribution]]
@@ -669,14 +659,10 @@ fn fork_marker_accrue() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-a"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "implementation_name == 'cpython'"
 
         [[distribution.dependencies]]
         name = "package-b"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "implementation_name == 'pypy'"
         "###
         );
@@ -861,8 +847,6 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "implementation_name == 'pypy' or sys_platform == 'linux'"
 
         [[distribution]]
@@ -1274,8 +1258,6 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-b"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "sys_platform == 'linux'"
 
         [[distribution]]
@@ -1395,8 +1377,6 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-b"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
 
         [[distribution]]
         name = "package-a"
@@ -1414,8 +1394,6 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
 
         [[distribution]]
         name = "package-c"
@@ -1658,8 +1636,6 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "sys_platform == 'linux'"
 
         [[distribution]]
@@ -1689,8 +1665,6 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-b"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         "###
         );
     });
@@ -1933,8 +1907,6 @@ fn fork_marker_track() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "1.10"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "implementation_name == 'iron'"
 
         [[distribution]]
@@ -2084,8 +2056,6 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "2.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "sys_platform == 'linux'"
 
         [[distribution]]
@@ -2097,8 +2067,6 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-c"
-        version = "2.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "sys_platform == 'darwin'"
 
         [[distribution]]
@@ -2116,13 +2084,9 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-a"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
 
         [[distribution.dependencies]]
         name = "package-b"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         "###
         );
     });
@@ -2502,8 +2466,6 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "package-a"
-        version = "1.0.0"
-        source = "registry+https://astral-sh.github.io/packse/0.3.29/simple-html/"
         marker = "python_version == '3.10'"
         "###
         );

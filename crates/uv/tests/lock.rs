@@ -54,13 +54,9 @@ fn lock_wheel_registry() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -77,8 +73,6 @@ fn lock_wheel_registry() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "sniffio"
@@ -153,8 +147,6 @@ fn lock_sdist_registry() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "source-distribution"
-        version = "0.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "source-distribution"
@@ -226,8 +218,6 @@ fn lock_sdist_git() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
 
         [[distribution]]
         name = "uv-public-pypackage"
@@ -299,13 +289,9 @@ fn lock_wheel_url() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -322,8 +308,6 @@ fn lock_wheel_url() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "anyio"
-        version = "4.3.0"
-        source = "direct+https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"
 
         [[distribution]]
         name = "sniffio"
@@ -398,13 +382,9 @@ fn lock_sdist_url() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -421,8 +401,6 @@ fn lock_sdist_url() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "anyio"
-        version = "4.3.0"
-        source = "direct+https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz"
 
         [[distribution]]
         name = "sniffio"
@@ -501,13 +479,9 @@ fn lock_project_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -531,15 +505,11 @@ fn lock_project_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
 
         [distribution.optional-dependencies]
 
         [[distribution.optional-dependencies.test]]
         name = "iniconfig"
-        version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "sniffio"
@@ -685,8 +655,6 @@ fn lock_dependency_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "colorama"
-        version = "0.4.6"
-        source = "registry+https://pypi.org/simple"
         marker = "platform_system == 'Windows'"
 
         [[distribution]]
@@ -705,35 +673,23 @@ fn lock_dependency_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "blinker"
-        version = "1.7.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "click"
-        version = "8.1.7"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "itsdangerous"
-        version = "2.1.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "jinja2"
-        version = "3.1.3"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "werkzeug"
-        version = "3.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [distribution.optional-dependencies]
 
         [[distribution.optional-dependencies.dotenv]]
         name = "python-dotenv"
-        version = "1.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "itsdangerous"
@@ -751,8 +707,6 @@ fn lock_dependency_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "markupsafe"
-        version = "2.1.5"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "markupsafe"
@@ -829,13 +783,9 @@ fn lock_dependency_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "flask"
-        version = "3.0.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "flask"
-        version = "3.0.2"
-        source = "registry+https://pypi.org/simple"
         extra = "dotenv"
 
         [[distribution]]
@@ -854,8 +804,6 @@ fn lock_dependency_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "markupsafe"
-        version = "2.1.5"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
@@ -1038,13 +986,9 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "requests"
-        version = "2.31.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "requests"
-        version = "2.31.0"
-        source = "registry+https://pypi.org/simple"
         extra = "socks"
         marker = "python_version < '3.10'"
 
@@ -1067,30 +1011,20 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "certifi"
-        version = "2024.2.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "charset-normalizer"
-        version = "3.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "urllib3"
-        version = "2.0.7"
-        source = "registry+https://pypi.org/simple"
 
         [distribution.optional-dependencies]
 
         [[distribution.optional-dependencies.socks]]
         name = "pysocks"
-        version = "1.7.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "urllib3"
@@ -1201,8 +1135,6 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "colorama"
-        version = "0.4.6"
-        source = "registry+https://pypi.org/simple"
         marker = "platform_system == 'Windows'"
 
         [[distribution]]
@@ -1221,28 +1153,18 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "blinker"
-        version = "1.7.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "click"
-        version = "8.1.7"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "itsdangerous"
-        version = "2.1.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "jinja2"
-        version = "3.1.3"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "werkzeug"
-        version = "3.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "itsdangerous"
@@ -1260,8 +1182,6 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "markupsafe"
-        version = "2.1.5"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "markupsafe"
@@ -1338,8 +1258,6 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "flask"
-        version = "3.0.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "werkzeug"
@@ -1350,8 +1268,6 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "markupsafe"
-        version = "2.1.5"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
@@ -1430,8 +1346,6 @@ fn lock_preference() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "iniconfig"
-        version = "1.1.1"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
@@ -1483,8 +1397,6 @@ fn lock_preference() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "iniconfig"
-        version = "1.1.1"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
@@ -1525,8 +1437,6 @@ fn lock_preference() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "iniconfig"
-        version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
@@ -1579,8 +1489,6 @@ fn lock_git_sha() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
 
         [[distribution]]
         name = "uv-public-pypackage"
@@ -1637,8 +1545,6 @@ fn lock_git_sha() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
 
         [[distribution]]
         name = "uv-public-pypackage"
@@ -1680,8 +1586,6 @@ fn lock_git_sha() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"
 
         [[distribution]]
         name = "uv-public-pypackage"
@@ -1779,8 +1683,6 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "importlib-metadata"
-        version = "6.7.0"
-        source = "registry+https://pypi.org/simple"
         marker = "python_version < '3.8'"
 
         [[distribution]]
@@ -1792,19 +1694,13 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "attrs"
-        version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "exceptiongroup"
-        version = "1.2.0"
-        source = "registry+https://pypi.org/simple"
         marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "typing-extensions"
-        version = "4.7.1"
-        source = "registry+https://pypi.org/simple"
         marker = "python_version < '3.11'"
 
         [[distribution]]
@@ -1823,14 +1719,10 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "typing-extensions"
-        version = "4.7.1"
-        source = "registry+https://pypi.org/simple"
         marker = "python_version < '3.8'"
 
         [[distribution.dependencies]]
         name = "zipp"
-        version = "3.15.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "lsprotocol"
@@ -1841,13 +1733,9 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "attrs"
-        version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "cattrs"
-        version = "23.1.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "project"
@@ -1857,8 +1745,6 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "pygls"
-        version = "1.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "pygls"
@@ -1869,13 +1755,9 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "lsprotocol"
-        version = "2023.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "typeguard"
-        version = "2.13.3"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "typeguard"
@@ -1944,8 +1826,6 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "importlib-metadata"
-        version = "6.7.0"
-        source = "registry+https://pypi.org/simple"
         marker = "python_version < '3.8'"
 
         [[distribution]]
@@ -1957,19 +1837,13 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "attrs"
-        version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "exceptiongroup"
-        version = "1.2.0"
-        source = "registry+https://pypi.org/simple"
         marker = "python_version < '3.11'"
 
         [[distribution.dependencies]]
         name = "typing-extensions"
-        version = "4.7.1"
-        source = "registry+https://pypi.org/simple"
         marker = "python_version < '3.11'"
 
         [[distribution]]
@@ -1988,14 +1862,10 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "typing-extensions"
-        version = "4.7.1"
-        source = "registry+https://pypi.org/simple"
         marker = "python_version < '3.8'"
 
         [[distribution.dependencies]]
         name = "zipp"
-        version = "3.15.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "lsprotocol"
@@ -2006,13 +1876,9 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "attrs"
-        version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "cattrs"
-        version = "23.1.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "project"
@@ -2022,8 +1888,6 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "pygls"
-        version = "1.2.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "pygls"
@@ -2034,8 +1898,6 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "lsprotocol"
-        version = "2023.0.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "typing-extensions"
@@ -2104,8 +1966,6 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "attrs"
-        version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "lsprotocol"
@@ -2116,13 +1976,9 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "attrs"
-        version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "cattrs"
-        version = "23.2.3"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "project"
@@ -2132,8 +1988,6 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "pygls"
-        version = "1.3.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "pygls"
@@ -2144,13 +1998,9 @@ fn lock_requires_python() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "cattrs"
-        version = "23.2.3"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "lsprotocol"
-        version = "2023.0.1"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
@@ -2238,8 +2088,6 @@ fn lock_requires_python_star() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "attrs"
-        version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "linehaul"
@@ -2250,18 +2098,12 @@ fn lock_requires_python_star() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "cattrs"
-        version = "23.2.3"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "packaging"
-        version = "24.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "pyparsing"
-        version = "3.1.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "packaging"
@@ -2278,8 +2120,6 @@ fn lock_requires_python_star() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "linehaul"
-        version = "1.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "pyparsing"
@@ -2350,8 +2190,6 @@ fn lock_requires_python_pre() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "attrs"
-        version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "linehaul"
@@ -2362,18 +2200,12 @@ fn lock_requires_python_pre() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "cattrs"
-        version = "23.2.3"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "packaging"
-        version = "24.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "pyparsing"
-        version = "3.1.2"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "packaging"
@@ -2390,8 +2222,6 @@ fn lock_requires_python_pre() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "linehaul"
-        version = "1.0.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "pyparsing"
@@ -2460,8 +2290,6 @@ fn lock_requires_python_unbounded() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "iniconfig"
-        version = "1.1.1"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
@@ -2523,15 +2351,11 @@ fn lock_dev() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "iniconfig"
-        version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
 
         [distribution.dev-dependencies]
 
         [[distribution.dev-dependencies.dev]]
         name = "typing-extensions"
-        version = "4.12.2"
-        source = "direct+https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl"
 
         [[distribution]]
         name = "typing-extensions"
@@ -2622,8 +2446,6 @@ fn lock_conditional_unconditional() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "iniconfig"
-        version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
@@ -2682,8 +2504,6 @@ fn lock_multiple_markers() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "iniconfig"
-        version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
         marker = "implementation_name == 'cpython'"
         "###
         );
@@ -2776,13 +2596,9 @@ fn relative_and_absolute_paths() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "b"
-        version = "0.1.0"
-        source = "directory+b"
 
         [[distribution.dependencies]]
         name = "c"
-        version = "0.1.0"
-        source = "directory+[TEMP_DIR]/c"
 
         [[distribution]]
         name = "b"

@@ -78,13 +78,9 @@ fn add_registry() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -101,8 +97,6 @@ fn add_registry() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "sniffio"
@@ -233,13 +227,9 @@ fn add_git() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -256,13 +246,9 @@ fn add_git() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
 
         [[distribution]]
         name = "sniffio"
@@ -387,13 +373,9 @@ fn add_git_raw() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -410,13 +392,9 @@ fn add_git_raw() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
 
         [[distribution]]
         name = "sniffio"
@@ -516,8 +494,6 @@ fn add_unnamed() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
 
         [[distribution]]
         name = "uv-public-pypackage"
@@ -613,13 +589,9 @@ fn add_remove_dev() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -638,8 +610,6 @@ fn add_remove_dev() -> Result<()> {
 
         [[distribution.dev-dependencies.dev]]
         name = "anyio"
-        version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "sniffio"
@@ -834,8 +804,6 @@ fn add_remove_workspace() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "child2"
-        version = "0.1.0"
-        source = "editable+child2"
 
         [[distribution]]
         name = "child2"
@@ -1021,8 +989,6 @@ fn add_workspace_editable() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "child2"
-        version = "0.1.0"
-        source = "editable+child2"
 
         [[distribution]]
         name = "child2"
@@ -1143,13 +1109,9 @@ fn update_registry() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.6"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
         name = "sniffio"
-        version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "idna"
@@ -1166,8 +1128,6 @@ fn update_registry() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "anyio"
-        version = "4.3.0"
-        source = "registry+https://pypi.org/simple"
 
         [[distribution]]
         name = "sniffio"
@@ -1302,8 +1262,6 @@ fn add_no_clean() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "iniconfig"
-        version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
         "###
         );
     });
