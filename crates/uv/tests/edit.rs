@@ -93,7 +93,6 @@ fn add_registry() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -242,7 +241,6 @@ fn add_git() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -261,7 +259,6 @@ fn add_git() -> Result<()> {
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = "git+https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
-        sdist = { url = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -388,7 +385,6 @@ fn add_git_raw() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -407,7 +403,6 @@ fn add_git_raw() -> Result<()> {
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
-        sdist = { url = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -490,7 +485,6 @@ fn add_unnamed() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "uv-public-pypackage"
@@ -499,7 +493,6 @@ fn add_unnamed() -> Result<()> {
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = "git+https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
-        sdist = { url = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -604,7 +597,6 @@ fn add_remove_dev() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [distribution.dev-dependencies]
 
@@ -696,7 +688,6 @@ fn add_remove_dev() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
         "###
         );
     });
@@ -800,7 +791,6 @@ fn add_remove_workspace() -> Result<()> {
         name = "child1"
         version = "0.1.0"
         source = "editable+child1"
-        sdist = { path = "child1" }
 
         [[distribution.dependencies]]
         name = "child2"
@@ -809,7 +799,6 @@ fn add_remove_workspace() -> Result<()> {
         name = "child2"
         version = "0.1.0"
         source = "editable+child2"
-        sdist = { path = "child2" }
         "###
         );
     });
@@ -874,13 +863,11 @@ fn add_remove_workspace() -> Result<()> {
         name = "child1"
         version = "0.1.0"
         source = "editable+child1"
-        sdist = { path = "child1" }
 
         [[distribution]]
         name = "child2"
         version = "0.1.0"
         source = "editable+child2"
-        sdist = { path = "child2" }
         "###
         );
     });
@@ -985,7 +972,6 @@ fn add_workspace_editable() -> Result<()> {
         name = "child1"
         version = "0.1.0"
         source = "editable+child1"
-        sdist = { path = "child1" }
 
         [[distribution.dependencies]]
         name = "child2"
@@ -994,7 +980,6 @@ fn add_workspace_editable() -> Result<()> {
         name = "child2"
         version = "0.1.0"
         source = "editable+child2"
-        sdist = { path = "child2" }
         "###
         );
     });
@@ -1124,7 +1109,6 @@ fn update_registry() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "anyio"
@@ -1258,7 +1242,6 @@ fn add_no_clean() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
 
         [[distribution.dependencies]]
         name = "iniconfig"
@@ -1381,7 +1364,6 @@ fn remove_registry() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-        sdist = { path = "." }
         "###
         );
     });
