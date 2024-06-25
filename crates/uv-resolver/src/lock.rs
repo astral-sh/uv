@@ -1,7 +1,3 @@
-// Temporarily allowed because this module is still in a state of flux
-// as we build out universal locking.
-#![allow(dead_code, unreachable_code, unused_variables)]
-
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Debug, Display};
@@ -444,7 +440,7 @@ impl TryFrom<LockWire> for Lock {
                 })
             });
 
-            for (extra, dependencies) in &mut dist.optional_dependencies {
+            for dependencies in dist.optional_dependencies.values_mut() {
                 dependencies.retain(|dep| {
                     dep.extra.as_ref().map_or(true, |extra| {
                         extras_by_id
@@ -454,7 +450,7 @@ impl TryFrom<LockWire> for Lock {
                 });
             }
 
-            for (group, dependencies) in &mut dist.dev_dependencies {
+            for dependencies in dist.dev_dependencies.values_mut() {
                 dependencies.retain(|dep| {
                     dep.extra.as_ref().map_or(true, |extra| {
                         extras_by_id
@@ -480,7 +476,7 @@ impl TryFrom<LockWire> for Lock {
             }
 
             // Perform the same validation for optional dependencies.
-            for (extra, dependencies) in &dist.optional_dependencies {
+            for dependencies in dist.optional_dependencies.values() {
                 for dep in dependencies {
                     if !by_id.contains_key(&dep.distribution_id) {
                         return Err(LockErrorKind::UnrecognizedDependency {
@@ -493,7 +489,7 @@ impl TryFrom<LockWire> for Lock {
             }
 
             // Perform the same validation for dev dependencies.
-            for (group, dependencies) in &dist.dev_dependencies {
+            for dependencies in dist.dev_dependencies.values() {
                 for dep in dependencies {
                     if !by_id.contains_key(&dep.distribution_id) {
                         return Err(LockErrorKind::UnrecognizedDependency {
@@ -610,7 +606,7 @@ impl Distribution {
                     let wheels = self
                         .wheels
                         .iter()
-                        .map(|wheel| wheel.to_registry_dist(url, &self.id.source))
+                        .map(|wheel| wheel.to_registry_dist(url))
                         .collect();
                     let reg_built_dist = RegistryBuiltDist {
                         wheels,
@@ -830,6 +826,8 @@ impl Distribution {
     }
 }
 
+/// Inside the lockfile, we match a dependency entry to a distribution entry through a key made up
+/// of the name, the version and the source url.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct DistributionId {
     pub(crate) name: PackageName,
@@ -856,6 +854,9 @@ impl std::fmt::Display for DistributionId {
     }
 }
 
+/// A unique identifier to differentiate between different distributions for the same version of a
+/// package.
+///
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
@@ -1569,7 +1570,7 @@ impl Wheel {
         }
     }
 
-    fn to_registry_dist(&self, url: &Url, source: &Source) -> RegistryBuiltWheel {
+    fn to_registry_dist(&self, url: &Url) -> RegistryBuiltWheel {
         let filename: WheelFilename = self.filename.clone();
         let file = Box::new(distribution_types::File {
             dist_info_metadata: false,
