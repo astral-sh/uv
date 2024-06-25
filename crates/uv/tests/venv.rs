@@ -637,8 +637,10 @@ fn path_with_trailing_space_gives_proper_error() {
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // Set a custom cache directory with a trailing space
-    uv_snapshot!(context.filters(), context.venv()
-        .env("UV_CACHE_DIR", format!("{} ", context.cache_dir.path().display())), @r###"
+    let path_with_trailing_slash = format!("{} ", context.cache_dir.path().display());
+    uv_snapshot!(context.filters(), std::process::Command::new(crate::common::get_bin())
+        .arg("venv")
+        .env("UV_CACHE_DIR", path_with_trailing_slash), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

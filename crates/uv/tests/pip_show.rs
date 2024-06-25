@@ -9,30 +9,14 @@ use indoc::indoc;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext, EXCLUDE_NEWER};
+use crate::common::{get_bin, TestContext};
 
 mod common;
 
-/// Create a `pip install` command with options shared across scenarios.
-fn install_command(context: &TestContext) -> Command {
+fn show_command(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("install")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
-
+    command.arg("pip").arg("show");
+    context.add_shared_args(&mut command);
     command
 }
 
@@ -40,14 +24,7 @@ fn install_command(context: &TestContext) -> Command {
 fn show_empty() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(show_command(&context), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -65,7 +42,8 @@ fn show_requires_multiple() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -86,15 +64,8 @@ fn show_requires_multiple() -> Result<()> {
     );
 
     context.assert_command("import requests").success();
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
-        .arg("requests")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), show_command(&context)
+        .arg("requests"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -120,7 +91,8 @@ fn show_python_version_marker() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("click==8.1.7")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -143,15 +115,8 @@ fn show_python_version_marker() -> Result<()> {
         filters.push(("Requires: colorama", "Requires:"));
     }
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
-        .arg("click")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, show_command(&context)
+        .arg("click"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -175,7 +140,8 @@ fn show_found_single_package() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -193,15 +159,8 @@ fn show_found_single_package() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
-        .arg("markupsafe")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), show_command(&context)
+        .arg("markupsafe"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -229,7 +188,8 @@ fn show_found_multiple_packages() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -248,16 +208,9 @@ fn show_found_multiple_packages() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
+    uv_snapshot!(context.filters(), show_command(&context)
         .arg("markupsafe")
-        .arg("pip")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("pip"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -291,7 +244,8 @@ fn show_found_one_out_of_three() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -310,17 +264,10 @@ fn show_found_one_out_of_three() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
+    uv_snapshot!(context.filters(), show_command(&context)
         .arg("markupsafe")
         .arg("flask")
-        .arg("django")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("django"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -349,7 +296,8 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -369,17 +317,10 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     // Flask isn't installed, but markupsafe is, so the command should succeed.
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
+    uv_snapshot!(show_command(&context)
         .arg("markupsafe")
         .arg("flask")
-        .arg("--quiet")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("--quiet"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -402,7 +343,8 @@ fn show_empty_quiet() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -422,16 +364,9 @@ fn show_empty_quiet() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     // Flask isn't installed, so the command should fail.
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
+    uv_snapshot!(show_command(&context)
         .arg("flask")
-        .arg("--quiet")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("--quiet"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -448,7 +383,8 @@ fn show_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
-    install_command(&context)
+    context
+        .pip_install()
         .arg("-e")
         .arg("../../scripts/packages/poetry_editable")
         .current_dir(current_dir()?)
@@ -459,15 +395,8 @@ fn show_editable() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
-        .arg("poetry-editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), show_command(&context)
+        .arg("poetry-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -496,7 +425,8 @@ fn show_required_by_multiple() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -521,15 +451,8 @@ fn show_required_by_multiple() -> Result<()> {
     context.assert_command("import requests").success();
 
     // idna is required by anyio and requests
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
-        .arg("idna")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), show_command(&context)
+        .arg("idna"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

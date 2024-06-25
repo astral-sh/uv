@@ -11,7 +11,7 @@ mod common;
 /// Create a `pip compile` command, overwriting defaults for any settings that vary based on machine
 /// and operating system.
 fn command(context: &TestContext) -> Command {
-    let mut command = context.compile();
+    let mut command = context.pip_compile();
     command
         .env("UV_LINK_MODE", "clone")
         .env("UV_CONCURRENT_DOWNLOADS", "50")

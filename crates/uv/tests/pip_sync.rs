@@ -1,6 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use fs_err as fs;
 use std::env::consts::EXE_SUFFIX;
 use std::path::Path;
 use std::process::Command;
@@ -9,16 +8,16 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use fs_err as fs;
 use indoc::indoc;
+use insta::assert_snapshot;
 use predicates::Predicate;
 use url::Url;
 
 use common::{uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
-use crate::common::{
-    copy_dir_all, get_bin, run_and_format, site_packages_path, TestContext, EXCLUDE_NEWER,
-};
+use crate::common::{copy_dir_all, run_and_format, site_packages_path, TestContext};
 
 mod common;
 
@@ -34,67 +33,13 @@ fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
         .success();
 }
 
-// TODO(zanieb): This belongs in the `TestContext`
-/// Create a `pip sync` command with options shared across scenarios.
-fn sync_without_exclude_newer(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("sync")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", &context.python_path())
-        .env("UV_TOOLCHAIN_DIR", "")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
-
-    command
-}
-
-/// Create a `pip sync` command with options shared across scenarios.
-pub fn sync(context: &TestContext) -> Command {
-    let mut command = sync_without_exclude_newer(context);
-    command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
-    command
-}
-
-/// Create a `pip uninstall` command with options shared across scenarios.
-fn uninstall_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("uninstall")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_TEST_PYTHON_PATH", &context.python_path())
-        .env("UV_TOOLCHAIN_DIR", "")
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
-
-    command
-}
-
 #[test]
 fn missing_requirements_txt() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -115,7 +60,7 @@ fn missing_venv() -> Result<()> {
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context).arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer().arg("requirements.txt"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -138,7 +83,7 @@ fn install() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -179,7 +124,7 @@ fn install_copy() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--link-mode")
         .arg("copy")
@@ -214,7 +159,7 @@ fn install_hardlink() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--link-mode")
         .arg("hardlink")
@@ -249,7 +194,7 @@ fn install_many() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -280,13 +225,14 @@ fn noop() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    sync_without_exclude_newer(&context)
+    context
+        .pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         .assert()
         .success();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -314,7 +260,8 @@ fn link() -> Result<()> {
     let requirements_txt = context1.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
 
-    sync_without_exclude_newer(&context1)
+    context1
+        .pip_sync_without_exclude_newer()
         .arg(requirements_txt.path())
         .arg("--strict")
         .assert()
@@ -322,21 +269,9 @@ fn link() -> Result<()> {
 
     // Create a separate virtual environment, but reuse the same cache.
     let context2 = TestContext::new("3.12");
-    let mut cmd = Command::new(get_bin());
-    cmd.arg("pip")
-        .arg("sync")
-        .arg("--cache-dir")
-        .arg(context1.cache_dir.path())
-        .env("VIRTUAL_ENV", context2.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string())
+    let mut cmd = context1.pip_sync_without_exclude_newer();
+    cmd.env("VIRTUAL_ENV", context2.venv.as_os_str())
         .current_dir(&context2.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        cmd.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
 
     uv_snapshot!(cmd
         .arg(requirements_txt.path())
@@ -366,7 +301,8 @@ fn add_remove() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
 
-    sync_without_exclude_newer(&context)
+    context
+        .pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         .assert()
@@ -375,7 +311,7 @@ fn add_remove() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tomli==2.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -407,7 +343,8 @@ fn install_sequential() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
 
-    sync_without_exclude_newer(&context)
+    context
+        .pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         .assert()
@@ -416,7 +353,7 @@ fn install_sequential() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0\ntomli==2.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -447,7 +384,8 @@ fn upgrade() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tomli==2.0.0")?;
 
-    sync_without_exclude_newer(&context)
+    context
+        .pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         .assert()
@@ -456,7 +394,7 @@ fn upgrade() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tomli==2.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -486,7 +424,7 @@ fn install_url() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -515,7 +453,7 @@ fn install_git_commit() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -548,7 +486,7 @@ fn install_git_tag() -> Result<()> {
         "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@test-tag",
     )?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -579,7 +517,7 @@ fn install_git_subdirectories() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -610,7 +548,7 @@ fn install_sdist() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source-distribution==0.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -640,7 +578,7 @@ fn install_sdist_url() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -676,7 +614,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
             .display()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -703,13 +641,14 @@ fn install_url_then_install_url() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    sync_without_exclude_newer(&context)
+    context
+        .pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         .assert()
         .success();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -736,7 +675,8 @@ fn install_url_then_install_version() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    sync_without_exclude_newer(&context)
+    context
+        .pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         .assert()
@@ -745,7 +685,7 @@ fn install_url_then_install_version() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug==2.0.0")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -772,7 +712,8 @@ fn install_version_then_install_url() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug==2.0.0")?;
 
-    sync_without_exclude_newer(&context)
+    context
+        .pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         .assert()
@@ -781,7 +722,7 @@ fn install_version_then_install_url() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -812,7 +753,7 @@ fn install_numpy_py38() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("numpy")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -840,7 +781,7 @@ fn install_no_index() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--strict"), @r###"
@@ -870,7 +811,7 @@ fn install_no_index_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -887,12 +828,9 @@ fn install_no_index_cached() -> Result<()> {
 
     context.assert_command("import iniconfig").success();
 
-    uninstall_command(&context)
-        .arg("iniconfig")
-        .assert()
-        .success();
+    context.pip_uninstall().arg("iniconfig").assert().success();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--strict"), @r###"
@@ -921,7 +859,7 @@ fn warn_on_yanked() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.txt");
     requirements_in.write_str("colorama==0.4.2")?;
 
-    uv_snapshot!(context.filters(), windows_filters=false, sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), windows_filters=false, context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -948,7 +886,7 @@ fn warn_on_yanked_dry_run() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.txt");
     requirements_in.write_str("colorama==0.4.2")?;
 
-    uv_snapshot!(context.filters(), windows_filters=false, sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), windows_filters=false, context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--dry-run")
         .arg("--strict"), @r###"
@@ -985,7 +923,7 @@ fn install_local_wheel() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1006,7 +944,7 @@ fn install_local_wheel() -> Result<()> {
     context.reset_venv();
 
     // Reinstall. The wheel should come from the cache, so there shouldn't be a "download".
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1031,7 +969,7 @@ fn install_local_wheel() -> Result<()> {
     filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall. The wheel should be "downloaded" again.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1053,7 +991,7 @@ fn install_local_wheel() -> Result<()> {
     filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall into the same virtual environment. The wheel should be reinstalled.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1071,7 +1009,7 @@ fn install_local_wheel() -> Result<()> {
     );
 
     // Reinstall into the same virtual environment. The wheel should _not_ be reinstalled.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1090,7 +1028,7 @@ fn install_local_wheel() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!("{}", Url::from_file_path(archive.path()).unwrap()))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1125,7 +1063,7 @@ fn mismatched_version() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -1160,7 +1098,7 @@ fn mismatched_name() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -1196,7 +1134,7 @@ fn install_local_source_distribution() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1235,7 +1173,7 @@ fn install_build_system_no_backend() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("build-system-no-backend @ https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1265,7 +1203,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1287,7 +1225,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1309,13 +1247,8 @@ fn install_url_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("clean")
-        .arg("source_distribution")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.clean()
+        .arg("source_distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1325,7 +1258,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1357,7 +1290,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1379,7 +1312,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1409,13 +1342,8 @@ fn install_git_source_dist_cached() -> Result<()> {
     } else {
         context.filters()
     };
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("clean")
-        .arg("werkzeug")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, context.clean()
+        .arg("werkzeug"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1425,7 +1353,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1455,7 +1383,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution==0.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1477,7 +1405,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1512,13 +1440,8 @@ fn install_registry_source_dist_cached() -> Result<()> {
             .chain(context.filters())
             .collect()
     };
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("clean")
-        .arg("source_distribution")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, context.clean()
+        .arg("source_distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1528,7 +1451,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1568,7 +1491,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1590,7 +1513,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1612,13 +1535,8 @@ fn install_path_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("clean")
-        .arg("source-distribution")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.clean()
+        .arg("source-distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1628,7 +1546,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1666,7 +1584,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     let url = Url::from_file_path(archive.path()).unwrap();
     requirements_txt.write_str(&format!("tomli @ {url}"))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1686,7 +1604,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1718,13 +1636,8 @@ fn install_path_built_dist_cached() -> Result<()> {
     } else {
         context.filters()
     };
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("clean")
-        .arg("tomli")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, context.clean()
+        .arg("tomli"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1734,7 +1647,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1771,7 +1684,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     } else {
         context.filters()
     };
-    uv_snapshot!(filters, sync_without_exclude_newer(&context)
+    uv_snapshot!(filters, context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1791,7 +1704,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(filters, sync_without_exclude_newer(&context)
+    uv_snapshot!(filters, context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1811,13 +1724,8 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("clean")
-        .arg("tqdm")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.clean()
+        .arg("tqdm"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1827,7 +1735,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(filters, sync_without_exclude_newer(&context)
+    uv_snapshot!(filters, context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1856,7 +1764,7 @@ fn duplicate_package_overlap() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -1880,7 +1788,7 @@ fn duplicate_package_disjoint() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2 ; python_version < '3.6'")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1906,7 +1814,7 @@ fn reinstall() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1926,7 +1834,7 @@ fn reinstall() -> Result<()> {
     context.assert_command("import tomli").success();
 
     // Re-run the installation with `--reinstall`.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--strict"), @r###"
@@ -1959,7 +1867,7 @@ fn reinstall_package() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1979,7 +1887,7 @@ fn reinstall_package() -> Result<()> {
     context.assert_command("import tomli").success();
 
     // Re-run the installation with `--reinstall`.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall-package")
         .arg("tomli")
@@ -2012,7 +1920,7 @@ fn reinstall_git() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -2032,7 +1940,7 @@ fn reinstall_git() -> Result<()> {
         .success();
 
     // Re-run the installation with `--reinstall`.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall-package")
         .arg("uv-public-pypackage")
@@ -2065,7 +1973,7 @@ fn refresh() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -2088,7 +1996,7 @@ fn refresh() -> Result<()> {
     // latest versions of the packages.
     context.reset_venv();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--strict")
@@ -2120,7 +2028,7 @@ fn refresh_package() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -2143,7 +2051,7 @@ fn refresh_package() -> Result<()> {
     // latest versions of the packages.
     context.reset_venv();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--refresh-package")
         .arg("tomli")
@@ -2191,7 +2099,7 @@ fn sync_editable() -> Result<()> {
     })?;
 
     // Install the editable packages.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
@@ -2208,7 +2116,7 @@ fn sync_editable() -> Result<()> {
     );
 
     // Reinstall the editable packages.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path())
         .arg("--reinstall-package")
         .arg("poetry-editable"), @r###"
@@ -2259,7 +2167,7 @@ fn sync_editable() -> Result<()> {
    "};
     context.assert_command(check_installed).success();
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
@@ -2293,7 +2201,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path())
         .arg("--strict"), @r###"
     success: true
@@ -2321,7 +2229,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
@@ -2345,7 +2253,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
@@ -2364,7 +2272,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path())
         .arg("--strict"), @r###"
     success: true
@@ -2408,7 +2316,7 @@ fn sync_editable_and_local() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
@@ -2429,7 +2337,7 @@ fn sync_editable_and_local() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
@@ -2452,7 +2360,7 @@ fn sync_editable_and_local() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
@@ -2480,7 +2388,7 @@ fn incompatible_wheel() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!("foo @ {}", wheel.path().simplified_display()))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -2505,7 +2413,7 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2530,7 +2438,7 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in")
         .arg("--legacy-setup-py"), @r###"
     success: true
@@ -2561,7 +2469,7 @@ fn find_links() -> Result<()> {
         werkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl
     "})?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--find-links")
         .arg(context.workspace_root.join("scripts/links/")), @r###"
@@ -2593,7 +2501,7 @@ fn find_links_no_index_match() -> Result<()> {
         tqdm==1000.0.0
     "})?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--find-links")
@@ -2623,7 +2531,7 @@ fn find_links_offline_match() -> Result<()> {
         tqdm==1000.0.0
     "})?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
@@ -2654,7 +2562,7 @@ fn find_links_offline_no_match() -> Result<()> {
         tqdm==1000.0.0
     "})?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
@@ -2685,7 +2593,7 @@ fn find_links_wheel_cache() -> Result<()> {
     "})?;
 
     // Install `tqdm`.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--find-links")
         .arg(context.workspace_root.join("scripts/links/")), @r###"
@@ -2702,7 +2610,7 @@ fn find_links_wheel_cache() -> Result<()> {
     );
 
     // Reinstall `tqdm` with `--reinstall`. Ensure that the wheel is reused.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--find-links")
@@ -2735,7 +2643,7 @@ fn find_links_source_cache() -> Result<()> {
     "})?;
 
     // Install `tqdm`.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--find-links")
         .arg(context.workspace_root.join("scripts/links/")), @r###"
@@ -2752,7 +2660,7 @@ fn find_links_source_cache() -> Result<()> {
     );
 
     // Reinstall `tqdm` with `--reinstall`. Ensure that the wheel is reused.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--find-links")
@@ -2781,7 +2689,7 @@ fn offline() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     // Install with `--offline` with an empty cache.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in")
         .arg("--offline"), @r###"
     success: false
@@ -2797,7 +2705,7 @@ fn offline() -> Result<()> {
     );
 
     // Populate the cache.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2814,7 +2722,7 @@ fn offline() -> Result<()> {
     // Install with `--offline` with a populated cache.
     context.reset_venv();
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in")
         .arg("--offline")
         , @r###"
@@ -2842,7 +2750,7 @@ fn compatible_constraint() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("anyio==3.7.0")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--constraint")
         .arg("constraints.txt"), @r###"
@@ -2871,7 +2779,7 @@ fn incompatible_constraint() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("anyio==3.6.0")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--constraint")
         .arg("constraints.txt"), @r###"
@@ -2898,7 +2806,7 @@ fn irrelevant_constraint() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("black==23.10.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--constraint")
         .arg("constraints.txt"), @r###"
@@ -2924,7 +2832,7 @@ fn repeat_requirement_identical() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio\nanyio")?;
 
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2947,7 +2855,7 @@ fn repeat_requirement_compatible() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio\nanyio==4.0.0")?;
 
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2970,7 +2878,7 @@ fn repeat_requirement_incompatible() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio<4.0.0\nanyio==4.0.0")?;
 
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.in"), @r###"
     success: false
     exit_code: 1
@@ -2993,7 +2901,7 @@ fn tar_dont_preserve_mtime() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tomli @ https://files.pythonhosted.org/packages/c0/3f/d7af728f075fb08564c5949a9c95e44352e23dee646869fa104a3b2060a3/tomli-2.0.1.tar.gz")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
@@ -3016,7 +2924,7 @@ fn set_read_permissions() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("databricks==0.2")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -3050,7 +2958,8 @@ fn pip_entrypoints() -> Result<()> {
         let requirements_txt = context.temp_dir.child("requirements.txt");
         requirements_txt.write_str(pip_requirement)?;
 
-        sync_without_exclude_newer(&context)
+        context
+            .pip_sync_without_exclude_newer()
             .arg("requirements.txt")
             .arg("--strict")
             .output()
@@ -3095,7 +3004,7 @@ requires-python = ">=3.8"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -3110,7 +3019,7 @@ requires-python = ">=3.8"
     );
 
     // Re-installing should be a no-op.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -3135,7 +3044,7 @@ requires-python = ">=3.8"
     )?;
 
     // Re-installing should update the package.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -3162,7 +3071,7 @@ fn compile() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--compile")
         .arg("--strict"), @r###"
@@ -3215,7 +3124,7 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     // Retry test if we run into a broken pipe (https://github.com/astral-sh/uv/issues/2672).
     // TODO(konsti): Why is this happening in the first place?
     let run_test = || {
-        let mut command = sync_without_exclude_newer(&context);
+        let mut command = context.pip_sync_without_exclude_newer();
         command
             .arg("requirements.txt")
             .arg("--compile")
@@ -3229,7 +3138,7 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
         snapshot = run_test();
     }
 
-    ::insta::assert_snapshot!(snapshot, @r###"
+    assert_snapshot!(snapshot, @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3272,7 +3181,7 @@ requires-python = "<=3.5"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: false
     exit_code: 1
@@ -3299,7 +3208,7 @@ fn no_stream() -> Result<()> {
     requirements_txt
         .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--index-url")
         .arg("https://buf.build/gen/python"), @r###"
@@ -3342,7 +3251,7 @@ requires-python = "<=3.5"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("example @ {}", editable_dir.path().display()))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: false
     exit_code: 1
@@ -3368,7 +3277,7 @@ fn require_hashes_unknown_algorithm() -> Result<()> {
         "anyio==4.0.0 --hash=foo:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
     )?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3392,7 +3301,7 @@ fn require_hashes_missing_hash() -> Result<()> {
     requirements_txt.write_str("anyio==4.0.0")?;
 
     // Install without error when `--require-hashes` is omitted.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
@@ -3407,7 +3316,7 @@ fn require_hashes_missing_hash() -> Result<()> {
     );
 
     // Error when `--require-hashes` is provided.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3433,7 +3342,7 @@ fn require_hashes_missing_version() -> Result<()> {
     )?;
 
     // Install without error when `--require-hashes` is omitted.
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
@@ -3448,7 +3357,7 @@ fn require_hashes_missing_version() -> Result<()> {
     );
 
     // Error when `--require-hashes` is provided.
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3474,7 +3383,7 @@ fn require_hashes_invalid_operator() -> Result<()> {
     )?;
 
     // Install without error when `--require-hashes` is omitted.
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
@@ -3489,7 +3398,7 @@ fn require_hashes_invalid_operator() -> Result<()> {
     );
 
     // Error when `--require-hashes` is provided.
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3513,7 +3422,7 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -3548,7 +3457,7 @@ fn require_hashes_wheel_only_binary() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--only-binary")
         .arg(":all:")
@@ -3577,7 +3486,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
     requirements_txt
         .write_str("source-distribution==0.0.1 --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -3606,7 +3515,7 @@ fn require_hashes_source_only_binary() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--only-binary")
         .arg(":all:")
@@ -3641,7 +3550,7 @@ fn require_hashes_wrong_digest() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3674,7 +3583,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3707,7 +3616,7 @@ fn require_hashes_source_url() -> Result<()> {
     requirements_txt
         .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -3723,7 +3632,7 @@ fn require_hashes_source_url() -> Result<()> {
     );
 
     // Reinstall with the right hash, and verify that it's reused.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
@@ -3745,7 +3654,7 @@ fn require_hashes_source_url() -> Result<()> {
     requirements_txt
         .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
@@ -3777,7 +3686,7 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
     requirements_txt
         .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3808,7 +3717,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     requirements_txt
         .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -3824,7 +3733,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     );
 
     // Reinstall with the right hash, and verify that it's reused.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
@@ -3846,7 +3755,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     requirements_txt
         .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
@@ -3875,7 +3784,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f\niniconfig==2.0.0 --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -3902,7 +3811,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
     requirements_txt
         .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3935,7 +3844,7 @@ fn require_hashes_git() -> Result<()> {
     requirements_txt
         .write_str("anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3965,7 +3874,7 @@ fn require_hashes_source_tree() -> Result<()> {
             .display()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -3990,7 +3899,7 @@ fn require_hashes_re_download() -> Result<()> {
     requirements_txt.write_str("anyio==4.0.0")?;
 
     // Install without `--require-hashes`.
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
@@ -4009,7 +3918,7 @@ fn require_hashes_re_download() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
@@ -4036,7 +3945,7 @@ fn require_hashes_re_download() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
@@ -4070,7 +3979,7 @@ fn require_hashes_wheel_path() -> Result<()> {
             .display()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -4102,7 +4011,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
             .display()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -4140,7 +4049,7 @@ fn require_hashes_source_path() -> Result<()> {
             .display()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -4172,7 +4081,7 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
             .display()
     ))?;
 
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -4205,7 +4114,7 @@ fn require_hashes_unnamed() -> Result<()> {
             https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
         "} )?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -4236,7 +4145,7 @@ fn require_hashes_editable() -> Result<()> {
     })?;
 
     // Install the editable packages.
-    uv_snapshot!(context.filters(), sync_without_exclude_newer(&context)
+    uv_snapshot!(context.filters(), context.pip_sync_without_exclude_newer()
         .arg(requirements_txt.path())
         .arg("--require-hashes"), @r###"
     success: false
@@ -4260,7 +4169,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a\nanyio")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -4277,7 +4186,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     requirements_txt
         .write_str("anyio\nanyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -4305,7 +4214,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
             anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     " })?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -4328,7 +4237,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
             anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     " })?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--reinstall"), @r###"
@@ -4354,7 +4263,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
             anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:420d85e19168705cdf0223621b18831a
     " })?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--reinstall"), @r###"
@@ -4380,7 +4289,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
             anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:520d85e19168705cdf0223621b18831a
     " })?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--reinstall"), @r###"
@@ -4415,7 +4324,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -4436,7 +4345,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a --hash=md5:420d85e19168705cdf0223621b18831a")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
@@ -4458,7 +4367,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a --hash=md5:1234")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
@@ -4488,7 +4397,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4510,7 +4419,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4540,7 +4449,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4569,7 +4478,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -4603,7 +4512,7 @@ fn require_hashes_find_links_valid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--find-links")
@@ -4632,7 +4541,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4661,7 +4570,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4691,7 +4600,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4714,7 +4623,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -4741,7 +4650,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -4777,7 +4686,7 @@ fn require_hashes_registry_no_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--index-url")
@@ -4806,7 +4715,7 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--find-links")
@@ -4833,7 +4742,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4862,7 +4771,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4892,7 +4801,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4915,7 +4824,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -4942,7 +4851,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -4978,7 +4887,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5013,7 +4922,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==1.1.1")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5034,7 +4943,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5070,7 +4979,7 @@ fn target_source_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in")
         .arg("--no-binary")
         .arg("iniconfig")
@@ -5119,7 +5028,7 @@ fn target_no_build_isolation() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flit_core")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -5136,7 +5045,7 @@ fn target_no_build_isolation() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("wheel")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.in")
         .arg("--no-build-isolation")
         .arg("--no-binary")
@@ -5185,7 +5094,7 @@ fn prefix() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
         .arg("prefix"), @r###"
@@ -5220,7 +5129,7 @@ fn prefix() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==1.1.1")?;
 
-    uv_snapshot!(sync(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
         .arg("prefix"), @r###"
@@ -5248,7 +5157,7 @@ fn preserve_markers() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio ; python_version > '3.7'")?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync_without_exclude_newer()
         .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
