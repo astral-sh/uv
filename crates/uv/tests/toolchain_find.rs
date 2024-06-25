@@ -1,13 +1,13 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use common::{python_path_with_versions, uv_snapshot, TestContext};
+use common::{uv_snapshot, TestContext};
 use uv_toolchain::platform::{Arch, Os};
 
 mod common;
 
 #[test]
 fn toolchain_find() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let mut context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // No interpreters on the path
     uv_snapshot!(context.filters(), context.toolchain_find().env("UV_TEST_PYTHON_PATH", ""), @r###"
@@ -105,10 +105,9 @@ fn toolchain_find() {
     "###);
 
     // Swap the order of the Python versions
-    let python_path = python_path_with_versions(&context.temp_dir, &["3.12", "3.11"])
-        .expect("Failed to create Python test path");
+    context.python_versions.reverse();
 
-    uv_snapshot!(context.filters(), context.toolchain_find().env("UV_TEST_PYTHON_PATH", python_path), @r###"
+    uv_snapshot!(context.filters(), context.toolchain_find(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
