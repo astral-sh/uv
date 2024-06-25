@@ -421,7 +421,12 @@ impl Lock {
             table.insert("source", value(dist.id.source.to_string()));
 
             if let Some(ref sdist) = dist.sdist {
-                table.insert("sdist", value(sdist.to_toml()?));
+                // An actual sdist entry in the lock file is only required when
+                // it's from a registry. Otherwise, it's strictly redundant
+                // with the information in all other kinds of `source`.
+                if matches!(dist.id.source, Source::Registry(_)) {
+                    table.insert("sdist", value(sdist.to_toml()?));
+                }
             }
 
             if !dist.dependencies.is_empty() {
