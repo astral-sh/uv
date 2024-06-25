@@ -45,7 +45,7 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
     Ok(buf)
 }
 
-/// Create a symlink from `src` to `dst`, replacing any existing symlink.
+/// Create a symlink at `dst` pointing to `src`, replacing any existing symlink.
 ///
 /// On Windows, this uses the `junction` crate to create a junction point.
 #[cfg(windows)]
@@ -68,7 +68,7 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     )
 }
 
-/// Create a symlink from `src` to `dst`, replacing any existing symlink if necessary.
+/// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.
