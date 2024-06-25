@@ -607,6 +607,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) dry_run: bool,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
+    pub(crate) allow_empty_requirements: Option<bool>,
 }
 
 impl PipSyncSettings {
@@ -640,6 +641,8 @@ impl PipSyncSettings {
             strict,
             no_strict,
             dry_run,
+            allow_empty_requirements,
+            no_allow_empty_requirements,
             compat_args: _,
         } = args;
 
@@ -651,6 +654,7 @@ impl PipSyncSettings {
                 .collect(),
             dry_run,
             refresh: Refresh::from(refresh),
+            allow_empty_requirements: flag(allow_empty_requirements, no_allow_empty_requirements),
             settings: PipSettings::combine(
                 PipOptions {
                     python,
@@ -668,6 +672,7 @@ impl PipSyncSettings {
                     python_version,
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
+
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),

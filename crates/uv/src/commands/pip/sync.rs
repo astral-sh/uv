@@ -47,6 +47,7 @@ pub(crate) async fn pip_sync(
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
     setup_py: SetupPyStrategy,
+    allow_empty_requirements: Option<bool>,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
@@ -105,8 +106,8 @@ pub(crate) async fn pip_sync(
 
     // Validate that the requirements are non-empty.
     let num_requirements = requirements.len() + source_trees.len();
-    if num_requirements == 0 {
-        writeln!(printer.stderr(), "No requirements found")?;
+    if num_requirements == 0 && allow_empty_requirements != Some(true) {
+        writeln!(printer.stderr(), "No requirements found (hint: use `--allow-empty-requirements` to clear the environment)")?;
         return Ok(ExitStatus::Success);
     }
 
