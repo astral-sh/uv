@@ -338,7 +338,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         'FORK: while let Some(mut state) = forked_states.pop() {
             loop {
                 // Run unit propagation.
-                state.pubgrub.unit_propagation(state.next.clone())?;
+                state
+                    .pubgrub
+                    .unit_propagation(state.next.clone())
+                    .map_err(|err| {
+                        ResolveError::from_pubgrub_error(err, state.fork_urls.clone())
+                    })?;
 
                 // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
                 // the dependency mode is direct, we only need to visit the root package.
@@ -385,8 +390,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .partial_solution
                     .term_intersection_for_package(&state.next)
                     .ok_or_else(|| {
-                        PubGrubError::Failure(
-                            "a package was chosen but we don't have a term.".into(),
+                        ResolveError::from_pubgrub_error(
+                            PubGrubError::Failure(
+                                "a package was chosen but we don't have a term.".into(),
+                            ),
+                            state.fork_urls.clone(),
                         )
                     })?;
                 let decision = self.choose_version(
@@ -1677,11 +1685,13 @@ impl SolveState {
             if enabled!(Level::DEBUG) {
                 prefetcher.log_tried_versions();
             }
-            return Err(PubGrubError::SelfDependency {
-                package: self.next.clone(),
-                version: version.clone(),
-            }
-            .into());
+            return Err(ResolveError::from_pubgrub_error(
+                PubGrubError::SelfDependency {
+                    package: self.next.clone(),
+                    version: version.clone(),
+                },
+                self.fork_urls.clone(),
+            ));
         }
 
         for dependency in &dependencies {

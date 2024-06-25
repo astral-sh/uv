@@ -164,8 +164,16 @@ fn collapse_proxies(
     }
 }
 
-impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
-    fn from(value: pubgrub::error::PubGrubError<UvDependencyProvider>) -> Self {
+impl ResolveError {
+    /// Convert an error from PubGrub to a resolver error.
+    ///
+    /// [`ForkUrls`] breaks the usual pattern used here since it's part of one the [`SolveState`],
+    /// not of the [`ResolverState`], so we have to take it from the fork that errored instead of
+    /// being able to add it later.
+    pub(crate) fn from_pubgrub_error(
+        value: pubgrub::error::PubGrubError<UvDependencyProvider>,
+        fork_urls: ForkUrls,
+    ) -> Self {
         match value {
             // These are all never type variant that can never match, but never is experimental
             pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(_)
@@ -186,7 +194,7 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
                     index_locations: None,
                     unavailable_packages: FxHashMap::default(),
                     incomplete_packages: FxHashMap::default(),
-                    fork_urls: ForkUrls::default(),
+                    fork_urls,
                 })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
