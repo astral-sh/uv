@@ -992,7 +992,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(requirement, None, &self.locals)
                     })
-                    .collect::<Vec<_>>()?
+                    .collect::<Result<Vec<_>, _>>()?
             }
             PubGrubPackageInner::Package {
                 name,
@@ -1125,19 +1125,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // add a dependency from it to the same package with the group
                 // enabled.
 
-                    if extra.is_none() && dev.is_none() {
-                        for group in &self.dev {
-                            if !metadata.dev_dependencies.contains_key(group) {
-                                continue;
-                            }
-                            dependencies.push(PubGrubDependency {
-                                package: PubGrubPackage::from(PubGrubPackageInner::Dev {
-                                    name: name.clone(),
-                                    dev: group.clone(),
-                                    marker: marker.clone(),
-                                }),
-                                version: Range::singleton(version.clone()),
-                                url: None,
+                if extra.is_none() && dev.is_none() {
+                    for group in &self.dev {
+                        if !metadata.dev_dependencies.contains_key(group) {
+                            continue;
+                        }
+                        dependencies.push(PubGrubDependency {
+                            package: PubGrubPackage::from(PubGrubPackageInner::Dev {
+                                name: name.clone(),
+                                dev: group.clone(),
+                                marker: marker.clone(),
+                            }),
+                            version: Range::singleton(version.clone()),
+                            url: None,
                         });
                     }
                 }
