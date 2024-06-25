@@ -197,7 +197,7 @@ fn freeze_with_egg_info() -> Result<()> {
 
     let site_packages = ChildPath::new(context.site_packages());
 
-    // Manually create a `.egg-info` directory.
+    // Manually create an `.egg-info` directory.
     site_packages
         .child("zstandard-0.22.0-py3.12.egg-info")
         .create_dir_all()?;
@@ -239,6 +239,96 @@ fn freeze_with_egg_info() -> Result<()> {
     ----- stderr -----
     "###);
 
+    Ok(())
+}
+
+/// Show an `.egg-info` package in a virtual environment. In this case, the filename omits the
+/// Python version.
+#[test]
+fn freeze_with_egg_info_no_py() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    // Manually create an `.egg-info` directory.
+    site_packages
+        .child("zstandard-0.22.0.egg-info")
+        .create_dir_all()?;
+    site_packages
+        .child("zstandard-0.22.0.egg-info")
+        .child("top_level.txt")
+        .write_str("zstd")?;
+    site_packages
+        .child("zstandard-0.22.0.egg-info")
+        .child("SOURCES.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0.egg-info")
+        .child("PKG-INFO")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0.egg-info")
+        .child("dependency_links.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0.egg-info")
+        .child("entry_points.txt")
+        .write_str("")?;
+
+    // Manually create the package directory.
+    site_packages.child("zstd").create_dir_all()?;
+    site_packages
+        .child("zstd")
+        .child("__init__.py")
+        .write_str("")?;
+
+    // Run `pip freeze`.
+    uv_snapshot!(context.filters(), command(&context), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    zstandard==0.22.0
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+/// Show a set of `.egg-info` files in a virtual environment.
+#[test]
+fn freeze_with_egg_info_file() -> Result<()> {
+    let context = TestContext::new("3.11");
+    let site_packages = ChildPath::new(context.site_packages());
+
+    // Manually create a `.egg-info` file with python version.
+    site_packages
+        .child("pycurl-7.45.1-py3.11.egg-info")
+        .write_str(indoc::indoc! {"
+            Metadata-Version: 1.1
+            Name: pycurl
+            Version: 7.45.1
+        "})?;
+
+    // Manually create another `.egg-info` file with no python version.
+    site_packages
+        .child("vtk-9.2.6.egg-info")
+        .write_str(indoc::indoc! {"
+            Metadata-Version: 1.1
+            Name: vtk
+            Version: 9.2.6
+        "})?;
+
+    // Run `pip freeze`.
+    uv_snapshot!(context.filters(), command(&context), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pycurl==7.45.1
+    vtk==9.2.6
+
+    ----- stderr -----
+    "###);
     Ok(())
 }
 

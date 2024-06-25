@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
+use distribution_filename::EggInfoFilename;
 use fs_err as fs;
 use tracing::warn;
 use url::Url;
@@ -117,46 +118,36 @@ impl InstalledDist {
             };
         }
 
+        // Ex) `zstandard-0.22.0-py3.12.egg-info` or `vtk-9.2.6.egg-info`
         if path.extension().is_some_and(|ext| ext == "egg-info") {
-            // Ex) `zstandard-0.22.0-py3.12.egg-info`
-            if path.is_dir() {
-                let Some(file_stem) = path.file_stem() else {
+            let metadata = match fs_err::metadata(path) {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    warn!("Invalid `.egg-info` path: {err}");
                     return Ok(None);
-                };
-                let Some(file_stem) = file_stem.to_str() else {
-                    return Ok(None);
-                };
-                let Some((name, version_python)) = file_stem.split_once('-') else {
-                    return Ok(None);
-                };
-                let Some((version, _)) = version_python.split_once('-') else {
-                    return Ok(None);
-                };
-                let name = PackageName::from_str(name)?;
-                let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+                }
+            };
+
+            let Some(file_stem) = path.file_stem() else {
+                return Ok(None);
+            };
+            let Some(file_stem) = file_stem.to_str() else {
+                return Ok(None);
+            };
+            let file_name = EggInfoFilename::parse(file_stem)?;
+
+            if metadata.is_dir() {
                 return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
-                    name,
-                    version,
+                    name: file_name.name,
+                    version: file_name.version,
                     path: path.to_path_buf(),
                 })));
             }
 
-            // Ex) `vtk-9.2.6.egg-info`
-            if path.is_file() {
-                let Some(file_stem) = path.file_stem() else {
-                    return Ok(None);
-                };
-                let Some(file_stem) = file_stem.to_str() else {
-                    return Ok(None);
-                };
-                let Some((name, version)) = file_stem.split_once('-') else {
-                    return Ok(None);
-                };
-                let name = PackageName::from_str(name)?;
-                let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+            if metadata.is_file() {
                 return Ok(Some(Self::EggInfoFile(InstalledEggInfoFile {
-                    name,
-                    version,
+                    name: file_name.name,
+                    version: file_name.version,
                     path: path.to_path_buf(),
                 })));
             }
