@@ -319,7 +319,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
             next: root,
             pins: FilePins::default(),
-            urls: ForkUrls::default(),
+            fork_urls: ForkUrls::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
             markers: MarkerTree::And(vec![]),
@@ -363,7 +363,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
-                let url = state.next.name().and_then(|name| state.urls.get(name));
+                let url = state.next.name().and_then(|name| state.fork_urls.get(name));
 
                 // Consider:
                 // ```toml
@@ -393,7 +393,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.next,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
-                    &state.urls,
+                    &state.fork_urls,
                     visited,
                     &request_sink,
                 )?;
@@ -519,7 +519,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let forked_deps = self.get_dependencies_forking(
                         &state.next,
                         &version,
-                        &state.urls,
+                        &state.fork_urls,
                         &state.markers,
                     )?;
                     match forked_deps {
@@ -549,7 +549,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     version: _,
                                     url: _,
                                 } = dependency;
-                                let url = package.name().and_then(|name| state.urls.get(name));
+                                let url = package.name().and_then(|name| state.fork_urls.get(name));
                                 self.visit_package(package, url, &request_sink)?;
                             }
                             forked_states.push(state);
@@ -597,8 +597,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         version: _,
                                         url: _,
                                     } = dependency;
-                                    let url =
-                                        package.name().and_then(|name| forked_state.urls.get(name));
+                                    let url = package
+                                        .name()
+                                        .and_then(|name| forked_state.fork_urls.get(name));
                                     self.visit_package(package, url, &request_sink)?;
                                 }
                                 forked_states.push(forked_state);
@@ -1629,7 +1630,7 @@ struct SolveState {
     /// Unlike [`Urls`], we add only the URLs we have seen in this branch, and there can be only
     /// one URL per package. By prioritizing direct URL dependencies over registry dependencies,
     /// this map is populated for all direct URL packages before we look at any registry packages.
-    urls: ForkUrls,
+    fork_urls: ForkUrls,
     /// When dependencies for a package are retrieved, this map of priorities
     /// is updated based on how each dependency was specified. Certain types
     /// of dependencies have more "priority" than others (like direct URL
@@ -1696,7 +1697,7 @@ impl SolveState {
             // conflicts using [`ForkUrl`].
             if let Some(name) = package.name() {
                 if let Some(url) = urls.get_url(name, url.as_ref(), git)? {
-                    self.urls.insert(name, url, &self.markers)?;
+                    self.fork_urls.insert(name, url, &self.markers)?;
                 };
             }
 
@@ -1715,7 +1716,7 @@ impl SolveState {
             }
 
             // Update the package priorities.
-            self.priorities.insert(package, version, &self.urls);
+            self.priorities.insert(package, version, &self.fork_urls);
         }
 
         self.pubgrub.add_package_version_dependencies(
@@ -1896,7 +1897,7 @@ impl SolveState {
                             name: name.clone(),
                             extra: extra.clone(),
                             dev: dev.clone(),
-                            url: self.urls.get(name).cloned(),
+                            url: self.fork_urls.get(name).cloned(),
                         },
                         FxHashSet::from_iter([version]),
                     ))
