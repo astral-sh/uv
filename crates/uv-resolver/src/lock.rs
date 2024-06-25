@@ -686,91 +686,91 @@ impl Distribution {
             };
         }
 
-        if let Some(sdist) = &self.sdist {
-            return match &self.id.source {
-                Source::Path(path) => {
-                    let path_dist = PathSourceDist {
-                        name: self.id.name.clone(),
-                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                            LockErrorKind::VerbatimUrl {
-                                id: self.id.clone(),
-                                err,
-                            }
-                        })?,
-                        install_path: workspace_root.join(path),
-                        lock_path: path.clone(),
-                    };
-                    let source_dist = distribution_types::SourceDist::Path(path_dist);
-                    Ok(Dist::Source(source_dist))
-                }
-                Source::Directory(path) => {
-                    let dir_dist = DirectorySourceDist {
-                        name: self.id.name.clone(),
-                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                            LockErrorKind::VerbatimUrl {
-                                id: self.id.clone(),
-                                err,
-                            }
-                        })?,
-                        install_path: workspace_root.join(path),
-                        lock_path: path.clone(),
-                        editable: false,
-                    };
-                    let source_dist = distribution_types::SourceDist::Directory(dir_dist);
-                    Ok(Dist::Source(source_dist))
-                }
-                Source::Editable(path) => {
-                    let dir_dist = DirectorySourceDist {
-                        name: self.id.name.clone(),
-                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                            LockErrorKind::VerbatimUrl {
-                                id: self.id.clone(),
-                                err,
-                            }
-                        })?,
-                        install_path: workspace_root.join(path),
-                        lock_path: path.clone(),
-                        editable: true,
-                    };
-                    let source_dist = distribution_types::SourceDist::Directory(dir_dist);
-                    Ok(Dist::Source(source_dist))
-                }
-                Source::Git(url, git) => {
-                    // Reconstruct the `GitUrl` from the `GitSource`.
-                    let git_url =
-                        uv_git::GitUrl::new(url.clone(), GitReference::from(git.kind.clone()))
-                            .with_precise(git.precise);
+        match &self.id.source {
+            Source::Path(path) => {
+                let path_dist = PathSourceDist {
+                    name: self.id.name.clone(),
+                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                        LockErrorKind::VerbatimUrl {
+                            id: self.id.clone(),
+                            err,
+                        }
+                    })?,
+                    install_path: workspace_root.join(path),
+                    lock_path: path.clone(),
+                };
+                let source_dist = distribution_types::SourceDist::Path(path_dist);
+                return Ok(Dist::Source(source_dist));
+            }
+            Source::Directory(path) => {
+                let dir_dist = DirectorySourceDist {
+                    name: self.id.name.clone(),
+                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                        LockErrorKind::VerbatimUrl {
+                            id: self.id.clone(),
+                            err,
+                        }
+                    })?,
+                    install_path: workspace_root.join(path),
+                    lock_path: path.clone(),
+                    editable: false,
+                };
+                let source_dist = distribution_types::SourceDist::Directory(dir_dist);
+                return Ok(Dist::Source(source_dist));
+            }
+            Source::Editable(path) => {
+                let dir_dist = DirectorySourceDist {
+                    name: self.id.name.clone(),
+                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
+                        LockErrorKind::VerbatimUrl {
+                            id: self.id.clone(),
+                            err,
+                        }
+                    })?,
+                    install_path: workspace_root.join(path),
+                    lock_path: path.clone(),
+                    editable: true,
+                };
+                let source_dist = distribution_types::SourceDist::Directory(dir_dist);
+                return Ok(Dist::Source(source_dist));
+            }
+            Source::Git(url, git) => {
+                // Reconstruct the `GitUrl` from the `GitSource`.
+                let git_url =
+                    uv_git::GitUrl::new(url.clone(), GitReference::from(git.kind.clone()))
+                        .with_precise(git.precise);
 
-                    // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                    let url = Url::from(ParsedGitUrl {
-                        url: git_url.clone(),
-                        subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
-                    });
+                // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                let url = Url::from(ParsedGitUrl {
+                    url: git_url.clone(),
+                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                });
 
-                    let git_dist = GitSourceDist {
-                        name: self.id.name.clone(),
-                        url: VerbatimUrl::from_url(url),
-                        git: Box::new(git_url),
-                        subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
-                    };
-                    let source_dist = distribution_types::SourceDist::Git(git_dist);
-                    Ok(Dist::Source(source_dist))
-                }
-                Source::Direct(url, direct) => {
-                    let url = Url::from(ParsedArchiveUrl {
-                        url: url.clone(),
-                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
-                    });
-                    let direct_dist = DirectUrlSourceDist {
-                        name: self.id.name.clone(),
-                        location: url.clone(),
-                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
-                        url: VerbatimUrl::from_url(url),
-                    };
-                    let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
-                    Ok(Dist::Source(source_dist))
-                }
-                Source::Registry(url) => {
+                let git_dist = GitSourceDist {
+                    name: self.id.name.clone(),
+                    url: VerbatimUrl::from_url(url),
+                    git: Box::new(git_url),
+                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                };
+                let source_dist = distribution_types::SourceDist::Git(git_dist);
+                return Ok(Dist::Source(source_dist));
+            }
+            Source::Direct(url, direct) => {
+                let url = Url::from(ParsedArchiveUrl {
+                    url: url.clone(),
+                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                });
+                let direct_dist = DirectUrlSourceDist {
+                    name: self.id.name.clone(),
+                    location: url.clone(),
+                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    url: VerbatimUrl::from_url(url),
+                };
+                let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
+                return Ok(Dist::Source(source_dist));
+            }
+            Source::Registry(url) => {
+                if let Some(ref sdist) = self.sdist {
                     let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
                         id: self.id.clone(),
                     })?;
@@ -799,9 +799,9 @@ impl Distribution {
                         wheels: vec![],
                     };
                     let source_dist = distribution_types::SourceDist::Registry(reg_dist);
-                    Ok(Dist::Source(source_dist))
+                    return Ok(Dist::Source(source_dist));
                 }
-            };
+            }
         }
 
         Err(LockErrorKind::NeitherSourceDistNorWheel {
