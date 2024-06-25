@@ -50,6 +50,7 @@ fn command(context: &TestContext) -> Command {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.29/vendor/links.html");
     context.add_shared_args(&mut command);
+    command.env_remove("UV_EXCLUDE_NEWER");
     command
 }
 

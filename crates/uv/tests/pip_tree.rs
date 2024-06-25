@@ -239,7 +239,8 @@ fn cyclic_dependency() {
         .write_str("uv-cyclic-dependencies-c")
         .unwrap();
 
-    let mut command = context.pip_install_without_exclude_newer();
+    let mut command = context.pip_install();
+    command.env_remove("UV_EXCLUDE_NEWER");
     command
         .arg("-r")
         .arg("requirements.txt")
@@ -501,7 +502,8 @@ fn no_dedupe_and_cycle() {
     "###
     );
 
-    let mut command = context.pip_install_without_exclude_newer();
+    let mut command = context.pip_install();
+    command.env_remove("UV_EXCLUDE_NEWER");
     command
         .arg("uv-cyclic-dependencies-c==0.1.0")
         .arg("--index-url")

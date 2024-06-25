@@ -125,7 +125,7 @@ fn lock_sdist_registry() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock_without_exclude_newer(), @r###"
+    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -166,7 +166,7 @@ fn lock_sdist_registry() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().env_remove("UV_EXCLUDE_NEWER"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

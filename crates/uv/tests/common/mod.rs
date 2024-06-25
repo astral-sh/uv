@@ -266,6 +266,7 @@ impl TestContext {
             .env("HOME", self.home_dir.as_os_str())
             .env("UV_TOOLCHAIN_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
+            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
             .current_dir(self.temp_dir.path());
 
         if cfg!(all(windows, debug_assertions)) {
@@ -277,18 +278,6 @@ impl TestContext {
 
     /// Create a `pip compile` command for testing.
     pub fn pip_compile(&self) -> Command {
-        let mut command = self.pip_compile_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
-        command
-    }
-
-    /// Create a `pip compile` command with no `--exclude-newer` option.
-    ///
-    /// One should avoid using this in tests to the extent possible because
-    /// it can result in tests failing when the index state changes. Therefore,
-    /// if you use this, there should be some other kind of mitigation in place.
-    /// For example, pinning package versions.
-    pub fn pip_compile_without_exclude_newer(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("compile");
         self.add_shared_args(&mut command);
@@ -297,18 +286,6 @@ impl TestContext {
 
     /// Create a `pip compile` command for testing.
     pub fn pip_sync(&self) -> Command {
-        let mut command = self.pip_sync_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
-        command
-    }
-
-    /// Create a `pip sync` command with no `--exclude-newer` option.
-    ///
-    /// One should avoid using this in tests to the extent possible because
-    /// it can result in tests failing when the index state changes. Therefore,
-    /// if you use this, there should be some other kind of mitigation in place.
-    /// For example, pinning package versions.
-    pub fn pip_sync_without_exclude_newer(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("sync");
         self.add_shared_args(&mut command);
@@ -318,10 +295,7 @@ impl TestContext {
     /// Create a `uv venv` command
     pub fn venv(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command
-            .arg("venv")
-            .arg("--exclude-newer")
-            .arg(EXCLUDE_NEWER);
+        command.arg("venv");
         self.add_shared_args(&mut command);
         command.env_remove("VIRTUAL_ENV");
         command
@@ -329,18 +303,6 @@ impl TestContext {
 
     /// Create a `pip install` command with options shared across scenarios.
     pub fn pip_install(&self) -> Command {
-        let mut command = self.pip_install_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
-        command
-    }
-
-    /// Create a `pip install` command with no `--exclude-newer` option.
-    ///
-    /// One should avoid using this in tests to the extent possible because
-    /// it can result in tests failing when the index state changes. Therefore,
-    /// if you use this, there should be some other kind of mitigation in place.
-    /// For example, pinning package versions.
-    pub fn pip_install_without_exclude_newer(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("install");
         self.add_shared_args(&mut command);
@@ -365,18 +327,6 @@ impl TestContext {
 
     /// Create a `uv lock` command with options shared across scenarios.
     pub fn lock(&self) -> Command {
-        let mut command = self.lock_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
-        command
-    }
-
-    /// Create a `uv lock` command with no `--exclude-newer` option.
-    ///
-    /// One should avoid using this in tests to the extent possible because
-    /// it can result in tests failing when the index state changes. Therefore,
-    /// if you use this, there should be some other kind of mitigation in place.
-    /// For example, pinning package versions.
-    pub fn lock_without_exclude_newer(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("lock");
         self.add_shared_args(&mut command);
@@ -398,18 +348,6 @@ impl TestContext {
 
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> Command {
-        let mut command = self.run_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
-        command
-    }
-
-    /// Create a `uv run` command with no `--exclude-newer` option.
-    ///
-    /// One should avoid using this in tests to the extent possible because
-    /// it can result in tests failing when the index state changes. Therefore,
-    /// if you use this, there should be some other kind of mitigation in place.
-    /// For example, pinning package versions.
-    pub fn run_without_exclude_newer(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("run");
         self.add_shared_args(&mut command);
@@ -418,18 +356,6 @@ impl TestContext {
 
     /// Create a `uv tool run` command with options shared across scenarios.
     pub fn tool_run(&self) -> Command {
-        let mut command = self.tool_run_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
-        command
-    }
-
-    /// Create a `uv tool run` command with no `--exclude-newer` option.
-    ///
-    /// One should avoid using this in tests to the extent possible because
-    /// it can result in tests failing when the index state changes. Therefore,
-    /// if you use this, there should be some other kind of mitigation in place.
-    /// For example, pinning package versions.
-    pub fn tool_run_without_exclude_newer(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("run");
         self.add_shared_args(&mut command);

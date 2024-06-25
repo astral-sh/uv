@@ -51,7 +51,8 @@ fn {{module_name}}() -> Result<()> {
         "###
     )?;
 
-    let mut cmd = context.lock_without_exclude_newer();
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg("{{index_url}}");
     {{#expected.explanation_lines}}
     // {{.}}
