@@ -7,44 +7,15 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
+use crate::common::{get_bin, uv_snapshot, TestContext};
 
 mod common;
 
 /// Create a `pip freeze` command with options shared across scenarios.
 fn command(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("freeze")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-    command
-}
-
-/// Create a `pip install` command with options shared across scenarios.
-fn sync_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("sync")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
-
+    command.arg("pip").arg("freeze");
+    context.add_shared_args(&mut command);
     command
 }
 
@@ -57,7 +28,8 @@ fn freeze_many() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     // Run `pip sync`.
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -90,7 +62,8 @@ fn freeze_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==21.3.1")?;
 
     // Run `pip sync`.
-    sync_command(&context1)
+    context1
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -101,7 +74,8 @@ fn freeze_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==22.1.1")?;
 
     // Run `pip sync`.
-    sync_command(&context2)
+    context2
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -139,7 +113,8 @@ fn freeze_url() -> Result<()> {
     requirements_txt.write_str("anyio\niniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")?;
 
     // Run `pip sync`.
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -176,7 +151,8 @@ fn freeze_with_editable() -> Result<()> {
     ))?;
 
     // Run `pip sync`.
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();

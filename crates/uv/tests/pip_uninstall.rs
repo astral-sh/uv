@@ -11,48 +11,6 @@ use crate::common::{get_bin, venv_to_interpreter, TestContext};
 
 mod common;
 
-/// Create a `pip uninstall` command with options shared across scenarios.
-fn uninstall_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("uninstall")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
-
-    command
-}
-
-/// Create a `pip sync` command with options shared across scenarios.
-fn sync_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("sync")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
-
-    command
-}
-
 #[test]
 fn no_arguments() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -156,7 +114,8 @@ fn uninstall() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg("requirements.txt")
         .assert()
         .success();
@@ -168,7 +127,7 @@ fn uninstall() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(uninstall_command(&context)
+    uv_snapshot!(context.pip_uninstall()
         .arg("MarkupSafe"), @r###"
     success: true
     exit_code: 0
@@ -197,7 +156,8 @@ fn missing_record() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg("requirements.txt")
         .assert()
         .success();
@@ -213,7 +173,7 @@ fn missing_record() -> Result<()> {
     let dist_info = context.site_packages().join("MarkupSafe-2.1.3.dist-info");
     fs_err::remove_file(dist_info.join("RECORD"))?;
 
-    uv_snapshot!(context.filters(), uninstall_command(&context)
+    uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("MarkupSafe"), @r###"
     success: false
     exit_code: 2
@@ -241,7 +201,8 @@ fn uninstall_editable_by_name() -> Result<()> {
             .to_str()
             .expect("Path is valid unicode")
     ))?;
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -253,7 +214,7 @@ fn uninstall_editable_by_name() -> Result<()> {
         .success();
 
     // Uninstall the editable by name.
-    uv_snapshot!(context.filters(), uninstall_command(&context)
+    uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("poetry-editable"), @r###"
     success: true
     exit_code: 0
@@ -288,7 +249,8 @@ fn uninstall_by_path() -> Result<()> {
             .expect("Path is valid unicode"),
     )?;
 
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -300,7 +262,7 @@ fn uninstall_by_path() -> Result<()> {
         .success();
 
     // Uninstall the editable by path.
-    uv_snapshot!(context.filters(), uninstall_command(&context)
+    uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
@@ -335,7 +297,8 @@ fn uninstall_duplicate_by_path() -> Result<()> {
             .expect("Path is valid unicode"),
     )?;
 
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -347,7 +310,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
         .success();
 
     // Uninstall the editable by both path and name.
-    uv_snapshot!(context.filters(), uninstall_command(&context)
+    uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("poetry-editable")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
@@ -380,7 +343,8 @@ fn uninstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==21.3.1")?;
 
     // Run `pip sync`.
-    sync_command(&context1)
+    context1
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -391,7 +355,8 @@ fn uninstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==22.1.1")?;
 
     // Run `pip sync`.
-    sync_command(&context2)
+    context2
+        .pip_sync()
         .arg(requirements_txt.path())
         .assert()
         .success();
@@ -403,7 +368,7 @@ fn uninstall_duplicate() -> Result<()> {
     )?;
 
     // Run `pip uninstall`.
-    uv_snapshot!(uninstall_command(&context1)
+    uv_snapshot!(context1.pip_uninstall()
         .arg("pip"), @r###"
     success: true
     exit_code: 0
@@ -459,7 +424,7 @@ fn uninstall_egg_info() -> Result<()> {
         .write_str("")?;
 
     // Run `pip uninstall`.
-    uv_snapshot!(uninstall_command(&context)
+    uv_snapshot!(context.pip_uninstall()
         .arg("zstandard"), @r###"
     success: true
     exit_code: 0
@@ -513,7 +478,7 @@ Version: 0.22.0
     ))?;
 
     // Run `pip uninstall`.
-    uv_snapshot!(uninstall_command(&context)
+    uv_snapshot!(context.pip_uninstall()
         .arg("zstandard"), @r###"
     success: true
     exit_code: 0

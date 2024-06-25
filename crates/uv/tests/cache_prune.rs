@@ -15,42 +15,8 @@ mod common;
 /// Create a `cache prune` command with options shared across scenarios.
 fn prune_command(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
-    command
-        .arg("cache")
-        .arg("prune")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
-
-    command
-}
-
-/// Create a `pip sync` command with options shared across scenarios.
-fn sync_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("sync")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
-
+    command.arg("cache").arg("prune");
+    context.add_shared_args(&mut command);
     command
 }
 
@@ -63,7 +29,8 @@ fn prune_no_op() -> Result<()> {
     requirements_txt.write_str("anyio")?;
 
     // Install a requirement, to populate the cache.
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg("requirements.txt")
         .assert()
         .success();
@@ -91,7 +58,8 @@ fn prune_stale_directory() -> Result<()> {
     requirements_txt.write_str("anyio")?;
 
     // Install a requirement, to populate the cache.
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg("requirements.txt")
         .assert()
         .success();
@@ -124,7 +92,8 @@ fn prune_stale_symlink() -> Result<()> {
     requirements_txt.write_str("anyio")?;
 
     // Install a requirement, to populate the cache.
-    sync_command(&context)
+    context
+        .pip_sync()
         .arg("requirements.txt")
         .assert()
         .success();
