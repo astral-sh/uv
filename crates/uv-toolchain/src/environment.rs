@@ -160,6 +160,9 @@ impl PythonEnvironment {
         if let Some(target) = self.0.interpreter.target() {
             // If we're installing into a `--target`, use a target-specific lock file.
             LockedFile::acquire(target.root().join(".lock"), target.root().user_display())
+        } else if let Some(prefix) = self.0.interpreter.prefix() {
+            // Likewise, if we're installing into a `--prefix`, use a prefix-specific lock file.
+            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display())
         } else if self.0.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.
             LockedFile::acquire(self.0.root.join(".lock"), self.0.root.user_display())
