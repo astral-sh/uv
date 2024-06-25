@@ -672,6 +672,12 @@
             "null"
           ]
         },
+        "no-strip-markers": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "only-binary": {
           "type": [
             "array",

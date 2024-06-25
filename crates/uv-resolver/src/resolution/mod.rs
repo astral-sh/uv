@@ -7,6 +7,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
 pub use crate::resolution::graph::ResolutionGraph;
+pub(crate) use crate::resolution::graph::ResolutionGraphNode;
 pub(crate) use crate::resolution::requirements_txt::RequirementsTxtDist;
 
 mod display;

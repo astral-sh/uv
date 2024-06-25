@@ -263,6 +263,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.generate_hashes,
                 args.settings.no_emit_package,
                 args.settings.no_strip_extras,
+                args.settings.no_strip_markers,
                 !args.settings.no_annotate,
                 !args.settings.no_header,
                 args.settings.custom_compile_command,

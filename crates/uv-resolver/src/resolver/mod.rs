@@ -1589,14 +1589,17 @@ impl SolveState {
                     continue;
                 }
 
-                let PubGrubPackageInner::Package {
-                    name: ref self_name,
-                    extra: ref self_extra,
-                    dev: ref self_dev,
-                    ..
-                } = &**self_package
-                else {
-                    continue;
+                let (self_name, self_extra, self_dev) = match &**self_package {
+                    PubGrubPackageInner::Package {
+                        name: self_name,
+                        extra: self_extra,
+                        dev: self_dev,
+                        ..
+                    } => (Some(self_name), self_extra.as_ref(), self_dev.as_ref()),
+
+                    PubGrubPackageInner::Root(_) => (None, None, None),
+
+                    _ => continue,
                 };
 
                 match **dependency_package {
@@ -1606,17 +1609,17 @@ impl SolveState {
                         dev: ref dependency_dev,
                         ..
                     } => {
-                        if self_name == dependency_name {
+                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
                         let names = ResolutionDependencyNames {
-                            from: self_name.clone(),
+                            from: self_name.cloned(),
                             to: dependency_name.clone(),
                         };
                         let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
-                            from_extra: self_extra.clone(),
-                            from_dev: self_dev.clone(),
+                            from_extra: self_extra.cloned(),
+                            from_dev: self_dev.cloned(),
                             to_version: dependency_version.clone(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
@@ -1630,17 +1633,17 @@ impl SolveState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name == dependency_name {
+                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
                         let names = ResolutionDependencyNames {
-                            from: self_name.clone(),
+                            from: self_name.cloned(),
                             to: dependency_name.clone(),
                         };
                         let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
-                            from_extra: self_extra.clone(),
-                            from_dev: self_dev.clone(),
+                            from_extra: self_extra.cloned(),
+                            from_dev: self_dev.cloned(),
                             to_version: dependency_version.clone(),
                             to_extra: None,
                             to_dev: None,
@@ -1655,17 +1658,17 @@ impl SolveState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name == dependency_name {
+                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
                         let names = ResolutionDependencyNames {
-                            from: self_name.clone(),
+                            from: self_name.cloned(),
                             to: dependency_name.clone(),
                         };
                         let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
-                            from_extra: self_extra.clone(),
-                            from_dev: self_dev.clone(),
+                            from_extra: self_extra.cloned(),
+                            from_dev: self_dev.cloned(),
                             to_version: dependency_version.clone(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
@@ -1680,17 +1683,17 @@ impl SolveState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name == dependency_name {
+                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
                         let names = ResolutionDependencyNames {
-                            from: self_name.clone(),
+                            from: self_name.cloned(),
                             to: dependency_name.clone(),
                         };
                         let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
-                            from_extra: self_extra.clone(),
-                            from_dev: self_dev.clone(),
+                            from_extra: self_extra.cloned(),
+                            from_dev: self_dev.cloned(),
                             to_version: dependency_version.clone(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
@@ -1756,7 +1759,7 @@ pub(crate) struct ResolutionPackage {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionDependencyNames {
-    pub(crate) from: PackageName,
+    pub(crate) from: Option<PackageName>,
     pub(crate) to: PackageName,
 }
 
