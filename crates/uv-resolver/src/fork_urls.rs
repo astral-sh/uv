@@ -39,7 +39,7 @@ impl ForkUrls {
                         url.verbatim.verbatim().to_string(),
                     ];
                     conflicting_url.sort();
-                    return if fork_markers.is_empty() {
+                    return if fork_markers.is_universal() {
                         Err(ResolveError::ConflictingUrls(
                             package_name.clone(),
                             conflicting_url,

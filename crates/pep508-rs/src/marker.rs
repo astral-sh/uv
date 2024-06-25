@@ -1587,7 +1587,7 @@ impl MarkerTree {
     }
 
     /// Whether the marker is `MarkerTree::And(Vec::new())`.
-    pub fn is_empty(&self) -> bool {
+    pub fn is_universal(&self) -> bool {
         self == &MarkerTree::And(Vec::new())
     }
 
