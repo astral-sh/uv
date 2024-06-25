@@ -100,32 +100,18 @@ pub enum IndexUrlError {
     Url(#[from] ParseError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
-    #[error("Index URL must be a valid base URL")]
-    CannotBeABase,
 }
 
 impl FromStr for IndexUrl {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(path) = Path::new(s).canonicalize() {
-            let url = VerbatimUrl::from_path(path)?.with_given(s.to_owned());
-            Ok(Self::Path(url))
+        let url = if let Ok(path) = Path::new(s).canonicalize() {
+            VerbatimUrl::from_path(path)?
         } else {
-            let url = Url::parse(s)?;
-            if url.cannot_be_a_base() {
-                Err(IndexUrlError::CannotBeABase)
-            } else {
-                let url = VerbatimUrl::from_url(url).with_given(s.to_owned());
-                if *url.raw() == *PYPI_URL {
-                    Ok(Self::Pypi(url))
-                } else if url.scheme() == "file" {
-                    Ok(Self::Path(url))
-                } else {
-                    Ok(Self::Url(url))
-                }
-            }
-        }
+            VerbatimUrl::parse_url(s)?
+        };
+        Ok(Self::from(url.with_given(s)))
     }
 }
 
@@ -150,7 +136,9 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
 
 impl From<VerbatimUrl> for IndexUrl {
     fn from(url: VerbatimUrl) -> Self {
-        if *url.raw() == *PYPI_URL {
+        if url.scheme() == "file" {
+            Self::Path(url)
+        } else if *url.raw() == *PYPI_URL {
             Self::Pypi(url)
         } else {
             Self::Url(url)
