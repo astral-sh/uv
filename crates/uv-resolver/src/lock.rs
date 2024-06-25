@@ -421,12 +421,7 @@ impl Lock {
             table.insert("source", value(dist.id.source.to_string()));
 
             if let Some(ref sdist) = dist.sdist {
-                // An actual sdist entry in the lock file is only required when
-                // it's from a registry. Otherwise, it's strictly redundant
-                // with the information in all other kinds of `source`.
-                if matches!(dist.id.source, Source::Registry(_)) {
-                    table.insert("sdist", value(sdist.to_toml()?));
-                }
+                table.insert("sdist", value(sdist.to_toml()?));
             }
 
             if !dist.dependencies.is_empty() {
@@ -1449,32 +1444,27 @@ impl SourceDist {
                 SourceDist::from_registry_dist(sdist).map(Some)
             }
             Dist::Built(_) => Ok(None),
-            Dist::Source(ref source_dist) => {
-                SourceDist::from_source_dist(source_dist, hashes).map(Some)
-            }
+            Dist::Source(ref source_dist) => SourceDist::from_source_dist(source_dist, hashes),
         }
     }
 
     fn from_source_dist(
         source_dist: &distribution_types::SourceDist,
         hashes: &[HashDigest],
-    ) -> Result<SourceDist, LockError> {
+    ) -> Result<Option<SourceDist>, LockError> {
         match *source_dist {
             distribution_types::SourceDist::Registry(ref reg_dist) => {
-                SourceDist::from_registry_dist(reg_dist)
+                SourceDist::from_registry_dist(reg_dist).map(Some)
             }
             distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
-                Ok(SourceDist::from_direct_dist(direct_dist, hashes))
+                Ok(Some(SourceDist::from_direct_dist(direct_dist, hashes)))
             }
-            distribution_types::SourceDist::Git(ref git_dist) => {
-                Ok(SourceDist::from_git_dist(git_dist, hashes))
-            }
-            distribution_types::SourceDist::Path(ref path_dist) => {
-                Ok(SourceDist::from_path_dist(path_dist, hashes))
-            }
-            distribution_types::SourceDist::Directory(ref directory_dist) => {
-                Ok(SourceDist::from_directory_dist(directory_dist, hashes))
-            }
+            // An actual sdist entry in the lock file is only required when
+            // it's from a registry or a direct URL. Otherwise, it's strictly
+            // redundant with the information in all other kinds of `source`.
+            distribution_types::SourceDist::Git(_)
+            | distribution_types::SourceDist::Path(_)
+            | distribution_types::SourceDist::Directory(_) => Ok(None),
         }
     }
 
@@ -1496,39 +1486,6 @@ impl SourceDist {
     fn from_direct_dist(direct_dist: &DirectUrlSourceDist, hashes: &[HashDigest]) -> SourceDist {
         SourceDist::Url {
             url: direct_dist.url.to_url(),
-            metadata: SourceDistMetadata {
-                hash: hashes.first().cloned().map(Hash::from),
-                size: None,
-            },
-        }
-    }
-
-    fn from_git_dist(git_dist: &GitSourceDist, hashes: &[HashDigest]) -> SourceDist {
-        SourceDist::Url {
-            url: locked_git_url(git_dist),
-            metadata: SourceDistMetadata {
-                hash: hashes.first().cloned().map(Hash::from),
-                size: None,
-            },
-        }
-    }
-
-    fn from_path_dist(path_dist: &PathSourceDist, hashes: &[HashDigest]) -> SourceDist {
-        SourceDist::Path {
-            path: path_dist.lock_path.clone(),
-            metadata: SourceDistMetadata {
-                hash: hashes.first().cloned().map(Hash::from),
-                size: None,
-            },
-        }
-    }
-
-    fn from_directory_dist(
-        directory_dist: &DirectorySourceDist,
-        hashes: &[HashDigest],
-    ) -> SourceDist {
-        SourceDist::Path {
-            path: directory_dist.lock_path.clone(),
             metadata: SourceDistMetadata {
                 hash: hashes.first().cloned().map(Hash::from),
                 size: None,
