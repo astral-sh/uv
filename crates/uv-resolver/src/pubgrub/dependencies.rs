@@ -165,7 +165,6 @@ impl PubGrubRequirement {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn from_registry_requirement(
         specifier: &VersionSpecifiers,
         extra: Option<ExtraName>,
