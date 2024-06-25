@@ -4999,6 +4999,7 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-toolchain",
+ "uv-warnings",
 ]
 
 [[package]]

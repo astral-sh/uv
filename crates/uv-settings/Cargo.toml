@@ -19,10 +19,11 @@ pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
 uv-configuration = { workspace = true, features = ["schemars"] }
 uv-fs = { workspace = true }
+uv-macros = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
 uv-resolver = { workspace = true, features = ["schemars"] }
 uv-toolchain = { workspace = true, features = ["schemars"] }
-uv-macros = { workspace = true }
+uv-warnings = { workspace = true }
 
 dirs-sys = { workspace = true }
 fs-err = { workspace = true }
