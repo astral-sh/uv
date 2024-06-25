@@ -114,23 +114,53 @@ jobs:
       - run: cargo binstall --no-confirm cargo-shear
       - run: cargo shear
 
-  cargo-test-unix:
+  # We use the large GitHub actions runners
+  # For Ubuntu and Windows, this requires Organization-level configuration
+  # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
+
+  cargo-test-linux:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    strategy:
-      matrix:
-        include:
-          # We use the large GitHub actions runners
-          # For Ubuntu and Windows, this requires Organization-level configuration
-          # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
-          - os: "ubuntu"
-            runner: "ubuntu-latest-large"
-          - os: "macos"
-            runner: "macos-14"
-      fail-fast: false
     runs-on:
-      labels: ${{ matrix.runner }}
-    name: "cargo test | ${{ matrix.os }}"
+      labels: "ubuntu-latest-large"
+    name: "cargo test | ubuntu"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install required Python versions"
+        run: |
+          cargo run toolchain install
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        run: |
+          cargo nextest run \
+            --features python-patch \
+            --workspace \
+            --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+
+      - name: "Smoke test"
+        run: |
+          uv="./target/debug/uv"
+          $uv venv
+          $uv pip install ruff
+
+  cargo-test-macos:
+    needs: determine_changes
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on:
+      labels: "macos-14"
+    name: "cargo test | macos"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
@@ -165,15 +195,9 @@ jobs:
   cargo-test-windows:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    strategy:
-      matrix:
-        include:
-          - os: "windows"
-            runner: "windows-latest-large"
-      fail-fast: false
     runs-on:
-      labels: ${{ matrix.runner }}
-    name: "cargo test | ${{ matrix.os }}"
+      labels: "windows-latest-large"
+    name: "cargo test | windows"
     steps:
       - name: Create Dev Drive using ReFS
         run: |
