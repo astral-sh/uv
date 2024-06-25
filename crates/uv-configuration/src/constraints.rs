@@ -16,7 +16,11 @@ impl Constraints {
             constraints
                 .entry(requirement.name.clone())
                 .or_default()
-                .push(requirement);
+                .push(Requirement {
+                    // We add and apply constraints independent of their extras.
+                    extras: vec![],
+                    ..requirement
+                });
         }
         Self(constraints)
     }
