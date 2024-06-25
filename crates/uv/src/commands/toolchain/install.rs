@@ -15,7 +15,6 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Download and install a Python toolchain.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     targets: Vec<String>,
     force: bool,

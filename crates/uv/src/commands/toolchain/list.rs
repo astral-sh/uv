@@ -25,7 +25,6 @@ enum Kind {
 }
 
 /// List available toolchains.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn list(
     kinds: ToolchainListKinds,
     all_versions: bool,

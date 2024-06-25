@@ -420,7 +420,6 @@ impl VersionMapLazy {
         simple.dist.get_or_init(get_or_init).as_ref()
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn source_dist_compatibility(
         &self,
         version: &Version,

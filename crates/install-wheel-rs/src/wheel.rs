@@ -513,7 +513,6 @@ fn install_script(
 }
 
 /// Move the files from the .data directory to the right location in the venv
-#[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 pub(crate) fn install_data(
     layout: &Layout,

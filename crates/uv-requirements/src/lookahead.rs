@@ -61,7 +61,6 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
 
 impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
