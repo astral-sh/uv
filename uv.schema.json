@@ -784,6 +784,12 @@
             "null"
           ]
         },
+        "universal": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "upgrade": {
           "type": [
             "boolean",

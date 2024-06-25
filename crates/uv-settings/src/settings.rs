@@ -177,6 +177,7 @@ pub struct PipOptions {
     pub config_settings: Option<ConfigSettings>,
     pub python_version: Option<PythonVersion>,
     pub python_platform: Option<TargetTriple>,
+    pub universal: Option<bool>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub no_emit_package: Option<Vec<PackageName>>,
     pub emit_index_url: Option<bool>,
