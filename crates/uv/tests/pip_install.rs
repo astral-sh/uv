@@ -5623,7 +5623,7 @@ fn prefer_editable() -> Result<()> {
 
 /// Resolve against a local directory laid out as a PEP 503-compatible index.
 #[test]
-fn local_index() -> Result<()> {
+fn local_index_absolute() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let root = context.temp_dir.child("simple-html");
@@ -5655,6 +5655,168 @@ fn local_index() -> Result<()> {
         .arg("tqdm")
         .arg("--index-url")
         .arg(Url::from_directory_path(root).unwrap().as_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Resolve against a local directory laid out as a PEP 503-compatible index, provided via a
+/// relative path on the CLI.
+#[test]
+fn local_index_relative() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root = context.temp_dir.child("simple-html");
+    fs_err::create_dir_all(&root)?;
+
+    let tqdm = root.child("tqdm");
+    fs_err::create_dir_all(&tqdm)?;
+
+    let index = tqdm.child("index.html");
+    index.write_str(&indoc::formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for example-a-961b4c22</h1>
+            <a
+              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              data-requires-python=">=3.8"
+            >
+              tqdm-1000.0.0-py3-none-any.whl
+            </a>
+          </body>
+        </html>
+    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+
+    uv_snapshot!(context.filters(), context.install_without_exclude_newer()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg("./simple-html"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Resolve against a local directory laid out as a PEP 503-compatible index, provided via a
+/// `requirements.txt` file.
+#[test]
+fn local_index_requirements_txt_absolute() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root = context.temp_dir.child("simple-html");
+    fs_err::create_dir_all(&root)?;
+
+    let tqdm = root.child("tqdm");
+    fs_err::create_dir_all(&tqdm)?;
+
+    let index = tqdm.child("index.html");
+    index.write_str(&indoc::formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for example-a-961b4c22</h1>
+            <a
+              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              data-requires-python=">=3.8"
+            >
+              tqdm-1000.0.0-py3-none-any.whl
+            </a>
+          </body>
+        </html>
+    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&indoc::formatdoc! {r#"
+        --index-url {}
+        tqdm
+    "#, Url::from_directory_path(root).unwrap().as_str()})?;
+
+    uv_snapshot!(context.filters(), context.install_without_exclude_newer()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Resolve against a local directory laid out as a PEP 503-compatible index, provided via a
+/// relative path in a `requirements.txt` file.
+#[test]
+fn local_index_requirements_txt_relative() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root = context.temp_dir.child("simple-html");
+    fs_err::create_dir_all(&root)?;
+
+    let tqdm = root.child("tqdm");
+    fs_err::create_dir_all(&tqdm)?;
+
+    let index = tqdm.child("index.html");
+    index.write_str(&indoc::formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for example-a-961b4c22</h1>
+            <a
+              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              data-requires-python=">=3.8"
+            >
+              tqdm-1000.0.0-py3-none-any.whl
+            </a>
+          </body>
+        </html>
+    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        r"
+        --index-url ./simple-html
+        tqdm
+    ",
+    )?;
+
+    uv_snapshot!(context.filters(), context.install_without_exclude_newer()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
