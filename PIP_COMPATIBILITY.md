@@ -355,7 +355,6 @@ does support a large subset.
 Missing options and subcommands are prioritized based on user demand and the complexity of
 the implementation, and tend to be tracked in individual issues. For example:
 
-- [`--prefix`](https://github.com/astral-sh/uv/issues/3076)
 - [`--trusted-host`](https://github.com/astral-sh/uv/issues/1339)
 - [`--user`](https://github.com/astral-sh/uv/issues/2077)
 
