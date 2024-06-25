@@ -270,7 +270,7 @@ impl RegistryClient {
         // Format the URL for PyPI.
         let mut url: Url = index.clone().into();
         url.path_segments_mut()
-            .unwrap()
+            .map_err(|()| ErrorKind::CannotBeABase(index.clone().into()))?
             .pop_if_empty()
             .push(package_name.as_ref())
             // The URL *must* end in a trailing slash for proper relative path behavior

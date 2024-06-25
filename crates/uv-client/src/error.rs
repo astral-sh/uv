@@ -137,6 +137,9 @@ pub enum ErrorKind {
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),
 
+    #[error("Expected an index URL, but received non-base URL: {0}")]
+    CannotBeABase(Url),
+
     #[error(transparent)]
     DistInfo(#[from] install_wheel_rs::Error),
 
