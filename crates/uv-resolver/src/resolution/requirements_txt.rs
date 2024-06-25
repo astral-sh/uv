@@ -5,7 +5,7 @@ use std::path::Path;
 use itertools::Itertools;
 
 use distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
-use pep508_rs::{MarkerTree, Scheme, split_scheme};
+use pep508_rs::{split_scheme, MarkerTree, Scheme};
 use pypi_types::HashDigest;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -27,7 +27,11 @@ impl RequirementsTxtDist {
     /// This typically results in a PEP 508 representation of the requirement, but will write an
     /// unnamed requirement for relative paths, which can't be represented with PEP 508 (but are
     /// supported in `requirements.txt`).
-    pub(crate) fn to_requirements_txt(&self, include_extras: bool) -> Cow<str> {
+    pub(crate) fn to_requirements_txt(
+        &self,
+        include_extras: bool,
+        include_markers: bool,
+    ) -> Cow<str> {
         // If the URL is editable, write it as an editable requirement.
         if self.dist.is_editable() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
@@ -40,7 +44,7 @@ impl RequirementsTxtDist {
         if self.dist.is_local() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
                 let given = url.verbatim();
-                match split_scheme(&given) {
+                let given = match split_scheme(&given) {
                     Some((scheme, path)) => {
                         match Scheme::parse(scheme) {
                             Some(Scheme::File) => {
@@ -50,6 +54,7 @@ impl RequirementsTxtDist {
                                     .is_some()
                                 {
                                     // Always absolute; nothing to do.
+                                    None
                                 } else if let Some(path) = path.strip_prefix("//") {
                                     // Strip the prefix, to convert, e.g., `file://flask-3.0.3-py3-none-any.whl` to `flask-3.0.3-py3-none-any.whl`.
                                     //
@@ -60,30 +65,40 @@ impl RequirementsTxtDist {
                                     if !path.starts_with("${PROJECT_ROOT}")
                                         && !Path::new(path).has_root()
                                     {
-                                        return Cow::Owned(path.to_string());
+                                        Some(Cow::Owned(path.to_string()))
+                                    } else {
+                                        None
                                     }
                                 } else {
                                     // Ex) `file:./flask-3.0.3-py3-none-any.whl`
-                                    return given;
+                                    Some(given)
                                 }
                             }
-                            Some(_) => {}
+                            Some(_) => None,
                             None => {
                                 // Ex) `flask @ C:\Users\user\flask-3.0.3-py3-none-any.whl`
-                                return given;
+                                Some(given)
                             }
                         }
                     }
                     None => {
                         // Ex) `flask @ flask-3.0.3-py3-none-any.whl`
-                        return given;
+                        Some(given)
                     }
+                };
+                if let Some(given) = given {
+                    return if let Some(markers) = self.markers.as_ref().filter(|_| include_markers)
+                    {
+                        Cow::Owned(format!("{given} ; {markers}"))
+                    } else {
+                        given
+                    };
                 }
             }
         }
 
         if self.extras.is_empty() || !include_extras {
-            if let Some(markers) = &self.markers {
+            if let Some(markers) = self.markers.as_ref().filter(|_| include_markers) {
                 Cow::Owned(format!("{} ; {}", self.dist.verbatim(), markers,))
             } else {
                 self.dist.verbatim()
@@ -92,7 +107,7 @@ impl RequirementsTxtDist {
             let mut extras = self.extras.clone();
             extras.sort_unstable();
             extras.dedup();
-            if let Some(markers) = &self.markers {
+            if let Some(markers) = self.markers.as_ref().filter(|_| include_markers) {
                 Cow::Owned(format!(
                     "{}[{}]{} ; {}",
                     self.name(),

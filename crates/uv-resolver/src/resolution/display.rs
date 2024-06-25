@@ -1,17 +1,17 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
-use petgraph::Direction;
 use petgraph::visit::{EdgeRef, Topo};
+use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use distribution_types::{Name, SourceAnnotation, SourceAnnotations};
+use distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use pep508_rs::MarkerEnvironment;
 use pep508_rs::MarkerTree;
 use uv_normalize::PackageName;
 
+use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{marker, ResolutionGraph};
-use crate::resolution::RequirementsTxtDist;
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
@@ -37,6 +37,12 @@ pub struct DisplayResolutionGraph<'a> {
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
+}
+
+#[derive(Debug)]
+enum DisplayResolutionGraphNode {
+    Root,
+    Dist(RequirementsTxtDist),
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
@@ -138,138 +144,14 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         };
 
         // Convert from `AnnotatedDist` to `RequirementsTxtDist`.
-        let mut petgraph = {
-            let mut petgraph = petgraph::graph::Graph::<
-                RequirementsTxtDist,
-                Option<MarkerTree>,
-                petgraph::Directed,
-            >::with_capacity(
-                self.resolution.petgraph.node_count(),
-                self.resolution.petgraph.edge_count(),
-            );
-            let mut inverse = FxHashMap::with_capacity_and_hasher(
-                self.resolution.petgraph.node_count(),
-                FxBuildHasher,
-            );
+        let petgraph = to_requirements_txt_graph(&self.resolution.petgraph);
 
-            // Re-add the nodes to the reduced graph.
-            for index in self.resolution.petgraph.node_indices() {
-                let dist = &self.resolution.petgraph[index];
-                inverse.insert(index, petgraph.add_node(RequirementsTxtDist::from(dist)));
-            }
-
-            // Re-add the edges to the reduced graph.
-            for edge in self.resolution.petgraph.edge_indices() {
-                let (source, target) = self.resolution.petgraph.edge_endpoints(edge).unwrap();
-                let weight = self.resolution.petgraph[edge].clone();
-                let source = inverse[&source];
-                let target = inverse[&target];
-                petgraph.update_edge(source, target, weight);
-            }
-
-            petgraph
-        };
-
-        // Propagate markers across the graph: the graph is directed, so if any edge contains a
-        // marker, we need to propagate it to all downstream nodes.
-        let mut topo = Topo::new(&petgraph);
-        while let Some(index) = topo.next(&petgraph) {
-            let marker_tree: Option<MarkerTree> = {
-                // Fold over the edges to combine the marker trees. If any edge is `None`, then
-                // the combined marker tree is `None`.
-                let mut edges = petgraph.edges_directed(index, Direction::Incoming);
-                edges
-                    .next()
-                    .and_then(|edge| {
-                        if let Some(weight) = petgraph.edge_weight(edge.id()) {
-                            weight.clone()
-                        } else {
-                            None
-                        }
-                    })
-                    .and_then(|initial| {
-                        edges.try_fold(initial, |mut acc, edge| {
-                            acc.or(petgraph.edge_weight(edge.id())?.clone()?);
-                            Some(acc)
-                        })
-                    })
-            };
-
-            // Propagate the marker tree to all downstream nodes.
-            if let Some(marker_tree) = marker_tree.as_ref() {
-                let mut walker = petgraph
-                    .neighbors_directed(index, Direction::Outgoing)
-                    .detach();
-                while let Some((outgoing, _)) = walker.next(&petgraph) {
-                    if let Some(weight) = petgraph.edge_weight_mut(outgoing) {
-                        if let Some(weight) = weight {
-                            weight.or(marker_tree.clone());
-                        } else {
-                            *weight = Some(marker_tree.clone());
-                        }
-                    }
-                }
-            }
-
-            petgraph[index].markers = marker_tree.and_then(marker::normalize);
-        }
+        // Propagate markers across the graph.
+        let petgraph = propagate_markers(petgraph);
 
         // Reduce the graph, such that all nodes for a single package are combined, regardless of
         // the extras.
-        //
-        // For example, `flask` and `flask[dotenv]` should be reduced into a single `flask[dotenv]`
-        // node.
-        let petgraph = {
-            let mut nextgraph = petgraph::graph::Graph::<
-                RequirementsTxtDist,
-                Option<MarkerTree>,
-                petgraph::Directed,
-            >::with_capacity(
-                petgraph.node_count(), petgraph.edge_count()
-            );
-            let mut inverse =
-                FxHashMap::with_capacity_and_hasher(petgraph.node_count(), FxBuildHasher);
-
-            // Re-add the nodes to the reduced graph.
-            for index in petgraph.node_indices() {
-                let dist = &petgraph[index];
-
-                if let Some(index) = inverse.get(&dist.version_id()) {
-                    let node: &mut RequirementsTxtDist = &mut nextgraph[*index];
-                    node.extras.extend(dist.extras.iter().cloned());
-                    node.extras.sort_unstable();
-                    node.extras.dedup();
-                } else {
-                    let index = nextgraph.add_node(dist.clone());
-                    inverse.insert(dist.version_id(), index);
-                }
-            }
-
-            // Re-add the edges to the reduced graph.
-            for edge in petgraph.edge_indices() {
-                let (source, target) = petgraph.edge_endpoints(edge).unwrap();
-                let weight = petgraph[edge].clone();
-                let source = inverse[&petgraph[source].version_id()];
-                let target = inverse[&petgraph[target].version_id()];
-
-                // If either the existing marker or new marker is `None`, then the dependency is
-                // included unconditionally, and so the combined marker should be `None`.
-                if let Some(edge) = nextgraph
-                    .find_edge(source, target)
-                    .and_then(|edge| nextgraph.edge_weight_mut(edge))
-                {
-                    if let (Some(marker), Some(ref version_marker)) = (edge.as_mut(), weight) {
-                        marker.or(version_marker.clone());
-                    } else {
-                        *edge = None;
-                    }
-                } else {
-                    nextgraph.update_edge(source, target, weight);
-                }
-            }
-
-            nextgraph
-        };
+        let petgraph = combine_extras(&petgraph);
 
         // Collect all packages.
         let mut nodes = petgraph
@@ -291,7 +173,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // Print out the dependency graph.
         for (index, node) in nodes {
             // Display the node itself.
-            let mut line = node.to_requirements_txt(self.include_extras).to_string();
+            let mut line = node
+                .to_requirements_txt(self.include_extras, self.include_markers)
+                .to_string();
 
             // Display the distribution hashes, if any.
             let mut has_hashes = false;
@@ -414,4 +298,152 @@ pub enum AnnotationStyle {
     /// Render each annotation on its own line.
     #[default]
     Split,
+}
+
+type ResolutionPetGraph =
+    petgraph::graph::Graph<ResolutionGraphNode, Option<MarkerTree>, petgraph::Directed>;
+
+type IntermediatePetGraph =
+    petgraph::graph::Graph<DisplayResolutionGraphNode, Option<MarkerTree>, petgraph::Directed>;
+
+type RequirementsTxtGraph =
+    petgraph::graph::Graph<RequirementsTxtDist, Option<MarkerTree>, petgraph::Directed>;
+
+/// Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
+/// [`DisplayResolutionGraphNode`].
+///
+/// In other words: converts from [`AnnotatedDist`] to [`RequirementsTxtDist`].
+fn to_requirements_txt_graph(graph: &ResolutionPetGraph) -> IntermediatePetGraph {
+    let mut next = IntermediatePetGraph::with_capacity(graph.node_count(), graph.edge_count());
+    let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+
+    // Re-add the nodes to the reduced graph.
+    for index in graph.node_indices() {
+        match &graph[index] {
+            ResolutionGraphNode::Root => {
+                inverse.insert(index, next.add_node(DisplayResolutionGraphNode::Root));
+            }
+            ResolutionGraphNode::Dist(dist) => {
+                let dist = RequirementsTxtDist::from(dist);
+                inverse.insert(index, next.add_node(DisplayResolutionGraphNode::Dist(dist)));
+            }
+        }
+    }
+
+    // Re-add the edges to the reduced graph.
+    for edge in graph.edge_indices() {
+        let (source, target) = graph.edge_endpoints(edge).unwrap();
+        let weight = graph[edge].clone();
+        let source = inverse[&source];
+        let target = inverse[&target];
+        next.update_edge(source, target, weight);
+    }
+
+    next
+}
+
+/// Propagate the [`MarkerTree`] qualifiers across the graph.
+///
+/// The graph is directed, so if any edge contains a marker, we need to propagate it to all
+/// downstream nodes.
+fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
+    let mut topo = Topo::new(&graph);
+    while let Some(index) = topo.next(&graph) {
+        let marker_tree: Option<MarkerTree> = {
+            // Fold over the edges to combine the marker trees. If any edge is `None`, then
+            // the combined marker tree is `None`.
+            let mut edges = graph.edges_directed(index, Direction::Incoming);
+            edges
+                .next()
+                .and_then(|edge| graph.edge_weight(edge.id()).cloned().flatten())
+                .and_then(|initial| {
+                    edges.try_fold(initial, |mut acc, edge| {
+                        acc.or(graph.edge_weight(edge.id())?.clone()?);
+                        Some(acc)
+                    })
+                })
+        };
+
+        // Propagate the marker tree to all downstream nodes.
+        if let Some(marker_tree) = marker_tree.as_ref() {
+            let mut walker = graph
+                .neighbors_directed(index, Direction::Outgoing)
+                .detach();
+            while let Some((outgoing, _)) = walker.next(&graph) {
+                if let Some(weight) = graph.edge_weight_mut(outgoing) {
+                    if let Some(weight) = weight {
+                        weight.and(marker_tree.clone());
+                    } else {
+                        *weight = Some(marker_tree.clone());
+                    }
+                }
+            }
+        }
+
+        if let DisplayResolutionGraphNode::Dist(node) = &mut graph[index] {
+            node.markers = marker_tree.and_then(marker::normalize);
+        };
+    }
+
+    graph
+}
+
+/// Reduce the graph, such that all nodes for a single package are combined, regardless of
+/// the extras.
+///
+/// For example, `flask` and `flask[dotenv]` should be reduced into a single `flask[dotenv]`
+/// node.
+///
+/// We also remove the root node, to simplify the graph structure.
+fn combine_extras(graph: &IntermediatePetGraph) -> RequirementsTxtGraph {
+    let mut next = RequirementsTxtGraph::with_capacity(graph.node_count(), graph.edge_count());
+    let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+
+    // Re-add the nodes to the reduced graph.
+    for index in graph.node_indices() {
+        let DisplayResolutionGraphNode::Dist(dist) = &graph[index] else {
+            continue;
+        };
+
+        if let Some(index) = inverse.get(&dist.version_id()) {
+            let node: &mut RequirementsTxtDist = &mut next[*index];
+            node.extras.extend(dist.extras.iter().cloned());
+            node.extras.sort_unstable();
+            node.extras.dedup();
+        } else {
+            let index = next.add_node(dist.clone());
+            inverse.insert(dist.version_id(), index);
+        }
+    }
+
+    // Re-add the edges to the reduced graph.
+    for edge in graph.edge_indices() {
+        let (source, target) = graph.edge_endpoints(edge).unwrap();
+        let DisplayResolutionGraphNode::Dist(source_node) = &graph[source] else {
+            continue;
+        };
+        let DisplayResolutionGraphNode::Dist(target_node) = &graph[target] else {
+            continue;
+        };
+        let weight = graph[edge].clone();
+        let source = inverse[&source_node.version_id()];
+        let target = inverse[&target_node.version_id()];
+
+        // If either the existing marker or new marker is `None`, then the dependency is
+        // included unconditionally, and so the combined marker should be `None`.
+        if let Some(edge) = next
+            .find_edge(source, target)
+            .and_then(|edge| next.edge_weight_mut(edge))
+        {
+            if let (Some(marker), Some(ref version_marker)) = (edge.as_mut(), weight) {
+                marker.and(version_marker.clone());
+            } else {
+                *edge = None;
+            }
+        } else {
+            next.update_edge(source, target, weight);
+        }
+    }
+
+    next
 }

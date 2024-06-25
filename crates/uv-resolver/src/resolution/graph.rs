@@ -31,7 +31,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    pub(crate) petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed>,
+    pub(crate) petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: Option<RequiresPython>,
     /// Any diagnostics that were encountered while building the graph.
@@ -44,12 +44,11 @@ pub struct ResolutionGraph {
     pub(crate) overrides: Overrides,
 }
 
-type NodeKey<'a> = (
-    &'a PackageName,
-    &'a Version,
-    Option<&'a ExtraName>,
-    Option<&'a GroupName>,
-);
+#[derive(Debug)]
+pub(crate) enum ResolutionGraphNode {
+    Root,
+    Dist(AnnotatedDist),
+}
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
@@ -64,11 +63,21 @@ impl ResolutionGraph {
         python: &PythonRequirement,
         resolution: Resolution,
     ) -> Result<Self, ResolveError> {
-        let mut petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed> =
+        type NodeKey<'a> = (
+            &'a PackageName,
+            &'a Version,
+            Option<&'a ExtraName>,
+            Option<&'a GroupName>,
+        );
+
+        let mut petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed> =
             Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
         let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> =
             FxHashMap::with_capacity_and_hasher(resolution.packages.len(), FxBuildHasher);
         let mut diagnostics = Vec::new();
+
+        // Add the root node.
+        let root_index = petgraph.add_node(ResolutionGraphNode::Root);
 
         // Add every package to the graph.
         for (package, versions) in &resolution.packages {
@@ -227,13 +236,13 @@ impl ResolutionGraph {
                 }
 
                 // Add the distribution to the graph.
-                let index = petgraph.add_node(AnnotatedDist {
+                let index = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
                     dist,
                     extra: extra.clone(),
                     dev: dev.clone(),
                     hashes,
                     metadata,
-                });
+                }));
                 inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
             }
         }
@@ -241,22 +250,20 @@ impl ResolutionGraph {
         // Add every edge to the graph.
         for (names, version_set) in resolution.dependencies {
             for versions in version_set {
-                let from_index = inverse[&(
-                    &names.from,
-                    &versions.from_version,
-                    versions.from_extra.as_ref(),
-                    versions.from_dev.as_ref(),
-                )];
+                let from_index = names.from.as_ref().map_or(root_index, |from| {
+                    inverse[&(
+                        from,
+                        &versions.from_version,
+                        versions.from_extra.as_ref(),
+                        versions.from_dev.as_ref(),
+                    )]
+                });
                 let to_index = inverse[&(
                     &names.to,
                     &versions.to_version,
                     versions.to_extra.as_ref(),
                     versions.to_dev.as_ref(),
                 )];
-
-                println!("from_index: {:?}", from_index);
-                println!("to_index: {:?}", to_index);
-                println!("versions.marker: {:?}", versions.marker);
 
                 if let Some(edge) = petgraph
                     .find_edge(from_index, to_index)
@@ -295,25 +302,29 @@ impl ResolutionGraph {
         })
     }
 
-    /// Return the number of distinct packages in the graph.
-    pub fn len(&self) -> usize {
+    /// Returns an iterator over the distinct packages in the graph.
+    fn dists(&self) -> impl Iterator<Item = &AnnotatedDist> {
         self.petgraph
             .node_indices()
-            .map(|index| &self.petgraph[index])
-            .filter(|dist| dist.is_base())
-            .count()
+            .filter_map(move |index| match &self.petgraph[index] {
+                ResolutionGraphNode::Root => None,
+                ResolutionGraphNode::Dist(dist) => Some(dist),
+            })
+    }
+
+    /// Return the number of distinct packages in the graph.
+    pub fn len(&self) -> usize {
+        self.dists().filter(|dist| dist.is_base()).count()
     }
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.dists().any(super::AnnotatedDist::is_base)
     }
 
     /// Returns `true` if the graph contains the given package.
     pub fn contains(&self, name: &PackageName) -> bool {
-        self.petgraph
-            .node_indices()
-            .any(|index| self.petgraph[index].name() == name)
+        self.dists().any(|dist| dist.name() == name)
     }
 
     /// Return the [`ResolutionDiagnostic`]s that were encountered while building the graph.
@@ -394,7 +405,9 @@ impl ResolutionGraph {
 
         let mut seen_marker_values = IndexSet::default();
         for i in self.petgraph.node_indices() {
-            let dist = &self.petgraph[i];
+            let ResolutionGraphNode::Dist(dist) = &self.petgraph[i] else {
+                continue;
+            };
             let version_id = match dist.version_or_url() {
                 VersionOrUrlRef::Version(version) => {
                     VersionId::from_registry(dist.name().clone(), version.clone())
@@ -464,14 +477,8 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
     fn from(graph: ResolutionGraph) -> Self {
         Self::new(
             graph
-                .petgraph
-                .node_indices()
-                .map(|node| {
-                    (
-                        graph.petgraph[node].name().clone(),
-                        graph.petgraph[node].dist.clone(),
-                    )
-                })
+                .dists()
+                .map(|node| (node.name().clone(), node.dist.clone()))
                 .collect(),
             graph.diagnostics,
         )

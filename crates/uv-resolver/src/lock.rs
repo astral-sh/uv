@@ -31,7 +31,7 @@ use uv_configuration::ExtrasSpecification;
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
-use crate::resolution::AnnotatedDist;
+use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::{RequiresPython, ResolutionGraph};
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -62,11 +62,16 @@ impl Lock {
 
         // Lock all base packages.
         for node_index in graph.petgraph.node_indices() {
-            let dist = &graph.petgraph[node_index];
+            let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
+                continue;
+            };
             if dist.is_base() {
                 let mut locked_dist = Distribution::from_annotated_dist(dist)?;
                 for edge in graph.petgraph.edges(node_index) {
-                    let dependency_dist = &graph.petgraph[edge.target()];
+                    let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
+                    else {
+                        continue;
+                    };
                     let marker = edge.weight().as_ref();
                     locked_dist.add_dependency(dependency_dist, marker);
                 }
@@ -82,7 +87,9 @@ impl Lock {
 
         // Lock all extras and development dependencies.
         for node_index in graph.petgraph.node_indices() {
-            let dist = &graph.petgraph[node_index];
+            let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
+                continue;
+            };
             if let Some(extra) = dist.extra.as_ref() {
                 let id = DistributionId::from_annotated_dist(dist);
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
@@ -93,7 +100,10 @@ impl Lock {
                     .into());
                 };
                 for edge in graph.petgraph.edges(node_index) {
-                    let dependency_dist = &graph.petgraph[edge.target()];
+                    let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
+                    else {
+                        continue;
+                    };
                     let marker = edge.weight().as_ref();
                     locked_dist.add_optional_dependency(extra.clone(), dependency_dist, marker);
                 }
@@ -108,7 +118,10 @@ impl Lock {
                     .into());
                 };
                 for edge in graph.petgraph.edges(node_index) {
-                    let dependency_dist = &graph.petgraph[edge.target()];
+                    let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
+                    else {
+                        continue;
+                    };
                     let marker = edge.weight().as_ref();
                     locked_dist.add_dev_dependency(group.clone(), dependency_dist, marker);
                 }

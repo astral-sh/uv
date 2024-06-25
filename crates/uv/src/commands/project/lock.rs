@@ -7,16 +7,18 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DEV_DEPENDENCIES, Workspace};
+use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
-use uv_requirements::upgrade::{LockedRequirements, read_lockfile};
-use uv_resolver::{DisplayResolutionGraph, FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
+use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
+use uv_resolver::{
+    FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython,
+};
 use uv_toolchain::{Interpreter, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::{ExitStatus, pip, project};
 use crate::commands::project::{find_requires_python, ProjectError};
+use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
@@ -231,8 +233,6 @@ pub(super) async fn do_lock(
         preview,
     )
     .await?;
-
-    println!("{}", DisplayResolutionGraph::from(&resolution));
 
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
