@@ -35,7 +35,7 @@ fn add_registry() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
-     + idna==3.7
+     + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
@@ -78,7 +78,7 @@ fn add_registry() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.7"
+        version = "3.6"
         source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
@@ -88,10 +88,10 @@ fn add_registry() -> Result<()> {
 
         [[distribution]]
         name = "idna"
-        version = "3.7"
+        version = "3.6"
         source = "registry+https://pypi.org/simple"
-        sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575 }
-        wheels = [{ url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836 }]
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 }]
 
         [[distribution]]
         name = "project"
@@ -567,7 +567,7 @@ fn add_remove_dev() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
-     + idna==3.7
+     + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
@@ -613,7 +613,7 @@ fn add_remove_dev() -> Result<()> {
 
         [[distribution.dependencies]]
         name = "idna"
-        version = "3.7"
+        version = "3.6"
         source = "registry+https://pypi.org/simple"
 
         [[distribution.dependencies]]
@@ -623,10 +623,10 @@ fn add_remove_dev() -> Result<()> {
 
         [[distribution]]
         name = "idna"
-        version = "3.7"
+        version = "3.6"
         source = "registry+https://pypi.org/simple"
-        sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575 }
-        wheels = [{ url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836 }]
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 }]
 
         [[distribution]]
         name = "project"
@@ -687,7 +687,7 @@ fn add_remove_dev() -> Result<()> {
     Uninstalled 4 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
-     - idna==3.7
+     - idna==3.6
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1

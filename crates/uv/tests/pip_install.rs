@@ -1314,7 +1314,8 @@ fn install_no_index_version() {
 fn install_extra_index_url_has_priority() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_install_without_exclude_newer()
+    uv_snapshot!(context.pip_install()
+        .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
         .arg("--extra-index-url")
@@ -3508,7 +3509,8 @@ fn install_utf16le_requirements() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli"))?;
 
-    uv_snapshot!(context.pip_install_without_exclude_newer()
+    uv_snapshot!(context.pip_install()
+        .env_remove("UV_EXCLUDE_NEWER")
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -3534,7 +3536,8 @@ fn install_utf16be_requirements() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli"))?;
 
-    uv_snapshot!(context.pip_install_without_exclude_newer()
+    uv_snapshot!(context.pip_install()
+        .env_remove("UV_EXCLUDE_NEWER")
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -5633,7 +5636,8 @@ fn local_index_absolute() -> Result<()> {
         </html>
     "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
 
-    uv_snapshot!(context.filters(), context.pip_install_without_exclude_newer()
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove("UV_EXCLUDE_NEWER")
         .arg("tqdm")
         .arg("--index-url")
         .arg(Url::from_directory_path(root).unwrap().as_str()), @r###"
@@ -5683,7 +5687,8 @@ fn local_index_relative() -> Result<()> {
         </html>
     "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
 
-    uv_snapshot!(context.filters(), context.pip_install_without_exclude_newer()
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove("UV_EXCLUDE_NEWER")
         .arg("tqdm")
         .arg("--index-url")
         .arg("./simple-html"), @r###"
@@ -5739,7 +5744,8 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
         tqdm
     "#, Url::from_directory_path(root).unwrap().as_str()})?;
 
-    uv_snapshot!(context.filters(), context.pip_install_without_exclude_newer()
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove("UV_EXCLUDE_NEWER")
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -5796,7 +5802,8 @@ fn local_index_requirements_txt_relative() -> Result<()> {
     ",
     )?;
 
-    uv_snapshot!(context.filters(), context.pip_install_without_exclude_newer()
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove("UV_EXCLUDE_NEWER")
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
