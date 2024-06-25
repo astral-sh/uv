@@ -285,16 +285,6 @@ impl Lock {
             // Also check that our sources are consistent with whether we have
             // hashes or not.
             let requires_hash = dist.id.source.requires_hash();
-            if let Some(ref sdist) = dist.sdist {
-                if requires_hash != sdist.hash().is_some() {
-                    return Err(LockErrorKind::Hash {
-                        id: dist.id.clone(),
-                        artifact_type: "source distribution",
-                        expected: requires_hash,
-                    }
-                    .into());
-                }
-            }
             for wheel in &dist.wheels {
                 if requires_hash != wheel.hash.is_some() {
                     return Err(LockErrorKind::Hash {
@@ -578,7 +568,7 @@ pub struct Distribution {
 impl Distribution {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Self, LockError> {
         let id = DistributionId::from_annotated_dist(annotated_dist);
-        let sdist = SourceDist::from_annotated_dist(annotated_dist)?;
+        let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
         Ok(Distribution {
             id,
@@ -1326,11 +1316,7 @@ enum GitSourceKind {
 #[derive(Clone, Debug, serde::Deserialize)]
 struct SourceDistMetadata {
     /// A hash of the source distribution.
-    ///
-    /// This is only present for source distributions that come from registries
-    /// and direct URLs. Source distributions from git or path dependencies do
-    /// not have hashes associated with them.
-    hash: Option<Hash>,
+    hash: Hash,
     /// The size of the source distribution in bytes.
     ///
     /// This is only present for source distributions that come from registries.
@@ -1387,10 +1373,10 @@ impl SourceDist {
         }
     }
 
-    fn hash(&self) -> Option<&Hash> {
+    fn hash(&self) -> &Hash {
         match &self {
-            SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
-            SourceDist::Path { metadata, .. } => metadata.hash.as_ref(),
+            SourceDist::Url { metadata, .. } => &metadata.hash,
+            SourceDist::Path { metadata, .. } => &metadata.hash,
         }
     }
     fn size(&self) -> Option<u64> {
@@ -1413,9 +1399,7 @@ impl SourceDist {
                 table.insert("path", Value::from(serialize_path_with_dot(path).as_ref()));
             }
         }
-        if let Some(hash) = self.hash() {
-            table.insert("hash", Value::from(hash.to_string()));
-        }
+        table.insert("hash", Value::from(self.hash().to_string()));
         if let Some(size) = self.size() {
             table.insert("size", Value::from(i64::try_from(size)?));
         }
@@ -1423,6 +1407,7 @@ impl SourceDist {
     }
 
     fn from_annotated_dist(
+        id: &DistributionId,
         annotated_dist: &AnnotatedDist,
     ) -> Result<Option<SourceDist>, LockError> {
         match annotated_dist.dist {
@@ -1430,34 +1415,39 @@ impl SourceDist {
             // Or should we return an error?
             ResolvedDist::Installed(_) => todo!(),
             ResolvedDist::Installable(ref dist) => {
-                SourceDist::from_dist(dist, &annotated_dist.hashes)
+                SourceDist::from_dist(id, dist, &annotated_dist.hashes)
             }
         }
     }
 
-    fn from_dist(dist: &Dist, hashes: &[HashDigest]) -> Result<Option<SourceDist>, LockError> {
+    fn from_dist(
+        id: &DistributionId,
+        dist: &Dist,
+        hashes: &[HashDigest],
+    ) -> Result<Option<SourceDist>, LockError> {
         match *dist {
             Dist::Built(BuiltDist::Registry(ref built_dist)) => {
                 let Some(sdist) = built_dist.sdist.as_ref() else {
                     return Ok(None);
                 };
-                SourceDist::from_registry_dist(sdist).map(Some)
+                SourceDist::from_registry_dist(id, sdist).map(Some)
             }
             Dist::Built(_) => Ok(None),
-            Dist::Source(ref source_dist) => SourceDist::from_source_dist(source_dist, hashes),
+            Dist::Source(ref source_dist) => SourceDist::from_source_dist(id, source_dist, hashes),
         }
     }
 
     fn from_source_dist(
+        id: &DistributionId,
         source_dist: &distribution_types::SourceDist,
         hashes: &[HashDigest],
     ) -> Result<Option<SourceDist>, LockError> {
         match *source_dist {
             distribution_types::SourceDist::Registry(ref reg_dist) => {
-                SourceDist::from_registry_dist(reg_dist).map(Some)
+                SourceDist::from_registry_dist(id, reg_dist).map(Some)
             }
             distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
-                Ok(Some(SourceDist::from_direct_dist(direct_dist, hashes)))
+                SourceDist::from_direct_dist(id, direct_dist, hashes).map(Some)
             }
             // An actual sdist entry in the lock file is only required when
             // it's from a registry or a direct URL. Otherwise, it's strictly
@@ -1468,14 +1458,24 @@ impl SourceDist {
         }
     }
 
-    fn from_registry_dist(reg_dist: &RegistrySourceDist) -> Result<SourceDist, LockError> {
+    fn from_registry_dist(
+        id: &DistributionId,
+        reg_dist: &RegistrySourceDist,
+    ) -> Result<SourceDist, LockError> {
         let url = reg_dist
             .file
             .url
             .to_url()
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
-        let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
+        let Some(hash) = reg_dist.file.hashes.first().cloned().map(Hash::from) else {
+            let kind = LockErrorKind::Hash {
+                id: id.clone(),
+                artifact_type: "registry source distribution",
+                expected: true,
+            };
+            return Err(kind.into());
+        };
         let size = reg_dist.file.size;
         Ok(SourceDist::Url {
             url,
@@ -1483,14 +1483,23 @@ impl SourceDist {
         })
     }
 
-    fn from_direct_dist(direct_dist: &DirectUrlSourceDist, hashes: &[HashDigest]) -> SourceDist {
-        SourceDist::Url {
+    fn from_direct_dist(
+        id: &DistributionId,
+        direct_dist: &DirectUrlSourceDist,
+        hashes: &[HashDigest],
+    ) -> Result<SourceDist, LockError> {
+        let Some(hash) = hashes.first().cloned().map(Hash::from) else {
+            let kind = LockErrorKind::Hash {
+                id: id.clone(),
+                artifact_type: "direct URL source distribution",
+                expected: true,
+            };
+            return Err(kind.into());
+        };
+        Ok(SourceDist::Url {
             url: direct_dist.url.to_url(),
-            metadata: SourceDistMetadata {
-                hash: hashes.first().cloned().map(Hash::from),
-                size: None,
-            },
-        }
+            metadata: SourceDistMetadata { hash, size: None },
+        })
     }
 }
 
