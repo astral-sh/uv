@@ -417,8 +417,12 @@ impl PubGrubReportFormatter<'_> {
             ) => {
                 if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
-                    if let (None, Some(selector)) = (fork_urls.get(name), selector) {
-                        self.prerelease_available_hint(package, name, set, selector, &mut hints);
+                    if let Some(selector) = selector {
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_available_hint(
+                                package, name, set, selector, &mut hints,
+                            );
+                        }
                     }
                 }
 

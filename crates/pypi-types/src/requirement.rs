@@ -254,39 +254,37 @@ impl RequirementSource {
     }
 
     pub fn to_verbatim_parsed_url(&self) -> Option<VerbatimParsedUrl> {
-        Some(match &self {
-            Self::Registry { .. } => {
-                return None;
-            }
+        match &self {
+            Self::Registry { .. } => None,
             Self::Url {
                 subdirectory,
                 location,
                 url,
-            } => VerbatimParsedUrl {
+            } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Archive(ParsedArchiveUrl::from_source(
                     location.clone(),
                     subdirectory.clone(),
                 )),
                 verbatim: url.clone(),
-            },
+            }),
             Self::Path {
                 install_path,
                 lock_path,
                 url,
-            } => VerbatimParsedUrl {
+            } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Path(ParsedPathUrl::from_source(
                     install_path.clone(),
                     lock_path.clone(),
                     url.to_url(),
                 )),
                 verbatim: url.clone(),
-            },
+            }),
             Self::Directory {
                 install_path,
                 lock_path,
                 editable,
                 url,
-            } => VerbatimParsedUrl {
+            } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                     install_path.clone(),
                     lock_path.clone(),
@@ -294,14 +292,14 @@ impl RequirementSource {
                     url.to_url(),
                 )),
                 verbatim: url.clone(),
-            },
+            }),
             Self::Git {
                 repository,
                 reference,
                 precise,
                 subdirectory,
                 url,
-            } => VerbatimParsedUrl {
+            } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Git(ParsedGitUrl::from_source(
                     repository.clone(),
                     reference.clone(),
@@ -309,8 +307,8 @@ impl RequirementSource {
                     subdirectory.clone(),
                 )),
                 verbatim: url.clone(),
-            },
-        })
+            }),
+        }
     }
 
     /// Returns `true` if the source is editable.

@@ -19,8 +19,9 @@ use crate::{PubGrubSpecifier, ResolveError};
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Range<Version>,
-    /// This field is set if the [`Requirement`] had a URL. We may still use a URL from [`Urls`]
-    /// even if this field is None.
+    /// This field is set if the [`Requirement`] had a URL. We still use a URL from [`Urls`]
+    /// even if this field is None where there is an override with a URL or there is a different
+    /// requirement or constraint for the same package that has a URL.
     pub(crate) url: Option<VerbatimParsedUrl>,
 }
 

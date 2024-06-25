@@ -19,6 +19,11 @@ impl ForkUrls {
         self.0.get(package_name)
     }
 
+    /// Whether we use a URL for this package.
+    pub(crate) fn contains_key(&self, package_name: &PackageName) -> bool {
+        self.0.contains_key(package_name)
+    }
+
     /// Check that this is the only URL used for this package in this fork.
     pub(crate) fn insert(
         &mut self,
@@ -31,10 +36,10 @@ impl ForkUrls {
                 if previous.get() != url {
                     let mut conflicting_url = vec![
                         previous.get().verbatim.verbatim().to_string(),
-                        url.to_string(),
+                        url.verbatim.verbatim().to_string(),
                     ];
                     conflicting_url.sort();
-                    return if fork_markers == &MarkerTree::And(Vec::new()) {
+                    return if fork_markers.is_empty() {
                         Err(ResolveError::ConflictingUrls(
                             package_name.clone(),
                             conflicting_url,

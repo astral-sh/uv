@@ -363,6 +363,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
+                let url = state.next.name().and_then(|name| state.urls.get(name));
+
+                // Consider:
+                // ```toml
+                // dependencies = [
+                //   "iniconfig == 1.1.1 ; python_version < '3.12'",
+                //   "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl ; python_version >= '3.12'",
+                // ]
+                // ```
+                // In the `python_version < '3.12'` case, we haven't pre-visited `iniconfig` yet,
+                // since we weren't sure whether it might also be a URL requirement when
+                // transforming the requirements. For that case, we do another request here
+                // (idempotent due to caching).
+                self.request_package(&state.next, url, &request_sink)?;
 
                 prefetcher.version_tried(state.next.clone());
 
@@ -477,12 +491,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 };
 
                 // Only consider registry packages for prefetch.
-                if state
-                    .next
-                    .name()
-                    .and_then(|name| state.urls.get(name))
-                    .is_none()
-                {
+                if url.is_none() {
                     prefetcher.prefetch_batches(
                         &state.next,
                         &version,
@@ -533,14 +542,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 &self.git,
                                 &prefetcher,
                             )?;
+                            // Emit a request to fetch the metadata for each registry package.
                             for dependency in &dependencies {
                                 let PubGrubDependency {
                                     package,
                                     version: _,
-                                    url,
+                                    url: _,
                                 } = dependency;
-                                // Emit a request to fetch the metadata for each registry package.
-                                self.visit_package(package, url.as_ref(), &request_sink)?;
+                                let url = package.name().and_then(|name| state.urls.get(name));
+                                self.visit_package(package, url, &request_sink)?;
                             }
                             forked_states.push(state);
                         }
@@ -580,14 +590,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     &self.git,
                                     &prefetcher,
                                 )?;
+                                // Emit a request to fetch the metadata for each registry package.
                                 for dependency in &fork.dependencies {
                                     let PubGrubDependency {
                                         package,
                                         version: _,
-                                        url,
+                                        url: _,
                                     } = dependency;
-                                    // Emit a request to fetch the metadata for each registry package.
-                                    self.visit_package(package, url.as_ref(), &request_sink)?;
+                                    let url =
+                                        package.name().and_then(|name| forked_state.urls.get(name));
+                                    self.visit_package(package, url, &request_sink)?;
                                 }
                                 forked_states.push(forked_state);
                             }
@@ -622,6 +634,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
     /// before it is selected, to allow metadata to be fetched in parallel.
     fn visit_package(
+        &self,
+        package: &PubGrubPackage,
+        url: Option<&VerbatimParsedUrl>,
+        request_sink: &Sender<Request>,
+    ) -> Result<(), ResolveError> {
+        // Ignore unresolved URL packages.
+        if url.is_none()
+            && package
+                .name()
+                .map(|name| self.urls.any_url(name))
+                .unwrap_or(true)
+        {
+            return Ok(());
+        }
+
+        self.request_package(package, url, request_sink)
+    }
+
+    fn request_package(
         &self,
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,

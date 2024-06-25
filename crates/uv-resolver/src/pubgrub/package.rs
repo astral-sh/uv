@@ -88,7 +88,7 @@ pub enum PubGrubPackageInner {
 }
 
 impl PubGrubPackage {
-    /// Create a [`PubGrubPackage`] from a package name and, optionally, a URL.
+    /// Create a [`PubGrubPackage`] from a package name and extra.
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
