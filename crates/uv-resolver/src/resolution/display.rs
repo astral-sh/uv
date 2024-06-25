@@ -194,19 +194,24 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // If enabled, include annotations to indicate the dependencies that requested each
             // package (e.g., `# via mypy`).
             if self.include_annotations {
-                // Display all dependencies.
-                let mut edges = petgraph
-                    .edges_directed(index, Direction::Incoming)
-                    .map(|edge| &petgraph[edge.source()])
-                    .collect::<Vec<_>>();
-                edges.sort_unstable_by_key(|package| package.name());
+                // Display all dependents (i.e., all packages that depend on the current package).
+                let dependents = {
+                    let mut dependents = petgraph
+                        .edges_directed(index, Direction::Incoming)
+                        .map(|edge| &petgraph[edge.source()])
+                        .map(distribution_types::Name::name)
+                        .collect::<Vec<_>>();
+                    dependents.sort_unstable();
+                    dependents.dedup();
+                    dependents
+                };
 
                 // Include all external sources (e.g., requirements files).
                 let default = BTreeSet::default();
                 let source = sources.get(node.name()).unwrap_or(&default);
 
                 match self.annotation_style {
-                    AnnotationStyle::Line => match edges.as_slice() {
+                    AnnotationStyle::Line => match dependents.as_slice() {
                         [] if source.is_empty() => {}
                         [] if source.len() == 1 => {
                             let separator = if has_hashes { "\n    " } else { "  " };
@@ -215,19 +220,19 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                                 .to_string();
                             annotation = Some((separator, comment));
                         }
-                        edges => {
+                        dependents => {
                             let separator = if has_hashes { "\n    " } else { "  " };
-                            let deps = edges
+                            let dependents = dependents
                                 .iter()
-                                .map(|dependency| format!("{}", dependency.name()))
+                                .map(ToString::to_string)
                                 .chain(source.iter().map(ToString::to_string))
                                 .collect::<Vec<_>>()
                                 .join(", ");
-                            let comment = format!("# via {deps}").green().to_string();
+                            let comment = format!("# via {dependents}").green().to_string();
                             annotation = Some((separator, comment));
                         }
                     },
-                    AnnotationStyle::Split => match edges.as_slice() {
+                    AnnotationStyle::Split => match dependents.as_slice() {
                         [] if source.is_empty() => {}
                         [] if source.len() == 1 => {
                             let separator = "\n";
@@ -236,25 +241,21 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                                 .to_string();
                             annotation = Some((separator, comment));
                         }
-                        [edge] if source.is_empty() => {
+                        [dependent] if source.is_empty() => {
                             let separator = "\n";
-                            let comment = format!("    # via {}", edge.name()).green().to_string();
+                            let comment = format!("    # via {dependent}").green().to_string();
                             annotation = Some((separator, comment));
                         }
-                        edges => {
+                        dependents => {
                             let separator = "\n";
-                            let deps = source
+                            let dependent = source
                                 .iter()
                                 .map(ToString::to_string)
-                                .chain(
-                                    edges
-                                        .iter()
-                                        .map(|dependency| format!("{}", dependency.name())),
-                                )
+                                .chain(dependents.iter().map(ToString::to_string))
                                 .map(|name| format!("    #   {name}"))
                                 .collect::<Vec<_>>()
                                 .join("\n");
-                            let comment = format!("    # via\n{deps}").green().to_string();
+                            let comment = format!("    # via\n{dependent}").green().to_string();
                             annotation = Some((separator, comment));
                         }
                     },
