@@ -1,5 +1,7 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::process::Command;
+
 use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, PathChild},
@@ -47,6 +49,8 @@ fn tool_install() {
     let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -74,11 +78,20 @@ fn tool_install() {
         "###);
     });
 
+    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.3.0 (compiled: yes)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
     // Install another tool
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("pytest")
+    uv_snapshot!(context.filters(), cached_windows_filters=true, context.tool_install()
+        .arg("flask")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        // Check that we support `XDG_BIN_HOME`
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
@@ -86,35 +99,50 @@ fn tool_install() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + iniconfig==2.0.0
-     + packaging==24.0
-     + pluggy==1.4.0
-     + pytest==8.1.1
+    Resolved 7 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
     "###);
 
-    tool_dir.child("pytest").assert(predicate::path::is_dir());
+    tool_dir.child("flask").assert(predicate::path::is_dir());
     assert!(bin_dir
-        .child(format!("pytest{}", std::env::consts::EXE_SUFFIX))
+        .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
         .exists());
 
+    #[cfg(not(windows))]
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(bin_dir.join("pytest")).unwrap(), @r###"
-        #![TEMP_DIR]/tools/pytest/bin/python
+        assert_snapshot!(fs_err::read_to_string(bin_dir.join("flask")).unwrap(), @r###"
+        #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
         import re
         import sys
-        from pytest import console_main
+        from flask.cli import main
         if __name__ == "__main__":
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-            sys.exit(console_main())
+            sys.exit(main())
         "###);
 
     });
+
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -123,7 +151,7 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("tools.toml")).unwrap(), @r###"
         [tools]
         black = { requirements = ["black"] }
-        pytest = { requirements = ["pytest"] }
+        flask = { requirements = ["flask"] }
         "###);
     });
 }
@@ -165,6 +193,8 @@ fn tool_install_twice() {
     let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -273,6 +303,9 @@ fn tool_install_entry_point_exists() {
 }
 
 /// Test `uv tool install` when the bin directory is inferred from `$HOME`
+///
+/// Only tested on Linux right now because it's not clear how to change the %USERPROFILE% on Windows
+#[cfg(unix)]
 #[test]
 fn tool_install_home() {
     let context = TestContext::new("3.12");
@@ -334,7 +367,7 @@ fn tool_install_xdg_data_home() {
 
     context
         .temp_dir
-        .child("data/bin/black")
+        .child(format!("data/bin/black{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
 }
 

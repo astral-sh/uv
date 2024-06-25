@@ -829,6 +829,7 @@ pub fn python_toolchains_for_versions(
 
 #[derive(Debug, Copy, Clone)]
 pub enum WindowsFilters {
+    CachedPlatform,
     Platform,
     Universal,
 }
@@ -908,6 +909,10 @@ pub fn run_and_format<T: AsRef<str>>(
                     for verb in match windows_filters {
                         WindowsFilters::Platform => {
                             ["Resolved", "Prepared", "Installed", "Uninstalled"].iter()
+                        }
+                        // When cached, "Prepared" should not change.
+                        WindowsFilters::CachedPlatform => {
+                            ["Resolved", "Installed", "Uninstalled"].iter()
                         }
                         WindowsFilters::Universal => {
                             ["Prepared", "Installed", "Uninstalled"].iter()
@@ -999,6 +1004,12 @@ macro_rules! uv_snapshot {
     ($filters:expr, universal_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), Some($crate::common::WindowsFilters::Universal));
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
+        output
+    }};
+    ($filters:expr, cached_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
+        // Take a reference for backwards compatibility with the vec-expecting insta filters.
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), Some($crate::common::WindowsFilters::CachedPlatform));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
