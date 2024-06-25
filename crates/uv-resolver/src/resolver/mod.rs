@@ -936,7 +936,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         priorities: &mut PubGrubPriorities,
         request_sink: &Sender<Request>,
     ) -> Result<Dependencies, ResolveError> {
-        match &**package {
+        let (dependencies, name) = match &**package {
             PubGrubPackageInner::Root(_) => {
                 // Add the root requirements.
                 let dependencies = PubGrubDependencies::from_requirements(
@@ -953,31 +953,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     self.markers.as_ref(),
                     self.requires_python.as_ref(),
                     markers,
-                );
-
-                let dependencies = match dependencies {
-                    Ok(dependencies) => dependencies,
-                    Err(err) => {
-                        return Ok(Dependencies::Unavailable(
-                            UnavailableVersion::ResolverError(uncapitalize(err.to_string())),
-                        ));
-                    }
-                };
-
-                for (package, version) in dependencies.iter() {
-                    debug!("Adding direct dependency: {package}{version}");
-
-                    // Update the package priorities.
-                    priorities.insert(package, version);
-
-                    // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, request_sink)?;
-                }
-
-                Ok(Dependencies::Available(dependencies.into()))
+                )?;
+                (dependencies, None)
             }
 
-            PubGrubPackageInner::Python(_) => Ok(Dependencies::Available(Vec::default())),
+            PubGrubPackageInner::Python(_) => return Ok(Dependencies::Available(Vec::default())),
 
             PubGrubPackageInner::Package {
                 name,
@@ -1108,16 +1088,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     markers,
                 )?;
 
-                for (dep_package, dep_version) in dependencies.iter() {
-                    debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
-
-                    // Update the package priorities.
-                    priorities.insert(dep_package, dep_version);
-
-                    // Emit a request to fetch the metadata for this package.
-                    self.visit_package(dep_package, request_sink)?;
-                }
-
                 // If a package has metadata for an enabled dependency group,
                 // add a dependency from it to the same package with the group
                 // enabled.
@@ -1137,44 +1107,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 }
 
-                Ok(Dependencies::Available(dependencies.into()))
+                (dependencies, Some(name))
             }
 
             // Add a dependency on both the marker and base package.
-            PubGrubPackageInner::Marker { name, marker, url } => Ok(Dependencies::Available(
-                [None, Some(marker)]
-                    .into_iter()
-                    .map(move |marker| {
-                        (
-                            PubGrubPackage::from(PubGrubPackageInner::Package {
-                                name: name.clone(),
-                                extra: None,
-                                dev: None,
-                                marker: marker.cloned(),
-                                url: url.clone(),
-                            }),
-                            Range::singleton(version.clone()),
-                        )
-                    })
-                    .collect(),
-            )),
-
-            // Add a dependency on both the extra and base package, with and without the marker.
-            PubGrubPackageInner::Extra {
-                name,
-                extra,
-                marker,
-                url,
-            } => Ok(Dependencies::Available(
-                [None, marker.as_ref()]
-                    .into_iter()
-                    .dedup()
-                    .flat_map(move |marker| {
-                        [None, Some(extra)].into_iter().map(move |extra| {
+            PubGrubPackageInner::Marker { name, marker, url } => {
+                return Ok(Dependencies::Available(
+                    [None, Some(marker)]
+                        .into_iter()
+                        .map(move |marker| {
                             (
                                 PubGrubPackage::from(PubGrubPackageInner::Package {
                                     name: name.clone(),
-                                    extra: extra.cloned(),
+                                    extra: None,
                                     dev: None,
                                     marker: marker.cloned(),
                                     url: url.clone(),
@@ -1182,9 +1127,38 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 Range::singleton(version.clone()),
                             )
                         })
-                    })
-                    .collect(),
-            )),
+                        .collect(),
+                ))
+            }
+
+            // Add a dependency on both the extra and base package, with and without the marker.
+            PubGrubPackageInner::Extra {
+                name,
+                extra,
+                marker,
+                url,
+            } => {
+                return Ok(Dependencies::Available(
+                    [None, marker.as_ref()]
+                        .into_iter()
+                        .dedup()
+                        .flat_map(move |marker| {
+                            [None, Some(extra)].into_iter().map(move |extra| {
+                                (
+                                    PubGrubPackage::from(PubGrubPackageInner::Package {
+                                        name: name.clone(),
+                                        extra: extra.cloned(),
+                                        dev: None,
+                                        marker: marker.cloned(),
+                                        url: url.clone(),
+                                    }),
+                                    Range::singleton(version.clone()),
+                                )
+                            })
+                        })
+                        .collect(),
+                ))
+            }
 
             // Add a dependency on both the development dependency group and base package, with and
             // without the marker.
@@ -1193,27 +1167,45 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dev,
                 marker,
                 url,
-            } => Ok(Dependencies::Available(
-                [None, marker.as_ref()]
-                    .into_iter()
-                    .dedup()
-                    .flat_map(move |marker| {
-                        [None, Some(dev)].into_iter().map(move |dev| {
-                            (
-                                PubGrubPackage::from(PubGrubPackageInner::Package {
-                                    name: name.clone(),
-                                    extra: None,
-                                    dev: dev.cloned(),
-                                    marker: marker.cloned(),
-                                    url: url.clone(),
-                                }),
-                                Range::singleton(version.clone()),
-                            )
+            } => {
+                return Ok(Dependencies::Available(
+                    [None, marker.as_ref()]
+                        .into_iter()
+                        .dedup()
+                        .flat_map(move |marker| {
+                            [None, Some(dev)].into_iter().map(move |dev| {
+                                (
+                                    PubGrubPackage::from(PubGrubPackageInner::Package {
+                                        name: name.clone(),
+                                        extra: None,
+                                        dev: dev.cloned(),
+                                        marker: marker.cloned(),
+                                        url: url.clone(),
+                                    }),
+                                    Range::singleton(version.clone()),
+                                )
+                            })
                         })
-                    })
-                    .collect(),
-            )),
+                        .collect(),
+                ))
+            }
+        };
+
+        for (dep_package, dep_version) in dependencies.iter() {
+            if let Some(name) = name {
+                debug!("Adding transitive dependency for {name}=={version}: {dep_package}{dep_version}");
+            } else {
+                debug!("Adding direct dependency: {dep_package}{dep_version}");
+            }
+
+            // Update the package priorities.
+            priorities.insert(dep_package, dep_version);
+
+            // Emit a request to fetch the metadata for this package.
+            self.visit_package(dep_package, request_sink)?;
         }
+
+        Ok(Dependencies::Available(dependencies.into()))
     }
 
     /// Fetch the metadata for a stream of packages and versions.
@@ -2296,13 +2288,5 @@ impl<'a> PossibleFork<'a> {
             }
         }
         false
-    }
-}
-
-fn uncapitalize<T: AsRef<str>>(string: T) -> String {
-    let mut chars = string.as_ref().chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_lowercase().chain(chars).collect(),
     }
 }
