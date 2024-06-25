@@ -392,56 +392,6 @@ impl Lock {
         Ok(Resolution::new(map, diagnostics))
     }
 
-    /// Returns the distribution with the given name. If there are multiple
-    /// matching distributions, then an error is returned. If there are no
-    /// matching distributions, then `Ok(None)` is returned.
-    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Distribution>, String> {
-        let mut found_dist = None;
-        for dist in &self.distributions {
-            if &dist.id.name == name {
-                if found_dist.is_some() {
-                    return Err(format!("found multiple distributions matching `{name}`"));
-                }
-                found_dist = Some(dist);
-            }
-        }
-        Ok(found_dist)
-    }
-
-    fn find_by_id(&self, id: &DistributionId) -> &Distribution {
-        let index = *self.by_id.get(id).expect("locked distribution for ID");
-        let dist = self
-            .distributions
-            .get(index)
-            .expect("valid index for distribution");
-        dist
-    }
-}
-
-#[derive(Clone, Debug, serde::Deserialize)]
-struct LockWire {
-    version: u32,
-    #[serde(rename = "distribution")]
-    distributions: Vec<DistributionWire>,
-    #[serde(rename = "requires-python")]
-    requires_python: Option<RequiresPython>,
-}
-
-impl From<Lock> for LockWire {
-    fn from(lock: Lock) -> LockWire {
-        LockWire {
-            version: lock.version,
-            distributions: lock
-                .distributions
-                .into_iter()
-                .map(DistributionWire::from)
-                .collect(),
-            requires_python: lock.requires_python,
-        }
-    }
-}
-
-impl Lock {
     /// Returns the TOML representation of this lock file.
     pub fn to_toml(&self) -> anyhow::Result<String> {
         // We construct a TOML document manually instead of going through Serde to enable
@@ -534,6 +484,54 @@ impl Lock {
 
         doc.insert("distribution", Item::ArrayOfTables(distributions));
         Ok(doc.to_string())
+    }
+
+    /// Returns the distribution with the given name. If there are multiple
+    /// matching distributions, then an error is returned. If there are no
+    /// matching distributions, then `Ok(None)` is returned.
+    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Distribution>, String> {
+        let mut found_dist = None;
+        for dist in &self.distributions {
+            if &dist.id.name == name {
+                if found_dist.is_some() {
+                    return Err(format!("found multiple distributions matching `{name}`"));
+                }
+                found_dist = Some(dist);
+            }
+        }
+        Ok(found_dist)
+    }
+
+    fn find_by_id(&self, id: &DistributionId) -> &Distribution {
+        let index = *self.by_id.get(id).expect("locked distribution for ID");
+        let dist = self
+            .distributions
+            .get(index)
+            .expect("valid index for distribution");
+        dist
+    }
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+struct LockWire {
+    version: u32,
+    #[serde(rename = "distribution")]
+    distributions: Vec<DistributionWire>,
+    #[serde(rename = "requires-python")]
+    requires_python: Option<RequiresPython>,
+}
+
+impl From<Lock> for LockWire {
+    fn from(lock: Lock) -> LockWire {
+        LockWire {
+            version: lock.version,
+            distributions: lock
+                .distributions
+                .into_iter()
+                .map(DistributionWire::from)
+                .collect(),
+            requires_python: lock.requires_python,
+        }
     }
 }
 
