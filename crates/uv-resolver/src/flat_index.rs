@@ -59,7 +59,6 @@ impl FlatIndex {
         Self { index, offline }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn add_file(
         distributions: &mut FlatDistributions,
         file: File,

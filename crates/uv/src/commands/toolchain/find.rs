@@ -11,7 +11,6 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Find a toolchain.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn find(
     request: Option<String>,
     toolchain_preference: ToolchainPreference,
