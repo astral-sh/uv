@@ -815,6 +815,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.from,
                 args.with,
+                args.force,
                 args.settings,
                 globals.preview,
                 globals.toolchain_preference,

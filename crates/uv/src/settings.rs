@@ -241,6 +241,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) force: bool,
 }
 
 impl ToolInstallSettings {
@@ -252,6 +253,7 @@ impl ToolInstallSettings {
             from,
             with,
             installer,
+            force,
             build,
             refresh,
             python,
@@ -262,6 +264,7 @@ impl ToolInstallSettings {
             from,
             with,
             python,
+            force,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),

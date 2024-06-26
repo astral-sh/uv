@@ -107,6 +107,20 @@ impl InstalledTools {
         Ok(())
     }
 
+    pub fn remove_environment(&self, name: &str) -> Result<(), Error> {
+        let _lock = self.acquire_lock();
+        let environment_path = self.root.join(name);
+
+        debug!(
+            "Deleting environment for tool `{name}` at {}",
+            environment_path.user_display()
+        );
+
+        fs_err::remove_dir_all(environment_path)?;
+
+        Ok(())
+    }
+
     pub fn create_environment(
         &self,
         name: &str,
