@@ -377,24 +377,8 @@ impl TestContext {
     /// For example, pinning package versions.
     pub fn tool_install_without_exclude_newer(&self) -> std::process::Command {
         let mut command = std::process::Command::new(get_bin());
-        command
-            .arg("tool")
-            .arg("install")
-            .arg("--cache-dir")
-            .arg(self.cache_dir.path())
-            .env("VIRTUAL_ENV", self.venv.as_os_str())
-            .env("UV_NO_WRAP", "1")
-            .env("HOME", self.home_dir.as_os_str())
-            .env("UV_TOOLCHAIN_DIR", "")
-            .env("UV_TEST_PYTHON_PATH", &self.python_path())
-            .current_dir(&self.temp_dir);
-
-        if cfg!(all(windows, debug_assertions)) {
-            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-            // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
-        }
-
+        command.arg("tool").arg("install");
+        self.add_shared_args(&mut command);
         command
     }
 
@@ -677,6 +661,7 @@ pub fn python_toolchains_for_versions(
 
 #[derive(Debug, Copy, Clone)]
 pub enum WindowsFilters {
+    CachedPlatform,
     Platform,
     Universal,
 }
@@ -756,6 +741,10 @@ pub fn run_and_format<T: AsRef<str>>(
                     for verb in match windows_filters {
                         WindowsFilters::Platform => {
                             ["Resolved", "Prepared", "Installed", "Uninstalled"].iter()
+                        }
+                        // When cached, "Prepared" should not change.
+                        WindowsFilters::CachedPlatform => {
+                            ["Resolved", "Installed", "Uninstalled"].iter()
                         }
                         WindowsFilters::Universal => {
                             ["Prepared", "Installed", "Uninstalled"].iter()
@@ -847,6 +836,12 @@ macro_rules! uv_snapshot {
     ($filters:expr, universal_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), Some($crate::common::WindowsFilters::Universal));
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
+        output
+    }};
+    ($filters:expr, cached_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
+        // Take a reference for backwards compatibility with the vec-expecting insta filters.
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), Some($crate::common::WindowsFilters::CachedPlatform));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};

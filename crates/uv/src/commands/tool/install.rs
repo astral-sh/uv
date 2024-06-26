@@ -10,7 +10,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
-use uv_fs::{replace_symlink, Simplified};
+#[cfg(unix)]
+use uv_fs::replace_symlink;
+use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_requirements::RequirementsSource;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool};
@@ -122,7 +124,10 @@ pub(crate) async fn install(
     for (name, path) in entrypoints {
         let target = executable_directory.join(path.file_name().unwrap());
         debug!("Installing {name} to {}", target.user_display());
+        #[cfg(unix)]
         replace_symlink(&path, &target).context("Failed to install entrypoint")?;
+        #[cfg(windows)]
+        fs_err::copy(&path, &target).context("Failed to install entrypoint")?;
     }
 
     debug!("Adding `{name}` to {}", path.user_display());
