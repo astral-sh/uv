@@ -1749,10 +1749,6 @@ pub struct AddArgs {
     #[arg(long)]
     pub dev: bool,
 
-    /// Add the requirements as workspace dependencies.
-    #[arg(long)]
-    pub workspace: bool,
-
     /// Add the requirements as editables.
     #[arg(long, default_missing_value = "true", num_args(0..=1))]
     pub editable: Option<bool>,

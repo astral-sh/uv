@@ -735,11 +735,29 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
     "#})?;
 
+    // Adding a workspace package with a mismatched source should error.
+    let mut add_cmd =
+        context.add(&["child2 @ git+https://github.com/astral-test/uv-public-pypackage"]);
+    add_cmd
+        .arg("--preview")
+        .arg("--package")
+        .arg("child1")
+        .current_dir(&context.temp_dir);
+
+    uv_snapshot!(context.filters(), add_cmd, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace dependency `child2` must refer to local directory, not a Git repository
+    "###);
+
+    // Workspace packages should be detected automatically.
     let child1 = context.temp_dir.join("child1");
     let mut add_cmd = context.add(&["child2"]);
     add_cmd
         .arg("--preview")
-        .arg("--workspace")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -921,7 +939,6 @@ fn add_workspace_editable() -> Result<()> {
     let mut add_cmd = context.add(&["child2"]);
     add_cmd
         .arg("--editable")
-        .arg("--workspace")
         .arg("--preview")
         .current_dir(&child1);
 

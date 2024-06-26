@@ -719,7 +719,6 @@ async fn run() -> Result<ExitStatus> {
 
             commands::add(
                 args.requirements,
-                args.workspace,
                 args.dev,
                 args.editable,
                 args.raw,

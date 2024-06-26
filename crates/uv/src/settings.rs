@@ -432,7 +432,6 @@ impl LockSettings {
 pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<RequirementsSource>,
     pub(crate) dev: bool,
-    pub(crate) workspace: bool,
     pub(crate) editable: Option<bool>,
     pub(crate) raw: bool,
     pub(crate) rev: Option<String>,
@@ -451,7 +450,6 @@ impl AddSettings {
         let AddArgs {
             requirements,
             dev,
-            workspace,
             editable,
             raw,
             rev,
@@ -471,7 +469,6 @@ impl AddSettings {
 
         Self {
             requirements,
-            workspace,
             dev,
             editable,
             raw,

@@ -194,14 +194,19 @@ pub enum Source {
 
 #[derive(Error, Debug)]
 pub enum SourceError {
-    #[error("Cannot resolve git reference `{0}`.")]
+    #[error("Cannot resolve git reference `{0}`")]
     UnresolvedReference(String),
-    #[error("Workspace dependency must be a local path.")]
-    InvalidWorkspaceRequirement,
+    #[error("Workspace dependency `{0}` must refer to local directory, not a Git repository")]
+    WorkspacePackageGit(String),
+    #[error("Workspace dependency `{0}` must refer to local directory, not a URL")]
+    WorkspacePackageUrl(String),
+    #[error("Workspace dependency `{0}` must refer to local directory, not a file")]
+    WorkspacePackageFile(String),
 }
 
 impl Source {
     pub fn from_requirement(
+        name: &PackageName,
         source: RequirementSource,
         workspace: bool,
         editable: Option<bool>,
@@ -210,15 +215,23 @@ impl Source {
         branch: Option<String>,
     ) -> Result<Option<Source>, SourceError> {
         if workspace {
-            match source {
-                RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {}
-                _ => return Err(SourceError::InvalidWorkspaceRequirement),
-            }
-
-            return Ok(Some(Source::Workspace {
-                editable,
-                workspace: true,
-            }));
+            return match source {
+                RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
+                    Ok(Some(Source::Workspace {
+                        editable,
+                        workspace: true,
+                    }))
+                }
+                RequirementSource::Url { .. } => {
+                    Err(SourceError::WorkspacePackageUrl(name.to_string()))
+                }
+                RequirementSource::Git { .. } => {
+                    Err(SourceError::WorkspacePackageGit(name.to_string()))
+                }
+                RequirementSource::Path { .. } => {
+                    Err(SourceError::WorkspacePackageFile(name.to_string()))
+                }
+            };
         }
 
         let source = match source {
