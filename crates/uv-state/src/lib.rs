@@ -95,14 +95,17 @@ impl StateStore {
 /// are subdirectories of the state store root.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum StateBucket {
-    // Managed toolchain
+    // Managed toolchains
     Toolchains,
+    // Installed tools
+    Tools,
 }
 
 impl StateBucket {
     fn to_str(self) -> &'static str {
         match self {
             Self::Toolchains => "toolchains",
+            Self::Tools => "tools",
         }
     }
 }

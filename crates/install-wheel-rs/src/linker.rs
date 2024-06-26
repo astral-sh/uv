@@ -1,7 +1,7 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::SystemTime;
 
@@ -141,6 +141,24 @@ pub fn install_wheel(
     }
 
     Ok(())
+}
+
+/// Determine the absolute path to an entrypoint script.
+pub fn entrypoint_path(entrypoint: &Script, layout: &Layout) -> PathBuf {
+    if cfg!(windows) {
+        // On windows we actually build an .exe wrapper
+        let script_name = entrypoint
+            .name
+            // FIXME: What are the in-reality rules here for names?
+            .strip_suffix(".py")
+            .unwrap_or(&entrypoint.name)
+            .to_string()
+            + ".exe";
+
+        layout.scheme.scripts.join(script_name)
+    } else {
+        layout.scheme.scripts.join(&entrypoint.name)
+    }
 }
 
 /// Find the `dist-info` directory in an unzipped wheel.
