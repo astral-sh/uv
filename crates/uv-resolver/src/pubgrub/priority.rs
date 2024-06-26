@@ -31,52 +31,48 @@ impl PubGrubPriorities {
         urls: &ForkUrls,
     ) {
         let next = self.0.len();
-        match &**package {
-            PubGrubPackageInner::Root(_) => {}
-            PubGrubPackageInner::Python(_) => {}
+        // The root package and Python constraints have no explicit priority, the root package is
+        // always first and the Python version (range) is fixed.
+        let Some(name) = package.name_no_root() else {
+            return;
+        };
 
-            PubGrubPackageInner::Marker { name, .. }
-            | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Dev { name, .. }
-            | PubGrubPackageInner::Package { name, .. } => {
-                match self.0.entry(name.clone()) {
-                    std::collections::hash_map::Entry::Occupied(mut entry) => {
-                        // Preserve the original index.
-                        let index = match entry.get() {
-                            PubGrubPriority::Unspecified(Reverse(index)) => *index,
-                            PubGrubPriority::Singleton(Reverse(index)) => *index,
-                            PubGrubPriority::DirectUrl(Reverse(index)) => *index,
-                            PubGrubPriority::Root => next,
-                        };
+        match self.0.entry(name.clone()) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                // Preserve the original index.
+                let index = match entry.get() {
+                    PubGrubPriority::Unspecified(Reverse(index)) => *index,
+                    PubGrubPriority::Singleton(Reverse(index)) => *index,
+                    PubGrubPriority::DirectUrl(Reverse(index)) => *index,
+                    PubGrubPriority::Root => next,
+                };
 
-                        // Compute the priority.
-                        let priority = if urls.get(name).is_some() {
-                            PubGrubPriority::DirectUrl(Reverse(index))
-                        } else if version.as_singleton().is_some() {
-                            PubGrubPriority::Singleton(Reverse(index))
-                        } else {
-                            PubGrubPriority::Unspecified(Reverse(index))
-                        };
+                // Compute the priority.
+                let priority = if urls.get(name).is_some() {
+                    PubGrubPriority::DirectUrl(Reverse(index))
+                } else if version.as_singleton().is_some() {
+                    PubGrubPriority::Singleton(Reverse(index))
+                } else {
+                    PubGrubPriority::Unspecified(Reverse(index))
+                };
 
-                        // Take the maximum of the new and existing priorities.
-                        if priority > *entry.get() {
-                            entry.insert(priority);
-                        }
-                    }
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        // Compute the priority.
-                        let priority = if urls.get(name).is_some() {
-                            PubGrubPriority::DirectUrl(Reverse(next))
-                        } else if version.as_singleton().is_some() {
-                            PubGrubPriority::Singleton(Reverse(next))
-                        } else {
-                            PubGrubPriority::Unspecified(Reverse(next))
-                        };
-
-                        // Insert the priority.
-                        entry.insert(priority);
-                    }
+                // Take the maximum of the new and existing priorities.
+                if priority > *entry.get() {
+                    entry.insert(priority);
                 }
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                // Compute the priority.
+                let priority = if urls.get(name).is_some() {
+                    PubGrubPriority::DirectUrl(Reverse(next))
+                } else if version.as_singleton().is_some() {
+                    PubGrubPriority::Singleton(Reverse(next))
+                } else {
+                    PubGrubPriority::Unspecified(Reverse(next))
+                };
+
+                // Insert the priority.
+                entry.insert(priority);
             }
         }
     }

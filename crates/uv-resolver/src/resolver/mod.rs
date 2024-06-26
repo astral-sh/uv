@@ -667,43 +667,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         url: Option<&VerbatimParsedUrl>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
-        match (&**package, url) {
-            (PubGrubPackageInner::Root(_), _) => {}
-            (PubGrubPackageInner::Python(_), _) => {}
-            (
-                PubGrubPackageInner::Marker { name, .. }
-                | PubGrubPackageInner::Extra { name, .. }
-                | PubGrubPackageInner::Dev { name, .. }
-                | PubGrubPackageInner::Package { name, .. },
-                None,
-            ) => {
-                // Verify that the package is allowed under the hash-checking policy.
-                if !self.hasher.allows_package(name) {
-                    return Err(ResolveError::UnhashedPackage(name.clone()));
-                }
+        // Only request real package
+        let Some(name) = package.name_no_root() else {
+            return Ok(());
+        };
 
-                // Emit a request to fetch the metadata for this package.
-                if self.index.packages().register(name.clone()) {
-                    request_sink.blocking_send(Request::Package(name.clone()))?;
-                }
+        if let Some(url) = url {
+            // Verify that the package is allowed under the hash-checking policy.
+            if !self.hasher.allows_url(&url.verbatim) {
+                return Err(ResolveError::UnhashedPackage(name.clone()));
             }
-            (
-                PubGrubPackageInner::Marker { name, .. }
-                | PubGrubPackageInner::Extra { name, .. }
-                | PubGrubPackageInner::Dev { name, .. }
-                | PubGrubPackageInner::Package { name, .. },
-                Some(url),
-            ) => {
-                // Verify that the package is allowed under the hash-checking policy.
-                if !self.hasher.allows_url(&url.verbatim) {
-                    return Err(ResolveError::UnhashedPackage(name.clone()));
-                }
 
-                // Emit a request to fetch the metadata for this distribution.
-                let dist = Dist::from_url(name.clone(), url.clone())?;
-                if self.index.distributions().register(dist.version_id()) {
-                    request_sink.blocking_send(Request::Dist(dist))?;
-                }
+            // Emit a request to fetch the metadata for this distribution.
+            let dist = Dist::from_url(name.clone(), url.clone())?;
+            if self.index.distributions().register(dist.version_id()) {
+                request_sink.blocking_send(Request::Dist(dist))?;
+            }
+        } else {
+            // Verify that the package is allowed under the hash-checking policy.
+            if !self.hasher.allows_package(name) {
+                return Err(ResolveError::UnhashedPackage(name.clone()));
+            }
+
+            // Emit a request to fetch the metadata for this package.
+            if self.index.packages().register(name.clone()) {
+                request_sink.blocking_send(Request::Package(name.clone()))?;
             }
         }
         Ok(())
