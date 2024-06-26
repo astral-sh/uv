@@ -78,13 +78,13 @@ pub(crate) async fn install(
         false
     };
 
-    let requirements = [Requirement::from_str(from.name.as_ref())]
+    let requirements = [Ok(from.clone())]
         .into_iter()
         .chain(with.iter().map(|name| Requirement::from_str(name)))
         .collect::<Result<Vec<Requirement<VerbatimParsedUrl>>, _>>()?;
 
     // TODO(zanieb): Duplicative with the above parsing but needed for `update_environment`
-    let requirements_sources = [RequirementsSource::from_package(from.name.to_string())]
+    let requirements_sources = [RequirementsSource::from_package(from.to_string())]
         .into_iter()
         .chain(with.into_iter().map(RequirementsSource::from_package))
         .collect::<Vec<_>>();
