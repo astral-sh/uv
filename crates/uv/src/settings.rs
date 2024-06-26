@@ -147,8 +147,8 @@ pub(crate) struct RunSettings {
     pub(crate) dev: bool,
     pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
-    pub(crate) python: Option<String>,
     pub(crate) package: Option<PackageName>,
+    pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
@@ -168,8 +168,8 @@ impl RunSettings {
             installer,
             build,
             refresh,
-            python,
             package,
+            python,
         } = args;
 
         Self {
@@ -180,8 +180,8 @@ impl RunSettings {
             dev: flag(dev, no_dev).unwrap_or(true),
             command,
             with,
-            python,
             package,
+            python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -438,6 +438,7 @@ pub(crate) struct AddSettings {
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
+    pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -459,6 +460,7 @@ impl AddSettings {
             installer,
             build,
             refresh,
+            package,
             python,
         } = args;
 
@@ -476,6 +478,7 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            package,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -492,6 +495,7 @@ impl AddSettings {
 pub(crate) struct RemoveSettings {
     pub(crate) requirements: Vec<PackageName>,
     pub(crate) dev: bool,
+    pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
 }
 
@@ -502,12 +506,14 @@ impl RemoveSettings {
         let RemoveArgs {
             dev,
             requirements,
+            package,
             python,
         } = args;
 
         Self {
             requirements,
             dev,
+            package,
             python,
         }
     }
