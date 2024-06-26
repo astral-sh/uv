@@ -824,11 +824,10 @@ fn add_remove_workspace() -> Result<()> {
     warning: `uv remove` is experimental and may change without warning.
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - child1==0.1.0 (from file://[TEMP_DIR]/child1)
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
-     - child2==0.1.0 (from file://[TEMP_DIR]/child2)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
@@ -880,7 +879,7 @@ fn add_remove_workspace() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Audited 1 package in [TIME]
+    Audited 2 packages in [TIME]
     "###);
 
     Ok(())

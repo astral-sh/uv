@@ -357,23 +357,25 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/bird-feeder)
      + idna==3.6
      + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/seeds)
      + sniffio==1.3.1
+     + tqdm==4.66.2
     "###
     );
 
     uv_snapshot!(context.filters(), universal_windows_filters=true, context
         .run()
         .arg("--preview")
-            .arg("--package")
-            .arg("albatross")
-            .arg("packages/albatross/check_installed_albatross.py")
-            .current_dir(&work_dir), @r###"
+        .arg("--package")
+        .arg("albatross")
+        .arg("packages/albatross/check_installed_albatross.py")
+        .current_dir(&work_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -381,10 +383,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
-     + tqdm==4.66.2
+    Audited 7 packages in [TIME]
     "###
     );
 
@@ -421,23 +420,25 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
      + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
+     + tqdm==4.66.2
     "###
     );
 
     uv_snapshot!(context.filters(), universal_windows_filters=true, context
         .run()
         .arg("--preview")
-            .arg("--package")
-            .arg("albatross")
-            .arg("check_installed_albatross.py")
-            .current_dir(&work_dir), @r###"
+        .arg("--package")
+        .arg("albatross")
+        .arg("check_installed_albatross.py")
+        .current_dir(&work_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -445,10 +446,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
-     + tqdm==4.66.2
+    Audited 7 packages in [TIME]
     "###
     );
 

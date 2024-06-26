@@ -202,8 +202,7 @@ pub(crate) async fn add(
     let dev = true;
 
     project::sync::do_sync(
-        project.project_name(),
-        project.workspace().root(),
+        project.workspace(),
         &venv,
         &lock,
         extras,
