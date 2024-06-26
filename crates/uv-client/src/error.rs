@@ -153,6 +153,10 @@ pub enum ErrorKind {
     #[error("Package `{0}` was not found in the registry.")]
     PackageNotFound(String),
 
+    /// The package was not found in the local (file-based) index.
+    #[error("Package `{0}` was not found in the local index.")]
+    FileNotFound(String),
+
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of {0} from {1}")]
     MetadataParseError(

@@ -5625,7 +5625,7 @@ fn local_index_absolute() -> Result<()> {
             <meta name="pypi:repository-version" content="1.1" />
           </head>
           <body>
-            <h1>Links for example-a-961b4c22</h1>
+            <h1>Links for tqdm</h1>
             <a
               href="{}/tqdm-1000.0.0-py3-none-any.whl"
               data-requires-python=">=3.8"
@@ -5676,7 +5676,7 @@ fn local_index_relative() -> Result<()> {
             <meta name="pypi:repository-version" content="1.1" />
           </head>
           <body>
-            <h1>Links for example-a-961b4c22</h1>
+            <h1>Links for tqdm</h1>
             <a
               href="{}/tqdm-1000.0.0-py3-none-any.whl"
               data-requires-python=">=3.8"
@@ -5727,7 +5727,7 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
             <meta name="pypi:repository-version" content="1.1" />
           </head>
           <body>
-            <h1>Links for example-a-961b4c22</h1>
+            <h1>Links for tqdm</h1>
             <a
               href="{}/tqdm-1000.0.0-py3-none-any.whl"
               data-requires-python=">=3.8"
@@ -5783,7 +5783,7 @@ fn local_index_requirements_txt_relative() -> Result<()> {
             <meta name="pypi:repository-version" content="1.1" />
           </head>
           <body>
-            <h1>Links for example-a-961b4c22</h1>
+            <h1>Links for tqdm</h1>
             <a
               href="{}/tqdm-1000.0.0-py3-none-any.whl"
               data-requires-python=">=3.8"
@@ -5815,6 +5815,52 @@ fn local_index_requirements_txt_relative() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==1000.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Resolve against a local directory laid out as a PEP 503-compatible index, falling back to
+/// the default index.
+#[test]
+fn local_index_fallback() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root = context.temp_dir.child("simple-html");
+    fs_err::create_dir_all(&root)?;
+
+    let tqdm = root.child("tqdm");
+    fs_err::create_dir_all(&tqdm)?;
+
+    let index = tqdm.child("index.html");
+    index.write_str(
+        r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for tqdm</h1>
+          </body>
+        </html>
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--extra-index-url")
+        .arg(Url::from_directory_path(root).unwrap().as_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     "###
     );
 
