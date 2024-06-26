@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.17
+
+### Preview features
+
+- Add `--extra` to `uv add` and enable fine grained updates ([#4566](https://github.com/astral-sh/uv/pull/4566))
+
 ## 0.2.16
 
 ### Preview features
@@ -155,7 +161,6 @@
 
 <!-- No changes -->
 
-
 ## 0.2.3
 
 ### Preview features
@@ -165,7 +170,6 @@
 ## 0.2.2
 
 <!-- No changes -->
-
 
 ## 0.2.1
 
@@ -203,7 +207,6 @@
 
 <!-- No changes -->
 
-
 ## 0.1.43
 
 ### Preview features
@@ -224,7 +227,6 @@
 ## 0.1.41
 
 <!-- No changes -->
-
 
 ## 0.1.40
 
