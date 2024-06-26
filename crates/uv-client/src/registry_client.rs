@@ -182,6 +182,12 @@ pub struct RegistryClient {
     timeout: u64,
 }
 
+#[derive(Debug)]
+enum IndexError {
+    Remote(CachedClientError<Error>),
+    Local(Error),
+}
+
 impl RegistryClient {
     /// Return the [`CachedClient`] used by this client.
     pub fn cached_client(&self) -> &CachedClient {
@@ -229,8 +235,19 @@ impl RegistryClient {
                         break;
                     }
                 }
-                Err(CachedClientError::Client(err)) => match err.into_kind() {
+                Err(IndexError::Local(err)) => {
+                    match err.into_kind() {
+                        // The package could not be found in the local index.
+                        ErrorKind::FileNotFound(_) => continue,
+
+                        other => return Err(other.into()),
+                    }
+                }
+                Err(IndexError::Remote(CachedClientError::Client(err))) => match err.into_kind() {
+                    // The package is unavailable due to a lack of connectivity.
                     ErrorKind::Offline(_) => continue,
+
+                    // The package could not be found in the remote index.
                     ErrorKind::ReqwestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND)
                             || err.status() == Some(StatusCode::UNAUTHORIZED)
@@ -240,9 +257,10 @@ impl RegistryClient {
                         }
                         return Err(ErrorKind::from(err).into());
                     }
+
                     other => return Err(other.into()),
                 },
-                Err(CachedClientError::Callback(err)) => return Err(err),
+                Err(IndexError::Remote(CachedClientError::Callback(err))) => return Err(err),
             };
         }
 
@@ -266,7 +284,7 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
         index: &IndexUrl,
-    ) -> Result<Result<OwnedArchive<SimpleMetadata>, CachedClientError<Error>>, Error> {
+    ) -> Result<Result<OwnedArchive<SimpleMetadata>, IndexError>, Error> {
         // Format the URL for PyPI.
         let mut url: Url = index.clone().into();
         url.path_segments_mut()
@@ -298,7 +316,7 @@ impl RegistryClient {
         };
 
         if matches!(index, IndexUrl::Path(_)) {
-            self.fetch_local_index(package_name, &url).await.map(Ok)
+            self.fetch_local_index(package_name, &url).await
         } else {
             self.fetch_remote_index(package_name, &url, &cache_entry, cache_control)
                 .await
@@ -312,7 +330,7 @@ impl RegistryClient {
         url: &Url,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
-    ) -> Result<Result<OwnedArchive<SimpleMetadata>, CachedClientError<Error>>, Error> {
+    ) -> Result<Result<OwnedArchive<SimpleMetadata>, IndexError>, Error> {
         let simple_request = self
             .uncached_client()
             .get(url.clone())
@@ -367,7 +385,8 @@ impl RegistryClient {
                 cache_control,
                 parse_simple_response,
             )
-            .await;
+            .await
+            .map_err(IndexError::Remote);
         Ok(result)
     }
 
@@ -377,16 +396,25 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
         url: &Url,
-    ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
+    ) -> Result<Result<OwnedArchive<SimpleMetadata>, IndexError>, Error> {
         let path = url
             .to_file_path()
             .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?
             .join("index.html");
-        let text = fs_err::tokio::read_to_string(&path)
-            .await
-            .map_err(ErrorKind::from)?;
+        let text = match fs_err::tokio::read_to_string(&path).await {
+            Ok(text) => text,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Err(IndexError::Local(Error::from(
+                    ErrorKind::FileNotFound(package_name.to_string()),
+                ))));
+            }
+            Err(err) => {
+                return Err(Error::from(ErrorKind::Io(err)));
+            }
+        };
         let metadata = SimpleMetadata::from_html(&text, package_name, url)?;
-        OwnedArchive::from_unarchived(&metadata)
+        let metadata = OwnedArchive::from_unarchived(&metadata)?;
+        Ok(Ok(metadata))
     }
 
     /// Fetch the metadata for a remote wheel file.
