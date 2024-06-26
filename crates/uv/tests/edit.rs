@@ -1131,7 +1131,7 @@ fn update() -> Result<()> {
     });
 
     // Change the source by specifying a version (note the extras should be preserved).
-    uv_snapshot!(context.filters(), context.add(&["requests @ git+https://github.com/psf/requests"]), @r###"
+    uv_snapshot!(context.filters(), context.add(&["requests @ git+https://github.com/psf/requests"]).arg("--tag=v2.32.3"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1146,7 +1146,7 @@ fn update() -> Result<()> {
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
-     + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068#0e322af87745eff34caffe4df68456ebc20d9068)
+     + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068?tag=v2.32.3#0e322af87745eff34caffe4df68456ebc20d9068)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -1165,7 +1165,7 @@ fn update() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        requests = { git = "https://github.com/psf/requests" }
+        requests = { git = "https://github.com/psf/requests", tag = "v2.32.3" }
         "###
         );
     });
@@ -1330,7 +1330,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "requests"
         version = "2.32.3"
-        source = "git+https://github.com/psf/requests#0e322af87745eff34caffe4df68456ebc20d9068"
+        source = "git+https://github.com/psf/requests?tag=v2.32.3#0e322af87745eff34caffe4df68456ebc20d9068"
 
         [[distribution.dependencies]]
         name = "certifi"
