@@ -1,36 +1,13 @@
 use std::env;
 use std::path::Path;
-use std::process::Command;
 
 use anyhow::Result;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 
-use crate::common::{get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER};
+use crate::common::{uv_snapshot, TestContext};
 
 mod common;
-
-fn lock_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command
-        .arg("lock")
-        .arg("--preview")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
-    }
-
-    command
-}
 
 /// Create a stub package `name` in `dir` with the given `pyproject.toml` body.
 fn make_project(dir: &Path, name: &str, body: &str) -> Result<()> {
@@ -74,7 +51,7 @@ fn branching_urls_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -107,7 +84,7 @@ fn branching_urls_overlapping() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -141,7 +118,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
             "anyio==4.2.0 ; python_version < '3.12'",
             "b"
         ]
-        
+
         [tool.uv.sources]
         b = { path = "b" }
     "# };
@@ -152,7 +129,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
             "b1",
             "b2",
         ]
-        
+
         [tool.uv.sources]
         b1 = { path = "../b1" }
         b2 = { path = "../b2" }
@@ -173,7 +150,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -209,7 +186,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
             "anyio==4.2.0 ; python_version < '3.12'",
             "b"
         ]
-        
+
         [tool.uv.sources]
         b = { path = "b" }
     "# };
@@ -220,7 +197,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
             "b1 ; python_version < '3.12'",
             "b2 ; python_version >= '3.12'",
         ]
-        
+
         [tool.uv.sources]
         b1 = { path = "../b1" }
         b2 = { path = "../b2" }
@@ -241,7 +218,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -277,7 +254,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
             "b1 ; python_version < '3.12'",
             "b2 ; python_version >= '3.12'",
         ]
-        
+
         [tool.uv.sources]
         b1 = { path = "b1" }
         b2 = { path = "b2" }
@@ -298,7 +275,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -331,7 +308,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -402,7 +379,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -473,7 +450,7 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -499,7 +476,7 @@ fn dont_previsit_url_packages() -> Result<()> {
             "c==0.1.0",
             "b",
         ]
-        
+
         [tool.uv.sources]
         b = { path = "b" }
     "# };
@@ -509,7 +486,7 @@ fn dont_previsit_url_packages() -> Result<()> {
         dependencies = [
           "c",
         ]
-        
+
         [tool.uv.sources]
         c = { path = "../c" }
     "# };
@@ -519,7 +496,7 @@ fn dont_previsit_url_packages() -> Result<()> {
     " };
     make_project(&context.temp_dir.join("c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), lock_command(&context).arg("--offline").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
