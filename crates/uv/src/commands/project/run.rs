@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_distribution::{ProjectWorkspace, Workspace};
+use uv_distribution::{ProjectWorkspace, Workspace, WorkspaceError};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
 use uv_toolchain::{
@@ -46,67 +46,111 @@ pub(crate) async fn run(
         warn_user!("`uv run` is experimental and may change without warning.");
     }
 
-    // Discover and sync the project.
-    let project_env = if isolated {
+    // Discover and sync the base environment.
+    let base_env = if isolated {
         // package is `None`, isolated and package are marked as conflicting in clap.
         None
     } else {
-        debug!("Syncing project environment.");
-
         let project = if let Some(package) = package {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
-            Workspace::discover(&std::env::current_dir()?, None)
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?
+            Some(
+                Workspace::discover(&std::env::current_dir()?, None)
+                    .await?
+                    .with_current_project(package.clone())
+                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            )
         } else {
-            ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
+            match ProjectWorkspace::discover(&std::env::current_dir()?, None).await {
+                Ok(project) => Some(project),
+                Err(WorkspaceError::MissingPyprojectToml) => None,
+                Err(err) => return Err(err.into()),
+            }
         };
-        let venv = project::init_environment(
-            project.workspace(),
-            python.as_deref().map(ToolchainRequest::parse),
-            toolchain_preference,
-            connectivity,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
 
-        // Lock and sync the environment.
-        let lock = project::lock::do_lock(
-            project.workspace(),
-            venv.interpreter(),
-            settings.as_ref().into(),
-            preview,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
-        project::sync::do_sync(
-            project.project_name(),
-            project.workspace().root(),
-            &venv,
-            &lock,
-            extras,
-            dev,
-            Modifications::Sufficient,
-            settings.as_ref().into(),
-            preview,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
+        let venv = if let Some(project) = project {
+            debug!(
+                "Discovered project `{}` at: {}",
+                project.project_name(),
+                project.workspace().root().display()
+            );
+
+            let venv = project::init_environment(
+                project.workspace(),
+                python.as_deref().map(ToolchainRequest::parse),
+                toolchain_preference,
+                connectivity,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            // Lock and sync the environment.
+            let lock = project::lock::do_lock(
+                project.workspace(),
+                venv.interpreter(),
+                settings.as_ref().into(),
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+            project::sync::do_sync(
+                project.project_name(),
+                project.workspace().root(),
+                &venv,
+                &lock,
+                extras,
+                dev,
+                Modifications::Sufficient,
+                settings.as_ref().into(),
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            venv
+        } else {
+            debug!("No project found; searching for Python interpreter");
+
+            let client_builder = BaseClientBuilder::new()
+                .connectivity(connectivity)
+                .native_tls(native_tls);
+
+            let toolchain = Toolchain::find_or_fetch(
+                python.as_deref().map(ToolchainRequest::parse),
+                // No opt-in is required for system environments, since we are not mutating it.
+                EnvironmentPreference::Any,
+                toolchain_preference,
+                client_builder,
+                cache,
+            )
+            .await?;
+
+            // Creating a `PythonEnvironment` from a `find_or_fetch` is generally discouraged, since
+            // we may end up modifying a managed toolchain. However, the environment here is
+            // read-only.
+            PythonEnvironment::from_toolchain(toolchain)
+        };
 
         Some(venv)
     };
+
+    if let Some(base_env) = &base_env {
+        debug!(
+            "Using Python {} interpreter at: {}",
+            base_env.interpreter().python_version(),
+            base_env.interpreter().sys_executable().display()
+        );
+    }
 
     // If necessary, create an environment for the ephemeral requirements.
     let temp_dir;
@@ -115,14 +159,14 @@ pub(crate) async fn run(
     } else {
         debug!("Syncing ephemeral environment.");
 
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
-
         // Discover an interpreter.
-        let interpreter = if let Some(project_env) = &project_env {
-            project_env.interpreter().clone()
+        let interpreter = if let Some(base_env) = &base_env {
+            base_env.interpreter().clone()
         } else {
+            let client_builder = BaseClientBuilder::new()
+                .connectivity(connectivity)
+                .native_tls(native_tls);
+
             // Note we force preview on during `uv run` for now since the entire interface is in preview
             Toolchain::find_or_fetch(
                 python.as_deref().map(ToolchainRequest::parse),
@@ -194,7 +238,7 @@ pub(crate) async fn run(
             .map(PythonEnvironment::scripts)
             .into_iter()
             .chain(
-                project_env
+                base_env
                     .as_ref()
                     .map(PythonEnvironment::scripts)
                     .into_iter(),
@@ -217,7 +261,7 @@ pub(crate) async fn run(
             .into_iter()
             .flatten()
             .chain(
-                project_env
+                base_env
                     .as_ref()
                     .map(PythonEnvironment::site_packages)
                     .into_iter()
