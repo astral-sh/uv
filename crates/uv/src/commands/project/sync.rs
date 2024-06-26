@@ -4,7 +4,7 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{ProjectWorkspace, Workspace, DEV_DEPENDENCIES};
+use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
@@ -39,11 +39,11 @@ pub(crate) async fn sync(
     }
 
     // Find the project requirements.
-    let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
+    let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
     let venv = project::init_environment(
-        project.workspace(),
+        &workspace,
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
         connectivity,
@@ -55,14 +55,13 @@ pub(crate) async fn sync(
 
     // Read the lockfile.
     let lock: Lock = {
-        let encoded =
-            fs_err::tokio::read_to_string(project.workspace().root().join("uv.lock")).await?;
+        let encoded = fs_err::tokio::read_to_string(workspace.root().join("uv.lock")).await?;
         toml::from_str(&encoded)?
     };
 
     // Perform the sync operation.
     do_sync(
-        project.workspace(),
+        &workspace,
         &venv,
         &lock,
         extras,
