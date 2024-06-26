@@ -18,7 +18,7 @@ use uv_toolchain::{
     EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain, ToolchainPreference,
     ToolchainRequest,
 };
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus};
@@ -45,7 +45,7 @@ pub(crate) async fn run(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv run` is experimental and may change without warning.");
+        warn_user_once!("`uv run` is experimental and may change without warning.");
     }
 
     // Discover and sync the base environment.

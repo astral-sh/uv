@@ -9,7 +9,7 @@ use uv_fs::Simplified;
 use uv_toolchain::downloads::{self, DownloadResult, PythonDownload, PythonDownloadRequest};
 use uv_toolchain::managed::{InstalledToolchain, InstalledToolchains};
 use uv_toolchain::{requests_from_version_file, ToolchainRequest};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -25,7 +25,7 @@ pub(crate) async fn install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv toolchain install` is experimental and may change without warning.");
+        warn_user_once!("`uv toolchain install` is experimental and may change without warning.");
     }
 
     let start = std::time::Instant::now();

@@ -13,7 +13,7 @@ use uv_normalize::PackageName;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_toolchain::{PythonEnvironment, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::ProjectError;
@@ -38,7 +38,7 @@ pub(crate) async fn sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv sync` is experimental and may change without warning.");
+        warn_user_once!("`uv sync` is experimental and may change without warning.");
     }
 
     // Find the project requirements.

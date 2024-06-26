@@ -7,7 +7,7 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_toolchain::{ToolchainPreference, ToolchainRequest};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus};
@@ -30,7 +30,7 @@ pub(crate) async fn remove(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv remove` is experimental and may change without warning.");
+        warn_user_once!("`uv remove` is experimental and may change without warning.");
     }
 
     // Find the project in the workspace.

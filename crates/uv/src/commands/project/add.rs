@@ -1,19 +1,19 @@
 use anyhow::{Context, Result};
+
+use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::pyproject::{Source, SourceError};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
+use uv_distribution::{DistributionDatabase, ProjectWorkspace, Workspace};
 use uv_git::GitResolver;
+use uv_normalize::PackageName;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex};
 use uv_toolchain::{ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
-
-use uv_cache::Cache;
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
-use uv_distribution::{DistributionDatabase, ProjectWorkspace, Workspace};
-use uv_normalize::PackageName;
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
@@ -45,7 +45,7 @@ pub(crate) async fn add(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv add` is experimental and may change without warning.");
+        warn_user_once!("`uv add` is experimental and may change without warning.");
     }
 
     // Find the project in the workspace.
