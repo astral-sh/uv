@@ -132,6 +132,18 @@ impl PubGrubPackage {
         }
     }
 
+    /// Returns the name of this PubGrub package, if it is not the root package or a Python version
+    /// constraint.
+    pub(crate) fn name_no_root(&self) -> Option<&PackageName> {
+        match &**self {
+            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => None,
+            PubGrubPackageInner::Package { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Marker { name, .. } => Some(name),
+        }
+    }
+
     /// Returns the marker expression associated with this PubGrub package, if
     /// it has one.
     pub(crate) fn marker(&self) -> Option<&MarkerTree> {
