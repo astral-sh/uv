@@ -143,6 +143,7 @@ pub(crate) async fn run(
             match VirtualProject::discover(&std::env::current_dir()?, None).await {
                 Ok(project) => Some(project),
                 Err(WorkspaceError::MissingPyprojectToml) => None,
+                Err(WorkspaceError::NonWorkspace(_)) => None,
                 Err(err) => return Err(err.into()),
             }
         };

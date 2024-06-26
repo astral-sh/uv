@@ -74,7 +74,11 @@ pub struct Tool {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
     pub sources: Option<BTreeMap<PackageName, Source>>,
+    /// The workspace definition for the project, if any.
     pub workspace: Option<ToolUvWorkspace>,
+    /// Whether the project is managed by `uv`. If `false`, `uv` will ignore the project when
+    /// `uv run` is invoked.
+    pub managed: Option<bool>,
     #[cfg_attr(
         feature = "schemars",
         schemars(

@@ -104,6 +104,13 @@
         }
       ]
     },
+    "managed": {
+      "description": "Whether the project is managed by `uv`. If `false`, `uv` will ignore the project when `uv run` is invoked.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "native-tls": {
       "type": [
         "boolean",
@@ -254,6 +261,7 @@
       }
     },
     "workspace": {
+      "description": "The workspace definition for the project, if any.",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvWorkspace"
