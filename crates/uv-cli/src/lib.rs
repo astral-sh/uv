@@ -1757,7 +1757,7 @@ pub struct AddArgs {
     ///
     /// Without this flag uv will try to use `tool.uv.sources` for any sources.
     #[arg(long)]
-    pub raw: bool,
+    pub raw_sources: bool,
 
     /// Specific commit to use when adding from Git.
     #[arg(long)]

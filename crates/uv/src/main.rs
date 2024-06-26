@@ -721,7 +721,7 @@ async fn run() -> Result<ExitStatus> {
                 args.requirements,
                 args.dev,
                 args.editable,
-                args.raw,
+                args.raw_sources,
                 args.rev,
                 args.tag,
                 args.branch,
