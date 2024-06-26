@@ -13,7 +13,7 @@ use uv_requirements::RequirementsSource;
 use uv_toolchain::{
     EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
 };
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::project::update_environment;
 use crate::commands::ExitStatus;
@@ -38,7 +38,7 @@ pub(crate) async fn run(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv tool run` is experimental and may change without warning.");
+        warn_user_once!("`uv tool run` is experimental and may change without warning.");
     }
 
     let (target, args) = command.split();

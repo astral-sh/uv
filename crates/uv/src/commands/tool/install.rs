@@ -15,7 +15,7 @@ use uv_installer::SitePackages;
 use uv_requirements::RequirementsSource;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool};
 use uv_toolchain::{EnvironmentPreference, Toolchain, ToolchainPreference, ToolchainRequest};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::project::update_environment;
 use crate::commands::ExitStatus;
@@ -39,7 +39,7 @@ pub(crate) async fn install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv tool install` is experimental and may change without warning.");
+        warn_user_once!("`uv tool install` is experimental and may change without warning.");
     }
 
     let installed_tools = InstalledTools::from_settings()?;

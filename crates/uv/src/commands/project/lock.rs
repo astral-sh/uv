@@ -15,7 +15,7 @@ use uv_resolver::{
 };
 use uv_toolchain::{Interpreter, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::project::{find_requires_python, ProjectError};
 use crate::commands::{pip, project, ExitStatus};
@@ -36,7 +36,7 @@ pub(crate) async fn lock(
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv lock` is experimental and may change without warning.");
+        warn_user_once!("`uv lock` is experimental and may change without warning.");
     }
 
     // Find the project requirements.

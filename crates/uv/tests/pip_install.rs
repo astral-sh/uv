@@ -5485,26 +5485,27 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
         name = "foo"
         version = "0.0.0"
         dependencies = [
-          "tqdm>4,<=5",
+          "iniconfig>1,<=2",
         ]
 
         [tool.uv.sources]
-        tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
+        iniconfig = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
     "#})?;
 
     // Install the editable packages.
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
-        .arg("pyproject.toml")
-        .arg("--extra")
-        .arg("utils"), @r###"
-    success: false
-    exit_code: 2
+        .arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse entry for: `tqdm`
-      Caused by: `tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    warning: `uv.sources` is experimental and may change without warning.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     "###
     );
 

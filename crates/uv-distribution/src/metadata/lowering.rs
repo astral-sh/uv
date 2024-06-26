@@ -40,8 +40,6 @@ pub enum LoweringError {
     ForbiddenFragment(Url),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
-    #[error("`tool.uv.sources` is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it")]
-    MissingPreview,
     #[error("Editable must refer to a local directory, not a file: `{0}`")]
     EditableFile(String),
     #[error(transparent)] // Function attaches the context
@@ -95,7 +93,7 @@ pub(crate) fn lower_requirement(
     };
 
     if preview.is_disabled() {
-        return Err(LoweringError::MissingPreview);
+        warn_user_once!("`uv.sources` is experimental and may change without warning.");
     }
 
     let source = match source {
