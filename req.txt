@@ -1,3 +1,0 @@
---index-url file:///Users/crmarsh/workspace/packse/index/simple-html/
-
-example-a-961b4c22
