@@ -30,9 +30,9 @@ use crate::settings::ResolverInstallerSettings;
 /// Install a tool.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
-    name: String,
-    python: Option<String>,
+    package: String,
     from: Option<String>,
+    python: Option<String>,
     with: Vec<String>,
     force: bool,
     settings: ResolverInstallerSettings,
@@ -47,12 +47,35 @@ pub(crate) async fn install(
     if preview.is_disabled() {
         warn_user_once!("`uv tool install` is experimental and may change without warning.");
     }
-    let from = from.unwrap_or(name.clone());
+
+    let from = if let Some(from) = from {
+        let from_requirement = Requirement::<VerbatimParsedUrl>::from_str(&from)?;
+        // Check if the user provided more than just a name positionally or if that name conflicts with `--from`
+        if from_requirement.name.to_string() != package {
+            // Determine if its an entirely different package or a conflicting specification
+            let package_requirement = Requirement::<VerbatimParsedUrl>::from_str(&package)?;
+            if from_requirement.name == package_requirement.name {
+                bail!(
+                    "Package requirement `{}` provided with `--from` conflicts with install request `{}`",
+                    from,
+                    package
+                );
+            }
+            bail!(
+                "Package name `{}` provided with `--from` does not match install request `{}`",
+                from_requirement.name,
+                package
+            );
+        }
+        from_requirement
+    } else {
+        Requirement::<VerbatimParsedUrl>::from_str(&package)?
+    };
+
+    let name = from.name.to_string();
 
     let installed_tools = InstalledTools::from_settings()?;
 
-    // TODO(zanieb): Figure out the interface here, do we infer the name or do we match the `run --from` interface?
-    let from = Requirement::<VerbatimParsedUrl>::from_str(&from)?;
     let existing_tool_receipt = installed_tools.get_tool_receipt(&name)?;
     // TODO(zanieb): Automatically replace an existing tool if the request differs
     let reinstall_entry_points = if existing_tool_receipt.is_some() {
@@ -219,7 +242,7 @@ pub(crate) async fn install(
     installed_tools.add_tool_receipt(&name, tool)?;
 
     writeln!(
-        printer.stdout(),
+        printer.stderr(),
         "Installed: {}",
         targets.iter().map(|(name, _, _)| name).join(", ")
     )?;
