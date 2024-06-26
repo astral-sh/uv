@@ -1,6 +1,8 @@
 **Warning: this documentation applies to a future version of uv. Please refer to
 [README.md](../README.md) for documentation for the latest release.**
 
+# Workspaces
+
 Workspaces help you organize large codebases by splitting them into multiple packages with
 independent dependencies.
 

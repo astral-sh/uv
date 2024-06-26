@@ -147,8 +147,6 @@ excel = [
 
 ## Development dependencies
 
-_N.B. This feature is not yet implemented._
-
 Unlike optional dependencies, development dependencies are local-only and will _not_ be published
 to PyPI or other indexes. As such, development dependencies are included under `[tool.uv]` instead
 of `[project]`. `tool.uv.sources` applies to them equally.
@@ -156,23 +154,9 @@ of `[project]`. `tool.uv.sources` applies to them equally.
 ```toml
 [tool.uv]
 dev-dependencies = [
-  "pytest >=8.1.1,<9"
+  "pytest >=8.1.1,<9",
+  "ruff=>=0.4.8,<5"
 ]
-```
-
-You can also put development dependencies into groups and install them individually:
-
-```toml
-[tool.uv.dev-dependencies]
-test = [
-  "pytest >=8.1.1,<9"
-]
-lint = [
-  "mypy >=1,<2"
-]
-
-[tool.uv]
-default-dev-dependencies = ["test"]
 ```
 
 ## PEP 508
