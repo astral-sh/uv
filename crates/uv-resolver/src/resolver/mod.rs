@@ -1302,15 +1302,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> impl Iterator<Item = &'a Requirement> {
         self.overrides
             .apply(dependencies)
-            .flat_map(|requirement| {
-                iter::once(requirement).chain(
-                    // If the requirement was constrained, add those constraints.
-                    self.constraints
-                        .get(&requirement.name)
-                        .into_iter()
-                        .flatten(),
-                )
-            })
             .filter(move |requirement| {
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
@@ -1353,7 +1344,49 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                     }
                 }
+
                 true
+            })
+            .flat_map(move |requirement| {
+                iter::once(requirement).chain(
+                    self.constraints
+                        .get(&requirement.name)
+                        .into_iter()
+                        .flatten()
+                        .filter(move |constraint| {
+                            if !satisfies_requires_python(self.requires_python.as_ref(), constraint) {
+                                trace!(
+                                    "skipping {constraint} because of Requires-Python {requires_python}",
+                                    requires_python = self.requires_python.as_ref().unwrap()
+                                );
+                                return false;
+                            }
+
+                            if !possible_to_satisfy_markers(markers, constraint) {
+                                trace!("skipping {constraint} because of context resolver markers {markers}");
+                                return false;
+                            }
+
+                            // If the constraint isn't relevant for the current platform, skip it.
+                            match extra {
+                                Some(source_extra) => {
+                                    if !constraint.evaluate_markers(
+                                        self.markers.as_ref(),
+                                        std::slice::from_ref(source_extra),
+                                    ) {
+                                        return false;
+                                    }
+                                }
+                                None => {
+                                    if !constraint.evaluate_markers(self.markers.as_ref(), &[]) {
+                                        return false;
+                                    }
+                                }
+                            }
+
+                            true
+                        }),
+                )
             })
     }
 
