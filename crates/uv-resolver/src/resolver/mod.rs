@@ -738,10 +738,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(())
     }
 
-    /// Given a set of candidate packages, choose the next package (and version) to add to the
-    /// partial solution.
+    /// Given a candidate package, choose the next version in range to try.
     ///
-    /// Returns [None] when there are no versions in the given range.
+    /// Returns `None` when there are no versions in the given range, rejecting the current partial
+    /// solution.
     #[instrument(skip_all, fields(%package))]
     fn choose_version(
         &self,
@@ -752,206 +752,221 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
-        let url = package.name().and_then(|name| fork_urls.get(name));
-        match (&**package, url) {
-            (PubGrubPackageInner::Root(_), _) => {
+        match &**package {
+            PubGrubPackageInner::Root(_) => {
                 Ok(Some(ResolverVersion::Available(MIN_VERSION.clone())))
             }
 
-            (PubGrubPackageInner::Python(_), _) => {
+            PubGrubPackageInner::Python(_) => {
                 // Dependencies on Python are only added when a package is incompatible; as such,
                 // we don't need to do anything here.
                 // we don't need to do anything here.
                 Ok(None)
             }
 
-            (
-                PubGrubPackageInner::Marker { name, .. }
-                | PubGrubPackageInner::Extra { name, .. }
-                | PubGrubPackageInner::Dev { name, .. }
-                | PubGrubPackageInner::Package { name, .. },
-                Some(url),
-            ) => {
-                debug!(
-                    "Searching for a compatible version of {package} @ {} ({range})",
-                    url.verbatim
-                );
-
-                let dist = PubGrubDistribution::from_url(name, url);
-                let response = self
-                    .index
-                    .distributions()
-                    .wait_blocking(&dist.version_id())
-                    .ok_or_else(|| ResolveError::UnregisteredTask(dist.version_id().to_string()))?;
-
-                // If we failed to fetch the metadata for a URL, we can't proceed.
-                let metadata = match &*response {
-                    MetadataResponse::Found(archive) => &archive.metadata,
-                    MetadataResponse::Offline => {
-                        self.unavailable_packages
-                            .insert(name.clone(), UnavailablePackage::Offline);
-                        return Ok(None);
-                    }
-                    MetadataResponse::MissingMetadata => {
-                        self.unavailable_packages
-                            .insert(name.clone(), UnavailablePackage::MissingMetadata);
-                        return Ok(None);
-                    }
-                    MetadataResponse::InvalidMetadata(err) => {
-                        self.unavailable_packages.insert(
-                            name.clone(),
-                            UnavailablePackage::InvalidMetadata(err.to_string()),
-                        );
-                        return Ok(None);
-                    }
-                    MetadataResponse::InconsistentMetadata(err) => {
-                        self.unavailable_packages.insert(
-                            name.clone(),
-                            UnavailablePackage::InvalidMetadata(err.to_string()),
-                        );
-                        return Ok(None);
-                    }
-                    MetadataResponse::InvalidStructure(err) => {
-                        self.unavailable_packages.insert(
-                            name.clone(),
-                            UnavailablePackage::InvalidStructure(err.to_string()),
-                        );
-                        return Ok(None);
-                    }
-                };
-
-                let version = &metadata.version;
-
-                // The version is incompatible with the requirement.
-                if !range.contains(version) {
-                    return Ok(None);
+            PubGrubPackageInner::Marker { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Package { name, .. } => {
+                if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
+                    self.choose_version_url(name, range, url)
+                } else {
+                    self.choose_version_registry(name, range, package, pins, visited, request_sink)
                 }
-
-                // The version is incompatible due to its Python requirement.
-                if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    if let Some(target) = self.python_requirement.target() {
-                        if !target.is_compatible_with(requires_python) {
-                            return Ok(Some(ResolverVersion::Unavailable(
-                                version.clone(),
-                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
-                                    IncompatibleSource::RequiresPython(
-                                        requires_python.clone(),
-                                        PythonRequirementKind::Target,
-                                    ),
-                                )),
-                            )));
-                        }
-                    }
-                    if !requires_python.contains(self.python_requirement.installed()) {
-                        return Ok(Some(ResolverVersion::Unavailable(
-                            version.clone(),
-                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
-                                IncompatibleSource::RequiresPython(
-                                    requires_python.clone(),
-                                    PythonRequirementKind::Installed,
-                                ),
-                            )),
-                        )));
-                    }
-                }
-
-                Ok(Some(ResolverVersion::Available(version.clone())))
-            }
-
-            (
-                PubGrubPackageInner::Marker { name, .. }
-                | PubGrubPackageInner::Extra { name, .. }
-                | PubGrubPackageInner::Dev { name, .. }
-                | PubGrubPackageInner::Package { name, .. },
-                None,
-            ) => {
-                // Wait for the metadata to be available.
-                let versions_response = self
-                    .index
-                    .packages()
-                    .wait_blocking(name)
-                    .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?;
-                visited.insert(name.clone());
-
-                let version_maps = match *versions_response {
-                    VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
-                    VersionsResponse::NoIndex => {
-                        self.unavailable_packages
-                            .insert(name.clone(), UnavailablePackage::NoIndex);
-                        &[]
-                    }
-                    VersionsResponse::Offline => {
-                        self.unavailable_packages
-                            .insert(name.clone(), UnavailablePackage::Offline);
-                        &[]
-                    }
-                    VersionsResponse::NotFound => {
-                        self.unavailable_packages
-                            .insert(name.clone(), UnavailablePackage::NotFound);
-                        &[]
-                    }
-                };
-
-                debug!("Searching for a compatible version of {package} ({range})");
-
-                // Find a version.
-                let Some(candidate) = self.selector.select(
-                    name,
-                    range,
-                    version_maps,
-                    &self.preferences,
-                    &self.installed_packages,
-                    &self.exclusions,
-                ) else {
-                    // Short circuit: we couldn't find _any_ versions for a package.
-                    return Ok(None);
-                };
-
-                let dist = match candidate.dist() {
-                    CandidateDist::Compatible(dist) => dist,
-                    CandidateDist::Incompatible(incompatibility) => {
-                        // If the version is incompatible because no distributions are compatible, exit early.
-                        return Ok(Some(ResolverVersion::Unavailable(
-                            candidate.version().clone(),
-                            UnavailableVersion::IncompatibleDist(incompatibility.clone()),
-                        )));
-                    }
-                };
-
-                let filename = match dist.for_installation() {
-                    ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
-                        .filename()
-                        .unwrap_or(Cow::Borrowed("unknown filename")),
-                    ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
-                        .filename()
-                        .unwrap_or(Cow::Borrowed("unknown filename")),
-                    ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
-                };
-
-                debug!(
-                    "Selecting: {}=={} ({})",
-                    package,
-                    candidate.version(),
-                    filename,
-                );
-
-                // We want to return a package pinned to a specific version; but we _also_ want to
-                // store the exact file that we selected to satisfy that version.
-                pins.insert(&candidate, dist);
-
-                let version = candidate.version().clone();
-
-                // Emit a request to fetch the metadata for this version.
-                if matches!(&**package, PubGrubPackageInner::Package { .. }) {
-                    if self.index.distributions().register(candidate.version_id()) {
-                        let request = Request::from(dist.for_resolution());
-                        request_sink.blocking_send(request)?;
-                    }
-                }
-
-                Ok(Some(ResolverVersion::Available(version)))
             }
         }
+    }
+
+    /// Select a version for a URL requirement. Since there is only one version per URL, we return
+    /// that version if it is in range and `None` otherwise.
+    fn choose_version_url(
+        &self,
+        name: &PackageName,
+        range: &Range<Version>,
+        url: &VerbatimParsedUrl,
+    ) -> Result<Option<ResolverVersion>, ResolveError> {
+        debug!(
+            "Searching for a compatible version of {name} @ {} ({range})",
+            url.verbatim
+        );
+
+        let dist = PubGrubDistribution::from_url(name, url);
+        let response = self
+            .index
+            .distributions()
+            .wait_blocking(&dist.version_id())
+            .ok_or_else(|| ResolveError::UnregisteredTask(dist.version_id().to_string()))?;
+
+        // If we failed to fetch the metadata for a URL, we can't proceed.
+        let metadata = match &*response {
+            MetadataResponse::Found(archive) => &archive.metadata,
+            MetadataResponse::Offline => {
+                self.unavailable_packages
+                    .insert(name.clone(), UnavailablePackage::Offline);
+                return Ok(None);
+            }
+            MetadataResponse::MissingMetadata => {
+                self.unavailable_packages
+                    .insert(name.clone(), UnavailablePackage::MissingMetadata);
+                return Ok(None);
+            }
+            MetadataResponse::InvalidMetadata(err) => {
+                self.unavailable_packages.insert(
+                    name.clone(),
+                    UnavailablePackage::InvalidMetadata(err.to_string()),
+                );
+                return Ok(None);
+            }
+            MetadataResponse::InconsistentMetadata(err) => {
+                self.unavailable_packages.insert(
+                    name.clone(),
+                    UnavailablePackage::InvalidMetadata(err.to_string()),
+                );
+                return Ok(None);
+            }
+            MetadataResponse::InvalidStructure(err) => {
+                self.unavailable_packages.insert(
+                    name.clone(),
+                    UnavailablePackage::InvalidStructure(err.to_string()),
+                );
+                return Ok(None);
+            }
+        };
+
+        let version = &metadata.version;
+
+        // The version is incompatible with the requirement.
+        if !range.contains(version) {
+            return Ok(None);
+        }
+
+        // The version is incompatible due to its Python requirement.
+        if let Some(requires_python) = metadata.requires_python.as_ref() {
+            if let Some(target) = self.python_requirement.target() {
+                if !target.is_compatible_with(requires_python) {
+                    return Ok(Some(ResolverVersion::Unavailable(
+                        version.clone(),
+                        UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                            IncompatibleSource::RequiresPython(
+                                requires_python.clone(),
+                                PythonRequirementKind::Target,
+                            ),
+                        )),
+                    )));
+                }
+            }
+            if !requires_python.contains(self.python_requirement.installed()) {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    version.clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                        IncompatibleSource::RequiresPython(
+                            requires_python.clone(),
+                            PythonRequirementKind::Installed,
+                        ),
+                    )),
+                )));
+            }
+        }
+
+        Ok(Some(ResolverVersion::Available(version.clone())))
+    }
+
+    /// Given a candidate registry requirement, choose the next version in range to try, or `None`
+    /// if there is no version in this range.
+    fn choose_version_registry(
+        &self,
+        name: &PackageName,
+        range: &Range<Version>,
+        package: &PubGrubPackage,
+        pins: &mut FilePins,
+        visited: &mut FxHashSet<PackageName>,
+        request_sink: &Sender<Request>,
+    ) -> Result<Option<ResolverVersion>, ResolveError> {
+        // Wait for the metadata to be available.
+        let versions_response = self
+            .index
+            .packages()
+            .wait_blocking(name)
+            .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?;
+        visited.insert(name.clone());
+
+        let version_maps = match *versions_response {
+            VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
+            VersionsResponse::NoIndex => {
+                self.unavailable_packages
+                    .insert(name.clone(), UnavailablePackage::NoIndex);
+                &[]
+            }
+            VersionsResponse::Offline => {
+                self.unavailable_packages
+                    .insert(name.clone(), UnavailablePackage::Offline);
+                &[]
+            }
+            VersionsResponse::NotFound => {
+                self.unavailable_packages
+                    .insert(name.clone(), UnavailablePackage::NotFound);
+                &[]
+            }
+        };
+
+        debug!("Searching for a compatible version of {package} ({range})");
+
+        // Find a version.
+        let Some(candidate) = self.selector.select(
+            name,
+            range,
+            version_maps,
+            &self.preferences,
+            &self.installed_packages,
+            &self.exclusions,
+        ) else {
+            // Short circuit: we couldn't find _any_ versions for a package.
+            return Ok(None);
+        };
+
+        let dist = match candidate.dist() {
+            CandidateDist::Compatible(dist) => dist,
+            CandidateDist::Incompatible(incompatibility) => {
+                // If the version is incompatible because no distributions are compatible, exit early.
+                return Ok(Some(ResolverVersion::Unavailable(
+                    candidate.version().clone(),
+                    UnavailableVersion::IncompatibleDist(incompatibility.clone()),
+                )));
+            }
+        };
+
+        let filename = match dist.for_installation() {
+            ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
+                .filename()
+                .unwrap_or(Cow::Borrowed("unknown filename")),
+            ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
+                .filename()
+                .unwrap_or(Cow::Borrowed("unknown filename")),
+            ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
+        };
+
+        debug!(
+            "Selecting: {}=={} ({})",
+            name,
+            candidate.version(),
+            filename,
+        );
+
+        // We want to return a package pinned to a specific version; but we _also_ want to
+        // store the exact file that we selected to satisfy that version.
+        pins.insert(&candidate, dist);
+
+        let version = candidate.version().clone();
+
+        // Emit a request to fetch the metadata for this version.
+        if matches!(&**package, PubGrubPackageInner::Package { .. }) {
+            if self.index.distributions().register(candidate.version_id()) {
+                let request = Request::from(dist.for_resolution());
+                request_sink.blocking_send(request)?;
+            }
+        }
+
+        Ok(Some(ResolverVersion::Available(version)))
     }
 
     /// Given a candidate package and version, return its dependencies.
