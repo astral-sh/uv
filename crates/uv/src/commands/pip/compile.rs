@@ -1,6 +1,5 @@
 use std::env;
 use std::io::stdout;
-use std::ops::Deref;
 use std::path::Path;
 
 use anstream::{eprint, AutoStream, StripStream};
@@ -207,9 +206,9 @@ pub(crate) async fn pip_compile(
     // distributions will be built against the installed version, and so the index may contain
     // different package priorities than in the top-level resolution.
     let top_level_index = if python_version.is_some() {
-        InMemoryIndexRef::Owned(InMemoryIndex::default())
+        InMemoryIndex::default()
     } else {
-        InMemoryIndexRef::Borrowed(&source_index)
+        source_index.clone()
     };
 
     // Determine the Python requirement, if the user requested a specific version.
@@ -595,22 +594,5 @@ impl OutputWriter {
         }
 
         Ok(())
-    }
-}
-
-/// An owned or unowned [`InMemoryIndex`].
-enum InMemoryIndexRef<'a> {
-    Owned(InMemoryIndex),
-    Borrowed(&'a InMemoryIndex),
-}
-
-impl Deref for InMemoryIndexRef<'_> {
-    type Target = InMemoryIndex;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Owned(index) => index,
-            Self::Borrowed(index) => index,
-        }
     }
 }
