@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -14,7 +15,8 @@ use uv_distribution::{ProjectWorkspace, Workspace, WorkspaceError};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
 use uv_toolchain::{
-    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
+    EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain, ToolchainPreference,
+    ToolchainRequest,
 };
 use uv_warnings::warn_user;
 
@@ -47,7 +49,7 @@ pub(crate) async fn run(
     }
 
     // Discover and sync the base environment.
-    let base_env = if isolated {
+    let base_interpreter = if isolated {
         // package is `None`, isolated and package are marked as conflicting in clap.
         None
     } else {
@@ -68,7 +70,7 @@ pub(crate) async fn run(
             }
         };
 
-        let venv = if let Some(project) = project {
+        let interpreter = if let Some(project) = project {
             debug!(
                 "Discovered project `{}` at: {}",
                 project.project_name(),
@@ -117,7 +119,7 @@ pub(crate) async fn run(
             )
             .await?;
 
-            venv
+            venv.into_interpreter()
         } else {
             debug!("No project found; searching for Python interpreter");
 
@@ -135,20 +137,17 @@ pub(crate) async fn run(
             )
             .await?;
 
-            // Creating a `PythonEnvironment` from a `find_or_fetch` is generally discouraged, since
-            // we may end up modifying a managed toolchain. However, the environment here is
-            // read-only.
-            PythonEnvironment::from_toolchain(toolchain)
+            toolchain.into_interpreter()
         };
 
-        Some(venv)
+        Some(interpreter)
     };
 
-    if let Some(base_env) = &base_env {
+    if let Some(base_interpreter) = &base_interpreter {
         debug!(
             "Using Python {} interpreter at: {}",
-            base_env.interpreter().python_version(),
-            base_env.interpreter().sys_executable().display()
+            base_interpreter.python_version(),
+            base_interpreter.sys_executable().display()
         );
     }
 
@@ -160,8 +159,8 @@ pub(crate) async fn run(
         debug!("Syncing ephemeral environment.");
 
         // Discover an interpreter.
-        let interpreter = if let Some(base_env) = &base_env {
-            base_env.interpreter().clone()
+        let interpreter = if let Some(base_interpreter) = &base_interpreter {
+            base_interpreter.clone()
         } else {
             let client_builder = BaseClientBuilder::new()
                 .connectivity(connectivity)
@@ -238,9 +237,9 @@ pub(crate) async fn run(
             .map(PythonEnvironment::scripts)
             .into_iter()
             .chain(
-                base_env
+                base_interpreter
                     .as_ref()
-                    .map(PythonEnvironment::scripts)
+                    .map(Interpreter::scripts)
                     .into_iter(),
             )
             .map(PathBuf::from)
@@ -261,11 +260,12 @@ pub(crate) async fn run(
             .into_iter()
             .flatten()
             .chain(
-                base_env
+                base_interpreter
                     .as_ref()
-                    .map(PythonEnvironment::site_packages)
+                    .map(Interpreter::site_packages)
                     .into_iter()
-                    .flatten(),
+                    .flatten()
+                    .map(Cow::Borrowed),
             )
             .map(PathBuf::from)
             .chain(
