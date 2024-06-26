@@ -740,7 +740,9 @@ fn add_remove_workspace() -> Result<()> {
     add_cmd
         .arg("--preview")
         .arg("--workspace")
-        .current_dir(&child1);
+        .arg("--package")
+        .arg("child1")
+        .current_dir(&context.temp_dir);
 
     uv_snapshot!(context.filters(), add_cmd, @r###"
     success: true

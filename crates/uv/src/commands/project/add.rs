@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::pyproject::{Source, SourceError};
@@ -11,7 +11,8 @@ use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use uv_cache::Cache;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
-use uv_distribution::{DistributionDatabase, ProjectWorkspace};
+use uv_distribution::{DistributionDatabase, ProjectWorkspace, Workspace};
+use uv_normalize::PackageName;
 use uv_warnings::warn_user;
 
 use crate::commands::pip::operations::Modifications;
@@ -32,6 +33,7 @@ pub(crate) async fn add(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    package: Option<PackageName>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
     toolchain_preference: ToolchainPreference,
@@ -46,8 +48,15 @@ pub(crate) async fn add(
         warn_user!("`uv add` is experimental and may change without warning.");
     }
 
-    // Find the project requirements.
-    let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
+    // Find the project in the workspace.
+    let project = if let Some(package) = package {
+        Workspace::discover(&std::env::current_dir()?, None)
+            .await?
+            .with_current_project(package.clone())
+            .with_context(|| format!("Package `{package}` not found in workspace"))?
+    } else {
+        ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
+    };
 
     // Discover or create the virtual environment.
     let venv = project::init_environment(

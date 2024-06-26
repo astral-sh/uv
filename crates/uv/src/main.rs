@@ -726,6 +726,7 @@ async fn run() -> Result<ExitStatus> {
                 args.rev,
                 args.tag,
                 args.branch,
+                args.package,
                 args.python,
                 args.settings,
                 globals.toolchain_preference,
@@ -749,6 +750,7 @@ async fn run() -> Result<ExitStatus> {
             commands::remove(
                 args.requirements,
                 args.dev,
+                args.package,
                 args.python,
                 globals.toolchain_preference,
                 globals.preview,

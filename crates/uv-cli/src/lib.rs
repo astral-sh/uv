@@ -1639,6 +1639,10 @@ pub struct RunArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Run the command in a specific package in the workspace.
+    #[arg(long, conflicts_with = "isolated")]
+    pub package: Option<PackageName>,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, `uv` uses the virtual environment in the current working directory or any parent
@@ -1652,10 +1656,6 @@ pub struct RunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
-
-    /// Run the command in a different package in the workspace.
-    #[arg(long, conflicts_with = "isolated")]
-    pub package: Option<PackageName>,
 }
 
 #[derive(Args)]
@@ -1784,6 +1784,10 @@ pub struct AddArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Add the dependency to a specific package in the workspace.
+    #[arg(long, conflicts_with = "isolated")]
+    pub package: Option<PackageName>,
+
     /// The Python interpreter into which packages should be installed.
     ///
     /// By default, `uv` installs into the virtual environment in the current working directory or
@@ -1810,6 +1814,10 @@ pub struct RemoveArgs {
     /// Remove the requirements from development dependencies.
     #[arg(long)]
     pub dev: bool,
+
+    /// Remove the dependency from a specific package in the workspace.
+    #[arg(long, conflicts_with = "isolated")]
+    pub package: Option<PackageName>,
 
     /// The Python interpreter into which packages should be installed.
     ///
