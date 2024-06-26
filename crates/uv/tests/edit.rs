@@ -174,7 +174,7 @@ fn add_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot resolve Git reference `0.0.1` for requirement `uv-public-pypackage`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw` flag.
+    error: Cannot resolve Git reference `0.0.1` for requirement `uv-public-pypackage`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.
     "###);
 
     uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1").arg("--preview"), @r###"
@@ -294,7 +294,7 @@ fn add_git() -> Result<()> {
     Ok(())
 }
 
-/// Add a Git requirement using the `--raw` API.
+/// Add a Git requirement using the `--raw-sources` API.
 #[test]
 fn add_git_raw() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -334,7 +334,7 @@ fn add_git_raw() -> Result<()> {
     "###);
 
     // Use an ambiguous tag reference, which would otherwise not resolve.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--raw").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--raw-sources").arg("--preview"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

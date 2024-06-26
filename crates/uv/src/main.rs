@@ -722,7 +722,7 @@ async fn run() -> Result<ExitStatus> {
                 args.workspace,
                 args.dev,
                 args.editable,
-                args.raw,
+                args.raw_sources,
                 args.rev,
                 args.tag,
                 args.branch,

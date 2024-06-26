@@ -28,7 +28,7 @@ pub(crate) async fn add(
     workspace: bool,
     dev: bool,
     editable: Option<bool>,
-    raw: bool,
+    raw_sources: bool,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -140,7 +140,7 @@ pub(crate) async fn add(
     // Add the requirements to the `pyproject.toml`.
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements {
-        let (req, source) = if raw {
+        let (req, source) = if raw_sources {
             // Use the PEP 508 requirement directly.
             (pep508_rs::Requirement::from(req), None)
         } else {
@@ -157,7 +157,7 @@ pub(crate) async fn add(
             let source = match result {
                 Ok(source) => source,
                 Err(SourceError::UnresolvedReference(rev)) => {
-                    anyhow::bail!("Cannot resolve Git reference `{rev}` for requirement `{}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw` flag.", req.name)
+                    anyhow::bail!("Cannot resolve Git reference `{rev}` for requirement `{}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.", req.name)
                 }
                 Err(err) => return Err(err.into()),
             };
