@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 
+use pep508_rs::ExtraName;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
@@ -32,6 +33,7 @@ pub(crate) async fn add(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    extras: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
@@ -147,7 +149,12 @@ pub(crate) async fn add(
 
     // Add the requirements to the `pyproject.toml`.
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
-    for req in requirements {
+    for mut req in requirements {
+        // Add the specified extras.
+        req.extras.extend(extras.iter().cloned());
+        req.extras.sort_unstable();
+        req.extras.dedup();
+
         let (req, source) = if raw_sources {
             // Use the PEP 508 requirement directly.
             (pep508_rs::Requirement::from(req), None)
@@ -180,9 +187,9 @@ pub(crate) async fn add(
         };
 
         if dev {
-            pyproject.add_dev_dependency(&req, source.as_ref())?;
+            pyproject.add_dev_dependency(req, source)?;
         } else {
-            pyproject.add_dependency(&req, source.as_ref())?;
+            pyproject.add_dependency(req, source)?;
         }
     }
 
