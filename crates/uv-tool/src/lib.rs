@@ -8,6 +8,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::debug;
+use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 
@@ -21,9 +22,9 @@ pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
     // TODO(zanieb): Improve the error handling here
-    #[error("Failed to update `tools.toml` at {0}")]
+    #[error("Failed to update `tools.toml` metadata at {0}")]
     TomlEdit(PathBuf, #[source] tools_toml::Error),
-    #[error("Failed to read `tools.toml` at {0}")]
+    #[error("Failed to read `tools.toml` metadata at {0}")]
     TomlRead(PathBuf, #[source] Box<toml::de::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
@@ -33,6 +34,8 @@ pub enum Error {
     DistInfoMissing(String, PathBuf),
     #[error("Failed to find a directory for executables")]
     NoExecutableDirectory,
+    #[error(transparent)]
+    EnvironmentError(#[from] uv_toolchain::Error),
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -121,16 +124,26 @@ impl InstalledTools {
         Ok(())
     }
 
-    pub fn create_environment(
+    pub fn environment(
         &self,
         name: &str,
+        remove_existing: bool,
         interpreter: Interpreter,
+        cache: &Cache,
     ) -> Result<PythonEnvironment, Error> {
         let _lock = self.acquire_lock();
         let environment_path = self.root.join(name);
 
+        if !remove_existing && environment_path.exists() {
+            debug!(
+                "Using existing environment for tool `{name}` at `{}`.",
+                environment_path.user_display()
+            );
+            return Ok(PythonEnvironment::from_root(environment_path, cache)?);
+        }
+
         debug!(
-            "Creating environment for tool `{name}` at {}.",
+            "Creating environment for tool `{name}` at `{}`.",
             environment_path.user_display()
         );
 

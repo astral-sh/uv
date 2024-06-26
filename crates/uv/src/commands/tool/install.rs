@@ -9,10 +9,10 @@ use itertools::Itertools;
 
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
-use tracing::debug;
+use tracing::{debug, trace};
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_configuration::{Concurrency, PreviewMode, Reinstall};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
@@ -47,29 +47,44 @@ pub(crate) async fn install(
     if preview.is_disabled() {
         warn_user_once!("`uv tool install` is experimental and may change without warning.");
     }
+    let from = from.unwrap_or(name.clone());
 
     let installed_tools = InstalledTools::from_settings()?;
 
+    // TODO(zanieb): Figure out the interface here, do we infer the name or do we match the `run --from` interface?
+    let from = Requirement::<VerbatimParsedUrl>::from_str(&from)?;
+    let existing_tool_entry = installed_tools.find_tool_entry(&name)?;
     // TODO(zanieb): Automatically replace an existing tool if the request differs
-    if installed_tools.find_tool_entry(&name)?.is_some() {
+    let reinstall_entry_points = if existing_tool_entry.is_some() {
         if force {
             debug!("Replacing existing tool due to `--force` flag.");
+            false
         } else {
-            writeln!(printer.stderr(), "Tool `{name}` is already installed.")?;
-            return Ok(ExitStatus::Failure);
+            match settings.reinstall {
+                Reinstall::All => {
+                    debug!("Replacing existing tool due to `--reinstall` flag.");
+                    true
+                }
+                // Do not replace the entry points unless the tool is explicitly requested
+                Reinstall::Packages(ref packages) => packages.contains(&from.name),
+                // If not reinstalling... then we're done
+                Reinstall::None => {
+                    writeln!(printer.stderr(), "Tool `{name}` is already installed")?;
+                    return Ok(ExitStatus::Failure);
+                }
+            }
         }
-    }
+    } else {
+        false
+    };
 
-    // TODO(zanieb): Figure out the interface here, do we infer the name or do we match the `run --from` interface?
-    let from = from.unwrap_or(name.clone());
-
-    let requirements = [Requirement::from_str(&from)]
+    let requirements = [Requirement::from_str(from.name.as_ref())]
         .into_iter()
         .chain(with.iter().map(|name| Requirement::from_str(name)))
         .collect::<Result<Vec<Requirement<VerbatimParsedUrl>>, _>>()?;
 
     // TODO(zanieb): Duplicative with the above parsing but needed for `update_environment`
-    let requirements_sources = [RequirementsSource::from_package(from.clone())]
+    let requirements_sources = [RequirementsSource::from_package(from.name.to_string())]
         .into_iter()
         .chain(with.into_iter().map(RequirementsSource::from_package))
         .collect::<Vec<_>>();
@@ -93,7 +108,13 @@ pub(crate) async fn install(
 
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory
     // This lets us confirm the environment is valid before removing an existing install
-    let environment = installed_tools.create_environment(&name, interpreter)?;
+    let environment = installed_tools.environment(
+        &name,
+        // Do not remove the existing environment if we're reinstalling a subset of packages
+        !matches!(settings.reinstall, Reinstall::Packages(_)),
+        interpreter,
+        cache,
+    )?;
 
     // Install the ephemeral requirements.
     let environment = update_environment(
@@ -115,13 +136,23 @@ pub(crate) async fn install(
         bail!("Expected at least one requirement")
     };
 
+    // Exit early if we're not supposed to be reinstalling entry points
+    // e.g. `--reinstall-package` was used for some dependency
+    if existing_tool_entry.is_some() && !reinstall_entry_points {
+        writeln!(printer.stderr(), "Updated environment for tool `{name}`")?;
+        return Ok(ExitStatus::Success);
+    }
+
     // Find a suitable path to install into
     // TODO(zanieb): Warn if this directory is not on the PATH
     let executable_directory = find_executable_directory()?;
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
 
-    debug!("Installing into {}", executable_directory.user_display());
+    debug!(
+        "Installing tool entry points into {}",
+        executable_directory.user_display()
+    );
 
     let entrypoints = entrypoint_paths(
         &environment,
@@ -130,6 +161,7 @@ pub(crate) async fn install(
     )?;
 
     // Determine the entry points targets
+    // Use a sorted collection for deterministic output
     let targets = entrypoints
         .into_iter()
         .map(|(name, path)| {
@@ -140,16 +172,19 @@ pub(crate) async fn install(
             );
             (name, path, target)
         })
-        .collect::<Vec<_>>();
+        .collect::<BTreeSet<_>>();
 
     // Check if they exist, before installing
     let mut existing_targets = targets
         .iter()
         .filter(|(_, _, target)| target.exists())
         .peekable();
-    if force {
+
+    // Note we use `reinstall_entry_points` here instead of `reinstall`; requesting reinstall
+    // will _not_ remove existing entry points when they are not managed by uv.
+    if force || reinstall_entry_points {
         for (name, _, target) in existing_targets {
-            debug!("Removing existing install of `{name}`");
+            debug!("Removing existing entry point `{name}`");
             fs_err::remove_file(target)?;
         }
     } else if existing_targets.peek().is_some() {
@@ -159,7 +194,7 @@ pub(crate) async fn install(
         let existing_targets = existing_targets
             // SAFETY: We know the target has a filename because we just constructed it above
             .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
-            .collect::<BTreeSet<_>>();
+            .collect::<Vec<_>>();
         let (s, exists) = if existing_targets.len() == 1 {
             ("", "exists")
         } else {
@@ -172,15 +207,23 @@ pub(crate) async fn install(
     }
 
     // TODO(zanieb): Handle the case where there are no entrypoints
-    for (name, path, target) in targets {
+    for (name, path, target) in &targets {
         debug!("Installing `{name}`");
         #[cfg(unix)]
-        replace_symlink(&path, &target).context("Failed to install entrypoint")?;
+        replace_symlink(path, target).context("Failed to install entrypoint")?;
         #[cfg(windows)]
-        fs_err::copy(&path, &target).context("Failed to install entrypoint")?;
+        fs_err::copy(path, target).context("Failed to install entrypoint")?;
     }
+    writeln!(
+        printer.stdout(),
+        "Installed: {}",
+        targets.iter().map(|(name, _, _)| name).join(", ")
+    )?;
 
-    debug!("Adding `{name}` to {}", path.user_display());
+    trace!(
+        "Tracking installed tool `{name}` in tool metadata at `{}`",
+        path.user_display()
+    );
     let installed_tools = installed_tools.init()?;
     installed_tools.add_tool_entry(&name, &tool)?;
 

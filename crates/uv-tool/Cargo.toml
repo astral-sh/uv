@@ -21,6 +21,7 @@ uv-virtualenv = { workspace = true }
 uv-toolchain = { workspace = true }
 install-wheel-rs = { workspace = true }
 pep440_rs = { workspace = true }
+uv-cache = { workspace = true }
 
 thiserror = { workspace = true }
 tracing = { workspace = true }
