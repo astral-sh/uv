@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.16
+
+### Preview features
+
+- Add `--package` argument to `uv add` and `uv remove` ([#4556](https://github.com/astral-sh/uv/pull/4556))
+- Add `uv tool install` ([#4492](https://github.com/astral-sh/uv/pull/4492))
+- Fallback to interpreter discovery in `uv run` ([#4549](https://github.com/astral-sh/uv/pull/4549))
+- Make `uv.sources` without `--preview` non-fatal ([#4558](https://github.com/astral-sh/uv/pull/4558))
+- Remove non-existent extras from lockfile ([#4479](https://github.com/astral-sh/uv/pull/4479))
+- Support conflicting URL in separate forks ([#4435](https://github.com/astral-sh/uv/pull/4435))
+- Automatically detect workspace packages in `uv add` ([#4557](https://github.com/astral-sh/uv/pull/4557))
+- Omit `distribution.sdist` from lockfile when it is redundant ([#4528](https://github.com/astral-sh/uv/pull/4528))
+- Remove `source` and `version` from lock file when unambiguous ([#4513](https://github.com/astral-sh/uv/pull/4513))
+- Allow `uv lock` to read overrides from `tool.uv` (#4108) ([#4369](https://github.com/astral-sh/uv/pull/4369))
+
 ## 0.2.15
 
 <!-- No changes -->

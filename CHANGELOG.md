@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.16
+
+### Enhancements
+
+- Add a universal resolution mode to `uv pip compile` with `--universal` ([#4505](https://github.com/astral-sh/uv/pull/4505))
+- Add support for `--no-strip-markers` in `uv pip compile` output ([#4503](https://github.com/astral-sh/uv/pull/4503))
+- Add `--no-dedupe` support to `uv pip tree` ([#4449](https://github.com/astral-sh/uv/pull/4449))
+
+### Bug fixes
+
+- Enable more precise environment locking with `--prefix` ([#4506](https://github.com/astral-sh/uv/pull/4506))
+- Allow local index references in `requirements.txt` files ([#4525](https://github.com/astral-sh/uv/pull/4525))
+- Allow non-`file://` paths to serve as `--index-url` values ([#4524](https://github.com/astral-sh/uv/pull/4524))
+- Make `.egg-info` filename parsing spec compliant ([#4533](https://github.com/astral-sh/uv/pull/4533))
+- Gracefully handle non-existent packages in local indexes ([#4545](https://github.com/astral-sh/uv/pull/4545))
+- Read content length from response rather than request ([#4488](https://github.com/astral-sh/uv/pull/4488))
+- Read persistent configuration from non-workspace `pyproject.toml` ([#4526](https://github.com/astral-sh/uv/pull/4526))
+- Avoid panic for invalid, non-base index URLs ([#4527](https://github.com/astral-sh/uv/pull/4527))
+
+### Performance
+
+- Skip submodule update for fresh clones ([#4482](https://github.com/astral-sh/uv/pull/4482))
+- Use shared client in Git fetch implementation ([#4487](https://github.com/astral-sh/uv/pull/4487))
+
 ## 0.2.15
 
 ### Enhancements
@@ -272,7 +296,7 @@ requested version, skipping interpreters that are broken or do not satisfy the r
 
 Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
 the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
-also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept *any* interpreter implementation.
 
 In summary, the following Python interpreter requests are now allowed:
 
@@ -290,7 +314,7 @@ To align the user expectations, uv now respects the interpreter that starts it. 
 now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
 
 We now check if discovered interpreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
-installation directory that is _not_ a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
+installation directory that is *not* a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
 to request the interpreter.
 
 ### Enhancements
