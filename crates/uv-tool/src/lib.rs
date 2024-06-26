@@ -12,20 +12,21 @@ use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 
-pub use tools_toml::{Tool, ToolsToml, ToolsTomlMut};
+pub use receipt::ToolReceipt;
+pub use tool::Tool;
 
 use uv_state::{StateBucket, StateStore};
-mod tools_toml;
+mod receipt;
+mod tool;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    // TODO(zanieb): Improve the error handling here
-    #[error("Failed to update `tools.toml` metadata at {0}")]
-    TomlEdit(PathBuf, #[source] tools_toml::Error),
-    #[error("Failed to read `tools.toml` metadata at {0}")]
-    TomlRead(PathBuf, #[source] Box<toml::de::Error>),
+    #[error("Failed to update `uv-receipt.toml` at {0}")]
+    ReceiptWrite(PathBuf, #[source] Box<toml::ser::Error>),
+    #[error("Failed to read `uv-receipt.toml` at {0}")]
+    ReceiptRead(PathBuf, #[source] Box<toml::de::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
     #[error("Failed to read package entry points {0}")]
@@ -36,6 +37,8 @@ pub enum Error {
     NoExecutableDirectory,
     #[error(transparent)]
     EnvironmentError(#[from] uv_toolchain::Error),
+    #[error("Failed to find a receipt for tool `{0}` at {1}")]
+    MissingToolReceipt(String, PathBuf),
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -51,7 +54,10 @@ impl InstalledTools {
         Self { root: root.into() }
     }
 
+    /// Create a new [`InstalledTools`] from settings.
+    ///
     /// Prefer, in order:
+    ///
     /// 1. The specific tool directory specified by the user, i.e., `UV_TOOL_DIR`
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/tools`
     /// 3. A directory in the local data directory, e.g., `./.uv/tools`
@@ -65,47 +71,74 @@ impl InstalledTools {
         }
     }
 
-    pub fn tools_toml_path(&self) -> PathBuf {
-        self.root.join("tools.toml")
+    /// Return the metadata for all installed tools.
+    pub fn tools(&self) -> Result<Vec<(String, Tool)>, Error> {
+        let _lock = self.acquire_lock();
+        let mut tools = Vec::new();
+        for directory in uv_fs::directories(self.root()) {
+            let name = directory.file_name().unwrap().to_string_lossy().to_string();
+            let path = directory.join("uv-receipt.toml");
+            let contents = match fs_err::read_to_string(&path) {
+                Ok(contents) => contents,
+                // TODO(zanieb): Consider warning on malformed tools instead
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    return Err(Error::MissingToolReceipt(name.clone(), path.clone()))
+                }
+                Err(err) => return Err(err.into()),
+            };
+            let tool_receipt = ToolReceipt::from_string(contents)
+                .map_err(|err| Error::ReceiptRead(path, Box::new(err)))?;
+            tools.push((name, tool_receipt.tool));
+        }
+        Ok(tools)
     }
 
-    /// Return the toml tracking tools.
-    pub fn toml(&self) -> Result<ToolsToml, Error> {
-        match fs_err::read_to_string(self.tools_toml_path()) {
-            Ok(contents) => Ok(ToolsToml::from_string(contents)
-                .map_err(|err| Error::TomlRead(self.tools_toml_path(), Box::new(err)))?),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(ToolsToml::default()),
-            Err(err) => Err(err.into()),
+    /// Get the receipt for the given tool.
+    pub fn get_tool_receipt(&self, name: &str) -> Result<Option<Tool>, Error> {
+        let path = self.root.join(name).join("uv-receipt.toml");
+        match ToolReceipt::from_path(&path) {
+            Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
+            Err(Error::IO(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err),
         }
     }
 
-    pub fn toml_mut(&self) -> Result<ToolsTomlMut, Error> {
-        let toml = self.toml()?;
-        ToolsTomlMut::from_toml(&toml).map_err(|err| Error::TomlEdit(self.tools_toml_path(), err))
-    }
-
-    pub fn find_tool_entry(&self, name: &str) -> Result<Option<Tool>, Error> {
-        let toml = self.toml()?;
-        Ok(toml.tools.and_then(|tools| tools.get(name).cloned()))
-    }
-
-    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
+    /// Lock the tools directory.
+    fn acquire_lock(&self) -> Result<LockedFile, Error> {
         Ok(LockedFile::acquire(
             self.root.join(".lock"),
             self.root.user_display(),
         )?)
     }
 
-    pub fn add_tool_entry(&self, name: &str, tool: &Tool) -> Result<(), Error> {
-        let _lock = self.acquire_lock();
+    /// Lock a tool directory.
+    fn acquire_tool_lock(&self, name: &str) -> Result<LockedFile, Error> {
+        let path = self.root.join(name);
+        Ok(LockedFile::acquire(
+            path.join(".lock"),
+            path.user_display(),
+        )?)
+    }
 
-        let mut toml_mut = self.toml_mut()?;
-        toml_mut
-            .add_tool(name, tool)
-            .map_err(|err| Error::TomlEdit(self.tools_toml_path(), err))?;
+    /// Add a receipt for a tool.
+    ///
+    /// Any existing receipt will be replaced.
+    pub fn add_tool_receipt(&self, name: &str, tool: Tool) -> Result<(), Error> {
+        let _lock = self.acquire_tool_lock(name);
+
+        let tool_receipt = ToolReceipt::from(tool);
+        let path = self.root.join(name).join("uv-receipt.toml");
+
+        debug!(
+            "Adding metadata entry for tool `{name}` at {}",
+            path.user_display()
+        );
+
+        let doc = toml::to_string(&tool_receipt)
+            .map_err(|err| Error::ReceiptWrite(path.clone(), Box::new(err)))?;
 
         // Save the modified `tools.toml`.
-        fs_err::write(self.tools_toml_path(), toml_mut.to_string())?;
+        fs_err::write(&path, doc)?;
 
         Ok(())
     }
@@ -189,6 +222,7 @@ impl InstalledTools {
         Ok(self)
     }
 
+    /// Return the path of the tools directory.
     pub fn root(&self) -> &Path {
         &self.root
     }
