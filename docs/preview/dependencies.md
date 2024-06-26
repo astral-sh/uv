@@ -1,5 +1,4 @@
-**Warning: this documentation applies to a future version of uv. Please refer to
-[README.md](../README.md) for documentation for the latest release.**
+**Warning: This documentation refers to experimental features that may change.**
 
 # Specifying dependencies
 
@@ -179,10 +178,10 @@ default-dev-dependencies = ["test"]
 
 The [PEP 508](https://peps.python.org/pep-0508/) syntax allows you to specify, in order:
 
-* The dependency name
-* The extras you want (optional)
-* The version specifier
-* An environment marker (optional)
+- The dependency name
+- The extras you want (optional)
+- The version specifier
+- An environment marker (optional)
 
 The version specifiers are comma separated and added together, e.g., `foo >=1.2.3,<2,!=1.4.0` is
 interpreted as "a version of `foo` that's at least 1.2.3, but less than 2, and not 1.4.0".

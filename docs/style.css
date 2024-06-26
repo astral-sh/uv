@@ -1,0 +1,42 @@
+/* Improve the font rendering */
+html {
+    font-family: -apple-system, BlinkMacSystemFont, Inter, Segoe UI, Helvetica Neue, sans-serif;
+}
+.heading, a, code, kbd, li, p, span, td {
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Improve padding and display of the navbar */
+.chapter {
+    padding-inline-start: 1.2rem;
+}
+.chapter li.chapter-item {
+    margin-left: 1em;
+    margin-block-start: 0.3em;
+    font-weight: 300;
+    margin-block-end: 0.5em
+}
+.chapter li.chapter-item a:hover {
+    text-decoration: underline;
+}
+.chapter li.part-title {
+    margin: 10px 0 0px 0;
+    font-weight: 500;
+    font-size: 1.3em;
+}
+
+/* Special case the landing page in the navbar */
+.chapter li.chapter-item:first-child {
+    margin-left: 0;
+    font-size: 16px
+}
+
+/* Hide the global title, it doesn't look good */
+.menu-title {
+    visibility: hidden;
+}
+
+/* Reduce spacing between sections in content */
+h2, h3 {
+    margin-block-start: 1.2em;
+}
