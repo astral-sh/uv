@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use glob::{glob, GlobError, PatternError};
+use glob::{MatchOptions, Pattern};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
 
@@ -26,11 +26,7 @@ pub enum WorkspaceError {
     MissingWorkspace(PathBuf),
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
     DynamicNotAllowed(&'static str),
-    #[error("Failed to find directories for glob: `{0}`")]
-    Pattern(String, #[source] PatternError),
     // Syntax and other errors.
-    #[error("Invalid glob in `tool.uv.workspace.members`: `{0}`")]
-    Glob(String, #[source] GlobError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
@@ -300,16 +296,7 @@ impl Workspace {
 
         // Add all other workspace members.
         for member_glob in workspace_definition.members.unwrap_or_default() {
-            let absolute_glob = workspace_root
-                .simplified()
-                .join(member_glob.as_str())
-                .to_string_lossy()
-                .to_string();
-            for member_root in glob(&absolute_glob)
-                .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
-            {
-                let member_root = member_root
-                    .map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
+            for member_root in WorkspaceGlobIter::new(&workspace_root, &member_glob) {
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
@@ -821,22 +808,62 @@ fn is_excluded_from_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
-        let absolute_glob = workspace_root
-            .simplified()
-            .join(exclude_glob.as_str())
-            .to_string_lossy()
-            .to_string();
-        for excluded_root in glob(&absolute_glob)
-            .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
+        if WorkspaceGlobIter::new(workspace_root, exclude_glob)
+            .any(|excluded_root| excluded_root == project_path)
         {
-            let excluded_root = excluded_root
-                .map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
-            if excluded_root == project_path {
-                return Ok(true);
-            }
+            return Ok(true);
         }
     }
     Ok(false)
+}
+
+/// An iterator over a [`Pattern`] in a workspace.
+///
+/// Iterates from the workspace root, returning the paths of any directories that match the pattern.
+#[derive(Debug)]
+struct WorkspaceGlobIter<'a> {
+    root: &'a Path,
+    glob: &'a Pattern,
+    iter: walkdir::IntoIter,
+}
+
+impl<'a> WorkspaceGlobIter<'a> {
+    fn new(root: &'a Path, glob: &'a Pattern) -> Self {
+        Self {
+            root,
+            glob,
+            iter: walkdir::WalkDir::new(root).into_iter(),
+        }
+    }
+}
+
+impl<'a> Iterator for WorkspaceGlobIter<'a> {
+    type Item = PathBuf;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let entry = match self.iter.next()? {
+                Ok(entry) => entry,
+                Err(err) => {
+                    debug!("Error walking directory: {err}");
+                    continue;
+                }
+            };
+            if entry.file_type().is_dir() {
+                if entry.path().strip_prefix(self.root).is_ok_and(|path| {
+                    self.glob.matches_path_with(
+                        path,
+                        MatchOptions {
+                            require_literal_separator: true,
+                            ..MatchOptions::default()
+                        },
+                    )
+                }) {
+                    return Some(entry.path().to_path_buf());
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
