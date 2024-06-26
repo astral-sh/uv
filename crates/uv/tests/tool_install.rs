@@ -15,7 +15,7 @@ mod common;
 /// Test installing a tool with `uv tool install`
 #[test]
 fn tool_install() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -31,9 +31,9 @@ fn tool_install() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -91,7 +91,7 @@ fn tool_install() {
     "###);
 
     // Install another tool
-    uv_snapshot!(context.filters(), cached_windows_filters=true, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -102,9 +102,9 @@ fn tool_install() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 7 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 7 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
      + flask==3.0.2
@@ -161,19 +161,12 @@ fn tool_install() {
 /// Test installing and reinstalling an already installed tool
 #[test]
 fn tool_install_already_installed() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Drop resolved counts, they differ on Windows and are not relevant here
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([("Resolved [0-9] packages", "Resolved [COUNT] packages")])
-        .collect::<Vec<_>>();
-
     // Install `black`
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -184,9 +177,9 @@ fn tool_install_already_installed() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved [COUNT] packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -234,7 +227,7 @@ fn tool_install_already_installed() {
     });
 
     // Install `black` again
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -264,7 +257,7 @@ fn tool_install_already_installed() {
 
     // Install `black` again with the `--reinstall` flag
     // We should recreate the entire environment and reinstall the entry points
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -276,8 +269,8 @@ fn tool_install_already_installed() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved [COUNT] packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -288,7 +281,7 @@ fn tool_install_already_installed() {
 
     // Install `black` again with `--reinstall-package` for `black`
     // We should reinstall `black` in the environment and reinstall the entry points
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall-package")
         .arg("black")
@@ -301,16 +294,16 @@ fn tool_install_already_installed() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved [COUNT] packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - black==24.3.0
      + black==24.3.0
     "###);
 
     // Install `black` again with `--reinstall-package` for a dependency
     // We should reinstall `click` in the environment but not reinstall the entry points
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall-package")
         .arg("click")
@@ -322,9 +315,9 @@ fn tool_install_already_installed() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved [COUNT] packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - click==8.1.7
      + click==8.1.7
     Updated environment for tool `black`
@@ -334,26 +327,17 @@ fn tool_install_already_installed() {
 /// Test installing a tool when its entry point already exists
 #[test]
 fn tool_install_entry_point_exists() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
     executable.touch().unwrap();
 
-    // Drop executable suffixes for cross-platform snapshots
-    // Drop resolved counts, they differ on Windows and are not relevant here
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (std::env::consts::EXE_SUFFIX, ""),
-            ("Resolved [0-9] packages", "Resolved [COUNT] packages"),
-        ])
-        .collect::<Vec<_>>();
-
     // Attempt to install `black`
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -363,9 +347,9 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved [COUNT] packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -391,7 +375,7 @@ fn tool_install_entry_point_exists() {
 
     // Attempt to install `black` with the `--reinstall` flag
     // Should have no effect
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -402,8 +386,8 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved [COUNT] packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -432,7 +416,7 @@ fn tool_install_entry_point_exists() {
         .child(format!("blackd{}", std::env::consts::EXE_SUFFIX))
         .touch()
         .unwrap();
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -442,8 +426,8 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved [COUNT] packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -454,7 +438,7 @@ fn tool_install_entry_point_exists() {
     "###);
 
     // Install `black` with `--force`
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--force")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -466,8 +450,8 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved [COUNT] packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0

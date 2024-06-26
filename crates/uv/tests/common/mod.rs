@@ -90,6 +90,36 @@ impl TestContext {
         new
     }
 
+    /// Add extra standard filtering for messages like "Resolved 10 packages" which
+    /// can differ between platforms.
+    ///
+    /// In some cases, these counts are helpful for the snapshot and should not be filtered.
+    #[must_use]
+    pub fn with_filtered_counts(mut self) -> Self {
+        for verb in &[
+            "Resolved",
+            "Prepared",
+            "Installed",
+            "Uninstalled",
+            "Audited",
+        ] {
+            self.filters.push((
+                format!("{verb} \\d+ packages?"),
+                format!("{verb} [N] packages"),
+            ));
+        }
+        self
+    }
+
+    /// Add extra standard filtering for executable suffixes on the current platform e.g.
+    /// drops `.exe` on Windows.
+    #[must_use]
+    pub fn with_filtered_exe_suffix(mut self) -> Self {
+        self.filters
+            .push((std::env::consts::EXE_SUFFIX.to_string(), String::new()));
+        self
+    }
+
     /// Create a new test context with multiple Python versions.
     ///
     /// Does not create a virtual environment by default, but the first Python version
@@ -661,7 +691,6 @@ pub fn python_toolchains_for_versions(
 
 #[derive(Debug, Copy, Clone)]
 pub enum WindowsFilters {
-    CachedPlatform,
     Platform,
     Universal,
 }
@@ -741,10 +770,6 @@ pub fn run_and_format<T: AsRef<str>>(
                     for verb in match windows_filters {
                         WindowsFilters::Platform => {
                             ["Resolved", "Prepared", "Installed", "Uninstalled"].iter()
-                        }
-                        // When cached, "Prepared" should not change.
-                        WindowsFilters::CachedPlatform => {
-                            ["Resolved", "Installed", "Uninstalled"].iter()
                         }
                         WindowsFilters::Universal => {
                             ["Prepared", "Installed", "Uninstalled"].iter()
@@ -836,12 +861,6 @@ macro_rules! uv_snapshot {
     ($filters:expr, universal_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), Some($crate::common::WindowsFilters::Universal));
-        ::insta::assert_snapshot!(snapshot, @$snapshot);
-        output
-    }};
-    ($filters:expr, cached_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
-        // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), Some($crate::common::WindowsFilters::CachedPlatform));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
