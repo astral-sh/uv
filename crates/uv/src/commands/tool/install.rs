@@ -1,10 +1,13 @@
+use std::collections::BTreeSet;
+use std::ffi::OsString;
 use std::fmt::Write;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use distribution_types::Name;
-use pep508_rs::Requirement;
+use itertools::Itertools;
 
+use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use tracing::debug;
 use uv_cache::Cache;
@@ -31,6 +34,7 @@ pub(crate) async fn install(
     python: Option<String>,
     from: Option<String>,
     with: Vec<String>,
+    force: bool,
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
@@ -46,10 +50,14 @@ pub(crate) async fn install(
 
     let installed_tools = InstalledTools::from_settings()?;
 
-    // TODO(zanieb): Allow replacing an existing tool
+    // TODO(zanieb): Automatically replace an existing tool if the request differs
     if installed_tools.find_tool_entry(&name)?.is_some() {
-        writeln!(printer.stderr(), "Tool `{name}` is already installed.")?;
-        return Ok(ExitStatus::Failure);
+        if force {
+            debug!("Replacing existing tool due to `--force` flag.");
+        } else {
+            writeln!(printer.stderr(), "Tool `{name}` is already installed.")?;
+            return Ok(ExitStatus::Failure);
+        }
     }
 
     // TODO(zanieb): Figure out the interface here, do we infer the name or do we match the `run --from` interface?
@@ -113,17 +121,59 @@ pub(crate) async fn install(
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
 
+    debug!("Installing into {}", executable_directory.user_display());
+
     let entrypoints = entrypoint_paths(
         &environment,
         installed_dist.name(),
         installed_dist.version(),
     )?;
 
+    // Determine the entry points targets
+    let targets = entrypoints
+        .into_iter()
+        .map(|(name, path)| {
+            let target = executable_directory.join(
+                path.file_name()
+                    .map(std::borrow::ToOwned::to_owned)
+                    .unwrap_or_else(|| OsString::from(name.clone())),
+            );
+            (name, path, target)
+        })
+        .collect::<Vec<_>>();
+
+    // Check if they exist, before installing
+    let mut existing_targets = targets
+        .iter()
+        .filter(|(_, _, target)| target.exists())
+        .peekable();
+    if force {
+        for (name, _, target) in existing_targets {
+            debug!("Removing existing install of `{name}`");
+            fs_err::remove_file(target)?;
+        }
+    } else if existing_targets.peek().is_some() {
+        // Clean up the environment we just created
+        installed_tools.remove_environment(&name)?;
+
+        let existing_targets = existing_targets
+            // SAFETY: We know the target has a filename because we just constructed it above
+            .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
+            .collect::<BTreeSet<_>>();
+        let (s, exists) = if existing_targets.len() == 1 {
+            ("", "exists")
+        } else {
+            ("s", "exist")
+        };
+        bail!(
+            "Entry point{s} for tool already {exists}: {} (use `--force` to overwrite)",
+            existing_targets.iter().join(", ")
+        )
+    }
+
     // TODO(zanieb): Handle the case where there are no entrypoints
-    // TODO(zanieb): Better error when an entry point exists, check if they all are don't exist first
-    for (name, path) in entrypoints {
-        let target = executable_directory.join(path.file_name().unwrap());
-        debug!("Installing {name} to {}", target.user_display());
+    for (name, path, target) in targets {
+        debug!("Installing `{name}`");
         #[cfg(unix)]
         replace_symlink(&path, &target).context("Failed to install entrypoint")?;
         #[cfg(windows)]

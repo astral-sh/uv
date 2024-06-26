@@ -1912,6 +1912,12 @@ pub struct ToolInstallArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Force installation of the tool.
+    ///
+    /// Will replace any existing entry points with the same name in the executable directory.
+    #[arg(long)]
+    pub force: bool,
+
     /// The Python interpreter to use to build the tool environment.
     ///
     /// By default, uv will search for a Python executable in the `PATH`. uv ignores virtual
