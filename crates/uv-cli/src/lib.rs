@@ -1771,6 +1771,10 @@ pub struct AddArgs {
     #[arg(long)]
     pub branch: Option<String>,
 
+    /// Extras to activate for the dependency; may be provided more than once.
+    #[arg(long)]
+    pub extra: Option<Vec<ExtraName>>,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 

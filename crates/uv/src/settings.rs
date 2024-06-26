@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::RequirementOrigin;
+use pep508_rs::{ExtraName, RequirementOrigin};
 use pypi_types::Requirement;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::options::{flag, installer_options, resolver_installer_options, resolver_options};
@@ -433,6 +433,7 @@ pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<RequirementsSource>,
     pub(crate) dev: bool,
     pub(crate) editable: Option<bool>,
+    pub(crate) extras: Vec<ExtraName>,
     pub(crate) raw_sources: bool,
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
@@ -451,6 +452,7 @@ impl AddSettings {
             requirements,
             dev,
             editable,
+            extra,
             raw_sources,
             rev,
             tag,
@@ -477,6 +479,7 @@ impl AddSettings {
             branch,
             package,
             python,
+            extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),

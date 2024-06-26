@@ -4,8 +4,7 @@ use std::{fmt, mem};
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 
-use pep508_rs::{PackageName, Requirement};
-use pypi_types::VerbatimParsedUrl;
+use pep508_rs::{PackageName, Requirement, VersionOrUrl};
 
 use crate::pyproject::{PyProjectToml, Source};
 
@@ -27,6 +26,8 @@ pub enum Error {
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
     MalformedSources,
+    #[error("Cannot perform ambiguous update; multiple entries with matching package names.")]
+    Ambiguous,
 }
 
 impl PyProjectTomlMut {
@@ -40,8 +41,8 @@ impl PyProjectTomlMut {
     /// Adds a dependency to `project.dependencies`.
     pub fn add_dependency(
         &mut self,
-        req: &Requirement,
-        source: Option<&Source>,
+        req: Requirement,
+        source: Option<Source>,
     ) -> Result<(), Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
@@ -55,7 +56,8 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        add_dependency(req, dependencies);
+        let name = req.name.clone();
+        add_dependency(req, dependencies, source.is_some())?;
 
         if let Some(source) = source {
             // Get or create `tool.uv.sources`.
@@ -74,7 +76,7 @@ impl PyProjectTomlMut {
                 .as_table_mut()
                 .ok_or(Error::MalformedSources)?;
 
-            add_source(req, source, sources)?;
+            add_source(&name, &source, sources)?;
         }
 
         Ok(())
@@ -83,8 +85,8 @@ impl PyProjectTomlMut {
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
     pub fn add_dev_dependency(
         &mut self,
-        req: &Requirement,
-        source: Option<&Source>,
+        req: Requirement,
+        source: Option<Source>,
     ) -> Result<(), Error> {
         // Get or create `tool.uv`.
         let tool_uv = self
@@ -105,7 +107,8 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        add_dependency(req, dev_dependencies);
+        let name = req.name.clone();
+        add_dependency(req, dev_dependencies, source.is_some())?;
 
         if let Some(source) = source {
             // Get or create `tool.uv.sources`.
@@ -115,7 +118,7 @@ impl PyProjectTomlMut {
                 .as_table_mut()
                 .ok_or(Error::MalformedSources)?;
 
-            add_source(req, source, sources)?;
+            add_source(&name, &source, sources)?;
         }
 
         Ok(())
@@ -194,19 +197,46 @@ fn implicit() -> Item {
 }
 
 /// Adds a dependency to the given `deps` array.
-pub fn add_dependency(req: &Requirement, deps: &mut Array) {
+pub fn add_dependency(req: Requirement, deps: &mut Array, has_source: bool) -> Result<(), Error> {
     // Find matching dependencies.
-    let to_replace = find_dependencies(&req.name, deps);
-    if to_replace.is_empty() {
-        deps.push(req.to_string());
-    } else {
-        // Replace the first occurrence of the dependency and remove the rest.
-        deps.replace(to_replace[0], req.to_string());
-        for &i in to_replace[1..].iter().rev() {
-            deps.remove(i);
+    let mut to_replace = find_dependencies(&req.name, deps);
+    match to_replace.as_slice() {
+        [] => deps.push(req.to_string()),
+        [_] => {
+            let (i, mut old_req) = to_replace.remove(0);
+            update_requirement(&mut old_req, req, has_source);
+            deps.replace(i, old_req.to_string());
         }
+        // Cannot perform ambiguous updates.
+        _ => return Err(Error::Ambiguous),
     }
     reformat_array_multiline(deps);
+    Ok(())
+}
+
+/// Update an existing requirement.
+fn update_requirement(old: &mut Requirement, new: Requirement, has_source: bool) {
+    // Add any new extras.
+    old.extras.extend(new.extras);
+    old.extras.sort_unstable();
+    old.extras.dedup();
+
+    // Clear the requirement source if we are going to add to `tool.uv.sources`.
+    if has_source {
+        old.version_or_url = None;
+    }
+
+    // Update the source if a new one was specified.
+    match new.version_or_url {
+        None => {}
+        Some(VersionOrUrl::VersionSpecifier(specifier)) if specifier.is_empty() => {}
+        Some(version_or_url) => old.version_or_url = Some(version_or_url),
+    }
+
+    // Update the marker expression.
+    if let Some(marker) = new.marker {
+        old.marker = Some(marker);
+    }
 }
 
 /// Removes all occurrences of dependencies with the given name from the given `deps` array.
@@ -215,7 +245,7 @@ fn remove_dependency(req: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     let removed = find_dependencies(req, deps)
         .into_iter()
         .rev() // Reverse to preserve indices as we remove them.
-        .filter_map(|i| {
+        .filter_map(|(i, _)| {
             deps.remove(i)
                 .as_str()
                 .and_then(|req| Requirement::from_str(req).ok())
@@ -229,32 +259,30 @@ fn remove_dependency(req: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     removed
 }
 
-// Returns a `Vec` containing the indices of all dependencies with the given name.
-fn find_dependencies(name: &PackageName, deps: &Array) -> Vec<usize> {
+// Returns a `Vec` containing the all dependencies with the given name, along with their positions
+// in the array.
+fn find_dependencies(name: &PackageName, deps: &Array) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
-        if dep
-            .as_str()
-            .and_then(try_parse_requirement)
-            .filter(|dep| dep.name == *name)
-            .is_some()
-        {
-            to_replace.push(i);
+        if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
+            if req.name == *name {
+                to_replace.push((i, req));
+            }
         }
     }
     to_replace
 }
 
 // Add a source to `tool.uv.sources`.
-fn add_source(req: &Requirement, source: &Source, sources: &mut Table) -> Result<(), Error> {
+fn add_source(req: &PackageName, source: &Source, sources: &mut Table) -> Result<(), Error> {
     // Serialize as an inline table.
-    let mut doc = toml::to_string(source)
+    let mut doc = toml::to_string(&source)
         .map_err(Box::new)?
         .parse::<DocumentMut>()
         .unwrap();
     let table = mem::take(doc.as_table_mut()).into_inline_table();
 
-    sources.insert(req.name.as_ref(), Item::Value(Value::InlineTable(table)));
+    sources.insert(req.as_ref(), Item::Value(Value::InlineTable(table)));
 
     Ok(())
 }
@@ -265,7 +293,7 @@ impl fmt::Display for PyProjectTomlMut {
     }
 }
 
-fn try_parse_requirement(req: &str) -> Option<Requirement<VerbatimParsedUrl>> {
+fn try_parse_requirement(req: &str) -> Option<Requirement> {
     Requirement::from_str(req).ok()
 }
 

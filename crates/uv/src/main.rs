@@ -725,6 +725,7 @@ async fn run() -> Result<ExitStatus> {
                 args.rev,
                 args.tag,
                 args.branch,
+                args.extras,
                 args.package,
                 args.python,
                 args.settings,
