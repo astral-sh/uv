@@ -1126,7 +1126,7 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "flask[dotenv,async]==3.0.0 ; python_version > '3.7'",
+            "flask[async,dotenv]==3.0.0 ; python_version > '3.7'",
         ]
         "###
         );
@@ -1163,7 +1163,7 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "flask[dotenv,async] ; python_version > '3.7'",
+            "flask[async,dotenv] ; python_version > '3.7'",
         ]
 
         [tool.uv.sources]
