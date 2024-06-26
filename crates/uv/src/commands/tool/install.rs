@@ -9,7 +9,7 @@ use itertools::Itertools;
 
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
-use tracing::{debug, trace};
+use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode, Reinstall};
@@ -53,9 +53,9 @@ pub(crate) async fn install(
 
     // TODO(zanieb): Figure out the interface here, do we infer the name or do we match the `run --from` interface?
     let from = Requirement::<VerbatimParsedUrl>::from_str(&from)?;
-    let existing_tool_entry = installed_tools.find_tool_entry(&name)?;
+    let existing_tool_receipt = installed_tools.get_tool_receipt(&name)?;
     // TODO(zanieb): Automatically replace an existing tool if the request differs
-    let reinstall_entry_points = if existing_tool_entry.is_some() {
+    let reinstall_entry_points = if existing_tool_receipt.is_some() {
         if force {
             debug!("Replacing existing tool due to `--force` flag.");
             false
@@ -137,7 +137,7 @@ pub(crate) async fn install(
 
     // Exit early if we're not supposed to be reinstalling entry points
     // e.g. `--reinstall-package` was used for some dependency
-    if existing_tool_entry.is_some() && !reinstall_entry_points {
+    if existing_tool_receipt.is_some() && !reinstall_entry_points {
         writeln!(printer.stderr(), "Updated environment for tool `{name}`")?;
         return Ok(ExitStatus::Success);
     }
@@ -213,18 +213,16 @@ pub(crate) async fn install(
         #[cfg(windows)]
         fs_err::copy(path, target).context("Failed to install entrypoint")?;
     }
+
+    debug!("Adding receipt for tool `{name}`",);
+    let installed_tools = installed_tools.init()?;
+    installed_tools.add_tool_receipt(&name, tool)?;
+
     writeln!(
         printer.stdout(),
         "Installed: {}",
         targets.iter().map(|(name, _, _)| name).join(", ")
     )?;
-
-    trace!(
-        "Adding receipt for tool `{name}` at `{}`",
-        path.user_display()
-    );
-    let installed_tools = installed_tools.init()?;
-    installed_tools.add_tool_metadata(&name, tool)?;
 
     Ok(ExitStatus::Success)
 }

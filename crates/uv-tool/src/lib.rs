@@ -12,19 +12,21 @@ use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 
-pub use tools_toml::{Tool, ToolToml};
+pub use receipt::ToolReceipt;
+pub use tool::Tool;
 
 use uv_state::{StateBucket, StateStore};
-mod tools_toml;
+mod receipt;
+mod tool;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    #[error("Failed to update `tool.toml` at {0}")]
-    TomlWrite(PathBuf, #[source] Box<toml::ser::Error>),
-    #[error("Failed to read `tool.toml` at {0}")]
-    TomlRead(PathBuf, #[source] Box<toml::de::Error>),
+    #[error("Failed to update `uv-receipt.toml` at {0}")]
+    ReceiptWrite(PathBuf, #[source] Box<toml::ser::Error>),
+    #[error("Failed to read `uv-receipt.toml` at {0}")]
+    ReceiptRead(PathBuf, #[source] Box<toml::de::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
     #[error("Failed to read package entry points {0}")]
@@ -35,8 +37,8 @@ pub enum Error {
     NoExecutableDirectory,
     #[error(transparent)]
     EnvironmentError(#[from] uv_toolchain::Error),
-    #[error("Failed to find a metadata for tool `{0}` at {1}")]
-    MissingToolMetadata(String, PathBuf),
+    #[error("Failed to find a receipt for tool `{0}` at {1}")]
+    MissingToolReceipt(String, PathBuf),
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -75,27 +77,27 @@ impl InstalledTools {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root()) {
             let name = directory.file_name().unwrap().to_string_lossy().to_string();
-            let path = directory.join("tool.toml");
+            let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,
                 // TODO(zanieb): Consider warning on malformed tools instead
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingToolMetadata(name.clone(), path.clone()))
+                    return Err(Error::MissingToolReceipt(name.clone(), path.clone()))
                 }
                 Err(err) => return Err(err.into()),
             };
-            let tool_toml = ToolToml::from_string(contents)
-                .map_err(|err| Error::TomlRead(path, Box::new(err)))?;
-            tools.push((name, tool_toml.tool));
+            let tool_receipt = ToolReceipt::from_string(contents)
+                .map_err(|err| Error::ReceiptRead(path, Box::new(err)))?;
+            tools.push((name, tool_receipt.tool));
         }
         Ok(tools)
     }
 
-    /// Get the tool metadata for the given tool
-    pub fn tool_metadata(&self, name: &str) -> Result<Option<Tool>, Error> {
-        let path = self.root.join(name).join("tool.toml");
-        match ToolToml::from_path(&path) {
-            Ok(tool_toml) => Ok(Some(tool_toml.tool)),
+    /// Get the receipt for the given tool.
+    pub fn get_tool_receipt(&self, name: &str) -> Result<Option<Tool>, Error> {
+        let path = self.root.join(name).join("uv-receipt.toml");
+        match ToolReceipt::from_path(&path) {
+            Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
             Err(Error::IO(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err),
         }
@@ -118,22 +120,22 @@ impl InstalledTools {
         )?)
     }
 
-    /// Add metadata for a tool.
+    /// Add a receipt for a tool.
     ///
-    /// Existing metadata will be replaced.
-    pub fn add_tool_metadata(&self, name: &str, tool: Tool) -> Result<(), Error> {
+    /// Any existing receipt will be replaced.
+    pub fn add_tool_receipt(&self, name: &str, tool: Tool) -> Result<(), Error> {
         let _lock = self.acquire_tool_lock(name);
 
-        let tool_toml = ToolToml::from(tool);
-        let path = self.root.join(name).join("tool.toml");
+        let tool_receipt = ToolReceipt::from(tool);
+        let path = self.root.join(name).join("uv-receipt.toml");
 
         debug!(
             "Adding metadata entry for tool `{name}` at {}",
             path.user_display()
         );
 
-        let doc = toml::to_string(&tool_toml)
-            .map_err(|err| Error::TomlWrite(path.clone(), Box::new(err)))?;
+        let doc = toml::to_string(&tool_receipt)
+            .map_err(|err| Error::ReceiptWrite(path.clone(), Box::new(err)))?;
 
         // Save the modified `tools.toml`.
         fs_err::write(&path, doc)?;
