@@ -5027,6 +5027,7 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
+ "uv-cache",
  "uv-fs",
  "uv-state",
  "uv-toolchain",
