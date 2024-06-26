@@ -1586,6 +1586,11 @@ impl MarkerTree {
         parse_markers(markers, reporter)
     }
 
+    /// Whether the marker is `MarkerTree::And(Vec::new())`.
+    pub fn is_universal(&self) -> bool {
+        self == &MarkerTree::And(Vec::new())
+    }
+
     /// Does this marker apply in the given environment?
     pub fn evaluate(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         self.evaluate_optional_environment(Some(env), extras)

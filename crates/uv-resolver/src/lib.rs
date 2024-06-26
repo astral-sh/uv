@@ -30,6 +30,7 @@ mod error;
 mod exclude_newer;
 mod exclusions;
 mod flat_index;
+mod fork_urls;
 mod lock;
 mod manifest;
 mod marker;

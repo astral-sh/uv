@@ -3,6 +3,7 @@ use std::cmp::Reverse;
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
+use crate::fork_urls::ForkUrls;
 use pep440_rs::Version;
 use uv_normalize::PackageName;
 
@@ -23,24 +24,21 @@ pub(crate) struct PubGrubPriorities(FxHashMap<PackageName, PubGrubPriority>);
 
 impl PubGrubPriorities {
     /// Add a [`PubGrubPackage`] to the priority map.
-    pub(crate) fn insert(&mut self, package: &PubGrubPackage, version: &Range<Version>) {
+    pub(crate) fn insert(
+        &mut self,
+        package: &PubGrubPackage,
+        version: &Range<Version>,
+        urls: &ForkUrls,
+    ) {
         let next = self.0.len();
         match &**package {
             PubGrubPackageInner::Root(_) => {}
             PubGrubPackageInner::Python(_) => {}
 
-            PubGrubPackageInner::Marker {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Extra {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Dev {
-                name, url: None, ..
-            }
-            | PubGrubPackageInner::Package {
-                name, url: None, ..
-            } => {
+            PubGrubPackageInner::Marker { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Package { name, .. } => {
                 match self.0.entry(name.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.
@@ -52,7 +50,9 @@ impl PubGrubPriorities {
                         };
 
                         // Compute the priority.
-                        let priority = if version.as_singleton().is_some() {
+                        let priority = if urls.get(name).is_some() {
+                            PubGrubPriority::DirectUrl(Reverse(index))
+                        } else if version.as_singleton().is_some() {
                             PubGrubPriority::Singleton(Reverse(index))
                         } else {
                             PubGrubPriority::Unspecified(Reverse(index))
@@ -64,48 +64,17 @@ impl PubGrubPriorities {
                         }
                     }
                     std::collections::hash_map::Entry::Vacant(entry) => {
-                        // Insert the priority.
-                        entry.insert(if version.as_singleton().is_some() {
+                        // Compute the priority.
+                        let priority = if urls.get(name).is_some() {
+                            PubGrubPriority::DirectUrl(Reverse(next))
+                        } else if version.as_singleton().is_some() {
                             PubGrubPriority::Singleton(Reverse(next))
                         } else {
                             PubGrubPriority::Unspecified(Reverse(next))
-                        });
-                    }
-                }
-            }
-            PubGrubPackageInner::Marker {
-                name, url: Some(_), ..
-            }
-            | PubGrubPackageInner::Extra {
-                name, url: Some(_), ..
-            }
-            | PubGrubPackageInner::Dev {
-                name, url: Some(_), ..
-            }
-            | PubGrubPackageInner::Package {
-                name, url: Some(_), ..
-            } => {
-                match self.0.entry(name.clone()) {
-                    std::collections::hash_map::Entry::Occupied(mut entry) => {
-                        // Preserve the original index.
-                        let index = match entry.get() {
-                            PubGrubPriority::Unspecified(Reverse(index)) => *index,
-                            PubGrubPriority::Singleton(Reverse(index)) => *index,
-                            PubGrubPriority::DirectUrl(Reverse(index)) => *index,
-                            PubGrubPriority::Root => next,
                         };
 
-                        // Compute the priority.
-                        let priority = PubGrubPriority::DirectUrl(Reverse(index));
-
-                        // Take the maximum of the new and existing priorities.
-                        if priority > *entry.get() {
-                            entry.insert(priority);
-                        }
-                    }
-                    std::collections::hash_map::Entry::Vacant(entry) => {
                         // Insert the priority.
-                        entry.insert(PubGrubPriority::DirectUrl(Reverse(next)));
+                        entry.insert(priority);
                     }
                 }
             }
@@ -140,6 +109,10 @@ pub(crate) enum PubGrubPriority {
     Singleton(Reverse<usize>),
 
     /// The package was specified via a direct URL.
+    ///
+    /// N.B.: URLs need to have priority over registry distributions for correctly matching registry
+    /// distributions to URLs, see [`PubGrubPackage::from_package`] an
+    /// [`crate::fork_urls::ForkUrls`].
     DirectUrl(Reverse<usize>),
 
     /// The package is the root package.
