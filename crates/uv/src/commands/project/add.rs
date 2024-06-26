@@ -26,7 +26,6 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
-    workspace: bool,
     dev: bool,
     editable: Option<bool>,
     raw: bool,
@@ -154,7 +153,9 @@ pub(crate) async fn add(
             (pep508_rs::Requirement::from(req), None)
         } else {
             // Otherwise, try to construct the source.
+            let workspace = project.workspace().packages().contains_key(&req.name);
             let result = Source::from_requirement(
+                &req.name,
                 req.source.clone(),
                 workspace,
                 editable,
