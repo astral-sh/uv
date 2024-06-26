@@ -44,7 +44,8 @@ fn tool_install() {
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("tools.toml")
+        .child("black")
+        .child("tool.toml")
         .assert(predicate::path::exists());
 
     let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
@@ -73,9 +74,9 @@ fn tool_install() {
         filters => context.filters(),
     }, {
         // We should have a tool entry
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("tools.toml")).unwrap(), @r###"
-        [tools]
-        black = { requirements = ["black"] }
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("tool.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["black"]
         "###);
     });
 
@@ -149,11 +150,10 @@ fn tool_install() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have an additional tool entry
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("tools.toml")).unwrap(), @r###"
-        [tools]
-        black = { requirements = ["black"] }
-        flask = { requirements = ["flask"] }
+        // We should have a new tool entry
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("tool.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["flask"]
         "###);
     });
 }
@@ -197,7 +197,8 @@ fn tool_install_already_installed() {
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("tools.toml")
+        .child("black")
+        .child("tool.toml")
         .assert(predicate::path::exists());
 
     let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
@@ -226,9 +227,9 @@ fn tool_install_already_installed() {
         filters => context.filters(),
     }, {
         // We should have a tool entry
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("tools.toml")).unwrap(), @r###"
-        [tools]
-        black = { requirements = ["black"] }
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("tool.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["black"]
         "###);
     });
 
@@ -255,9 +256,9 @@ fn tool_install_already_installed() {
         filters => context.filters(),
     }, {
         // We should not have an additional tool entry
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("tools.toml")).unwrap(), @r###"
-        [tools]
-        black = { requirements = ["black"] }
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("tool.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["black"]
         "###);
     });
 
@@ -378,7 +379,7 @@ fn tool_install_entry_point_exists() {
     assert!(!tool_dir.child("black").exists());
 
     // We should not write a tools entry
-    assert!(!tool_dir.join("tools.toml").exists());
+    assert!(!tool_dir.join("black").join("tool.toml").exists());
 
     insta::with_settings!({
         filters => context.filters(),
@@ -481,9 +482,9 @@ fn tool_install_entry_point_exists() {
         filters => context.filters(),
     }, {
         // We write a tool entry
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("tools.toml")).unwrap(), @r###"
-        [tools]
-        black = { requirements = ["black"] }
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("tool.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["black"]
         "###);
     });
 
@@ -510,9 +511,9 @@ fn tool_install_entry_point_exists() {
         filters => context.filters(),
     }, {
         // We should have a tool entry
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("tools.toml")).unwrap(), @r###"
-        [tools]
-        black = { requirements = ["black"] }
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("tool.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["black"]
         "###);
     });
 

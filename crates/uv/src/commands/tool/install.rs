@@ -93,7 +93,6 @@ pub(crate) async fn install(
         bail!("Expected at least one requirement")
     };
     let tool = Tool::new(requirements, python.clone());
-    let path = installed_tools.tools_toml_path();
 
     let interpreter = Toolchain::find(
         &python
@@ -221,11 +220,11 @@ pub(crate) async fn install(
     )?;
 
     trace!(
-        "Tracking installed tool `{name}` in tool metadata at `{}`",
+        "Adding receipt for tool `{name}` at `{}`",
         path.user_display()
     );
     let installed_tools = installed_tools.init()?;
-    installed_tools.add_tool_entry(&name, &tool)?;
+    installed_tools.add_tool_metadata(&name, tool)?;
 
     Ok(ExitStatus::Success)
 }
