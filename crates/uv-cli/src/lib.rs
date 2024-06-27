@@ -1497,7 +1497,9 @@ pub struct VenvArgs {
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
-    /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
+    /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment.
+    ///
+    /// Installing `setuptools` and `wheel` is disabled on Python 3.12+ environments.
     #[arg(long)]
     pub seed: bool,
 
@@ -1545,7 +1547,7 @@ pub struct VenvArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
     /// same name to a secondary
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
