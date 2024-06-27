@@ -6300,7 +6300,7 @@ fn universal() -> Result<()> {
         trio ; sys_platform == 'win32'
     "})?;
 
-    uv_snapshot!(context.pip_compile()
+    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -6345,7 +6345,7 @@ fn universal_conflicting() -> Result<()> {
         trio==0.10.0 ; sys_platform == 'win32'
     "})?;
 
-    uv_snapshot!(context.pip_compile()
+    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -6393,7 +6393,7 @@ fn universal_cycles() -> Result<()> {
         poetry
     "})?;
 
-    uv_snapshot!(context.pip_compile()
+    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -6407,7 +6407,7 @@ fn universal_cycles() -> Result<()> {
         # via poetry
     certifi==2024.2.2
         # via requests
-    cffi==1.16.0 ; platform_python_implementation != 'PyPy' or sys_platform == 'darwin'
+    cffi==1.16.0 ; sys_platform == 'darwin' or (platform_python_implementation != 'PyPy' and sys_platform == 'linux')
         # via
         #   cryptography
         #   xattr
@@ -6473,7 +6473,7 @@ fn universal_cycles() -> Result<()> {
         # via poetry
     ptyprocess==0.7.0
         # via pexpect
-    pycparser==2.21 ; platform_python_implementation != 'PyPy' or sys_platform == 'darwin'
+    pycparser==2.21 ; sys_platform == 'darwin' or (platform_python_implementation != 'PyPy' and sys_platform == 'linux')
         # via cffi
     pyproject-hooks==1.0.0
         # via
