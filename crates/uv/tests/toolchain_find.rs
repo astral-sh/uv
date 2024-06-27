@@ -10,14 +10,25 @@ fn toolchain_find() {
     let mut context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // No interpreters on the path
-    uv_snapshot!(context.filters(), context.toolchain_find().env("UV_TEST_PYTHON_PATH", ""), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.toolchain_find().env("UV_TEST_PYTHON_PATH", ""), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: No Python interpreters found in system toolchains
-    "###);
+        ----- stderr -----
+        error: No interpreter found in system path or `py` launcher
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), context.toolchain_find().env("UV_TEST_PYTHON_PATH", ""), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: No interpreter found in system path
+        "###);
+    }
 
     // We find the first interpreter on the path
     uv_snapshot!(context.filters(), context.toolchain_find(), @r###"
@@ -94,15 +105,26 @@ fn toolchain_find() {
     ----- stderr -----
     "###);
 
-    // Request PyPy
-    uv_snapshot!(context.filters(), context.toolchain_find().arg("pypy"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+    // Request PyPy (which should be missing)
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.toolchain_find().arg("pypy"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: No interpreter found for PyPy in system toolchains
-    "###);
+        ----- stderr -----
+        error: No interpreter found for PyPy in system path or `py` launcher
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), context.toolchain_find().arg("pypy"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: No interpreter found for PyPy in system path
+        "###);
+    }
 
     // Swap the order of the Python versions
     context.python_versions.reverse();

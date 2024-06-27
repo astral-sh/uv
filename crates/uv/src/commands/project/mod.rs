@@ -173,7 +173,7 @@ pub(crate) async fn find_interpreter(
                 return Ok(venv.into_interpreter());
             }
         }
-        Err(uv_toolchain::Error::NotFound(_)) => {}
+        Err(uv_toolchain::Error::MissingEnvironment(_)) => {}
         Err(e) => return Err(e.into()),
     };
 
@@ -245,7 +245,7 @@ pub(crate) async fn init_environment(
             fs_err::remove_dir_all(venv.root())
                 .context("Failed to remove existing virtual environment")?;
         }
-        Err(uv_toolchain::Error::NotFound(_)) => {}
+        Err(uv_toolchain::Error::MissingEnvironment(_)) => {}
         Err(e) => return Err(e.into()),
     };
 

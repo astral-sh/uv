@@ -66,7 +66,7 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No Python interpreters found in system toolchains
+    error: No virtual environment found
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));

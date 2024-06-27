@@ -1993,6 +1993,8 @@ fn lock_requires_python() -> Result<()> {
         .filters()
         .into_iter()
         .chain(context.filters())
+        // Platform independent message for the missing toolchain
+        .chain([(" or `py` launcher", "")])
         .collect();
 
     // Install from the lockfile.
@@ -2005,7 +2007,7 @@ fn lock_requires_python() -> Result<()> {
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
     Removing virtual environment at: .venv
-    error: No interpreter found for Python >=3.12 in system toolchains
+    error: No interpreter found for Python >=3.12 in system path
     "###);
 
     Ok(())
