@@ -415,22 +415,22 @@ impl Lock {
             }
 
             if !dist.dependencies.is_empty() {
-                let deps = dist
-                    .dependencies
-                    .iter()
-                    .map(|dep| dep.to_toml(&dist_count_by_name))
-                    .collect::<ArrayOfTables>();
-                table.insert("dependencies", Item::ArrayOfTables(deps));
+                let deps = each_element_on_its_line_array(
+                    dist.dependencies
+                        .iter()
+                        .map(|dep| dep.to_toml(&dist_count_by_name).into_inline_table()),
+                );
+                table.insert("dependencies", value(deps));
             }
 
             if !dist.optional_dependencies.is_empty() {
                 let mut optional_deps = Table::new();
                 for (extra, deps) in &dist.optional_dependencies {
-                    let deps = deps
-                        .iter()
-                        .map(|dep| dep.to_toml(&dist_count_by_name))
-                        .collect::<ArrayOfTables>();
-                    optional_deps.insert(extra.as_ref(), Item::ArrayOfTables(deps));
+                    let deps = each_element_on_its_line_array(
+                        deps.iter()
+                            .map(|dep| dep.to_toml(&dist_count_by_name).into_inline_table()),
+                    );
+                    optional_deps.insert(extra.as_ref(), value(deps));
                 }
                 table.insert("optional-dependencies", Item::Table(optional_deps));
             }
@@ -438,11 +438,11 @@ impl Lock {
             if !dist.dev_dependencies.is_empty() {
                 let mut dev_dependencies = Table::new();
                 for (extra, deps) in &dist.dev_dependencies {
-                    let deps = deps
-                        .iter()
-                        .map(|dep| dep.to_toml(&dist_count_by_name))
-                        .collect::<ArrayOfTables>();
-                    dev_dependencies.insert(extra.as_ref(), Item::ArrayOfTables(deps));
+                    let deps = each_element_on_its_line_array(
+                        deps.iter()
+                            .map(|dep| dep.to_toml(&dist_count_by_name).into_inline_table()),
+                    );
+                    dev_dependencies.insert(extra.as_ref(), value(deps));
                 }
                 table.insert("dev-dependencies", Item::Table(dev_dependencies));
             }
@@ -2137,6 +2137,32 @@ impl std::fmt::Display for HashParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Display::fmt(self.0, f)
     }
+}
+
+/// Format an array so that each element is on its own line and has a trailing comma.
+///
+/// Example:
+///
+/// ```toml
+/// dependencies = [
+///     { name = "idna" },
+///     { name = "sniffio" },
+/// ]
+/// ```
+fn each_element_on_its_line_array(elements: impl Iterator<Item = InlineTable>) -> Array {
+    let mut array = elements
+        .map(|mut inline_table| {
+            // Each dependency is on its own line and indented.
+            inline_table.decor_mut().set_prefix("\n    ");
+            inline_table
+        })
+        .collect::<Array>();
+    // With a trailing comma, inserting another entry doesn't change the preceding line,
+    // reducing the diff noise.
+    array.set_trailing_comma(true);
+    // The line break between the last element's comma and the closing square bracket.
+    array.set_trailing("\n");
+    array
 }
 
 #[cfg(test)]
