@@ -210,7 +210,7 @@ fn seed() {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtualenv with seed packages at: .venv
      + pip==24.0
     Activate with: source .venv/bin/activate
     "###
@@ -221,19 +221,19 @@ fn seed() {
 
 #[test]
 fn seed_older_python_version() {
-    let context = TestContext::new_with_versions(&["3.10"]);
+    let context = TestContext::new_with_versions(&["3.11"]);
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
-        .arg("3.10"), @r###"
+        .arg("3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.10.[X] interpreter at: [PYTHON-3.10]
-    Creating virtualenv at: .venv
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv with seed packages at: .venv
      + pip==24.0
      + setuptools==69.2.0
      + wheel==0.43.0

@@ -163,7 +163,8 @@ async fn venv_impl(
 
     writeln!(
         printer.stderr(),
-        "Creating virtualenv at: {}",
+        "Creating virtualenv {}at: {}",
+        if seed { "with seed packages " } else { "" },
         path.user_display().cyan()
     )
     .into_diagnostic()?;
