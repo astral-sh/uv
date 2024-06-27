@@ -1,7 +1,11 @@
+use std::borrow::Cow;
+use std::ffi::OsString;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+use pep440_rs::Version;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -46,16 +50,13 @@ pub(crate) async fn run(
         return Err(anyhow::anyhow!("No tool command provided"));
     };
 
-    let from = if let Some(from) = from {
-        from
+    let (target, from) = if let Some(from) = from {
+        (Cow::Borrowed(target), Cow::Owned(from))
     } else {
-        let Some(target) = target.to_str() else {
-            return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
-        };
-        target.to_string()
+        parse_target(target)?
     };
 
-    let requirements = [RequirementsSource::from_package(from)]
+    let requirements = [RequirementsSource::from_package(from.to_string())]
         .into_iter()
         .chain(with.into_iter().map(RequirementsSource::from_package))
         .collect::<Vec<_>>();
@@ -109,7 +110,7 @@ pub(crate) async fn run(
     let command = target;
 
     // Construct the command
-    let mut process = Command::new(command);
+    let mut process = Command::new(command.as_ref());
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -166,4 +167,34 @@ pub(crate) async fn run(
     } else {
         Ok(ExitStatus::Failure)
     }
+}
+
+/// Parse a target into a command name and a requirement.
+fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
+    let Some(target_str) = target.to_str() else {
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+    };
+
+    // e.g. `uv`, no special handling
+    let Some((name, version)) = target_str.split_once('@') else {
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    };
+
+    // e.g. `uv@`, warn and treat the whole thing as the command
+    if version.is_empty() {
+        debug!("Ignoring empty version request in command");
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    }
+
+    // e.g. `uv@0.1.0`, convert to `uv==0.1.0`
+    if let Ok(version) = Version::from_str(version) {
+        return Ok((
+            Cow::Owned(OsString::from(name)),
+            Cow::Owned(format!("{name}=={version}")),
+        ));
+    }
+
+    // e.g. `uv@invalid`, warn and treat the whole thing as the command
+    debug!("Ignoring invalid version request `{}` in command", version);
+    Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)))
 }
