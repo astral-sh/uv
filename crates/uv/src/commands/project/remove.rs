@@ -4,6 +4,7 @@ use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
+use uv_distribution::pyproject::DependencyType;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::{ProjectWorkspace, Workspace};
 use uv_toolchain::{ToolchainPreference, ToolchainRequest};
@@ -18,7 +19,7 @@ use crate::settings::{InstallerSettings, ResolverSettings};
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn remove(
     requirements: Vec<PackageName>,
-    dev: bool,
+    dependency_type: DependencyType,
     package: Option<PackageName>,
     python: Option<String>,
     toolchain_preference: ToolchainPreference,
@@ -45,41 +46,33 @@ pub(crate) async fn remove(
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements {
-        if dev {
-            let deps = pyproject.remove_dev_dependency(&req)?;
-            if deps.is_empty() {
-                // Check if there is a matching regular dependency.
-                if pyproject
-                    .remove_dependency(&req)
-                    .ok()
-                    .filter(|deps| !deps.is_empty())
-                    .is_some()
-                {
-                    warn_user!("`{req}` is not a development dependency; try calling `uv remove` without the `--dev` flag");
+        match dependency_type {
+            DependencyType::Production => {
+                let deps = pyproject.remove_dependency(&req)?;
+                if deps.is_empty() {
+                    warn_dependency_types(&req, &pyproject);
+                    anyhow::bail!("The dependency `{req}` could not be found in `dependencies`");
                 }
-
-                anyhow::bail!("The dependency `{req}` could not be found in `dev-dependencies`");
             }
-
-            continue;
-        }
-
-        let deps = pyproject.remove_dependency(&req)?;
-        if deps.is_empty() {
-            // Check if there is a matching development dependency.
-            if pyproject
-                .remove_dev_dependency(&req)
-                .ok()
-                .filter(|deps| !deps.is_empty())
-                .is_some()
-            {
-                warn_user!("`{req}` is a development dependency; try calling `uv remove --dev`");
+            DependencyType::Dev => {
+                let deps = pyproject.remove_dev_dependency(&req)?;
+                if deps.is_empty() {
+                    warn_dependency_types(&req, &pyproject);
+                    anyhow::bail!(
+                        "The dependency `{req}` could not be found in `dev-dependencies`"
+                    );
+                }
             }
-
-            anyhow::bail!("The dependency `{req}` could not be found in `dependencies`");
+            DependencyType::Optional(ref group) => {
+                let deps = pyproject.remove_optional_dependency(&req, group)?;
+                if deps.is_empty() {
+                    warn_dependency_types(&req, &pyproject);
+                    anyhow::bail!(
+                        "The dependency `{req}` could not be found in `optional-dependencies`"
+                    );
+                }
+            }
         }
-
-        continue;
     }
 
     // Save the modified `pyproject.toml`.
@@ -142,4 +135,23 @@ pub(crate) async fn remove(
     .await?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Emit a warning if a dependency with the given name is present as any dependency type.
+fn warn_dependency_types(name: &PackageName, pyproject: &PyProjectTomlMut) {
+    for dep_ty in pyproject.find_dependency(name) {
+        match dep_ty {
+            DependencyType::Production => {
+                warn_user!("`{name}` is a production dependency");
+            }
+            DependencyType::Dev => {
+                warn_user!("`{name}` is a development dependency; try calling `uv remove --dev`");
+            }
+            DependencyType::Optional(group) => {
+                warn_user!(
+                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`"
+                );
+            }
+        }
+    }
 }

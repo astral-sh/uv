@@ -721,8 +721,8 @@ async fn run() -> Result<ExitStatus> {
 
             commands::add(
                 args.requirements,
-                args.dev,
                 args.editable,
+                args.dependency_type,
                 args.raw_sources,
                 args.rev,
                 args.tag,
@@ -751,7 +751,7 @@ async fn run() -> Result<ExitStatus> {
 
             commands::remove(
                 args.requirements,
-                args.dev,
+                args.dependency_type,
                 args.package,
                 args.python,
                 globals.toolchain_preference,

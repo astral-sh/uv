@@ -5,7 +5,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::pyproject::{Source, SourceError};
+use uv_distribution::pyproject::{DependencyType, Source, SourceError};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::{DistributionDatabase, ProjectWorkspace, Workspace};
 use uv_git::GitResolver;
@@ -27,8 +27,8 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
-    dev: bool,
     editable: Option<bool>,
+    dependency_type: DependencyType,
     raw_sources: bool,
     rev: Option<String>,
     tag: Option<String>,
@@ -186,10 +186,16 @@ pub(crate) async fn add(
             (req, source)
         };
 
-        if dev {
-            pyproject.add_dev_dependency(req, source)?;
-        } else {
-            pyproject.add_dependency(req, source)?;
+        match dependency_type {
+            DependencyType::Production => {
+                pyproject.add_dependency(req, source)?;
+            }
+            DependencyType::Dev => {
+                pyproject.add_dev_dependency(req, source)?;
+            }
+            DependencyType::Optional(ref group) => {
+                pyproject.add_optional_dependency(req, group, source)?;
+            }
         }
     }
 
