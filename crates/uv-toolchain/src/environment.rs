@@ -1,17 +1,21 @@
 use std::borrow::Cow;
 use std::env;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use itertools::Either;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
 use crate::discovery::find_toolchain;
 use crate::toolchain::Toolchain;
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
+use crate::ImplementationName;
+use crate::VersionRequest;
 use crate::{
-    EnvironmentPreference, Error, Interpreter, Prefix, Target, ToolchainPreference,
-    ToolchainRequest,
+    EnvironmentPreference, Error, Interpreter, Prefix, Target, ToolchainNotFound,
+    ToolchainPreference, ToolchainRequest,
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
@@ -24,6 +28,86 @@ struct PythonEnvironmentShared {
     interpreter: Interpreter,
 }
 
+/// The result of failed toolchain discovery.
+///
+/// See [`InterpreterResult`].
+#[derive(Clone, Debug, Error)]
+pub enum EnvironmentNotFound {
+    /// No Python environments were found.
+    None(EnvironmentPreference, Option<VersionRequest>),
+    /// No Python environments with the requested version were found.
+    NoMatchingVersion(EnvironmentPreference, VersionRequest),
+    /// No Python environments with the requested implementation name were found.
+    NoMatchingImplementation(EnvironmentPreference, ImplementationName),
+    /// No Python environments with the requested implementation name and version were found.
+    NoMatchingImplementationVersion(EnvironmentPreference, ImplementationName, VersionRequest),
+}
+
+impl EnvironmentNotFound {
+    fn try_from(value: ToolchainNotFound) -> Either<Self, ToolchainNotFound> {
+        match value {
+            ToolchainNotFound::NoPythonInstallation(_, preference, version_request) => {
+                Either::Left(Self::None(preference, version_request))
+            }
+            ToolchainNotFound::NoMatchingVersion(_, preference, version_request) => {
+                Either::Left(Self::NoMatchingVersion(preference, version_request))
+            }
+            ToolchainNotFound::NoMatchingImplementation(_, preference, implementation) => {
+                Either::Left(Self::NoMatchingImplementation(preference, implementation))
+            }
+            ToolchainNotFound::NoMatchingImplementationVersion(
+                _,
+                preference,
+                implementation,
+                version,
+            ) => Either::Left(Self::NoMatchingImplementationVersion(
+                preference,
+                implementation,
+                version,
+            )),
+            _ => Either::Right(value),
+        }
+    }
+
+    fn preference(&self) -> EnvironmentPreference {
+        match self {
+            Self::None(preference, _)
+            | Self::NoMatchingVersion(preference, _)
+            | Self::NoMatchingImplementation(preference, _)
+            | Self::NoMatchingImplementationVersion(preference, _, _) => *preference,
+        }
+    }
+}
+
+impl fmt::Display for EnvironmentNotFound {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let environment = match self.preference() {
+            EnvironmentPreference::Any => "virtual or system environment",
+            EnvironmentPreference::ExplicitSystem => "virtual or system environment",
+            EnvironmentPreference::OnlySystem => "system environment",
+            EnvironmentPreference::OnlyVirtual => "virtual environment",
+        };
+        match self {
+            Self::None(_, None | Some(VersionRequest::Any)) => {
+                write!(f, "No {environment} found")
+            }
+            Self::None(_, Some(version)) | Self::NoMatchingVersion(_, version) => {
+                write!(f, "No {environment} found with Python {version}")
+            }
+            Self::NoMatchingImplementation(_, implementation) => {
+                write!(f, "No {environment} found for {}", implementation.pretty())
+            }
+            Self::NoMatchingImplementationVersion(_, implementation, version) => {
+                write!(
+                    f,
+                    "No {environment} found for {} {version}",
+                    implementation.pretty()
+                )
+            }
+        }
+    }
+}
+
 impl PythonEnvironment {
     /// Find a [`PythonEnvironment`] matching the given request and preference.
     ///
@@ -34,13 +118,20 @@ impl PythonEnvironment {
         preference: EnvironmentPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let toolchain = find_toolchain(
+        let toolchain = match find_toolchain(
             request,
             preference,
             // Ignore managed toolchains when looking for environments
             ToolchainPreference::OnlySystem,
             cache,
-        )??;
+        )? {
+            Ok(toolchain) => toolchain,
+            Err(err) => match EnvironmentNotFound::try_from(err) {
+                Either::Left(err) => return Err(Error::MissingEnvironment(err)),
+                // We generally shouldn't hit this case when looking for environments
+                Either::Right(err) => return Err(Error::MissingToolchain(err)),
+            },
+        };
         Ok(Self::from_toolchain(toolchain))
     }
 
@@ -49,7 +140,7 @@ impl PythonEnvironment {
         let venv = match fs_err::canonicalize(root.as_ref()) {
             Ok(venv) => venv,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(
+                return Err(Error::MissingToolchain(
                     crate::ToolchainNotFound::DirectoryNotFound(root.as_ref().to_path_buf()),
                 ));
             }

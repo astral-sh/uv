@@ -70,7 +70,10 @@ pub enum Error {
     KeyError(#[from] toolchain::ToolchainKeyError),
 
     #[error(transparent)]
-    NotFound(#[from] ToolchainNotFound),
+    MissingToolchain(#[from] ToolchainNotFound),
+
+    #[error(transparent)]
+    MissingEnvironment(#[from] environment::EnvironmentNotFound),
 }
 
 // The mock interpreters are not valid on Windows so we don't have unit test coverage there
