@@ -5,7 +5,7 @@ import shutil
 
 def find_uv_bin() -> str:
     """Return the uv binary path."""
-    
+
     path = shutil.which("uv")
     if path:
         return path
