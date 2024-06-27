@@ -1499,7 +1499,7 @@ pub struct VenvArgs {
 
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment.
     ///
-    /// Installing `setuptools` and `wheel` is disabled on Python 3.12+ environments.
+    /// Note `setuptools` and `wheel` are not included in Python 3.12+ environments.
     #[arg(long)]
     pub seed: bool,
 
