@@ -1404,6 +1404,13 @@ pub struct PipShowArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipTreeArgs {
+    /// Maximum display depth of the dependency tree
+    #[arg(long, short, default_value_t = 255)]
+    pub depth: u8,
+
+    /// Prune the given package from the display of the dependency tree.
+    #[arg(long)]
+    pub prune: Vec<PackageName>,
     /// Do not de-duplicate repeated dependencies.
     /// Usually, when a package has already displayed its dependencies,
     /// further occurrences will not re-display its dependencies,
