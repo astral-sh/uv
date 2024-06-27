@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
+use petgraph::algo::greedy_feedback_arc_set;
 use petgraph::visit::{EdgeRef, Topo};
 use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -348,6 +349,28 @@ fn to_requirements_txt_graph(graph: &ResolutionPetGraph) -> IntermediatePetGraph
 /// The graph is directed, so if any edge contains a marker, we need to propagate it to all
 /// downstream nodes.
 fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
+    // Remove any cycles. By absorption, it should be fine to ignore cycles.
+    //
+    // Imagine a graph: `A -> B -> C -> A`. Assume that `A` has weight `1`, `B` has weight `2`,
+    // and `C` has weight `3`. The weights are the marker trees.
+    //
+    // When propagating, we'd return to `A` when we hit the cycle, to create `1 or (1 and 2 and 3)`,
+    // which resolves to `1`.
+    //
+    // TODO(charlie): The above reasoning could be incorrect. Consider using a graph algorithm that
+    // can handle weight propagation with cycles.
+    let edges = {
+        let fas = greedy_feedback_arc_set(&graph)
+            .map(|edge| edge.id())
+            .collect::<Vec<_>>();
+        let mut edges = Vec::with_capacity(fas.len());
+        for edge_id in fas {
+            edges.push(graph.edge_endpoints(edge_id).unwrap());
+            graph.remove_edge(edge_id);
+        }
+        edges
+    };
+
     let mut topo = Topo::new(&graph);
     while let Some(index) = topo.next(&graph) {
         let marker_tree: Option<MarkerTree> = {
@@ -384,6 +407,12 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
         if let DisplayResolutionGraphNode::Dist(node) = &mut graph[index] {
             node.markers = marker_tree.and_then(marker::normalize);
         };
+    }
+
+    // Re-add the removed edges. We no longer care about the edge _weights_, but we do want the
+    // edges to be present, to power the `# via` annotations.
+    for (source, target) in edges {
+        graph.add_edge(source, target, None);
     }
 
     graph
