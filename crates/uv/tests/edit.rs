@@ -74,13 +74,11 @@ fn add_registry() -> Result<()> {
         version = "3.7.0"
         source = "registry+https://pypi.org/simple"
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
         wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 }]
-
-        [[distribution.dependencies]]
-        name = "idna"
-
-        [[distribution.dependencies]]
-        name = "sniffio"
 
         [[distribution]]
         name = "idna"
@@ -93,9 +91,9 @@ fn add_registry() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-
-        [[distribution.dependencies]]
-        name = "anyio"
+        dependencies = [
+            { name = "anyio" },
+        ]
 
         [[distribution]]
         name = "sniffio"
@@ -222,13 +220,11 @@ fn add_git() -> Result<()> {
         version = "3.7.0"
         source = "registry+https://pypi.org/simple"
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
         wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 }]
-
-        [[distribution.dependencies]]
-        name = "idna"
-
-        [[distribution.dependencies]]
-        name = "sniffio"
 
         [[distribution]]
         name = "idna"
@@ -241,12 +237,10 @@ fn add_git() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-
-        [[distribution.dependencies]]
-        name = "anyio"
-
-        [[distribution.dependencies]]
-        name = "uv-public-pypackage"
+        dependencies = [
+            { name = "anyio" },
+            { name = "uv-public-pypackage" },
+        ]
 
         [[distribution]]
         name = "sniffio"
@@ -366,13 +360,11 @@ fn add_git_raw() -> Result<()> {
         version = "3.7.0"
         source = "registry+https://pypi.org/simple"
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
         wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 }]
-
-        [[distribution.dependencies]]
-        name = "idna"
-
-        [[distribution.dependencies]]
-        name = "sniffio"
 
         [[distribution]]
         name = "idna"
@@ -385,12 +377,10 @@ fn add_git_raw() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-
-        [[distribution.dependencies]]
-        name = "anyio"
-
-        [[distribution.dependencies]]
-        name = "uv-public-pypackage"
+        dependencies = [
+            { name = "anyio" },
+            { name = "uv-public-pypackage" },
+        ]
 
         [[distribution]]
         name = "sniffio"
@@ -485,9 +475,9 @@ fn add_unnamed() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-
-        [[distribution.dependencies]]
-        name = "uv-public-pypackage"
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
 
         [[distribution]]
         name = "uv-public-pypackage"
@@ -578,13 +568,11 @@ fn add_remove_dev() -> Result<()> {
         version = "3.7.0"
         source = "registry+https://pypi.org/simple"
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
         wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 }]
-
-        [[distribution.dependencies]]
-        name = "idna"
-
-        [[distribution.dependencies]]
-        name = "sniffio"
 
         [[distribution]]
         name = "idna"
@@ -599,9 +587,9 @@ fn add_remove_dev() -> Result<()> {
         source = "editable+."
 
         [distribution.dev-dependencies]
-
-        [[distribution.dev-dependencies.dev]]
-        name = "anyio"
+        dev = [
+            { name = "anyio" },
+        ]
 
         [[distribution]]
         name = "sniffio"
@@ -811,9 +799,9 @@ fn add_remove_workspace() -> Result<()> {
         name = "child1"
         version = "0.1.0"
         source = "editable+child1"
-
-        [[distribution.dependencies]]
-        name = "child2"
+        dependencies = [
+            { name = "child2" },
+        ]
 
         [[distribution]]
         name = "child2"
@@ -991,9 +979,9 @@ fn add_workspace_editable() -> Result<()> {
         name = "child1"
         version = "0.1.0"
         source = "editable+child1"
-
-        [[distribution.dependencies]]
-        name = "child2"
+        dependencies = [
+            { name = "child2" },
+        ]
 
         [[distribution]]
         name = "child2"
@@ -1302,20 +1290,11 @@ fn update() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-
-        [[distribution.dependencies]]
-        name = "requests"
-        marker = "python_version > '3.7'"
-
-        [[distribution.dependencies]]
-        name = "requests"
-        extra = "socks"
-        marker = "python_version > '3.7'"
-
-        [[distribution.dependencies]]
-        name = "requests"
-        extra = "use-chardet-on-py3"
-        marker = "python_version > '3.7'"
+        dependencies = [
+            { name = "requests", marker = "python_version > '3.7'" },
+            { name = "requests", extra = "socks", marker = "python_version > '3.7'" },
+            { name = "requests", extra = "use-chardet-on-py3", marker = "python_version > '3.7'" },
+        ]
 
         [[distribution]]
         name = "pysocks"
@@ -1331,26 +1310,20 @@ fn update() -> Result<()> {
         name = "requests"
         version = "2.32.3"
         source = "git+https://github.com/psf/requests?tag=v2.32.3#0e322af87745eff34caffe4df68456ebc20d9068"
-
-        [[distribution.dependencies]]
-        name = "certifi"
-
-        [[distribution.dependencies]]
-        name = "charset-normalizer"
-
-        [[distribution.dependencies]]
-        name = "idna"
-
-        [[distribution.dependencies]]
-        name = "urllib3"
+        dependencies = [
+            { name = "certifi" },
+            { name = "charset-normalizer" },
+            { name = "idna" },
+            { name = "urllib3" },
+        ]
 
         [distribution.optional-dependencies]
-
-        [[distribution.optional-dependencies.socks]]
-        name = "pysocks"
-
-        [[distribution.optional-dependencies.use-chardet-on-py3]]
-        name = "chardet"
+        socks = [
+            { name = "pysocks" },
+        ]
+        use-chardet-on-py3 = [
+            { name = "chardet" },
+        ]
 
         [[distribution]]
         name = "urllib3"
@@ -1481,9 +1454,9 @@ fn add_no_clean() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = "editable+."
-
-        [[distribution.dependencies]]
-        name = "iniconfig"
+        dependencies = [
+            { name = "iniconfig" },
+        ]
         "###
         );
     });
