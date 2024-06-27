@@ -131,7 +131,7 @@ fn depth() {
         .write_str("scikit-learn==1.4.1.post1")
         .unwrap();
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -231,7 +231,7 @@ fn prune() {
         .write_str("scikit-learn==1.4.1.post1")
         .unwrap();
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -433,7 +433,7 @@ fn prune_big_tree() {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("packse").unwrap();
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
