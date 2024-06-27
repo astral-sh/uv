@@ -526,17 +526,8 @@ fn respect_installed_and_reinstall() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("Flask==2.3.3")?;
 
-    let filters = if cfg!(windows) {
-        // Remove the colorama count on windows
-        context
-            .filters()
-            .into_iter()
-            .chain([("Resolved 8 packages", "Resolved 7 packages")])
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, context.pip_install()
+    let context = context.with_filtered_counts();
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -545,10 +536,10 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - flask==2.3.2
      + flask==2.3.3
     "###
@@ -558,7 +549,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("Flask")?;
 
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--reinstall-package")
@@ -569,10 +560,10 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - flask==2.3.3
      + flask==3.0.2
     "###
@@ -582,7 +573,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("Flask")?;
 
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--reinstall-package")
@@ -593,9 +584,9 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - flask==3.0.2
      + flask==3.0.2
     "###
@@ -895,27 +886,19 @@ fn install_editable_and_registry() {
     "###
     );
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([
-            // Remove colorama
-            ("Resolved 7 packages", "Resolved 6 packages"),
-        ])
-        .collect();
-
+    let context = context.with_filtered_counts();
     // Re-install Black at a specific version. This should replace the editable version.
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("black==23.10.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
      + black==23.10.0
     "###
@@ -1770,17 +1753,7 @@ fn reinstall_no_binary() {
     context.assert_command("import anyio").success();
 
     // With `--reinstall`, `--no-binary` should have an affect
-    let filters = if cfg!(windows) {
-        // Remove the colorama count on windows
-        context
-            .filters()
-            .into_iter()
-            .chain([("Resolved 8 packages", "Resolved 7 packages")])
-            .collect()
-    } else {
-        context.filters()
-    };
-
+    let context = context.with_filtered_counts();
     let mut command = context.pip_install();
     command
         .arg("anyio")
@@ -1789,15 +1762,15 @@ fn reinstall_no_binary() {
         .arg("--reinstall-package")
         .arg("anyio")
         .arg("--strict");
-    uv_snapshot!(filters, command, @r###"
+    uv_snapshot!(context.filters(), command, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - anyio==4.3.0
      + anyio==4.3.0
     "###
