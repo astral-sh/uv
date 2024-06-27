@@ -448,24 +448,13 @@ impl Lock {
             }
 
             if !dist.wheels.is_empty() {
-                let wheels = dist
-                    .wheels
-                    .iter()
-                    .enumerate()
-                    .map(|(i, wheel)| {
-                        let mut table = wheel.to_toml()?;
-
-                        if dist.wheels.len() > 1 {
-                            // Indent each wheel on a new line.
-                            table.decor_mut().set_prefix("\n\t");
-                            if i == dist.wheels.len() - 1 {
-                                table.decor_mut().set_suffix("\n");
-                            }
-                        }
-
-                        Ok(table)
-                    })
-                    .collect::<anyhow::Result<Array>>()?;
+                let wheels = each_element_on_its_line_array(
+                    dist.wheels
+                        .iter()
+                        .map(Wheel::to_toml)
+                        .collect::<anyhow::Result<Vec<_>>>()?
+                        .into_iter(),
+                );
                 table.insert("wheels", value(wheels));
             }
 
