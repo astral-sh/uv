@@ -9,10 +9,10 @@ use uv_normalize::PackageName;
 use crate::resolver::provider::{MetadataResponse, VersionsResponse};
 
 /// In-memory index of package metadata.
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct InMemoryIndex(Arc<SharedInMemoryIndex>);
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct SharedInMemoryIndex {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
@@ -25,6 +25,17 @@ struct SharedInMemoryIndex {
 pub(crate) type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
+    /// Create an `InMemoryIndex` with pre-filled packages and distributions.
+    pub fn with(
+        packages: FxOnceMap<PackageName, Arc<VersionsResponse>>,
+        distributions: FxOnceMap<VersionId, Arc<MetadataResponse>>,
+    ) -> InMemoryIndex {
+        InMemoryIndex(Arc::new(SharedInMemoryIndex {
+            packages,
+            distributions,
+        }))
+    }
+
     /// Returns a reference to the package metadata map.
     pub fn packages(&self) -> &FxOnceMap<PackageName, Arc<VersionsResponse>> {
         &self.0.packages

@@ -1,8 +1,10 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt::{Debug, Display};
+use std::iter;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use either::Either;
 use path_slash::PathExt;
@@ -15,20 +17,30 @@ use url::Url;
 use cache_key::RepositoryUrl;
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
-    GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
+    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
+    DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, PathBuiltDist,
+    PathSourceDist, PrioritizedDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Resolution, ResolvedDist, SourceDistCompatibility, ToUrlError, VersionId,
+    WheelCompatibility,
 };
-use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
+use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::{
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, VerbatimUrl, VerbatimUrlError,
+};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
-use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
+use pypi_types::{
+    HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
+};
 use uv_configuration::ExtrasSpecification;
+use uv_distribution::{ArchiveMetadata, Metadata, Workspace};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::{RequiresPython, ResolutionGraph};
+use crate::resolver::FxOnceMap;
+use crate::{
+    InMemoryIndex, MetadataResponse, RequiresPython, ResolutionGraph, VersionMap, VersionsResponse,
+};
 
 /// The current version of the lock file format.
 const VERSION: u32 = 1;
@@ -500,6 +512,51 @@ impl Lock {
             .expect("valid index for distribution");
         dist
     }
+
+    /// Convert the [`Lock`] to a [`InMemoryIndex`] that can be used for resolution.
+    pub fn to_index(self, workspace: &Workspace) -> Result<InMemoryIndex, LockError> {
+        let distributions = FxOnceMap::default();
+        let mut packages: HashMap<_, BTreeMap<Version, PrioritizedDist>> = HashMap::new();
+
+        for distribution in self.distributions {
+            match distribution.id.source {
+                Source::Registry(..) | Source::Git(..) => {}
+                // Skip local and direct URL dependencies, as their metadata may have been mutated
+                // without a version change.
+                Source::Path(..)
+                | Source::Directory(..)
+                | Source::Editable(..)
+                | Source::Direct(..) => continue,
+            }
+
+            // Add registry distributions to the package index.
+            if let Some(prioritized_dist) = distribution.to_prioritized_dist(workspace.root())? {
+                packages
+                    .entry(distribution.name().clone())
+                    .or_default()
+                    .insert(distribution.id.version.clone(), prioritized_dist);
+            }
+
+            // Extract the distribution metadata.
+            let version_id = distribution.version_id(workspace.root())?;
+            let hashes = distribution.hashes();
+            let metadata = distribution.into_metadata(workspace.root())?;
+
+            // Add metadata to the distributions index.
+            let response = MetadataResponse::Found(ArchiveMetadata::with_hashes(metadata, hashes));
+            distributions.done(version_id, Arc::new(response));
+        }
+
+        let packages = packages
+            .into_iter()
+            .map(|(name, versions)| {
+                let response = VersionsResponse::Found(vec![VersionMap::from(versions)]);
+                (name, Arc::new(response))
+            })
+            .collect();
+
+        Ok(InMemoryIndex::with(packages, distributions))
+    }
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -627,18 +684,14 @@ impl Distribution {
                         best_wheel_index,
                         sdist: None,
                     };
+
                     Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
                 }
                 Source::Path(path) => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let path_dist = PathBuiltDist {
                         filename,
-                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                            LockErrorKind::VerbatimUrl {
-                                id: self.id.clone(),
-                                err,
-                            }
-                        })?,
+                        url: verbatim_url(workspace_root.join(path), &self.id)?,
                         path: path.clone(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
@@ -676,53 +729,179 @@ impl Distribution {
             };
         }
 
+        if let Some(sdist) = self.to_source_dist(workspace_root)? {
+            return Ok(Dist::Source(sdist));
+        }
+
+        Err(LockErrorKind::NeitherSourceDistNorWheel {
+            id: self.id.clone(),
+        }
+        .into())
+    }
+
+    /// Convert the [`Distribution`] to a [`PrioritizedDist`] that can be used for resolution, if
+    /// it has a registry source.
+    fn to_prioritized_dist(
+        &self,
+        workspace_root: &Path,
+    ) -> Result<Option<PrioritizedDist>, LockError> {
+        let prioritized_dist = match &self.id.source {
+            Source::Registry(url) => {
+                let mut prioritized_dist = PrioritizedDist::default();
+
+                // Add the source distribution.
+                if let Some(distribution_types::SourceDist::Registry(sdist)) =
+                    self.to_source_dist(workspace_root)?
+                {
+                    // When resolving from a lockfile all sources are equally compatible.
+                    let compat = SourceDistCompatibility::Compatible(HashComparison::Matched);
+                    let hash = self.sdist.as_ref().unwrap().hash().0.clone();
+                    prioritized_dist.insert_source(sdist, iter::once(hash), compat);
+                };
+
+                // Add any wheels.
+                for wheel in &self.wheels {
+                    let hash = wheel.hash.as_ref().map(|h| h.0.clone());
+                    let wheel = wheel.to_registry_dist(url);
+                    let compat =
+                        WheelCompatibility::Compatible(HashComparison::Matched, None, None);
+                    prioritized_dist.insert_built(wheel, hash, compat);
+                }
+
+                prioritized_dist
+            }
+            _ => return Ok(None),
+        };
+
+        Ok(Some(prioritized_dist))
+    }
+
+    /// Convert the [`Distribution`] to [`Metadata`] that can be used for resolution.
+    fn into_metadata(self, workspace_root: &Path) -> Result<Metadata, LockError> {
+        let name = self.name().clone();
+        let version = self.id.version.clone();
+        let provides_extras = self.optional_dependencies.keys().cloned().collect();
+
+        let mut dependency_extras = HashMap::new();
+        let mut requires_dist = self
+            .dependencies
+            .into_iter()
+            .filter_map(|dep| {
+                dep.into_requirement(workspace_root, &mut dependency_extras)
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>, LockError>>()?;
+
+        // Denormalize optional dependencies.
+        for (extra, deps) in self.optional_dependencies {
+            for dep in deps {
+                if let Some(mut dep) =
+                    dep.into_requirement(workspace_root, &mut dependency_extras)?
+                {
+                    // Add back the extra marker expression.
+                    let marker = MarkerTree::Expression(MarkerExpression::Extra {
+                        operator: ExtraOperator::Equal,
+                        name: extra.clone(),
+                    });
+                    match dep.marker {
+                        Some(ref mut tree) => tree.and(marker),
+                        None => dep.marker = Some(marker),
+                    }
+
+                    requires_dist.push(dep);
+                }
+            }
+        }
+
+        // Denormalize extras for each dependency.
+        for req in &mut requires_dist {
+            if let Some(extras) = dependency_extras.remove(&req.name) {
+                req.extras = extras;
+            }
+        }
+
+        let dev_dependencies = self
+            .dev_dependencies
+            .into_iter()
+            .map(|(group, deps)| {
+                let mut dependency_extras = HashMap::new();
+                let mut deps = deps
+                    .into_iter()
+                    .filter_map(|dep| {
+                        dep.into_requirement(workspace_root, &mut dependency_extras)
+                            .transpose()
+                    })
+                    .collect::<Result<Vec<_>, LockError>>()?;
+
+                // Denormalize extras for each development dependency.
+                for dep in &mut deps {
+                    if let Some(extras) = dependency_extras.remove(&dep.name) {
+                        dep.extras = extras;
+                    }
+                }
+
+                Ok((group, deps))
+            })
+            .collect::<Result<_, LockError>>()?;
+
+        Ok(Metadata {
+            name,
+            version,
+            requires_dist,
+            dev_dependencies,
+            provides_extras,
+            requires_python: None,
+        })
+    }
+
+    /// Returns a [`VersionId`] for this package that can be used for resolution.
+    fn version_id(&self, workspace_root: &Path) -> Result<VersionId, LockError> {
         match &self.id.source {
+            Source::Registry(_) => Ok(VersionId::NameVersion(
+                self.name().clone(),
+                self.id.version.clone(),
+            )),
+            _ => Ok(self.to_source_dist(workspace_root)?.unwrap().version_id()),
+        }
+    }
+
+    /// Convert the source of this [`Distribution`] to a [`SourceDist`] that can be used in installation.
+    ///
+    /// Returns `Ok(None)` if the source cannot be converted because `self.sdist` is `None`. This is required
+    /// for registry sources.
+    fn to_source_dist(
+        &self,
+        workspace_root: &Path,
+    ) -> Result<Option<distribution_types::SourceDist>, LockError> {
+        let sdist = match &self.id.source {
             Source::Path(path) => {
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
-                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                        LockErrorKind::VerbatimUrl {
-                            id: self.id.clone(),
-                            err,
-                        }
-                    })?,
+                    url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
                 };
-                let source_dist = distribution_types::SourceDist::Path(path_dist);
-                return Ok(Dist::Source(source_dist));
+                distribution_types::SourceDist::Path(path_dist)
             }
             Source::Directory(path) => {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                        LockErrorKind::VerbatimUrl {
-                            id: self.id.clone(),
-                            err,
-                        }
-                    })?,
+                    url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
                     editable: false,
                 };
-                let source_dist = distribution_types::SourceDist::Directory(dir_dist);
-                return Ok(Dist::Source(source_dist));
+                distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Editable(path) => {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                        LockErrorKind::VerbatimUrl {
-                            id: self.id.clone(),
-                            err,
-                        }
-                    })?,
+                    url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
                     editable: true,
                 };
-                let source_dist = distribution_types::SourceDist::Directory(dir_dist);
-                return Ok(Dist::Source(source_dist));
+                distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Git(url, git) => {
                 // Reconstruct the `GitUrl` from the `GitSource`.
@@ -742,8 +921,7 @@ impl Distribution {
                     git: Box::new(git_url),
                     subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
                 };
-                let source_dist = distribution_types::SourceDist::Git(git_dist);
-                return Ok(Dist::Source(source_dist));
+                distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
                 let url = Url::from(ParsedArchiveUrl {
@@ -756,48 +934,45 @@ impl Distribution {
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                     url: VerbatimUrl::from_url(url),
                 };
-                let source_dist = distribution_types::SourceDist::DirectUrl(direct_dist);
-                return Ok(Dist::Source(source_dist));
+                distribution_types::SourceDist::DirectUrl(direct_dist)
             }
             Source::Registry(url) => {
-                if let Some(ref sdist) = self.sdist {
-                    let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
+                let Some(ref sdist) = self.sdist else {
+                    return Ok(None);
+                };
+
+                let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
+                    id: self.id.clone(),
+                })?;
+                let filename = sdist
+                    .filename()
+                    .ok_or_else(|| LockErrorKind::MissingFilename {
                         id: self.id.clone(),
                     })?;
-                    let filename =
-                        sdist
-                            .filename()
-                            .ok_or_else(|| LockErrorKind::MissingFilename {
-                                id: self.id.clone(),
-                            })?;
-                    let file = Box::new(distribution_types::File {
-                        dist_info_metadata: false,
-                        filename: filename.to_string(),
-                        hashes: vec![],
-                        requires_python: None,
-                        size: sdist.size(),
-                        upload_time_utc_ms: None,
-                        url: FileLocation::AbsoluteUrl(file_url.to_string()),
-                        yanked: None,
-                    });
-                    let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
-                    let reg_dist = RegistrySourceDist {
-                        name: self.id.name.clone(),
-                        version: self.id.version.clone(),
-                        file,
-                        index,
-                        wheels: vec![],
-                    };
-                    let source_dist = distribution_types::SourceDist::Registry(reg_dist);
-                    return Ok(Dist::Source(source_dist));
-                }
-            }
-        }
+                let file = Box::new(distribution_types::File {
+                    dist_info_metadata: false,
+                    filename: filename.to_string(),
+                    hashes: vec![sdist.hash().0.clone()],
+                    requires_python: None,
+                    size: sdist.size(),
+                    upload_time_utc_ms: None,
+                    url: FileLocation::AbsoluteUrl(file_url.to_string()),
+                    yanked: None,
+                });
+                let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
 
-        Err(LockErrorKind::NeitherSourceDistNorWheel {
-            id: self.id.clone(),
-        }
-        .into())
+                let reg_dist = RegistrySourceDist {
+                    name: self.id.name.clone(),
+                    version: self.id.version.clone(),
+                    file,
+                    index,
+                    wheels: vec![],
+                };
+                distribution_types::SourceDist::Registry(reg_dist)
+            }
+        };
+
+        Ok(Some(sdist))
     }
 
     fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
@@ -820,6 +995,18 @@ impl Distribution {
         best.map(|(_, i)| i)
     }
 
+    /// Returns all the hashes associated with this [`Distribution`].
+    fn hashes(&self) -> Vec<HashDigest> {
+        let mut hashes = Vec::new();
+        if let Some(ref sdist) = self.sdist {
+            hashes.push(sdist.hash().0.clone());
+        }
+        for wheel in &self.wheels {
+            hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
+        }
+        hashes
+    }
+
     /// Returns the [`PackageName`] of the distribution.
     pub fn name(&self) -> &PackageName {
         &self.id.name
@@ -838,6 +1025,16 @@ impl Distribution {
             _ => None,
         }
     }
+}
+
+/// Attempts to construct a `VerbatimUrl` from the given `Path`.
+fn verbatim_url(path: PathBuf, id: &DistributionId) -> Result<VerbatimUrl, LockError> {
+    let url = VerbatimUrl::from_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
+        id: id.clone(),
+        err,
+    })?;
+
+    Ok(url)
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -1689,7 +1886,7 @@ impl Wheel {
         let file = Box::new(distribution_types::File {
             dist_info_metadata: false,
             filename: filename.to_string(),
-            hashes: vec![],
+            hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: None,
@@ -1781,6 +1978,76 @@ impl Dependency {
             extra,
             marker,
         }
+    }
+
+    /// Convert the [`Dependency`] to a [`Requirement`] that can be used for resolution.
+    pub(crate) fn into_requirement(
+        self,
+        workspace_root: &Path,
+        extras: &mut HashMap<PackageName, Vec<ExtraName>>,
+    ) -> Result<Option<Requirement>, LockError> {
+        // Keep track of extras, these will be denormalized later.
+        if let Some(extra) = self.extra {
+            extras
+                .entry(self.distribution_id.name)
+                .or_default()
+                .push(extra);
+
+            return Ok(None);
+        }
+
+        // Reconstruct the `RequirementSource` from the `Source`.
+        let source = match self.distribution_id.source {
+            Source::Registry(_) => RequirementSource::Registry {
+                specifier: VersionSpecifiers::empty(),
+                index: None,
+            },
+            Source::Git(repository, git) => {
+                let git_url =
+                    uv_git::GitUrl::new(repository.clone(), GitReference::from(git.kind.clone()))
+                        .with_precise(git.precise);
+
+                let parsed_url = ParsedUrl::Git(ParsedGitUrl {
+                    url: git_url.clone(),
+                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                });
+                RequirementSource::from_verbatim_parsed_url(parsed_url)
+            }
+            Source::Direct(url, direct) => {
+                let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl {
+                    url: url.clone(),
+                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                });
+                RequirementSource::from_verbatim_parsed_url(parsed_url)
+            }
+            Source::Path(ref path) => RequirementSource::Path {
+                lock_path: path.clone(),
+                install_path: workspace_root.join(path),
+                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+            },
+            Source::Directory(ref path) => RequirementSource::Directory {
+                editable: false,
+                lock_path: path.clone(),
+                install_path: workspace_root.join(path),
+                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+            },
+            Source::Editable(ref path) => RequirementSource::Directory {
+                editable: true,
+                lock_path: path.clone(),
+                install_path: workspace_root.join(path),
+                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+            },
+        };
+
+        let requirement = Requirement {
+            name: self.distribution_id.name.clone(),
+            marker: self.marker,
+            origin: None,
+            extras: Vec::new(),
+            source,
+        };
+
+        Ok(Some(requirement))
     }
 
     /// Returns the TOML representation of this dependency.

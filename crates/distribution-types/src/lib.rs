@@ -497,7 +497,7 @@ impl BuiltDist {
 
     pub fn version(&self) -> &Version {
         match self {
-            Self::Registry(wheels) => &wheels.best_wheel().filename.version,
+            Self::Registry(wheels) => wheels.version(),
             Self::DirectUrl(wheel) => &wheel.filename.version,
             Self::Path(wheel) => &wheel.filename.version,
         }
@@ -552,6 +552,10 @@ impl SourceDist {
 }
 
 impl RegistryBuiltDist {
+    pub fn version(&self) -> &Version {
+        &self.best_wheel().filename.version
+    }
+
     /// Returns the best or "most compatible" wheel in this distribution.
     pub fn best_wheel(&self) -> &RegistryBuiltWheel {
         &self.wheels[self.best_wheel_index]

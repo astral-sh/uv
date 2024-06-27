@@ -63,11 +63,13 @@ pub async fn read_requirements_txt(
     })
 }
 
-/// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.
-pub async fn read_lockfile(workspace: &Workspace, upgrade: &Upgrade) -> Result<LockedRequirements> {
+/// Load the lockfile from the workspace.
+///
+/// Returns `Ok(None)` if the lockfile does not exist, is invalid, or is not required for the given upgrade strategy.
+pub async fn read_lockfile(workspace: &Workspace, upgrade: &Upgrade) -> Result<Option<Lock>> {
     // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
     if upgrade.is_all() {
-        return Ok(LockedRequirements::default());
+        return Ok(None);
     }
 
     // If an existing lockfile exists, build up a set of preferences.
@@ -77,15 +79,20 @@ pub async fn read_lockfile(workspace: &Workspace, upgrade: &Upgrade) -> Result<L
             Ok(lock) => lock,
             Err(err) => {
                 eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");
-                return Ok(LockedRequirements::default());
+                return Ok(None);
             }
         },
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(LockedRequirements::default());
+            return Ok(None);
         }
         Err(err) => return Err(err.into()),
     };
 
+    Ok(Some(lock))
+}
+
+/// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.
+pub fn read_lock_requirements(lock: &Lock, upgrade: &Upgrade) -> LockedRequirements {
     let mut preferences = Vec::new();
     let mut git = Vec::new();
 
@@ -108,5 +115,5 @@ pub async fn read_lockfile(workspace: &Workspace, upgrade: &Upgrade) -> Result<L
         }
     }
 
-    Ok(LockedRequirements { preferences, git })
+    LockedRequirements { preferences, git }
 }

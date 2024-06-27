@@ -312,6 +312,12 @@ impl RequirementSource {
         }
     }
 
+    /// Construct a [`RequirementSource`] for a URL source, given a URL parsed into components.
+    pub fn from_verbatim_parsed_url(parsed_url: ParsedUrl) -> Self {
+        let verbatim_url = VerbatimUrl::from_url(Url::from(parsed_url.clone()));
+        RequirementSource::from_parsed_url(parsed_url, verbatim_url)
+    }
+
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Directory { editable: true, .. })
