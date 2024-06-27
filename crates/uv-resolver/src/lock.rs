@@ -404,61 +404,7 @@ impl Lock {
 
         let mut distributions = ArrayOfTables::new();
         for dist in &self.distributions {
-            let mut table = Table::new();
-
-            table.insert("name", value(dist.id.name.to_string()));
-            table.insert("version", value(dist.id.version.to_string()));
-            table.insert("source", value(dist.id.source.to_string()));
-
-            if let Some(ref sdist) = dist.sdist {
-                table.insert("sdist", value(sdist.to_toml()?));
-            }
-
-            if !dist.dependencies.is_empty() {
-                let deps = each_element_on_its_line_array(
-                    dist.dependencies
-                        .iter()
-                        .map(|dep| dep.to_toml(&dist_count_by_name).into_inline_table()),
-                );
-                table.insert("dependencies", value(deps));
-            }
-
-            if !dist.optional_dependencies.is_empty() {
-                let mut optional_deps = Table::new();
-                for (extra, deps) in &dist.optional_dependencies {
-                    let deps = each_element_on_its_line_array(
-                        deps.iter()
-                            .map(|dep| dep.to_toml(&dist_count_by_name).into_inline_table()),
-                    );
-                    optional_deps.insert(extra.as_ref(), value(deps));
-                }
-                table.insert("optional-dependencies", Item::Table(optional_deps));
-            }
-
-            if !dist.dev_dependencies.is_empty() {
-                let mut dev_dependencies = Table::new();
-                for (extra, deps) in &dist.dev_dependencies {
-                    let deps = each_element_on_its_line_array(
-                        deps.iter()
-                            .map(|dep| dep.to_toml(&dist_count_by_name).into_inline_table()),
-                    );
-                    dev_dependencies.insert(extra.as_ref(), value(deps));
-                }
-                table.insert("dev-dependencies", Item::Table(dev_dependencies));
-            }
-
-            if !dist.wheels.is_empty() {
-                let wheels = each_element_on_its_line_array(
-                    dist.wheels
-                        .iter()
-                        .map(Wheel::to_toml)
-                        .collect::<anyhow::Result<Vec<_>>>()?
-                        .into_iter(),
-                );
-                table.insert("wheels", value(wheels));
-            }
-
-            distributions.push(table);
+            distributions.push(dist.to_toml(&dist_count_by_name)?);
         }
 
         doc.insert("distribution", Item::ArrayOfTables(distributions));
@@ -787,6 +733,64 @@ impl Distribution {
             id: self.id.clone(),
         }
         .into())
+    }
+
+    fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> anyhow::Result<Table> {
+        let mut table = Table::new();
+
+        table.insert("name", value(self.id.name.to_string()));
+        table.insert("version", value(self.id.version.to_string()));
+        table.insert("source", value(self.id.source.to_string()));
+
+        if let Some(ref sdist) = self.sdist {
+            table.insert("sdist", value(sdist.to_toml()?));
+        }
+
+        if !self.dependencies.is_empty() {
+            let deps = each_element_on_its_line_array(
+                self.dependencies
+                    .iter()
+                    .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
+            );
+            table.insert("dependencies", value(deps));
+        }
+
+        if !self.optional_dependencies.is_empty() {
+            let mut optional_deps = Table::new();
+            for (extra, deps) in &self.optional_dependencies {
+                let deps = each_element_on_its_line_array(
+                    deps.iter()
+                        .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
+                );
+                optional_deps.insert(extra.as_ref(), value(deps));
+            }
+            table.insert("optional-dependencies", Item::Table(optional_deps));
+        }
+
+        if !self.dev_dependencies.is_empty() {
+            let mut dev_dependencies = Table::new();
+            for (extra, deps) in &self.dev_dependencies {
+                let deps = each_element_on_its_line_array(
+                    deps.iter()
+                        .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
+                );
+                dev_dependencies.insert(extra.as_ref(), value(deps));
+            }
+            table.insert("dev-dependencies", Item::Table(dev_dependencies));
+        }
+
+        if !self.wheels.is_empty() {
+            let wheels = each_element_on_its_line_array(
+                self.wheels
+                    .iter()
+                    .map(Wheel::to_toml)
+                    .collect::<anyhow::Result<Vec<_>>>()?
+                    .into_iter(),
+            );
+            table.insert("wheels", value(wheels));
+        }
+
+        Ok(table)
     }
 
     fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
