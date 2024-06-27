@@ -115,3 +115,16 @@ However, It's possible to adjust uv's toolchain selection preference with the `t
 - `only-system`: Only use system toolchains, never use managed toolchains.
 
 These options allow disabling uv's managed toolchains entirely or always using them and ignoring any existing system installations.
+
+## Discovery order
+
+When searching for a toolchain, the following locations are checked:
+
+- Managed toolchains in the `UV_TOOLCHAIN_DIR`.
+- A Python interpreter on the `PATH` as `python3` on macOS and Linux, or `python.exe` on Windows.
+- On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
+  version.
+
+If a specific Python version is requested, e.g. `--python 3.7`, additional executable names are included in the search:
+
+- A Python interpreter on the `PATH` as, e.g., `python3.7` on macOS and Linux.
