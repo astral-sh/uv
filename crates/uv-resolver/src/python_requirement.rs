@@ -74,12 +74,15 @@ impl PythonRequirement {
         let version_major_minor_only = Version::new(version.release().iter().take(2));
         let expr_python_version = MarkerExpression::Version {
             key: MarkerValueVersion::PythonVersion,
-            specifier: VersionSpecifier::from_version(Operator::Equal, version_major_minor_only)
-                .unwrap(),
+            specifier: VersionSpecifier::from_version(
+                Operator::GreaterThanEqual,
+                version_major_minor_only,
+            )
+            .unwrap(),
         };
         let expr_python_full_version = MarkerExpression::Version {
             key: MarkerValueVersion::PythonFullVersion,
-            specifier: VersionSpecifier::from_version(Operator::Equal, version).unwrap(),
+            specifier: VersionSpecifier::from_version(Operator::GreaterThanEqual, version).unwrap(),
         };
         MarkerTree::And(vec![
             MarkerTree::Expression(expr_python_version),

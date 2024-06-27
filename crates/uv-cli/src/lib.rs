@@ -569,8 +569,12 @@ pub struct PipCompileArgs {
     pub python_platform: Option<TargetTriple>,
 
     /// Perform a universal resolution, attempting to generate a single `requirements.txt` output
-    /// file that is compatible with all operating systems, architectures and supported Python
-    /// versions.
+    /// file that is compatible with all operating systems, architectures, and Python
+    /// implementations.
+    ///
+    /// In universal mode, the current Python version (or user-provided `--python-version`) will be
+    /// treated as a lower bound. For example, `--universal --python-version 3.7` would produce a
+    /// universal resolution for Python 3.7 and later.
     #[arg(long, overrides_with("no_universal"))]
     pub universal: bool,
 
