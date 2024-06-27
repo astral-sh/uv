@@ -235,7 +235,7 @@ impl ToolRunSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolInstallSettings {
-    pub(crate) name: String,
+    pub(crate) package: String,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) python: Option<String>,
@@ -249,7 +249,7 @@ impl ToolInstallSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolInstallArgs {
-            name,
+            package,
             from,
             with,
             installer,
@@ -260,7 +260,7 @@ impl ToolInstallSettings {
         } = args;
 
         Self {
-            name,
+            package,
             from,
             with,
             python,

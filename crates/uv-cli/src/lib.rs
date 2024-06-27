@@ -1908,13 +1908,13 @@ pub struct ToolRunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolInstallArgs {
-    /// The command to install.
-    pub name: String,
+    /// The package to install commands from.
+    pub package: String,
 
-    /// Use the given package to provide the command.
+    /// The package to install commands from.
     ///
-    /// By default, the package name is assumed to match the command name.
-    #[arg(long)]
+    /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
+    #[arg(long, hide = true)]
     pub from: Option<String>,
 
     /// Include the following extra requirements.
