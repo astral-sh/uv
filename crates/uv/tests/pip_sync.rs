@@ -66,7 +66,7 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No virtual or system environment found
+    error: No virtual environment found
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));

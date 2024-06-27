@@ -102,7 +102,7 @@ mod tests {
     use crate::{
         implementation::ImplementationName, managed::InstalledToolchains, toolchain::Toolchain,
         virtualenv::virtualenv_python_executable, PythonVersion, ToolchainNotFound,
-        ToolchainRequest, ToolchainSource, VersionRequest,
+        ToolchainRequest, ToolchainSource,
     };
 
     struct TestContext {
@@ -413,7 +413,7 @@ mod tests {
             )
         });
         assert!(
-            matches!(result, Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))),
+            matches!(result, Ok(Err(ToolchainNotFound { .. }))),
             "With an empty path, no Python installation should be detected got {result:?}"
         );
 
@@ -427,7 +427,7 @@ mod tests {
             )
         });
         assert!(
-            matches!(result, Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))),
+            matches!(result, Ok(Err(ToolchainNotFound { .. }))),
             "With an unset path, no Python installation should be detected got {result:?}"
         );
 
@@ -453,7 +453,7 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))
+                Ok(Err(ToolchainNotFound { .. }))
             ),
             "With an non-executable Python, no Python installation should be detected; got {result:?}"
         );
@@ -566,7 +566,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::NoPythonInstallation(..))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             // TODO(zanieb): We could improve the error handling to hint this to the user
             "If only Python 2 is available, we should not find a toolchain; got {result:?}"
         );
@@ -792,13 +792,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(
-                result,
-                Err(ToolchainNotFound::NoMatchingVersion(
-                    ..,
-                    VersionRequest::MajorMinor(3, 9)
-                ))
-            ),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find a toolchain; got {result:?}"
         );
 
@@ -819,13 +813,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(
-                result,
-                Err(ToolchainNotFound::NoMatchingVersion(
-                    ..,
-                    VersionRequest::MajorMinorPatch(3, 11, 9)
-                ))
-            ),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find a toolchain; got {result:?}"
         );
 
@@ -1301,14 +1289,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(
-                result,
-                Err(ToolchainNotFound::NoPythonInstallation(
-                    ToolchainPreference::OnlySystem,
-                    _,
-                    None
-                ))
-            ),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find an toolchain; got {result:?}"
         );
 
@@ -1325,14 +1306,7 @@ mod tests {
             },
         )?;
         assert!(
-            matches!(
-                result,
-                Err(ToolchainNotFound::NoMatchingVersion(
-                    ToolchainPreference::OnlySystem,
-                    _,
-                    VersionRequest::MajorMinorPatch(3, 12, 3)
-                ))
-            ),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find an toolchain; got {result:?}"
         );
         Ok(())
@@ -1366,7 +1340,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::NoPythonInstallation(..))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find it without a specific request"
         );
 
@@ -1379,7 +1353,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::NoMatchingVersion(..))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find it via a matching version request"
         );
 
@@ -1593,7 +1567,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::FileNotFound(_))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find the file; got {result:?}"
         );
 
@@ -1643,7 +1617,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::NoPythonInstallation(..))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not the pypy interpreter if not named `python` or requested; got {result:?}"
         );
 
