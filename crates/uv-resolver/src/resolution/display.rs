@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
-use petgraph::visit::{EdgeRef, Topo};
+use petgraph::graph::NodeIndex;
+use petgraph::visit::{Dfs, EdgeRef};
 use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
@@ -348,8 +349,8 @@ fn to_requirements_txt_graph(graph: &ResolutionPetGraph) -> IntermediatePetGraph
 /// The graph is directed, so if any edge contains a marker, we need to propagate it to all
 /// downstream nodes.
 fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
-    let mut topo = Topo::new(&graph);
-    while let Some(index) = topo.next(&graph) {
+    let mut dfs = Dfs::new(&graph, NodeIndex::default());
+    while let Some(index) = dfs.next(&graph) {
         let marker_tree: Option<MarkerTree> = {
             // Fold over the edges to combine the marker trees. If any edge is `None`, then
             // the combined marker tree is `None`.
