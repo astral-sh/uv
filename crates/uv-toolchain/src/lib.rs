@@ -792,7 +792,7 @@ mod tests {
             matches!(
                 result,
                 Err(ToolchainNotFound::NoMatchingVersion(
-                    _,
+                    ..,
                     VersionRequest::MajorMinor(3, 9)
                 ))
             ),
@@ -819,7 +819,7 @@ mod tests {
             matches!(
                 result,
                 Err(ToolchainNotFound::NoMatchingVersion(
-                    _,
+                    ..,
                     VersionRequest::MajorMinorPatch(3, 11, 9)
                 ))
             ),
@@ -1301,8 +1301,8 @@ mod tests {
             matches!(
                 result,
                 Err(ToolchainNotFound::NoPythonInstallation(
-                    // TODO(zanieb): We need the environment preference in the error
                     ToolchainPreference::OnlySystem,
+                    _,
                     None
                 ))
             ),
@@ -1326,6 +1326,7 @@ mod tests {
                 result,
                 Err(ToolchainNotFound::NoMatchingVersion(
                     ToolchainPreference::OnlySystem,
+                    _,
                     VersionRequest::MajorMinorPatch(3, 12, 3)
                 ))
             ),
@@ -1569,7 +1570,7 @@ mod tests {
         assert_eq!(
             toolchain.interpreter().python_full_version().to_string(),
             "3.10.0",
-            "We should prefer the requested directory over the system and active virtul toolchains"
+            "We should prefer the requested directory over the system and active virtual environments"
         );
 
         Ok(())

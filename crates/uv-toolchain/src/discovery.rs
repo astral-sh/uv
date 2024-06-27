@@ -119,15 +119,32 @@ type ToolchainResult = Result<Toolchain, ToolchainNotFound>;
 #[derive(Clone, Debug, Error)]
 pub enum ToolchainNotFound {
     /// No Python installations were found.
-    NoPythonInstallation(ToolchainPreference, Option<VersionRequest>),
+    NoPythonInstallation(
+        ToolchainPreference,
+        EnvironmentPreference,
+        Option<VersionRequest>,
+    ),
     /// No Python installations with the requested version were found.
-    NoMatchingVersion(ToolchainPreference, VersionRequest),
+    NoMatchingVersion(ToolchainPreference, EnvironmentPreference, VersionRequest),
     /// No Python installations with the requested key were found.
-    NoMatchingKey(ToolchainPreference, PythonDownloadRequest),
+    NoMatchingKey(
+        ToolchainPreference,
+        EnvironmentPreference,
+        PythonDownloadRequest,
+    ),
     /// No Python installations with the requested implementation name were found.
-    NoMatchingImplementation(ToolchainPreference, ImplementationName),
+    NoMatchingImplementation(
+        ToolchainPreference,
+        EnvironmentPreference,
+        ImplementationName,
+    ),
     /// No Python installations with the requested implementation name and version were found.
-    NoMatchingImplementationVersion(ToolchainPreference, ImplementationName, VersionRequest),
+    NoMatchingImplementationVersion(
+        ToolchainPreference,
+        EnvironmentPreference,
+        ImplementationName,
+        VersionRequest,
+    ),
     /// The requested file path does not exist.
     FileNotFound(PathBuf),
     /// The requested directory path does not exist.
@@ -733,27 +750,36 @@ pub(crate) fn find_toolchain(
     } else {
         let err = match request {
             ToolchainRequest::Implementation(implementation) => {
-                ToolchainNotFound::NoMatchingImplementation(preference, *implementation)
+                ToolchainNotFound::NoMatchingImplementation(
+                    preference,
+                    environments,
+                    *implementation,
+                )
             }
             ToolchainRequest::ImplementationVersion(implementation, version) => {
                 ToolchainNotFound::NoMatchingImplementationVersion(
                     preference,
+                    environments,
                     *implementation,
                     version.clone(),
                 )
             }
             ToolchainRequest::Version(version) => {
-                ToolchainNotFound::NoMatchingVersion(preference, version.clone())
+                ToolchainNotFound::NoMatchingVersion(preference, environments, version.clone())
             }
             ToolchainRequest::ExecutableName(name) => {
                 ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone())
             }
-            ToolchainRequest::Key(key) => ToolchainNotFound::NoMatchingKey(preference, key.clone()),
+            ToolchainRequest::Key(key) => {
+                ToolchainNotFound::NoMatchingKey(preference, environments, key.clone())
+            }
             // TODO(zanieb): As currently implemented, these are unreachable as they are handled in `find_toolchains`
             // We should avoid this duplication
             ToolchainRequest::Directory(path) => ToolchainNotFound::DirectoryNotFound(path.clone()),
             ToolchainRequest::File(path) => ToolchainNotFound::FileNotFound(path.clone()),
-            ToolchainRequest::Any => ToolchainNotFound::NoPythonInstallation(preference, None),
+            ToolchainRequest::Any => {
+                ToolchainNotFound::NoPythonInstallation(preference, environments, None)
+            }
         };
         Ok(ToolchainResult::Err(err))
     }
@@ -819,7 +845,7 @@ pub fn find_best_toolchain(
         find_toolchain(&request, environments, preference, cache)?.map_err(|err| {
             // Use a more general error in this case since we looked for multiple versions
             if matches!(err, ToolchainNotFound::NoMatchingVersion(..)) {
-                ToolchainNotFound::NoPythonInstallation(preference, None)
+                ToolchainNotFound::NoPythonInstallation(preference, environments, None)
             } else {
                 err
             }
@@ -1495,46 +1521,76 @@ impl fmt::Display for ToolchainSource {
 
 impl fmt::Display for ToolchainPreference {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::OnlyManaged => f.write_str("managed toolchains"),
-            Self::OnlySystem => f.write_str("system toolchains"),
-            Self::PreferInstalledManaged | Self::PreferManaged | Self::PreferSystem => {
-                f.write_str("managed or system toolchains")
+        let s = match self {
+            Self::OnlyManaged => "managed toolchains",
+            Self::PreferManaged | Self::PreferInstalledManaged | Self::PreferSystem => {
+                "managed or system toolchains"
             }
-        }
+            Self::OnlySystem => "system toolchains",
+        };
+        f.write_str(s)
+    }
+}
+
+fn message_for_preferences(
+    toolchains: ToolchainPreference,
+    environments: EnvironmentPreference,
+) -> String {
+    match environments {
+        EnvironmentPreference::Any => format!("virtual environments or {toolchains}"),
+        // TODO(zanieb): This depends on the request type, if we can get that here we can provide a clearer message
+        EnvironmentPreference::ExplicitSystem => format!("virtual environments or {toolchains}"),
+        EnvironmentPreference::OnlySystem => toolchains.to_string(),
+        EnvironmentPreference::OnlyVirtual => "virtual environments".to_string(),
     }
 }
 
 impl fmt::Display for ToolchainNotFound {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NoPythonInstallation(sources, None | Some(VersionRequest::Any)) => {
+            Self::NoPythonInstallation(
+                toolchains,
+                environments,
+                None | Some(VersionRequest::Any),
+            ) => {
+                let sources = message_for_preferences(*toolchains, *environments);
                 write!(f, "No Python interpreters found in {sources}")
             }
-            Self::NoPythonInstallation(sources, Some(version)) => {
+            Self::NoPythonInstallation(toolchains, environments, Some(version)) => {
+                let sources = message_for_preferences(*toolchains, *environments);
                 write!(f, "No Python {version} interpreters found in {sources}")
             }
-            Self::NoMatchingVersion(sources, VersionRequest::Any) => {
+            Self::NoMatchingVersion(toolchains, environments, VersionRequest::Any) => {
+                let sources = message_for_preferences(*toolchains, *environments);
                 write!(f, "No Python interpreter found in {sources}")
             }
-            Self::NoMatchingVersion(sources, version) => {
+            Self::NoMatchingVersion(toolchains, environments, version) => {
+                let sources = message_for_preferences(*toolchains, *environments);
                 write!(f, "No interpreter found for Python {version} in {sources}")
             }
-            Self::NoMatchingImplementation(sources, implementation) => {
+            Self::NoMatchingImplementation(toolchains, environments, implementation) => {
+                let sources = message_for_preferences(*toolchains, *environments);
                 write!(
                     f,
                     "No interpreter found for {} in {sources}",
                     implementation.pretty()
                 )
             }
-            Self::NoMatchingImplementationVersion(sources, implementation, version) => {
+            Self::NoMatchingImplementationVersion(
+                toolchains,
+                environments,
+                implementation,
+                version,
+            ) => {
+                let sources = message_for_preferences(*toolchains, *environments);
                 write!(
                     f,
                     "No interpreter found for {} {version} in {sources}",
                     implementation.pretty()
                 )
             }
-            Self::NoMatchingKey(sources, key) => {
+            Self::NoMatchingKey(toolchains, environments, key) => {
+                let sources = message_for_preferences(*toolchains, *environments);
                 write!(f, "No interpreter found key {key} in {sources}")
             }
             Self::FileNotFound(path) => write!(
