@@ -77,14 +77,10 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
-
-        [[tool.entrypoints]]
-        name = "black"
-        install_path = "[TEMP_DIR]/bin/black"
-
-        [[tool.entrypoints]]
-        name = "blackd"
-        install_path = "[TEMP_DIR]/bin/blackd"
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -162,10 +158,9 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["flask"]
-
-        [[tool.entrypoints]]
-        name = "flask"
-        install_path = "[TEMP_DIR]/bin/flask"
+        entrypoints = [
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+        ]
         "###);
     });
 }
@@ -235,14 +230,10 @@ fn tool_install_version() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black==24.2.0"]
-
-        [[tool.entrypoints]]
-        name = "black"
-        install_path = "[TEMP_DIR]/bin/black"
-
-        [[tool.entrypoints]]
-        name = "blackd"
-        install_path = "[TEMP_DIR]/bin/blackd"
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -387,14 +378,10 @@ fn tool_install_already_installed() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
-
-        [[tool.entrypoints]]
-        name = "black"
-        install_path = "[TEMP_DIR]/bin/black"
-
-        [[tool.entrypoints]]
-        name = "blackd"
-        install_path = "[TEMP_DIR]/bin/blackd"
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -424,14 +411,10 @@ fn tool_install_already_installed() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
-
-        [[tool.entrypoints]]
-        name = "black"
-        install_path = "[TEMP_DIR]/bin/black"
-
-        [[tool.entrypoints]]
-        name = "blackd"
-        install_path = "[TEMP_DIR]/bin/blackd"
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -649,14 +632,10 @@ fn tool_install_entry_point_exists() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
-
-        [[tool.entrypoints]]
-        name = "black"
-        install_path = "[TEMP_DIR]/bin/black"
-
-        [[tool.entrypoints]]
-        name = "blackd"
-        install_path = "[TEMP_DIR]/bin/blackd"
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -686,14 +665,10 @@ fn tool_install_entry_point_exists() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
-
-        [[tool.entrypoints]]
-        name = "black"
-        install_path = "[TEMP_DIR]/bin/black"
-
-        [[tool.entrypoints]]
-        name = "blackd"
-        install_path = "[TEMP_DIR]/bin/blackd"
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 

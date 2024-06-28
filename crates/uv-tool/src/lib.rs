@@ -135,10 +135,9 @@ impl InstalledTools {
             path.user_display()
         );
 
-        let doc = toml::to_string(&tool_receipt)
-            .map_err(|err| Error::ReceiptWrite(path.clone(), Box::new(err)))?;
+        let doc = tool_receipt.to_toml();
 
-        // Save the modified `tools.toml`.
+        // Save the modified `uv-receipt.toml`.
         fs_err::write(&path, doc)?;
 
         Ok(())

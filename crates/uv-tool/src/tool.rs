@@ -1,11 +1,15 @@
 use std::path::PathBuf;
 
 use pypi_types::VerbatimParsedUrl;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use toml_edit::value;
+use toml_edit::Array;
+use toml_edit::Table;
+use toml_edit::Value;
 
 /// A tool entry.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
@@ -17,10 +21,38 @@ pub struct Tool {
     entrypoints: Vec<ToolEntrypoint>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct ToolEntrypoint {
     name: String,
     install_path: PathBuf,
+}
+
+/// Format an array so that each element is on its own line and has a trailing comma.
+///
+/// Example:
+///
+/// ```toml
+/// requirements = [
+///     "foo",
+///     "bar",
+/// ]
+/// ```
+fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value>>) -> Array {
+    let mut array = elements
+        .map(Into::into)
+        .map(|mut value| {
+            // Each dependency is on its own line and indented.
+            value.decor_mut().set_prefix("\n    ");
+            value
+        })
+        .collect::<Array>();
+    // With a trailing comma, inserting another entry doesn't change the preceding line,
+    // reducing the diff noise.
+    array.set_trailing_comma(true);
+    // The line break between the last element's comma and the closing square bracket.
+    array.set_trailing("\n");
+    array
 }
 
 impl Tool {
@@ -38,11 +70,56 @@ impl Tool {
             entrypoints,
         }
     }
+
+    /// Returns the TOML table for this tool.
+    pub(crate) fn to_toml(&self) -> Table {
+        let mut table = Table::new();
+
+        table.insert("requirements", {
+            let requirements = match self.requirements.as_slice() {
+                [] => Array::new(),
+                [requirement] => Array::from_iter([Value::from(requirement.to_string())]),
+                requirements => each_element_on_its_line_array(
+                    requirements
+                        .iter()
+                        .map(|requirement| Value::from(requirement.to_string())),
+                ),
+            };
+            value(requirements)
+        });
+
+        if let Some(ref python) = self.python {
+            table.insert("python", value(python));
+        }
+
+        table.insert("entrypoints", {
+            let entrypoints = each_element_on_its_line_array(
+                self.entrypoints
+                    .iter()
+                    .map(ToolEntrypoint::to_toml)
+                    .map(toml_edit::Table::into_inline_table),
+            );
+            value(entrypoints)
+        });
+
+        table
+    }
 }
 
 impl ToolEntrypoint {
     /// Create a new [`ToolEntrypoint`].
     pub fn new(name: String, install_path: PathBuf) -> Self {
         Self { name, install_path }
+    }
+
+    /// Returns the TOML table for this entrypoint.
+    pub(crate) fn to_toml(&self) -> Table {
+        let mut table = Table::new();
+        table.insert("name", value(&self.name));
+        table.insert(
+            "install-path",
+            value(self.install_path.to_string_lossy().to_string()),
+        );
+        table
     }
 }

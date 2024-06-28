@@ -5025,6 +5025,7 @@ dependencies = [
  "serde",
  "thiserror",
  "toml",
+ "toml_edit",
  "tracing",
  "uv-cache",
  "uv-fs",
