@@ -738,9 +738,7 @@ impl Distribution {
     fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> anyhow::Result<Table> {
         let mut table = Table::new();
 
-        table.insert("name", value(self.id.name.to_string()));
-        table.insert("version", value(self.id.version.to_string()));
-        table.insert("source", value(self.id.source.to_string()));
+        self.id.to_toml(None, &mut table);
 
         if let Some(ref sdist) = self.sdist {
             table.insert("sdist", value(sdist.to_toml()?));
@@ -921,6 +919,21 @@ impl DistributionId {
             name,
             version,
             source,
+        }
+    }
+
+    /// Writes this distribution ID inline into the table given.
+    ///
+    /// When a map is given, and if the package name in this ID is unambiguous
+    /// (i.e., it has a count of 1 in the map), then the `version` and `source`
+    /// fields are omitted. In all other cases, including when a map is not
+    /// given, the `version` and `source` fields are written.
+    fn to_toml(&self, dist_count_by_name: Option<&FxHashMap<PackageName, u64>>, table: &mut Table) {
+        let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
+        table.insert("name", value(self.name.to_string()));
+        if count.map(|count| count > 1).unwrap_or(true) {
+            table.insert("version", value(self.version.to_string()));
+            self.source.to_toml(table);
         }
     }
 }
@@ -1123,6 +1136,10 @@ impl Source {
                     .map(ToString::to_string),
             },
         )
+    }
+
+    fn to_toml(&self, table: &mut Table) {
+        table.insert("source", value(self.to_string()));
     }
 }
 
@@ -1778,16 +1795,9 @@ impl Dependency {
 
     /// Returns the TOML representation of this dependency.
     fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> Table {
-        let count = dist_count_by_name
-            .get(&self.distribution_id.name)
-            .copied()
-            .expect("all dependencies have a corresponding distribution");
         let mut table = Table::new();
-        table.insert("name", value(self.distribution_id.name.to_string()));
-        if count > 1 {
-            table.insert("version", value(self.distribution_id.version.to_string()));
-            table.insert("source", value(self.distribution_id.source.to_string()));
-        }
+        self.distribution_id
+            .to_toml(Some(dist_count_by_name), &mut table);
         if let Some(ref extra) = self.extra {
             table.insert("extra", value(extra.to_string()));
         }
