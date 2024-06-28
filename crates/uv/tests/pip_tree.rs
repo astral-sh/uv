@@ -77,6 +77,7 @@ fn single_package() {
 
 // `pandas` requires `numpy` with markers on Python version.
 #[test]
+#[cfg(not(windows))]
 fn python_version_marker() {
     let context = TestContext::new("3.12");
 
