@@ -13,7 +13,7 @@ use uv_fs::{LockedFile, Simplified};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 
 pub use receipt::ToolReceipt;
-pub use tool::Tool;
+pub use tool::{Tool, ToolEntrypoint};
 
 use uv_state::{StateBucket, StateStore};
 mod receipt;
