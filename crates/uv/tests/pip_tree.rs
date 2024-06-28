@@ -81,7 +81,7 @@ fn python_version_marker() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("pandas").unwrap();
+    requirements_txt.write_str("pandas==2.2.1").unwrap();
 
     uv_snapshot!(context
         .pip_install()
