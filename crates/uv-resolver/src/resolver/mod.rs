@@ -404,6 +404,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.fork_urls,
                     visited,
                     &request_sink,
+                    &state.markers,
                 )?;
 
                 // Pick the next compatible version.
@@ -682,6 +683,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// Returns `None` when there are no versions in the given range, rejecting the current partial
     /// solution.
     #[instrument(skip_all, fields(%package))]
+    #[allow(clippy::too_many_arguments)]
     fn choose_version(
         &self,
         package: &PubGrubPackage,
@@ -690,6 +692,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: &ForkUrls,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
+        // For logging only
+        state_markers: &MarkerTree,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         match &**package {
             PubGrubPackageInner::Root(_) => {
@@ -710,7 +714,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
                     self.choose_version_url(name, range, url)
                 } else {
-                    self.choose_version_registry(name, range, package, pins, visited, request_sink)
+                    self.choose_version_registry(
+                        name,
+                        range,
+                        package,
+                        pins,
+                        visited,
+                        request_sink,
+                        state_markers,
+                    )
                 }
             }
         }
@@ -812,6 +824,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     /// Given a candidate registry requirement, choose the next version in range to try, or `None`
     /// if there is no version in this range.
+    #[allow(clippy::too_many_arguments)]
     fn choose_version_registry(
         &self,
         name: &PackageName,
@@ -820,6 +833,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
+        // For logging only
+        state_markers: &MarkerTree,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
         let versions_response = self
@@ -884,12 +899,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
         };
 
-        debug!(
-            "Selecting: {}=={} ({})",
-            name,
-            candidate.version(),
-            filename,
-        );
+        if state_markers.is_universal() {
+            debug!(
+                "Selecting: {}=={} ({})",
+                name,
+                candidate.version(),
+                filename,
+            );
+        } else {
+            debug!(
+                "Selecting: {}=={} {{{}}} ({})",
+                name,
+                state_markers,
+                candidate.version(),
+                filename,
+            );
+        }
 
         // We want to return a package pinned to a specific version; but we _also_ want to
         // store the exact file that we selected to satisfy that version.
