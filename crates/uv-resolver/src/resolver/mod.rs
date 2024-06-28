@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
 use std::sync::Arc;
+use std::time::Instant;
 use std::{iter, thread};
 
 use dashmap::DashMap;
@@ -336,6 +337,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         'FORK: while let Some(mut state) = forked_states.pop() {
+            let start = Instant::now();
             loop {
                 // Run unit propagation.
                 state
@@ -364,6 +366,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
                     }
+                    debug!(
+                        "Split {} took {:.3}s",
+                        state.markers,
+                        start.elapsed().as_secs_f32()
+                    );
                     resolutions.push(state.into_resolution());
                     continue 'FORK;
                 };
@@ -491,7 +498,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     version.clone(),
                                     UnavailableReason::Version(reason),
                                 ));
-                            forked_states.push(state);
+                            continue;
                         }
                         ForkedDependencies::Unforked(dependencies) => {
                             state.add_package_version_dependencies(
@@ -512,7 +519,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 let url = package.name().and_then(|name| state.fork_urls.get(name));
                                 self.visit_package(package, url, &request_sink)?;
                             }
-                            forked_states.push(state);
+                            continue;
                         }
                         ForkedDependencies::Forked {
                             forks,
@@ -532,6 +539,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             // as it needs to be. We basically move the state
                             // into `forked_states`, and then only clone it if
                             // there is at least one more fork to visit.
+                            let markers = state.markers.clone();
                             let mut cur_state = Some(state);
                             let forks_len = forks.len();
                             for (i, fork) in forks.into_iter().enumerate() {
@@ -564,9 +572,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
                                 forked_states.push(forked_state);
                             }
+                            if markers.is_universal() {
+                                debug!(
+                                    "Pre-fork split universal took {:.3}s",
+                                    start.elapsed().as_secs_f32()
+                                );
+                            } else {
+                                debug!(
+                                    "Pre-fork split {} took {:.3}s",
+                                    markers,
+                                    start.elapsed().as_secs_f32()
+                                );
+                            }
+                            continue 'FORK;
                         }
                     }
-                    continue 'FORK;
                 }
                 // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
                 // terms and can add the decision directly.
