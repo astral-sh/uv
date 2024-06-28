@@ -786,7 +786,7 @@ async fn run() -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
 
-            commands::run_tool(
+            commands::tool_run(
                 args.command,
                 args.python,
                 args.from,
