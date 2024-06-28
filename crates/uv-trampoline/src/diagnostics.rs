@@ -1,10 +1,8 @@
-extern crate alloc;
-
-use alloc::{ffi::CString, string::String};
-use core::{
+use std::{
     convert::Infallible,
     ptr::{addr_of_mut, null, null_mut},
 };
+use std::{ffi::CString, string::String};
 
 use ufmt_write::uWrite;
 use windows_sys::Win32::{
