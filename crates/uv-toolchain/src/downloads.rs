@@ -17,7 +17,7 @@ use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, instrument};
 use url::Url;
-use uv_fs::Simplified;
+use uv_fs::{rename_with_retry, Simplified};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -427,7 +427,7 @@ impl PythonDownload {
 
         // Persist it to the target
         debug!("Moving {} to {}", extracted.display(), path.user_display());
-        fs_err::tokio::rename(extracted, &path)
+        rename_with_retry(extracted, &path)
             .await
             .map_err(|err| Error::CopyError {
                 to: path.clone(),
