@@ -118,7 +118,7 @@ While uv supports a large subset of the `pip` interface, it does not support the
 In some cases, those differences are intentional; in others, they're a result of uv's early stage of
 development.
 
-For details, see our [`pip` compatibility guide](./PIP_COMPATIBILITY.md).
+For details, see our [`pip` compatibility guide](https://github.com/astral-sh/uv/blob/main/PIP_COMPATIBILITY.md).
 
 Like `pip-compile`, uv generates a platform-specific `requirements.txt` file (unlike, e.g.,
 `poetry` and `pdm`, which generate platform-agnostic `poetry.lock` and `pdm.lock` files). As such,
@@ -308,7 +308,7 @@ Authentication may be used for hosts specified in the following contexts:
 - `find-links`
 - `package @ https://...`
 
-See the [`pip` compatibility guide](PIP_COMPATIBILITY.md#registry-authentication) for details on differences from
+See the [`pip` compatibility guide](https://github.com/astral-sh/uv/blob/main/PIP_COMPATIBILITY.md#registry-authentication) for details on differences from
 `pip`.
 
 ### Dependency caching
@@ -424,7 +424,7 @@ to model, and are a frequent source of bugs in other packaging tools. uv's pre-r
 is _intentionally_ limited and _intentionally_ requires user opt-in for pre-releases, to ensure
 correctness.
 
-For more, see ["Pre-release compatibility"](./PIP_COMPATIBILITY.md#pre-release-compatibility)
+For more, see ["Pre-release compatibility"](https://github.com/astral-sh/uv/blob/main/PIP_COMPATIBILITY.md#pre-release-compatibility)
 
 ### Dependency overrides
 
@@ -650,8 +650,8 @@ for Windows support.
 
 uv is licensed under either of
 
-- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT)
+- Apache License, Version 2.0, ([LICENSE-APACHE](https://github.com/astral-sh/uv/blob/main/LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](https://github.com/astral-sh/uv/blob/main/LICENSE-MIT) or https://opensource.org/licenses/MIT)
 
 at your option.
 
