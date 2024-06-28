@@ -22,6 +22,7 @@ use uv_configuration::{
     KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple,
     Upgrade,
 };
+use uv_distribution::pyproject::DependencyType;
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
@@ -434,7 +435,7 @@ impl LockSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
     pub(crate) requirements: Vec<RequirementsSource>,
-    pub(crate) dev: bool,
+    pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
     pub(crate) extras: Vec<ExtraName>,
     pub(crate) raw_sources: bool,
@@ -454,6 +455,7 @@ impl AddSettings {
         let AddArgs {
             requirements,
             dev,
+            optional,
             editable,
             extra,
             raw_sources,
@@ -472,9 +474,17 @@ impl AddSettings {
             .map(RequirementsSource::Package)
             .collect::<Vec<_>>();
 
+        let dependency_type = if let Some(group) = optional {
+            DependencyType::Optional(group)
+        } else if dev {
+            DependencyType::Dev
+        } else {
+            DependencyType::Production
+        };
+
         Self {
             requirements,
-            dev,
+            dependency_type,
             editable,
             raw_sources,
             rev,
@@ -497,7 +507,7 @@ impl AddSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
     pub(crate) requirements: Vec<PackageName>,
-    pub(crate) dev: bool,
+    pub(crate) dependency_type: DependencyType,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
 }
@@ -508,14 +518,23 @@ impl RemoveSettings {
     pub(crate) fn resolve(args: RemoveArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let RemoveArgs {
             dev,
+            optional,
             requirements,
             package,
             python,
         } = args;
 
+        let dependency_type = if let Some(group) = optional {
+            DependencyType::Optional(group)
+        } else if dev {
+            DependencyType::Dev
+        } else {
+            DependencyType::Production
+        };
+
         Self {
             requirements,
-            dev,
+            dependency_type,
             package,
             python,
         }

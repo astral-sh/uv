@@ -289,6 +289,17 @@ impl Source {
     }
 }
 
+/// The type of a dependency in a `pyproject.toml`.
+#[derive(Debug, Clone)]
+pub enum DependencyType {
+    /// A dependency in `project.dependencies`.
+    Production,
+    /// A dependency in `tool.uv.dev-dependencies`.
+    Dev,
+    /// A dependency in `project.optional-dependencies.{0}`.
+    Optional(ExtraName),
+}
+
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 mod serde_from_and_to_string {
     use std::fmt::Display;

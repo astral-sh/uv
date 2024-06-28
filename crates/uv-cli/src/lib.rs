@@ -1763,8 +1763,12 @@ pub struct AddArgs {
     pub requirements: Vec<String>,
 
     /// Add the requirements as development dependencies.
-    #[arg(long)]
+    #[arg(long, conflicts_with("optional"))]
     pub dev: bool,
+
+    /// Add the requirements to the specified optional dependency group.
+    #[arg(long, conflicts_with("dev"))]
+    pub optional: Option<ExtraName>,
 
     /// Add the requirements as editables.
     #[arg(long, default_missing_value = "true", num_args(0..=1))]
@@ -1829,8 +1833,12 @@ pub struct RemoveArgs {
     pub requirements: Vec<PackageName>,
 
     /// Remove the requirements from development dependencies.
-    #[arg(long)]
+    #[arg(long, conflicts_with("optional"))]
     pub dev: bool,
+
+    /// Remove the requirements from the specified optional dependency group.
+    #[arg(long, conflicts_with("dev"))]
+    pub optional: Option<ExtraName>,
 
     /// Remove the dependency from a specific package in the workspace.
     #[arg(long, conflicts_with = "isolated")]
