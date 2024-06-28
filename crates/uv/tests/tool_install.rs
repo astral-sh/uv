@@ -15,7 +15,9 @@ mod common;
 /// Test installing a tool with `uv tool install`
 #[test]
 fn tool_install() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -316,7 +318,9 @@ fn tool_install_from() {
 /// Test installing and reinstalling an already installed tool
 #[test]
 fn tool_install_already_installed() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 

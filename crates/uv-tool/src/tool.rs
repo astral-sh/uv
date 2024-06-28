@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use path_slash::PathBufExt;
 use pypi_types::VerbatimParsedUrl;
 use serde::Deserialize;
 use toml_edit::value;
@@ -118,7 +119,8 @@ impl ToolEntrypoint {
         table.insert("name", value(&self.name));
         table.insert(
             "install-path",
-            value(self.install_path.to_string_lossy().to_string()),
+            // Use cross-platform slashes so the toml string type does not change
+            value(self.install_path.to_slash_lossy().to_string()),
         );
         table
     }
