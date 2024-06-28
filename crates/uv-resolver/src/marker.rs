@@ -1,4 +1,4 @@
-#![allow(clippy::enum_glob_use)]
+#![allow(clippy::enum_glob_use, clippy::single_match_else)]
 
 use std::collections::HashMap;
 use std::ops::Bound::{self, *};
@@ -145,7 +145,13 @@ pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPython
 ///
 /// This is useful in cases where creating conjunctions or disjunctions might occur in a non-deterministic
 /// order. This routine will attempt to erase the distinction created by such a construction.
-pub(crate) fn normalize(tree: MarkerTree) -> Option<MarkerTree> {
+pub(crate) fn normalize(mut tree: MarkerTree) -> Option<MarkerTree> {
+    filter_all(&mut tree);
+    normalize_all(tree)
+}
+
+/// Normalize the marker tree recursively.
+pub(crate) fn normalize_all(tree: MarkerTree) -> Option<MarkerTree> {
     match tree {
         MarkerTree::And(trees) => {
             let mut reduced = Vec::new();
@@ -155,20 +161,27 @@ pub(crate) fn normalize(tree: MarkerTree) -> Option<MarkerTree> {
                 // Simplify nested expressions as much as possible first.
                 //
                 // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`), omit it.
-                let Some(subtree) = normalize(subtree) else {
+                let Some(subtree) = normalize_all(subtree) else {
                     continue;
                 };
 
-                // Extract expressions we may be able to simplify more.
-                if let MarkerTree::Expression(ref expr) = subtree {
-                    if let Some((key, range)) = keyed_range(expr) {
-                        versions.entry(key.clone()).or_default().push(range);
-                        continue;
+                match subtree {
+                    MarkerTree::Or(_) => reduced.push(subtree),
+                    // Flatten nested `And` expressions.
+                    MarkerTree::And(subtrees) => reduced.extend(subtrees),
+                    // Extract expressions we may be able to simplify more.
+                    MarkerTree::Expression(ref expr) => {
+                        if let Some((key, range)) = keyed_range(expr) {
+                            versions.entry(key.clone()).or_default().push(range);
+                            continue;
+                        }
+
+                        reduced.push(subtree);
                     }
                 }
-                reduced.push(subtree);
             }
 
+            // Combine version ranges.
             simplify_ranges(&mut reduced, versions, |ranges| {
                 ranges
                     .iter()
@@ -193,19 +206,25 @@ pub(crate) fn normalize(tree: MarkerTree) -> Option<MarkerTree> {
                 // Simplify nested expressions as much as possible first.
                 //
                 // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`), return `true`.
-                let subtree = normalize(subtree)?;
+                let subtree = normalize_all(subtree)?;
 
-                // Extract expressions we may be able to simplify more.
-                if let MarkerTree::Expression(ref expr) = subtree {
-                    if let Some((key, range)) = keyed_range(expr) {
-                        versions.entry(key.clone()).or_default().push(range);
-                        continue;
+                match subtree {
+                    MarkerTree::And(_) => reduced.push(subtree),
+                    // Flatten nested `Or` expressions.
+                    MarkerTree::Or(subtrees) => reduced.extend(subtrees),
+                    // Extract expressions we may be able to simplify more.
+                    MarkerTree::Expression(ref expr) => {
+                        if let Some((key, range)) = keyed_range(expr) {
+                            versions.entry(key.clone()).or_default().push(range);
+                            continue;
+                        }
+
+                        reduced.push(subtree);
                     }
                 }
-
-                reduced.push(subtree);
             }
 
+            // Combine version ranges.
             simplify_ranges(&mut reduced, versions, |ranges| {
                 ranges
                     .iter()
@@ -224,6 +243,177 @@ pub(crate) fn normalize(tree: MarkerTree) -> Option<MarkerTree> {
 
         MarkerTree::Expression(_) => Some(tree),
     }
+}
+
+/// Removes redundant expressions from the tree recursively.
+///
+/// This function does not attempt to flatten or clean trees and may leave it in a denormalized state.
+pub(crate) fn filter_all(tree: &mut MarkerTree) {
+    match tree {
+        MarkerTree::And(trees) => {
+            for subtree in &mut *trees {
+                filter_all(subtree);
+            }
+
+            for conjunct in collect_expressions(trees) {
+                // Filter out redundant disjunctions.
+                trees.retain_mut(|tree| !filter_disjunctions(tree, &conjunct));
+
+                // Filter out redundant conjunctions.
+                for tree in &mut *trees {
+                    filter_conjuncts(tree, &conjunct);
+                }
+            }
+        }
+
+        MarkerTree::Or(trees) => {
+            for subtree in &mut *trees {
+                filter_all(subtree);
+            }
+
+            for disjunct in collect_expressions(trees) {
+                // Filter out redundant conjunctions.
+                trees.retain_mut(|tree| !filter_conjunctions(tree, &disjunct));
+
+                // Filter out redundant disjunctions.
+                for tree in &mut *trees {
+                    filter_disjuncts(tree, &disjunct);
+                }
+            }
+        }
+
+        MarkerTree::Expression(_) => {}
+    }
+}
+
+// Collect all expressions from a tree.
+fn collect_expressions(trees: &[MarkerTree]) -> Vec<MarkerExpression> {
+    trees
+        .iter()
+        .filter_map(|tree| match tree {
+            MarkerTree::Expression(expr) => Some(expr.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+// Filters out matching expressions from any nested disjunctions.
+fn filter_disjuncts(tree: &mut MarkerTree, disjunct: &MarkerExpression) {
+    match tree {
+        MarkerTree::Or(trees) => {
+            trees.retain_mut(|tree| match tree {
+                MarkerTree::Expression(expr) => expr != disjunct,
+                _ => {
+                    filter_disjuncts(tree, disjunct);
+                    true
+                }
+            });
+        }
+        MarkerTree::And(trees) => {
+            for tree in trees {
+                filter_disjuncts(tree, disjunct);
+            }
+        }
+
+        MarkerTree::Expression(_) => {}
+    }
+}
+
+// Filters out matching expressions from any nested conjunctions.
+fn filter_conjuncts(tree: &mut MarkerTree, conjunct: &MarkerExpression) {
+    match tree {
+        MarkerTree::And(trees) => {
+            trees.retain_mut(|tree| match tree {
+                MarkerTree::Expression(expr) => expr != conjunct,
+                _ => {
+                    filter_conjuncts(tree, conjunct);
+                    true
+                }
+            });
+        }
+        MarkerTree::Or(trees) => {
+            for tree in trees {
+                filter_conjuncts(tree, conjunct);
+            }
+        }
+        MarkerTree::Expression(_) => {}
+    }
+}
+
+// Filters out disjunctions that contain the given expression which appears in an outer conjunction.
+//
+// Returns `true` if the outer tree should be removed.
+fn filter_disjunctions(tree: &mut MarkerTree, conjunct: &MarkerExpression) -> bool {
+    let disjunction = match tree {
+        MarkerTree::Or(trees) => trees,
+        // Recurse because the tree might not have been flattened.
+        MarkerTree::And(trees) => {
+            trees.retain_mut(|tree| !filter_disjunctions(tree, conjunct));
+            return trees.is_empty();
+        }
+        MarkerTree::Expression(_) => return false,
+    };
+
+    let mut filter = Vec::new();
+    for (i, tree) in disjunction.iter_mut().enumerate() {
+        match tree {
+            // Found a matching expression, filter out this entire tree.
+            MarkerTree::Expression(expr) if expr == conjunct => {
+                return true;
+            }
+            // Filter subtrees.
+            MarkerTree::Or(_) => {
+                if filter_disjunctions(tree, conjunct) {
+                    filter.push(i);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    for i in filter.into_iter().rev() {
+        disjunction.remove(i);
+    }
+
+    false
+}
+
+// Filters out conjunctions that contain the given expression which appears in an outer disjunction.
+//
+// Returns `true` if the outer tree should be removed.
+fn filter_conjunctions(tree: &mut MarkerTree, disjunct: &MarkerExpression) -> bool {
+    let conjunction = match tree {
+        MarkerTree::And(trees) => trees,
+        // Recurse because the tree might not have been flattened.
+        MarkerTree::Or(trees) => {
+            trees.retain_mut(|tree| !filter_conjunctions(tree, disjunct));
+            return trees.is_empty();
+        }
+        MarkerTree::Expression(_) => return false,
+    };
+
+    let mut filter = Vec::new();
+    for (i, tree) in conjunction.iter_mut().enumerate() {
+        match tree {
+            // Found a matching expression, filter out this entire tree.
+            MarkerTree::Expression(expr) if expr == disjunct => {
+                return true;
+            }
+            // Filter subtrees.
+            MarkerTree::And(_) => {
+                if filter_conjunctions(tree, disjunct) {
+                    filter.push(i);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    for i in filter.into_iter().rev() {
+        conjunction.remove(i);
+    }
+
+    false
 }
 
 // Simplify version expressions.
@@ -487,12 +677,49 @@ mod tests {
             "python_version == '3.18' and python_version < '3.17'",
         );
 
-        // cannot simplify nested complex expressions
+        // flatten nested expressions
         assert_marker_equal(
-            "extra == 'a' and (extra == 'a' or extra == 'b')",
-            "extra == 'a' and (extra == 'a' or extra == 'b')",
+            "((extra == 'a' and extra == 'b') and extra == 'c') and extra == 'b'",
+            "extra == 'a' and extra == 'b' and extra == 'c'",
         );
 
+        assert_marker_equal(
+            "((extra == 'a' or extra == 'b') or extra == 'c') or extra == 'b'",
+            "extra == 'a' or extra == 'b' or extra == 'c'",
+        );
+
+        // complex expressions
+        assert_marker_equal(
+            "extra == 'a' or (extra == 'a' and extra == 'b')",
+            "extra == 'a'",
+        );
+
+        assert_marker_equal(
+            "extra == 'a' and (extra == 'a' or extra == 'b')",
+            "extra == 'a'",
+        );
+
+        assert_marker_equal(
+            "(extra == 'a' and (extra == 'a' or extra == 'b')) or extra == 'd'",
+            "extra == 'a' or extra == 'd'",
+        );
+
+        assert_marker_equal(
+            "((extra == 'a' and extra == 'b') or extra == 'c') or extra == 'b'",
+            "extra == 'b' or extra == 'c'",
+        );
+
+        assert_marker_equal(
+            "((extra == 'a' or extra == 'b') and extra == 'c') and extra == 'b'",
+            "extra == 'b' and extra == 'c'",
+        );
+
+        assert_marker_equal(
+            "((extra == 'a' or extra == 'b') and extra == 'c') or extra == 'b'",
+            "extra == 'b' or (extra == 'a' and extra == 'c')",
+        );
+
+        // normalize out redundant ranges
         assert_normalizes_out("python_version < '3.12.0rc1' or python_version >= '3.12.0rc1'");
 
         assert_normalizes_out(
@@ -668,7 +895,12 @@ mod tests {
         let tree1 = MarkerTree::parse_reporter(one.as_ref(), &mut TracingReporter).unwrap();
         let tree1 = normalize(tree1).unwrap();
         let tree2 = MarkerTree::parse_reporter(two.as_ref(), &mut TracingReporter).unwrap();
-        assert_eq!(tree1.to_string(), tree2.to_string());
+        assert_eq!(
+            tree1.to_string(),
+            tree2.to_string(),
+            "failed to normalize {}",
+            one.as_ref()
+        );
     }
 
     fn assert_normalizes_to(before: impl AsRef<str>, after: impl AsRef<str>) {
