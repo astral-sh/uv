@@ -48,7 +48,7 @@ fn lock_wheel_registry() -> Result<()> {
         [[distribution]]
         name = "anyio"
         version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
         dependencies = [
             { name = "idna" },
@@ -61,7 +61,7 @@ fn lock_wheel_registry() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -70,7 +70,7 @@ fn lock_wheel_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -78,7 +78,7 @@ fn lock_wheel_registry() -> Result<()> {
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -145,7 +145,7 @@ fn lock_sdist_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "source-distribution" },
         ]
@@ -153,7 +153,7 @@ fn lock_sdist_registry() -> Result<()> {
         [[distribution]]
         name = "source-distribution"
         version = "0.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz", hash = "sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106", size = 2157 }
         "###
         );
@@ -215,7 +215,7 @@ fn lock_sdist_git() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -223,7 +223,7 @@ fn lock_sdist_git() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -284,7 +284,7 @@ fn lock_wheel_url() -> Result<()> {
         [[distribution]]
         name = "anyio"
         version = "4.3.0"
-        source = "direct+https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"
+        source = { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -296,7 +296,7 @@ fn lock_wheel_url() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -305,7 +305,7 @@ fn lock_wheel_url() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -313,7 +313,7 @@ fn lock_wheel_url() -> Result<()> {
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -380,7 +380,7 @@ fn lock_sdist_url() -> Result<()> {
         [[distribution]]
         name = "anyio"
         version = "4.3.0"
-        source = "direct+https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz"
+        source = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz" }
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" }
         dependencies = [
             { name = "idna" },
@@ -390,7 +390,7 @@ fn lock_sdist_url() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -399,7 +399,7 @@ fn lock_sdist_url() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -407,7 +407,7 @@ fn lock_sdist_url() -> Result<()> {
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -477,7 +477,7 @@ fn lock_project_extra() -> Result<()> {
         [[distribution]]
         name = "anyio"
         version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
         dependencies = [
             { name = "idna" },
@@ -490,7 +490,7 @@ fn lock_project_extra() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -499,7 +499,7 @@ fn lock_project_extra() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
@@ -508,7 +508,7 @@ fn lock_project_extra() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -521,7 +521,7 @@ fn lock_project_extra() -> Result<()> {
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -651,7 +651,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "blinker"
         version = "1.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
@@ -660,7 +660,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "click"
         version = "8.1.7"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         dependencies = [
             { name = "colorama", marker = "platform_system == 'Windows'" },
@@ -672,7 +672,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "colorama"
         version = "0.4.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -681,7 +681,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "flask"
         version = "3.0.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/3f/e0/a89e8120faea1edbfca1a9b171cff7f2bf62ec860bbafcb2c2387c0317be/flask-3.0.2.tar.gz", hash = "sha256:822c03f4b799204250a7ee84b1eddc40665395333973dfb9deebfe425fefcb7d", size = 675248 }
         dependencies = [
             { name = "blinker" },
@@ -702,7 +702,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "itsdangerous"
         version = "2.1.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
@@ -711,7 +711,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "jinja2"
         version = "3.1.3"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
         dependencies = [
             { name = "markupsafe" },
@@ -723,7 +723,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "markupsafe"
         version = "2.1.5"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e4/54/ad5eb37bf9d51800010a74e4665425831a9db4e7c4e0fde4352e391e808e/MarkupSafe-2.1.5-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:a17a92de5231666cfbe003f0e4b9b3a7ae3afb1ec2845aadc2bacc93ff85febc", size = 18206 },
@@ -790,7 +790,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "flask" },
             { name = "flask", extra = "dotenv" },
@@ -799,7 +799,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "python-dotenv"
         version = "1.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bc/57/e84d88dfe0aec03b7a2d4327012c1627ab5f03652216c63d49846d7a6c58/python-dotenv-1.0.1.tar.gz", hash = "sha256:e324ee90a023d808f1959c46bcbc04446a10ced277783dc6ee09987c37ec10ca", size = 39115 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl", hash = "sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a", size = 19863 },
@@ -808,7 +808,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "werkzeug"
         version = "3.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
         dependencies = [
             { name = "markupsafe" },
@@ -884,7 +884,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "certifi"
         version = "2024.2.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/71/da/e94e26401b62acd6d91df2b52954aceb7f561743aa5ccc32152886c76c96/certifi-2024.2.2.tar.gz", hash = "sha256:0569859f95fc761b18b45ef421b1290a0f65f147e92a1e5eb3e635f9a5e4e66f", size = 164886 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl", hash = "sha256:dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1", size = 163774 },
@@ -893,7 +893,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "charset-normalizer"
         version = "3.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/96/d7/1675d9089a1f4677df5eb29c3f8b064aa1e70c1251a0a8a127803158942d/charset-normalizer-3.0.1.tar.gz", hash = "sha256:ebea339af930f8ca5d7a699b921106c6e29c617fe9606fa7baa043c1cdae326f", size = 92842 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/b2/4c/9a4f30042bfee22d34d80daf75f51817cdd23180d718e0160aab235c4faf/charset_normalizer-3.0.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:88600c72ef7587fe1708fd242b385b6ed4b8904976d5da0893e31df8b3480cb6", size = 201319 },
@@ -988,7 +988,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -997,7 +997,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "requests" },
             { name = "requests", extra = "socks", marker = "python_version < '3.10'" },
@@ -1006,7 +1006,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "pysocks"
         version = "1.7.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/4b/52123768624ae28d84c97515dd96c9958888e8c2d8f122074e31e2be878c/PySocks-1.7.1-py27-none-any.whl", hash = "sha256:08e69f092cc6dbe92a0fdd16eeb9b9ffbc13cadfe5ca4c7bd92ffb078b293299", size = 16726 },
@@ -1016,7 +1016,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "requests"
         version = "2.31.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d4380d62fd5b955065c3/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7ffb0d1cf7af05c3d2791656dbd6ad1e1", size = 110794 }
         dependencies = [
             { name = "certifi" },
@@ -1036,7 +1036,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[distribution]]
         name = "urllib3"
         version = "2.0.7"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/af/47/b215df9f71b4fdba1025fc05a77db2ad243fa0926755a52c5e71659f4e3c/urllib3-2.0.7.tar.gz", hash = "sha256:c97dfde1f7bd43a71c8d2a58e369e9b2bf692d1334ea9f9cae55add7d0dd0f84", size = 282546 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d2/b2/b157855192a68541a91ba7b2bbcb91f1b4faa51f8bae38d8005c034be524/urllib3-2.0.7-py3-none-any.whl", hash = "sha256:fdb6d215c776278489906c2f8916e6e7d4f5a9b602ccbcfdf7f016fc8da0596e", size = 124213 },
@@ -1131,7 +1131,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "blinker"
         version = "1.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
@@ -1140,7 +1140,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "click"
         version = "8.1.7"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         dependencies = [
             { name = "colorama", marker = "platform_system == 'Windows'" },
@@ -1152,7 +1152,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "colorama"
         version = "0.4.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -1161,7 +1161,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "flask"
         version = "3.0.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/3f/e0/a89e8120faea1edbfca1a9b171cff7f2bf62ec860bbafcb2c2387c0317be/flask-3.0.2.tar.gz", hash = "sha256:822c03f4b799204250a7ee84b1eddc40665395333973dfb9deebfe425fefcb7d", size = 675248 }
         dependencies = [
             { name = "blinker" },
@@ -1177,7 +1177,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "itsdangerous"
         version = "2.1.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
@@ -1186,7 +1186,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "jinja2"
         version = "3.1.3"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
         dependencies = [
             { name = "markupsafe" },
@@ -1198,7 +1198,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "markupsafe"
         version = "2.1.5"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e4/54/ad5eb37bf9d51800010a74e4665425831a9db4e7c4e0fde4352e391e808e/MarkupSafe-2.1.5-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:a17a92de5231666cfbe003f0e4b9b3a7ae3afb1ec2845aadc2bacc93ff85febc", size = 18206 },
@@ -1265,7 +1265,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "flask" },
         ]
@@ -1273,7 +1273,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[distribution]]
         name = "werkzeug"
         version = "3.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
         dependencies = [
             { name = "markupsafe" },
@@ -1347,7 +1347,7 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "1.1.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
@@ -1356,7 +1356,7 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -1399,7 +1399,7 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "1.1.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
@@ -1408,7 +1408,7 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -1440,7 +1440,7 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
@@ -1449,7 +1449,7 @@ fn lock_preference() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -1500,7 +1500,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -1508,7 +1508,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -1554,7 +1554,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -1562,7 +1562,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -1593,7 +1593,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -1601,7 +1601,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
         "###
         );
     });
@@ -1687,7 +1687,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "attrs"
         version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
         dependencies = [
             { name = "importlib-metadata", marker = "python_version < '3.8'" },
@@ -1699,7 +1699,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "cattrs"
         version = "23.1.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/68/d4/27f9fd840e74d51b6d6a024d39ff495b56ffde71d28eb82758b7b85d0617/cattrs-23.1.2.tar.gz", hash = "sha256:db1c821b8c537382b2c7c66678c3790091ca0275ac486c76f3c8f3920e83c657", size = 39998 }
         dependencies = [
             { name = "attrs" },
@@ -1713,7 +1713,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 },
@@ -1722,7 +1722,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "importlib-metadata"
         version = "6.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
         dependencies = [
             { name = "typing-extensions", marker = "python_version < '3.8'" },
@@ -1735,7 +1735,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "lsprotocol"
         version = "2023.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/9d/f6/6e80484ec078d0b50699ceb1833597b792a6c695f90c645fbaf54b947e6f/lsprotocol-2023.0.1.tar.gz", hash = "sha256:cc5c15130d2403c18b734304339e51242d3018a05c4f7d0f198ad6e0cd21861d", size = 69434 }
         dependencies = [
             { name = "attrs" },
@@ -1748,7 +1748,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "pygls" },
         ]
@@ -1756,7 +1756,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "pygls"
         version = "1.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/8e/27/58ff0f76b379fc11a1d03e8d4b4e96fd0abb463d27709a7fb4193bcdbbc4/pygls-1.0.1.tar.gz", hash = "sha256:f3ee98ddbb4690eb5c755bc32ba7e129607f14cbd313575f33d0cea443b78cb2", size = 674546 }
         dependencies = [
             { name = "lsprotocol" },
@@ -1769,7 +1769,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "typeguard"
         version = "2.13.3"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/3a/38/c61bfcf62a7b572b5e9363a802ff92559cb427ee963048e1442e3aef7490/typeguard-2.13.3.tar.gz", hash = "sha256:00edaa8da3a133674796cf5ea87d9f4b4c367d77476e185e80251cc13dfbb8c4", size = 40604 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9a/bb/d43e5c75054e53efce310e79d63df0ac3f25e34c926be5dffb7d283fb2a8/typeguard-2.13.3-py3-none-any.whl", hash = "sha256:5e3e3be01e887e7eafae5af63d1f36c849aaa94e3a0112097312aabfa16284f1", size = 17605 },
@@ -1778,7 +1778,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "typing-extensions"
         version = "4.7.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 },
@@ -1787,7 +1787,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "zipp"
         version = "3.15.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/00/27/f0ac6b846684cecce1ee93d32450c45ab607f65c2e0255f0092032d91f07/zipp-3.15.0.tar.gz", hash = "sha256:112929ad649da941c23de50f356a2b5570c954b65150642bccdd66bf194d224b", size = 18454 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/5b/fa/c9e82bbe1af6266adf08afb563905eb87cab83fde00a0a08963510621047/zipp-3.15.0-py3-none-any.whl", hash = "sha256:48904fc76a60e542af151aded95726c1a5c34ed43ab4134b597665c86d7ad556", size = 6758 },
@@ -1833,7 +1833,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "attrs"
         version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
         dependencies = [
             { name = "importlib-metadata", marker = "python_version < '3.8'" },
@@ -1845,7 +1845,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "cattrs"
         version = "23.1.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/68/d4/27f9fd840e74d51b6d6a024d39ff495b56ffde71d28eb82758b7b85d0617/cattrs-23.1.2.tar.gz", hash = "sha256:db1c821b8c537382b2c7c66678c3790091ca0275ac486c76f3c8f3920e83c657", size = 39998 }
         dependencies = [
             { name = "attrs" },
@@ -1859,7 +1859,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "exceptiongroup"
         version = "1.2.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 },
@@ -1868,7 +1868,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "importlib-metadata"
         version = "6.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
         dependencies = [
             { name = "typing-extensions", marker = "python_version < '3.8'" },
@@ -1881,7 +1881,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "lsprotocol"
         version = "2023.0.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/3e/fe/f7671a4fb28606ff1663bba60aff6af21b1e43a977c74c33db13cb83680f/lsprotocol-2023.0.0.tar.gz", hash = "sha256:c9d92e12a3f4ed9317d3068226592860aab5357d93cf5b2451dc244eee8f35f2", size = 69399 }
         dependencies = [
             { name = "attrs" },
@@ -1894,7 +1894,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "pygls" },
         ]
@@ -1902,7 +1902,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "pygls"
         version = "1.2.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/e6/94/534c11ba5475df09542e48d751a66e0448d52bbbb92cbef5541deef7760d/pygls-1.2.1.tar.gz", hash = "sha256:04f9b9c115b622dcc346fb390289066565343d60245a424eca77cb429b911ed8", size = 45274 }
         dependencies = [
             { name = "lsprotocol" },
@@ -1914,7 +1914,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "typing-extensions"
         version = "4.7.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 },
@@ -1923,7 +1923,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "zipp"
         version = "3.15.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/00/27/f0ac6b846684cecce1ee93d32450c45ab607f65c2e0255f0092032d91f07/zipp-3.15.0.tar.gz", hash = "sha256:112929ad649da941c23de50f356a2b5570c954b65150642bccdd66bf194d224b", size = 18454 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/5b/fa/c9e82bbe1af6266adf08afb563905eb87cab83fde00a0a08963510621047/zipp-3.15.0-py3-none-any.whl", hash = "sha256:48904fc76a60e542af151aded95726c1a5c34ed43ab4134b597665c86d7ad556", size = 6758 },
@@ -1969,7 +1969,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "attrs"
         version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
@@ -1978,7 +1978,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "cattrs"
         version = "23.2.3"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215 }
         dependencies = [
             { name = "attrs" },
@@ -1990,7 +1990,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "lsprotocol"
         version = "2023.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/9d/f6/6e80484ec078d0b50699ceb1833597b792a6c695f90c645fbaf54b947e6f/lsprotocol-2023.0.1.tar.gz", hash = "sha256:cc5c15130d2403c18b734304339e51242d3018a05c4f7d0f198ad6e0cd21861d", size = 69434 }
         dependencies = [
             { name = "attrs" },
@@ -2003,7 +2003,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "pygls" },
         ]
@@ -2011,7 +2011,7 @@ fn lock_requires_python() -> Result<()> {
         [[distribution]]
         name = "pygls"
         version = "1.3.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/e9/8d/31b50ac0879464049d744a1ddf00dc6474433eb55d40fa0c8e8510591ad2/pygls-1.3.0.tar.gz", hash = "sha256:1b44ace89c9382437a717534f490eadc6fda7c0c6c16ac1eaaf5568e345e4fb8", size = 45539 }
         dependencies = [
             { name = "cattrs" },
@@ -2096,7 +2096,7 @@ fn lock_requires_python_star() -> Result<()> {
         [[distribution]]
         name = "attrs"
         version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
@@ -2105,7 +2105,7 @@ fn lock_requires_python_star() -> Result<()> {
         [[distribution]]
         name = "cattrs"
         version = "23.2.3"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215 }
         dependencies = [
             { name = "attrs" },
@@ -2117,7 +2117,7 @@ fn lock_requires_python_star() -> Result<()> {
         [[distribution]]
         name = "linehaul"
         version = "1.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/f8/e7/74d1bd36ed26ac43bfe22e97129edaa7066f7af4bf76084b9493cd581d58/linehaul-1.0.1.tar.gz", hash = "sha256:09d71b1f6a9ab92dd8c763b3d099e4ae05c2845ee783a02d5fe731e6e2a6a997", size = 19410 }
         dependencies = [
             { name = "cattrs" },
@@ -2131,7 +2131,7 @@ fn lock_requires_python_star() -> Result<()> {
         [[distribution]]
         name = "packaging"
         version = "24.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
@@ -2140,7 +2140,7 @@ fn lock_requires_python_star() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "linehaul" },
         ]
@@ -2148,7 +2148,7 @@ fn lock_requires_python_star() -> Result<()> {
         [[distribution]]
         name = "pyparsing"
         version = "3.1.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/46/3a/31fd28064d016a2182584d579e033ec95b809d8e220e74c4af6f0f2e8842/pyparsing-3.1.2.tar.gz", hash = "sha256:a1bac0ce561155ecc3ed78ca94d3c9378656ad4c94c1270de543f621420f94ad", size = 889571 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9d/ea/6d76df31432a0e6fdf81681a895f009a4bb47b3c39036db3e1b528191d52/pyparsing-3.1.2-py3-none-any.whl", hash = "sha256:f9db75911801ed778fe61bb643079ff86601aca99fcae6345aa67292038fb742", size = 103245 },
@@ -2203,7 +2203,7 @@ fn lock_requires_python_pre() -> Result<()> {
         [[distribution]]
         name = "attrs"
         version = "23.2.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
@@ -2212,7 +2212,7 @@ fn lock_requires_python_pre() -> Result<()> {
         [[distribution]]
         name = "cattrs"
         version = "23.2.3"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215 }
         dependencies = [
             { name = "attrs" },
@@ -2224,7 +2224,7 @@ fn lock_requires_python_pre() -> Result<()> {
         [[distribution]]
         name = "linehaul"
         version = "1.0.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/f8/e7/74d1bd36ed26ac43bfe22e97129edaa7066f7af4bf76084b9493cd581d58/linehaul-1.0.1.tar.gz", hash = "sha256:09d71b1f6a9ab92dd8c763b3d099e4ae05c2845ee783a02d5fe731e6e2a6a997", size = 19410 }
         dependencies = [
             { name = "cattrs" },
@@ -2238,7 +2238,7 @@ fn lock_requires_python_pre() -> Result<()> {
         [[distribution]]
         name = "packaging"
         version = "24.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
@@ -2247,7 +2247,7 @@ fn lock_requires_python_pre() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "linehaul" },
         ]
@@ -2255,7 +2255,7 @@ fn lock_requires_python_pre() -> Result<()> {
         [[distribution]]
         name = "pyparsing"
         version = "3.1.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/46/3a/31fd28064d016a2182584d579e033ec95b809d8e220e74c4af6f0f2e8842/pyparsing-3.1.2.tar.gz", hash = "sha256:a1bac0ce561155ecc3ed78ca94d3c9378656ad4c94c1270de543f621420f94ad", size = 889571 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9d/ea/6d76df31432a0e6fdf81681a895f009a4bb47b3c39036db3e1b528191d52/pyparsing-3.1.2-py3-none-any.whl", hash = "sha256:f9db75911801ed778fe61bb643079ff86601aca99fcae6345aa67292038fb742", size = 103245 },
@@ -2309,7 +2309,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "1.1.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
@@ -2318,7 +2318,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -2371,7 +2371,7 @@ fn lock_dev() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
@@ -2380,7 +2380,7 @@ fn lock_dev() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -2393,7 +2393,7 @@ fn lock_dev() -> Result<()> {
         [[distribution]]
         name = "typing-extensions"
         version = "4.12.2"
-        source = "direct+https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl"
+        source = { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d" },
         ]
@@ -2469,7 +2469,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
@@ -2478,7 +2478,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -2528,7 +2528,7 @@ fn lock_multiple_markers() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
@@ -2537,7 +2537,7 @@ fn lock_multiple_markers() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "iniconfig", marker = "implementation_name == 'cpython'" },
         ]
@@ -2627,7 +2627,7 @@ fn relative_and_absolute_paths() -> Result<()> {
         [[distribution]]
         name = "a"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "b" },
             { name = "c" },
@@ -2636,12 +2636,12 @@ fn relative_and_absolute_paths() -> Result<()> {
         [[distribution]]
         name = "b"
         version = "0.1.0"
-        source = "directory+b"
+        source = { directory = "b" }
 
         [[distribution]]
         name = "c"
         version = "0.1.0"
-        source = "directory+[TEMP_DIR]/c"
+        source = { directory = "[TEMP_DIR]/c" }
         "###
         );
     });

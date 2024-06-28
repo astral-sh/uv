@@ -72,7 +72,7 @@ fn add_registry() -> Result<()> {
         [[distribution]]
         name = "anyio"
         version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
         dependencies = [
             { name = "idna" },
@@ -85,7 +85,7 @@ fn add_registry() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -94,7 +94,7 @@ fn add_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -102,7 +102,7 @@ fn add_registry() -> Result<()> {
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -224,7 +224,7 @@ fn add_git() -> Result<()> {
         [[distribution]]
         name = "anyio"
         version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
         dependencies = [
             { name = "idna" },
@@ -237,7 +237,7 @@ fn add_git() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -246,7 +246,7 @@ fn add_git() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "anyio" },
             { name = "uv-public-pypackage" },
@@ -255,7 +255,7 @@ fn add_git() -> Result<()> {
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -264,7 +264,7 @@ fn add_git() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -370,7 +370,7 @@ fn add_git_raw() -> Result<()> {
         [[distribution]]
         name = "anyio"
         version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
         dependencies = [
             { name = "idna" },
@@ -383,7 +383,7 @@ fn add_git_raw() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -392,7 +392,7 @@ fn add_git_raw() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "anyio" },
             { name = "uv-public-pypackage" },
@@ -401,7 +401,7 @@ fn add_git_raw() -> Result<()> {
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -410,7 +410,7 @@ fn add_git_raw() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -492,7 +492,7 @@ fn add_unnamed() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -500,7 +500,7 @@ fn add_unnamed() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = "git+https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -584,7 +584,7 @@ fn add_remove_dev() -> Result<()> {
         [[distribution]]
         name = "anyio"
         version = "3.7.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
         dependencies = [
             { name = "idna" },
@@ -597,7 +597,7 @@ fn add_remove_dev() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -606,7 +606,7 @@ fn add_remove_dev() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
 
         [distribution.dev-dependencies]
         dev = [
@@ -616,7 +616,7 @@ fn add_remove_dev() -> Result<()> {
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -699,7 +699,7 @@ fn add_remove_dev() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         "###
         );
     });
@@ -780,7 +780,7 @@ fn add_remove_optional() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         "###
         );
     });
@@ -856,7 +856,7 @@ fn add_remove_optional() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         "###
         );
     });
@@ -979,7 +979,7 @@ fn add_remove_workspace() -> Result<()> {
         [[distribution]]
         name = "child1"
         version = "0.1.0"
-        source = "editable+child1"
+        source = { editable = "child1" }
         dependencies = [
             { name = "child2" },
         ]
@@ -987,7 +987,7 @@ fn add_remove_workspace() -> Result<()> {
         [[distribution]]
         name = "child2"
         version = "0.1.0"
-        source = "editable+child2"
+        source = { editable = "child2" }
         "###
         );
     });
@@ -1051,12 +1051,12 @@ fn add_remove_workspace() -> Result<()> {
         [[distribution]]
         name = "child1"
         version = "0.1.0"
-        source = "editable+child1"
+        source = { editable = "child1" }
 
         [[distribution]]
         name = "child2"
         version = "0.1.0"
-        source = "editable+child2"
+        source = { editable = "child2" }
         "###
         );
     });
@@ -1159,7 +1159,7 @@ fn add_workspace_editable() -> Result<()> {
         [[distribution]]
         name = "child1"
         version = "0.1.0"
-        source = "editable+child1"
+        source = { editable = "child1" }
         dependencies = [
             { name = "child2" },
         ]
@@ -1167,7 +1167,7 @@ fn add_workspace_editable() -> Result<()> {
         [[distribution]]
         name = "child2"
         version = "0.1.0"
-        source = "editable+child2"
+        source = { editable = "child2" }
         "###
         );
     });
@@ -1352,7 +1352,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "certifi"
         version = "2024.2.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/71/da/e94e26401b62acd6d91df2b52954aceb7f561743aa5ccc32152886c76c96/certifi-2024.2.2.tar.gz", hash = "sha256:0569859f95fc761b18b45ef421b1290a0f65f147e92a1e5eb3e635f9a5e4e66f", size = 164886 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl", hash = "sha256:dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1", size = 163774 },
@@ -1361,7 +1361,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "chardet"
         version = "5.2.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/f3/0d/f7b6ab21ec75897ed80c17d79b15951a719226b9fababf1e40ea74d69079/chardet-5.2.0.tar.gz", hash = "sha256:1b3b6ff479a8c414bc3fa2c0852995695c4a026dcd6d0633b2dd092ca39c1cf7", size = 2069618 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/38/6f/f5fbc992a329ee4e0f288c1fe0e2ad9485ed064cac731ed2fe47dcc38cbf/chardet-5.2.0-py3-none-any.whl", hash = "sha256:e1cf59446890a00105fe7b7912492ea04b6e6f06d4b742b2c788469e34c82970", size = 199385 },
@@ -1370,7 +1370,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "charset-normalizer"
         version = "3.3.2"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/63/09/c1bc53dab74b1816a00d8d030de5bf98f724c52c1635e07681d312f20be8/charset-normalizer-3.3.2.tar.gz", hash = "sha256:f30c3cb33b24454a82faecaf01b19c18562b1e89558fb6c56de4d9118a032fd5", size = 104809 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/2b/61/095a0aa1a84d1481998b534177c8566fdc50bb1233ea9a0478cd3cc075bd/charset_normalizer-3.3.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:25baf083bf6f6b341f4121c2f3c548875ee6f5339300e08be3f2b2ba1721cdd3", size = 194219 },
@@ -1467,7 +1467,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "idna"
         version = "3.6"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -1476,7 +1476,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "requests", marker = "python_version > '3.7'" },
             { name = "requests", extra = "socks", marker = "python_version > '3.7'" },
@@ -1486,7 +1486,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "pysocks"
         version = "1.7.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/4b/52123768624ae28d84c97515dd96c9958888e8c2d8f122074e31e2be878c/PySocks-1.7.1-py27-none-any.whl", hash = "sha256:08e69f092cc6dbe92a0fdd16eeb9b9ffbc13cadfe5ca4c7bd92ffb078b293299", size = 16726 },
@@ -1496,7 +1496,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "requests"
         version = "2.32.3"
-        source = "git+https://github.com/psf/requests?tag=v2.32.3#0e322af87745eff34caffe4df68456ebc20d9068"
+        source = { git = "https://github.com/psf/requests?tag=v2.32.3#0e322af87745eff34caffe4df68456ebc20d9068" }
         dependencies = [
             { name = "certifi" },
             { name = "charset-normalizer" },
@@ -1515,7 +1515,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "urllib3"
         version = "2.2.1"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/7a/50/7fd50a27caa0652cd4caf224aa87741ea41d3265ad13f010886167cfcc79/urllib3-2.2.1.tar.gz", hash = "sha256:d0570876c61ab9e520d776c38acbbb5b05a776d3f9ff98a5c8fd5162a444cf19", size = 291020 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
@@ -1635,7 +1635,7 @@ fn add_no_clean() -> Result<()> {
         [[distribution]]
         name = "iniconfig"
         version = "2.0.0"
-        source = "registry+https://pypi.org/simple"
+        source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
@@ -1644,7 +1644,7 @@ fn add_no_clean() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -1766,7 +1766,7 @@ fn remove_registry() -> Result<()> {
         [[distribution]]
         name = "project"
         version = "0.1.0"
-        source = "editable+."
+        source = { editable = "." }
         "###
         );
     });
