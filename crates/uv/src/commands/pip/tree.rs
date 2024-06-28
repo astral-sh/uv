@@ -1,8 +1,9 @@
-use std::fmt::Write;
-
 use distribution_types::{Diagnostic, InstalledDist, Name};
 use owo_colors::OwoColorize;
 use pep508_rs::MarkerEnvironment;
+use pypi_types::VerbatimParsedUrl;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
@@ -15,9 +16,6 @@ use uv_toolchain::ToolchainRequest;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use std::collections::{HashMap, HashSet};
-
-use pypi_types::VerbatimParsedUrl;
 
 /// Display the installed packages in the current environment as a dependency tree.
 #[allow(clippy::too_many_arguments)]
@@ -84,21 +82,25 @@ pub(crate) fn pip_tree(
     Ok(ExitStatus::Success)
 }
 
-// Filter out all required packages of the given distribution if they
-// are required by an extra.
-// For example, `requests==2.32.3` requires `charset-normalizer`, `idna`, `urllib`, and `certifi` at
-// all times, `PySocks` on `socks` extra and `chardet` on `use_chardet_on_py3` extra.
-// This function will return `["charset-normalizer", "idna", "urllib", "certifi"]` for `requests`.
+/// Filter out all required packages of the given distribution if they
+/// are required by an extra.
+///
+/// For example, `requests==2.32.3` requires `charset-normalizer`, `idna`, `urllib`, and `certifi` at
+/// all times, `PySocks` on `socks` extra and `chardet` on `use_chardet_on_py3` extra.
+/// This function will return `["charset-normalizer", "idna", "urllib", "certifi"]` for `requests`.
 fn required_with_no_extra(
     dist: &InstalledDist,
-    marker_environment: &MarkerEnvironment,
+    markers: &MarkerEnvironment,
 ) -> Vec<pep508_rs::Requirement<VerbatimParsedUrl>> {
     let metadata = dist.metadata().unwrap();
     return metadata
         .requires_dist
         .into_iter()
-        .filter(|r| {
-            r.marker.is_none() || r.marker.as_ref().unwrap().evaluate(marker_environment, &[])
+        .filter(|requirement| {
+            requirement
+                .marker
+                .as_ref()
+                .map_or(true, |m| m.evaluate(markers, &[]))
         })
         .collect::<Vec<_>>();
 }
@@ -106,24 +108,20 @@ fn required_with_no_extra(
 #[derive(Debug)]
 struct DisplayDependencyGraph<'a> {
     site_packages: &'a SitePackages,
-    // Map from package name to the installed distribution.
+    /// Map from package name to the installed distribution.
     dist_by_package_name: HashMap<&'a PackageName, &'a InstalledDist>,
-    // Set of package names that are required by at least one installed distribution.
-    // It is used to determine the starting nodes when recursing the
-    // dependency graph.
+    /// Set of package names that are required by at least one installed distribution.
+    /// It is used to determine the starting nodes when recursing the
+    /// dependency graph.
     required_packages: HashSet<PackageName>,
-
-    // Maximum display depth of the dependency tree
+    /// Maximum display depth of the dependency tree
     depth: usize,
-
-    // Prune the given package from the display of the dependency tree.
+    /// Prune the given package from the display of the dependency tree.
     prune: Vec<PackageName>,
-
-    // Whether to de-duplicate the displayed dependencies.
+    /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
-
-    // The marker environment for the current interpreter.
-    marker_environment: &'a MarkerEnvironment,
+    /// The marker environment for the current interpreter.
+    markers: &'a MarkerEnvironment,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
@@ -133,7 +131,7 @@ impl<'a> DisplayDependencyGraph<'a> {
         depth: usize,
         prune: Vec<PackageName>,
         no_dedupe: bool,
-        marker_environment: &'a MarkerEnvironment,
+        markers: &'a MarkerEnvironment,
     ) -> DisplayDependencyGraph<'a> {
         let mut dist_by_package_name = HashMap::new();
         let mut required_packages = HashSet::new();
@@ -141,7 +139,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             dist_by_package_name.insert(site_package.name(), site_package);
         }
         for site_package in site_packages.iter() {
-            for required in required_with_no_extra(site_package, marker_environment) {
+            for required in required_with_no_extra(site_package, markers) {
                 required_packages.insert(required.name.clone());
             }
         }
@@ -153,11 +151,11 @@ impl<'a> DisplayDependencyGraph<'a> {
             depth,
             prune,
             no_dedupe,
-            marker_environment,
+            markers,
         }
     }
 
-    // Depth-first traversal of the given distribution and its dependencies.
+    /// Perform a depth-first traversal of the given distribution and its dependencies.
     fn visit(
         &self,
         installed_dist: &InstalledDist,
@@ -192,7 +190,7 @@ impl<'a> DisplayDependencyGraph<'a> {
 
         path.push(package_name.clone());
         visited.insert(package_name.clone());
-        let required_packages = required_with_no_extra(installed_dist, self.marker_environment);
+        let required_packages = required_with_no_extra(installed_dist, self.markers);
         for (index, required_package) in required_packages.iter().enumerate() {
             // Skip if the current package is not one of the installed distributions.
             if !self
