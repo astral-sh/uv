@@ -1599,12 +1599,9 @@ impl MarkerTree {
     /// Does this marker contain an extra?
     pub fn has_extra(&self) -> bool {
         match self {
-            Self::Expression(expression) => match expression {
-                MarkerExpression::Extra { .. } => true,
-                _ => false,
-            },
-            Self::And(expressions) => expressions.iter().any(|x| x.has_extra()),
-            Self::Or(expressions) => expressions.iter().any(|x| x.has_extra()),
+            Self::Expression(expression) => matches!(expression, MarkerExpression::Extra { .. }),
+            Self::And(expressions) => expressions.iter().any(MarkerTree::has_extra),
+            Self::Or(expressions) => expressions.iter().any(MarkerTree::has_extra),
         }
     }
 
