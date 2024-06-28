@@ -51,6 +51,7 @@ pub enum ToolchainRequest {
     /// Generally these refer to uv-managed toolchain downloads.
     Key(PythonDownloadRequest),
 }
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -115,29 +116,12 @@ type ToolchainResult = Result<Toolchain, ToolchainNotFound>;
 
 /// The result of failed toolchain discovery.
 ///
-/// See [`InterpreterResult`].
+/// See [`ToolchainResult`].
 #[derive(Clone, Debug, Error)]
-pub enum ToolchainNotFound {
-    /// No Python installations were found.
-    NoPythonInstallation(ToolchainPreference, Option<VersionRequest>),
-    /// No Python installations with the requested version were found.
-    NoMatchingVersion(ToolchainPreference, VersionRequest),
-    /// No Python installations with the requested key were found.
-    NoMatchingKey(ToolchainPreference, PythonDownloadRequest),
-    /// No Python installations with the requested implementation name were found.
-    NoMatchingImplementation(ToolchainPreference, ImplementationName),
-    /// No Python installations with the requested implementation name and version were found.
-    NoMatchingImplementationVersion(ToolchainPreference, ImplementationName, VersionRequest),
-    /// The requested file path does not exist.
-    FileNotFound(PathBuf),
-    /// The requested directory path does not exist.
-    DirectoryNotFound(PathBuf),
-    /// No Python executables could be found in the requested directory.
-    ExecutableNotFoundInDirectory(PathBuf, PathBuf),
-    /// The Python executable name could not be found in the search path (i.e. PATH).
-    ExecutableNotFoundInSearchPath(String),
-    /// A Python executable was found but is not executable.
-    FileNotExecutable(PathBuf),
+pub struct ToolchainNotFound {
+    pub request: ToolchainRequest,
+    pub toolchain_preference: ToolchainPreference,
+    pub environment_preference: EnvironmentPreference,
 }
 
 /// A location for discovery of a Python toolchain.
@@ -559,34 +543,25 @@ impl Error {
     }
 }
 
-fn find_toolchain_at_file(path: &PathBuf, cache: &Cache) -> Result<ToolchainResult, Error> {
-    if !path.try_exists()? {
-        return Ok(ToolchainResult::Err(ToolchainNotFound::FileNotFound(
-            path.clone(),
-        )));
-    }
-    Ok(ToolchainResult::Ok(Toolchain {
+fn find_toolchain_at_file(
+    path: &PathBuf,
+    cache: &Cache,
+) -> Result<Toolchain, crate::interpreter::Error> {
+    Ok(Toolchain {
         source: ToolchainSource::ProvidedPath,
         interpreter: Interpreter::query(path, cache)?,
-    }))
+    })
 }
 
-fn find_toolchain_at_directory(path: &PathBuf, cache: &Cache) -> Result<ToolchainResult, Error> {
-    if !path.try_exists()? {
-        return Ok(ToolchainResult::Err(ToolchainNotFound::FileNotFound(
-            path.clone(),
-        )));
-    }
+fn find_toolchain_at_directory(
+    path: &PathBuf,
+    cache: &Cache,
+) -> Result<Toolchain, crate::interpreter::Error> {
     let executable = virtualenv_python_executable(path);
-    if !executable.try_exists()? {
-        return Ok(ToolchainResult::Err(
-            ToolchainNotFound::ExecutableNotFoundInDirectory(path.clone(), executable),
-        ));
-    }
-    Ok(ToolchainResult::Ok(Toolchain {
+    Ok(Toolchain {
         source: ToolchainSource::ProvidedPath,
         interpreter: Interpreter::query(executable, cache)?,
-    }))
+    })
 }
 
 /// Lazily iterate over all Python interpreters on the path with the given executable name.
@@ -613,7 +588,17 @@ pub fn find_toolchains<'a>(
         ToolchainRequest::File(path) => Box::new(std::iter::once({
             if preference.allows(ToolchainSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
-                find_toolchain_at_file(path, cache)
+                match find_toolchain_at_file(path, cache) {
+                    Ok(toolchain) => Ok(ToolchainResult::Ok(toolchain)),
+                    Err(InterpreterError::NotFound(_)) => {
+                        Ok(ToolchainResult::Err(ToolchainNotFound {
+                            request: request.clone(),
+                            toolchain_preference: preference,
+                            environment_preference: environments,
+                        }))
+                    }
+                    Err(err) => Err(err.into()),
+                }
             } else {
                 Err(Error::SourceNotAllowed(
                     request.clone(),
@@ -626,7 +611,17 @@ pub fn find_toolchains<'a>(
             debug!("Checking for Python interpreter in {request}");
             if preference.allows(ToolchainSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
-                find_toolchain_at_directory(path, cache)
+                match find_toolchain_at_directory(path, cache) {
+                    Ok(toolchain) => Ok(ToolchainResult::Ok(toolchain)),
+                    Err(InterpreterError::NotFound(_)) => {
+                        Ok(ToolchainResult::Err(ToolchainNotFound {
+                            request: request.clone(),
+                            toolchain_preference: preference,
+                            environment_preference: environments,
+                        }))
+                    }
+                    Err(err) => Err(err.into()),
+                }
             } else {
                 Err(Error::SourceNotAllowed(
                     request.clone(),
@@ -731,31 +726,11 @@ pub(crate) fn find_toolchain(
     }) {
         result
     } else {
-        let err = match request {
-            ToolchainRequest::Implementation(implementation) => {
-                ToolchainNotFound::NoMatchingImplementation(preference, *implementation)
-            }
-            ToolchainRequest::ImplementationVersion(implementation, version) => {
-                ToolchainNotFound::NoMatchingImplementationVersion(
-                    preference,
-                    *implementation,
-                    version.clone(),
-                )
-            }
-            ToolchainRequest::Version(version) => {
-                ToolchainNotFound::NoMatchingVersion(preference, version.clone())
-            }
-            ToolchainRequest::ExecutableName(name) => {
-                ToolchainNotFound::ExecutableNotFoundInSearchPath(name.clone())
-            }
-            ToolchainRequest::Key(key) => ToolchainNotFound::NoMatchingKey(preference, key.clone()),
-            // TODO(zanieb): As currently implemented, these are unreachable as they are handled in `find_toolchains`
-            // We should avoid this duplication
-            ToolchainRequest::Directory(path) => ToolchainNotFound::DirectoryNotFound(path.clone()),
-            ToolchainRequest::File(path) => ToolchainNotFound::FileNotFound(path.clone()),
-            ToolchainRequest::Any => ToolchainNotFound::NoPythonInstallation(preference, None),
-        };
-        Ok(ToolchainResult::Err(err))
+        Ok(ToolchainResult::Err(ToolchainNotFound {
+            request: request.clone(),
+            environment_preference: environments,
+            toolchain_preference: preference,
+        }))
     }
 }
 
@@ -818,10 +793,10 @@ pub fn find_best_toolchain(
     Ok(
         find_toolchain(&request, environments, preference, cache)?.map_err(|err| {
             // Use a more general error in this case since we looked for multiple versions
-            if matches!(err, ToolchainNotFound::NoMatchingVersion(..)) {
-                ToolchainNotFound::NoPythonInstallation(preference, None)
-            } else {
-                err
+            ToolchainNotFound {
+                request,
+                toolchain_preference: err.toolchain_preference,
+                environment_preference: err.environment_preference,
             }
         }),
     )
@@ -1149,6 +1124,10 @@ impl ToolchainRequest {
             ToolchainRequest::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
     }
+
+    pub(crate) fn is_explicit_system(&self) -> bool {
+        matches!(self, Self::File(_) | Self::Directory(_))
+    }
 }
 
 impl ToolchainPreference {
@@ -1468,10 +1447,10 @@ impl fmt::Display for ToolchainRequest {
             Self::File(path) => write!(f, "path `{}`", path.user_display()),
             Self::ExecutableName(name) => write!(f, "executable name `{name}`"),
             Self::Implementation(implementation) => {
-                write!(f, "{implementation}")
+                write!(f, "{}", implementation.pretty())
             }
             Self::ImplementationVersion(implementation, version) => {
-                write!(f, "{implementation} {version}")
+                write!(f, "{} {version}", implementation.pretty())
             }
             Self::Key(request) => write!(f, "{request}"),
         }
@@ -1495,75 +1474,49 @@ impl fmt::Display for ToolchainSource {
 
 impl fmt::Display for ToolchainPreference {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::OnlyManaged => f.write_str("managed toolchains"),
-            Self::OnlySystem => f.write_str("system toolchains"),
-            Self::PreferInstalledManaged | Self::PreferManaged | Self::PreferSystem => {
-                f.write_str("managed or system toolchains")
+        let s = match self {
+            Self::OnlyManaged => "managed toolchains",
+            Self::PreferManaged | Self::PreferInstalledManaged | Self::PreferSystem => {
+                if cfg!(windows) {
+                    "managed toolchains, system path, or `py` launcher"
+                } else {
+                    "managed toolchains or system path"
+                }
             }
-        }
+            Self::OnlySystem => {
+                if cfg!(windows) {
+                    "system path or `py` launcher"
+                } else {
+                    "system path"
+                }
+            }
+        };
+        f.write_str(s)
     }
 }
 
 impl fmt::Display for ToolchainNotFound {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NoPythonInstallation(sources, None | Some(VersionRequest::Any)) => {
-                write!(f, "No Python interpreters found in {sources}")
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let sources = match self.environment_preference {
+            EnvironmentPreference::Any => {
+                format!("virtual environments or {}", self.toolchain_preference)
             }
-            Self::NoPythonInstallation(sources, Some(version)) => {
-                write!(f, "No Python {version} interpreters found in {sources}")
+            EnvironmentPreference::ExplicitSystem => {
+                if self.request.is_explicit_system() {
+                    "virtual or system environment".to_string()
+                } else {
+                    "virtual environment".to_string()
+                }
             }
-            Self::NoMatchingVersion(sources, VersionRequest::Any) => {
-                write!(f, "No Python interpreter found in {sources}")
+            EnvironmentPreference::OnlySystem => self.toolchain_preference.to_string(),
+            EnvironmentPreference::OnlyVirtual => "virtual environments".to_string(),
+        };
+        match self.request {
+            ToolchainRequest::Any => {
+                write!(f, "No interpreter found in {sources}")
             }
-            Self::NoMatchingVersion(sources, version) => {
-                write!(f, "No interpreter found for Python {version} in {sources}")
-            }
-            Self::NoMatchingImplementation(sources, implementation) => {
-                write!(
-                    f,
-                    "No interpreter found for {} in {sources}",
-                    implementation.pretty()
-                )
-            }
-            Self::NoMatchingImplementationVersion(sources, implementation, version) => {
-                write!(
-                    f,
-                    "No interpreter found for {} {version} in {sources}",
-                    implementation.pretty()
-                )
-            }
-            Self::NoMatchingKey(sources, key) => {
-                write!(f, "No interpreter found key {key} in {sources}")
-            }
-            Self::FileNotFound(path) => write!(
-                f,
-                "Requested interpreter path `{}` does not exist",
-                path.user_display()
-            ),
-            Self::DirectoryNotFound(path) => write!(
-                f,
-                "Requested interpreter directory `{}` does not exist",
-                path.user_display()
-            ),
-            Self::ExecutableNotFoundInDirectory(directory, executable) => {
-                write!(
-                    f,
-                    "Interpreter directory `{}` does not contain Python executable at `{}`",
-                    directory.user_display(),
-                    executable.user_display_from(directory)
-                )
-            }
-            Self::ExecutableNotFoundInSearchPath(name) => {
-                write!(f, "Requested Python executable `{name}` not found in PATH")
-            }
-            Self::FileNotExecutable(path) => {
-                write!(
-                    f,
-                    "Python interpreter at `{}` is not executable",
-                    path.user_display()
-                )
+            _ => {
+                write!(f, "No interpreter found for {} in {sources}", self.request)
             }
         }
     }
