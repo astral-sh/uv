@@ -726,7 +726,7 @@ fn multiple_packages() {
     let mut filters = context.filters();
     if cfg!(windows) {
         filters.push(("colorama v0.4.6\n", ""));
-        filters.push(("requests v2.31.0", "└── requests v2.31.0"));
+        filters.push(("└── requests v2.31.0", "requests v2.31.0"));
     }
     context.assert_command("import requests").success();
     uv_snapshot!(filters, tree_command(&context), @r###"
