@@ -223,7 +223,7 @@ fn lock_sdist_git() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        source = { git = "https://github.com/astral-test/uv-public-pypackage", commit = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979", revision = "0.0.1" }
         "###
         );
     });
@@ -1411,7 +1411,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        source = { git = "https://github.com/astral-test/uv-public-pypackage", commit = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979", revision = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -1465,7 +1465,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        source = { git = "https://github.com/astral-test/uv-public-pypackage", commit = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389", revision = "main" }
         "###
         );
     });
@@ -1504,7 +1504,7 @@ fn lock_git_sha() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+        source = { git = "https://github.com/astral-test/uv-public-pypackage", commit = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389", revision = "main" }
         "###
         );
     });

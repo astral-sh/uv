@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use either::Either;
 use path_slash::PathExt;
@@ -1218,7 +1217,7 @@ impl Source {
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
         Source::Git(
-            locked_git_url(git_dist),
+            git_dist.git.repository().clone(),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().expect("precise commit"),
@@ -1237,8 +1236,26 @@ impl Source {
             Source::Registry(ref url) => {
                 source_table.insert("registry", Value::from(url.as_str()));
             }
-            Source::Git(ref url, _) => {
+            Source::Git(ref url, ref git_source) => {
                 source_table.insert("git", Value::from(url.as_str()));
+                source_table.insert("commit", Value::from(git_source.precise.to_string()));
+                if let Some(ref subdirectory) = git_source.subdirectory {
+                    source_table.insert("subdirectory", Value::from(subdirectory));
+                }
+                match git_source.kind {
+                    GitSourceKind::Tag(ref tag) => {
+                        source_table.insert("tag", Value::from(tag));
+                    }
+                    GitSourceKind::Branch(ref branch) => {
+                        source_table.insert("branch", Value::from(branch));
+                    }
+                    GitSourceKind::Rev(ref rev) => {
+                        source_table.insert("revision", Value::from(rev));
+                    }
+                    // Do nothing. Omitting tag and branch implies default
+                    // branch.
+                    GitSourceKind::DefaultBranch => {}
+                }
             }
             Source::Direct(ref url, DirectSource { ref subdirectory }) => {
                 source_table.insert("url", Value::from(url.as_str()));
@@ -1313,7 +1330,16 @@ enum SourceWire {
         registry: Url,
     },
     Git {
-        git: String,
+        git: Url,
+        commit: String,
+        #[serde(default)]
+        subdirectory: Option<String>,
+        #[serde(default)]
+        tag: Option<String>,
+        #[serde(default)]
+        branch: Option<String>,
+        #[serde(default)]
+        revision: Option<String>,
     },
     Direct {
         url: Url,
@@ -1343,24 +1369,37 @@ impl TryFrom<SourceWire> for Source {
 
         match wire {
             Registry { registry } => Ok(Source::Registry(registry)),
-            Git { git } => {
-                let mut url = Url::parse(&git)
-                    .map_err(|err| SourceParseError::InvalidUrl {
-                        given: git.to_string(),
-                        err,
-                    })
-                    .map_err(LockErrorKind::InvalidGitSourceUrl)?;
-                let git_source = GitSource::from_url(&mut url)
-                    .map_err(|err| match err {
-                        GitSourceError::InvalidSha => SourceParseError::InvalidSha {
-                            given: git.to_string(),
-                        },
-                        GitSourceError::MissingSha => SourceParseError::MissingSha {
-                            given: git.to_string(),
-                        },
-                    })
-                    .map_err(LockErrorKind::InvalidGitSourceUrl)?;
-                Ok(Source::Git(url, git_source))
+            Git {
+                git,
+                commit,
+                subdirectory,
+                tag,
+                branch,
+                revision,
+            } => {
+                let precise: GitSha =
+                    commit
+                        .parse()
+                        .map_err(|err| LockErrorKind::InvalidGitSourceRevision {
+                            given: commit.to_string(),
+                            err,
+                        })?;
+                let kind = match (tag, branch, revision) {
+                    (None, None, None) => GitSourceKind::DefaultBranch,
+                    (Some(tag), None, None) => GitSourceKind::Tag(tag),
+                    (None, Some(branch), None) => GitSourceKind::Branch(branch),
+                    (None, None, Some(revision)) => GitSourceKind::Rev(revision),
+                    _ => {
+                        let kind = LockErrorKind::InvalidGitSourceTooMany;
+                        return Err(kind.into());
+                    }
+                };
+                let git_source = GitSource {
+                    precise,
+                    subdirectory,
+                    kind,
+                };
+                Ok(Source::Git(git, git_source))
             }
             Direct { url, subdirectory } => Ok(Source::Direct(url, DirectSource { subdirectory })),
             Path { path } => Ok(Source::Path(path)),
@@ -1375,10 +1414,6 @@ struct DirectSource {
     subdirectory: Option<String>,
 }
 
-/// NOTE: Care should be taken when adding variants to this enum. Namely, new
-/// variants should be added without changing the relative ordering of other
-/// variants. Otherwise, this could cause the lock file to have a different
-/// canonical ordering of distributions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
     precise: GitSha,
@@ -1386,44 +1421,10 @@ struct GitSource {
     kind: GitSourceKind,
 }
 
-/// An error that occurs when a source string could not be parsed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum GitSourceError {
-    InvalidSha,
-    MissingSha,
-}
-
-impl GitSource {
-    /// Extracts a git source reference from the query pairs and the hash
-    /// fragment in the given URL.
-    ///
-    /// This also removes the query pairs and hash fragment from the given
-    /// URL in place.
-    fn from_url(url: &mut Url) -> Result<GitSource, GitSourceError> {
-        let mut kind = GitSourceKind::DefaultBranch;
-        let mut subdirectory = None;
-        for (key, val) in url.query_pairs() {
-            match &*key {
-                "tag" => kind = GitSourceKind::Tag(val.into_owned()),
-                "branch" => kind = GitSourceKind::Branch(val.into_owned()),
-                "rev" => kind = GitSourceKind::Rev(val.into_owned()),
-                "subdirectory" => subdirectory = Some(val.into_owned()),
-                _ => continue,
-            };
-        }
-        let precise = GitSha::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
-            .map_err(|_| GitSourceError::InvalidSha)?;
-
-        url.set_query(None);
-        url.set_fragment(None);
-        Ok(GitSource {
-            precise,
-            subdirectory,
-            kind,
-        })
-    }
-}
-
+/// NOTE: Care should be taken when adding variants to this enum. Namely, new
+/// variants should be added without changing the relative ordering of other
+/// variants. Otherwise, this could cause the lock file to have a different
+/// canonical ordering of distributions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 enum GitSourceKind {
     Tag(String),
@@ -1647,54 +1648,6 @@ impl From<GitSourceKind> for GitReference {
             GitSourceKind::DefaultBranch => GitReference::DefaultBranch,
         }
     }
-}
-
-/// Construct the lockfile-compatible [`URL`] for a [`GitSourceDist`].
-fn locked_git_url(git_dist: &GitSourceDist) -> Url {
-    let mut url = git_dist.git.repository().clone();
-
-    // Clear out any existing state.
-    url.set_fragment(None);
-    url.set_query(None);
-
-    // Put the subdirectory in the query.
-    if let Some(subdirectory) = git_dist.subdirectory.as_deref().and_then(Path::to_str) {
-        url.query_pairs_mut()
-            .append_pair("subdirectory", subdirectory);
-    }
-
-    // Put the requested reference in the query.
-    match git_dist.git.reference() {
-        GitReference::Branch(branch) => {
-            url.query_pairs_mut()
-                .append_pair("branch", branch.to_string().as_str());
-        }
-        GitReference::Tag(tag) => {
-            url.query_pairs_mut()
-                .append_pair("tag", tag.to_string().as_str());
-        }
-        GitReference::ShortCommit(rev)
-        | GitReference::BranchOrTag(rev)
-        | GitReference::BranchOrTagOrCommit(rev)
-        | GitReference::NamedRef(rev)
-        | GitReference::FullCommit(rev) => {
-            url.query_pairs_mut()
-                .append_pair("rev", rev.to_string().as_str());
-        }
-        GitReference::DefaultBranch => {}
-    }
-
-    // Put the precise commit in the fragment.
-    url.set_fragment(
-        git_dist
-            .git
-            .precise()
-            .as_ref()
-            .map(GitSha::to_string)
-            .as_deref(),
-    );
-
-    url
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
@@ -2165,14 +2118,20 @@ enum LockErrorKind {
         #[source]
         ToUrlError,
     ),
-    /// Failed to parse a git source URL.
-    #[error("failed to parse source git URL")]
-    InvalidGitSourceUrl(
-        /// The underlying error that occurred. This includes the
-        /// errant URL in the message.
+    /// Failed because a git source has more than one of `tag`, `branch`
+    /// or `revision`.
+    #[error(
+        "failed to parse git source since it has more than one \
+         `tag`, `branch` or `revision`"
+    )]
+    InvalidGitSourceTooMany,
+    /// Failed because a git source has an invalid `revision` field.
+    #[error("failed to parse git source revision '{given}'")]
+    InvalidGitSourceRevision {
+        given: String,
         #[source]
-        SourceParseError,
-    ),
+        err: uv_git::OidParseError,
+    },
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a distribution that isn't in the lock file.
@@ -2275,32 +2234,6 @@ enum LockErrorKind {
     MissingDependencySource {
         /// The name of the dependency that is missing a `source` field.
         name: PackageName,
-    },
-}
-
-/// An error that occurs when a source string could not be parsed.
-#[derive(Clone, Debug, thiserror::Error)]
-enum SourceParseError {
-    /// An error that occurs when the URL in the source is invalid.
-    #[error("invalid URL in source `{given}`")]
-    InvalidUrl {
-        /// The source string given.
-        given: String,
-        /// The URL parse error.
-        #[source]
-        err: url::ParseError,
-    },
-    /// An error that occurs when a Git URL is missing a precise commit SHA.
-    #[error("missing SHA in source `{given}`")]
-    MissingSha {
-        /// The source string given.
-        given: String,
-    },
-    /// An error that occurs when a Git URL has an invalid SHA.
-    #[error("invalid SHA in source `{given}`")]
-    InvalidSha {
-        /// The source string given.
-        given: String,
     },
 }
 
