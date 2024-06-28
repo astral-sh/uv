@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use distribution_types::{Diagnostic, InstalledDist, Name};
 use owo_colors::OwoColorize;
+use pep508_rs::MarkerEnvironment;
 use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
@@ -47,9 +48,15 @@ pub(crate) fn pip_tree(
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;
 
-    let rendered_tree = DisplayDependencyGraph::new(&site_packages, depth.into(), prune, no_dedupe)
-        .render()
-        .join("\n");
+    let rendered_tree = DisplayDependencyGraph::new(
+        &site_packages,
+        depth.into(),
+        prune,
+        no_dedupe,
+        environment.interpreter().markers(),
+    )
+    .render()
+    .join("\n");
     writeln!(printer.stdout(), "{rendered_tree}").unwrap();
     if rendered_tree.contains('*') {
         writeln!(
@@ -82,18 +89,16 @@ pub(crate) fn pip_tree(
 // For example, `requests==2.32.3` requires `charset-normalizer`, `idna`, `urllib`, and `certifi` at
 // all times, `PySocks` on `socks` extra and `chardet` on `use_chardet_on_py3` extra.
 // This function will return `["charset-normalizer", "idna", "urllib", "certifi"]` for `requests`.
-fn required_with_no_extra(dist: &InstalledDist) -> Vec<pep508_rs::Requirement<VerbatimParsedUrl>> {
+fn required_with_no_extra(
+    dist: &InstalledDist,
+    marker_environment: &MarkerEnvironment,
+) -> Vec<pep508_rs::Requirement<VerbatimParsedUrl>> {
     let metadata = dist.metadata().unwrap();
     return metadata
         .requires_dist
         .into_iter()
         .filter(|r| {
-            r.marker.is_none()
-                || !r
-                    .marker
-                    .as_ref()
-                    .unwrap()
-                    .evaluate_optional_environment(None, &metadata.provides_extras[..])
+            r.marker.is_none() || r.marker.as_ref().unwrap().evaluate(marker_environment, &[])
         })
         .collect::<Vec<_>>();
 }
@@ -116,6 +121,9 @@ struct DisplayDependencyGraph<'a> {
 
     // Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
+
+    // The marker environment for the current interpreter.
+    marker_environment: &'a MarkerEnvironment,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
@@ -125,6 +133,7 @@ impl<'a> DisplayDependencyGraph<'a> {
         depth: usize,
         prune: Vec<PackageName>,
         no_dedupe: bool,
+        marker_environment: &'a MarkerEnvironment,
     ) -> DisplayDependencyGraph<'a> {
         let mut dist_by_package_name = HashMap::new();
         let mut required_packages = HashSet::new();
@@ -132,7 +141,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             dist_by_package_name.insert(site_package.name(), site_package);
         }
         for site_package in site_packages.iter() {
-            for required in required_with_no_extra(site_package) {
+            for required in required_with_no_extra(site_package, marker_environment) {
                 required_packages.insert(required.name.clone());
             }
         }
@@ -144,6 +153,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             depth,
             prune,
             no_dedupe,
+            marker_environment,
         }
     }
 
@@ -182,7 +192,7 @@ impl<'a> DisplayDependencyGraph<'a> {
 
         path.push(package_name.clone());
         visited.insert(package_name.clone());
-        let required_packages = required_with_no_extra(installed_dist);
+        let required_packages = required_with_no_extra(installed_dist, self.marker_environment);
         for (index, required_package) in required_packages.iter().enumerate() {
             // Skip if the current package is not one of the installed distributions.
             if !self
