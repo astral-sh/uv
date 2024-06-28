@@ -116,8 +116,12 @@ struct DisplayDependencyGraph<'a> {
     prune: Vec<PackageName>,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
+
+    /// Show the reverse dependencies for the given package.
+    /// This flag will invert the tree and display the packages that depend on the given package.
     invert: bool,
 
+    /// Map from package name to the list of required (reversed if --invert is given) packages.
     requires_map: HashMap<PackageName, Vec<PackageName>>,
 }
 
