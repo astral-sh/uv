@@ -23,6 +23,7 @@ pub(crate) fn pip_tree(
     depth: u8,
     prune: Vec<PackageName>,
     no_dedupe: bool,
+    invert: bool,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -51,6 +52,7 @@ pub(crate) fn pip_tree(
         depth.into(),
         prune,
         no_dedupe,
+        invert,
         environment.interpreter().markers(),
     )
     .render()
@@ -108,18 +110,15 @@ struct DisplayDependencyGraph<'a> {
     site_packages: &'a SitePackages,
     /// Map from package name to the installed distribution.
     dist_by_package_name: HashMap<&'a PackageName, &'a InstalledDist>,
-    /// Set of package names that are required by at least one installed distribution.
-    /// It is used to determine the starting nodes when recursing the
-    /// dependency graph.
-    required_packages: HashSet<PackageName>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Prune the given package from the display of the dependency tree.
     prune: Vec<PackageName>,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
-    /// The marker environment for the current interpreter.
-    markers: &'a MarkerEnvironment,
+    invert: bool,
+
+    requires_map: HashMap<PackageName, Vec<PackageName>>,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
@@ -129,27 +128,39 @@ impl<'a> DisplayDependencyGraph<'a> {
         depth: usize,
         prune: Vec<PackageName>,
         no_dedupe: bool,
+        invert: bool,
         markers: &'a MarkerEnvironment,
     ) -> DisplayDependencyGraph<'a> {
         let mut dist_by_package_name = HashMap::new();
-        let mut required_packages = HashSet::new();
+        let mut requires_map = HashMap::new();
+
         for site_package in site_packages.iter() {
             dist_by_package_name.insert(site_package.name(), site_package);
         }
         for site_package in site_packages.iter() {
             for required in required_with_no_extra(site_package, markers) {
-                required_packages.insert(required.name.clone());
+                if invert {
+                    requires_map
+                        .entry(required.name.clone())
+                        .or_insert_with(Vec::new)
+                        .push(site_package.name().clone());
+                } else {
+                    requires_map
+                        .entry(site_package.name().clone())
+                        .or_insert_with(Vec::new)
+                        .push(required.name.clone());
+                }
             }
         }
 
         Self {
             site_packages,
             dist_by_package_name,
-            required_packages,
             depth,
             prune,
             no_dedupe,
-            markers,
+            invert,
+            requires_map,
         }
     }
 
@@ -182,19 +193,20 @@ impl<'a> DisplayDependencyGraph<'a> {
         }
 
         let mut lines = vec![line];
-
+        let empty_vec = Vec::new();
         path.push(package_name.clone());
         visited.insert(package_name.clone());
-        let required_packages = required_with_no_extra(installed_dist, self.markers);
+        let required_packages = self
+            .requires_map
+            .get(installed_dist.name())
+            .unwrap_or(&empty_vec)
+            .into_iter()
+            .filter(|required_package| {
+                // Skip if the current package is not one of the installed distributions.
+                self.dist_by_package_name.contains_key(required_package)
+            })
+            .collect::<Vec<_>>();
         for (index, required_package) in required_packages.iter().enumerate() {
-            // Skip if the current package is not one of the installed distributions.
-            if !self
-                .dist_by_package_name
-                .contains_key(&required_package.name)
-            {
-                continue;
-            }
-
             // For sub-visited packages, add the prefix to make the tree display user-friendly.
             // The key observation here is you can group the tree as follows when you're at the
             // root of the tree:
@@ -222,11 +234,7 @@ impl<'a> DisplayDependencyGraph<'a> {
 
             let mut prefixed_lines = Vec::new();
             for (visited_index, visited_line) in self
-                .visit(
-                    self.dist_by_package_name[&required_package.name],
-                    visited,
-                    path,
-                )
+                .visit(self.dist_by_package_name[required_package], visited, path)
                 .iter()
                 .enumerate()
             {
@@ -249,12 +257,17 @@ impl<'a> DisplayDependencyGraph<'a> {
     // Depth-first traverse the nodes to render the tree.
     // The starting nodes are the ones without incoming edges.
     fn render(&self) -> Vec<String> {
+        let mut non_starting_nodes = HashSet::new();
+        for (_, children) in self.requires_map.iter() {
+            non_starting_nodes.extend(children);
+        }
+
         let mut visited: HashSet<String> = HashSet::new();
         let mut lines: Vec<String> = Vec::new();
         for site_package in self.site_packages.iter() {
             // If the current package is not required by any other package, start the traversal
             // with the current package as the root.
-            if !self.required_packages.contains(site_package.name()) {
+            if !non_starting_nodes.contains(site_package.name()) {
                 lines.extend(self.visit(site_package, &mut visited, &mut Vec::new()));
             }
         }

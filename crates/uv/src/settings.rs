@@ -1047,6 +1047,7 @@ pub(crate) struct PipTreeSettings {
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
+    pub(crate) invert: bool,
     // CLI-only settings.
     pub(crate) shared: PipSettings,
 }
@@ -1058,6 +1059,7 @@ impl PipTreeSettings {
             depth,
             prune,
             no_dedupe,
+            invert,
             strict,
             no_strict,
             python,
@@ -1069,6 +1071,7 @@ impl PipTreeSettings {
             depth,
             prune,
             no_dedupe,
+            invert,
             // Shared settings.
             shared: PipSettings::combine(
                 PipOptions {

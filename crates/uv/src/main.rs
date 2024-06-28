@@ -551,6 +551,7 @@ async fn run() -> Result<ExitStatus> {
                 args.depth,
                 args.prune,
                 args.no_dedupe,
+                args.invert,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
