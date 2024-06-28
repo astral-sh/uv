@@ -62,7 +62,7 @@ pub(crate) fn pip_tree(
         } else {
             "(*) Package tree already displayed".italic()
         };
-        writeln!(printer.stdout(), "{}", message)?;
+        writeln!(printer.stdout(), "{message}")?;
     }
 
     // Validate that the environment is consistent.
