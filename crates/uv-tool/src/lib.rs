@@ -11,6 +11,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 use uv_toolchain::{Interpreter, PythonEnvironment};
+use uv_warnings::warn_user_once;
 
 pub use receipt::ToolReceipt;
 pub use tool::Tool;
@@ -80,9 +81,9 @@ impl InstalledTools {
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,
-                // TODO(zanieb): Consider warning on malformed tools instead
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingToolReceipt(name.clone(), path.clone()))
+                    warn_user_once!("Ignoring malformed tool `{name}`: missing receipt");
+                    continue;
                 }
                 Err(err) => return Err(err.into()),
             };

@@ -830,6 +830,16 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::List(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolListSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::tool_list(globals.preview, printer).await
+        }
         Commands::Toolchain(ToolchainNamespace {
             command: ToolchainCommand::List(args),
         }) => {
