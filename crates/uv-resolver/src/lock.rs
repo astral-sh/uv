@@ -24,6 +24,7 @@ use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
 use uv_configuration::ExtrasSpecification;
+use uv_distribution::VirtualProject;
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
@@ -317,35 +318,36 @@ impl Lock {
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub fn to_resolution(
         &self,
-        workspace_root: &Path,
+        project: &VirtualProject,
         marker_env: &MarkerEnvironment,
         tags: &Tags,
-        root_name: &PackageName,
         extras: &ExtrasSpecification,
         dev: &[GroupName],
     ) -> Result<Resolution, LockError> {
         let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
 
-        // Add the root distribution to the queue.
-        let root = self
-            .find_by_name(root_name)
-            .expect("found too many distributions matching root")
-            .expect("could not find root");
+        // Add the workspace packages to the queue.
+        for root_name in project.packages() {
+            let root = self
+                .find_by_name(root_name)
+                .expect("found too many distributions matching root")
+                .expect("could not find root");
 
-        // Add the base package.
-        queue.push_back((root, None));
+            // Add the base package.
+            queue.push_back((root, None));
 
-        // Add any extras.
-        match extras {
-            ExtrasSpecification::None => {}
-            ExtrasSpecification::All => {
-                for extra in root.optional_dependencies.keys() {
-                    queue.push_back((root, Some(extra)));
+            // Add any extras.
+            match extras {
+                ExtrasSpecification::None => {}
+                ExtrasSpecification::All => {
+                    for extra in root.optional_dependencies.keys() {
+                        queue.push_back((root, Some(extra)));
+                    }
                 }
-            }
-            ExtrasSpecification::Some(extras) => {
-                for extra in extras {
-                    queue.push_back((root, Some(extra)));
+                ExtrasSpecification::Some(extras) => {
+                    for extra in extras {
+                        queue.push_back((root, Some(extra)));
+                    }
                 }
             }
         }
@@ -375,7 +377,8 @@ impl Lock {
                 }
             }
             let name = dist.id.name.clone();
-            let resolved_dist = ResolvedDist::Installable(dist.to_dist(workspace_root, tags)?);
+            let resolved_dist =
+                ResolvedDist::Installable(dist.to_dist(project.workspace().root(), tags)?);
             map.insert(name, resolved_dist);
         }
         let diagnostics = vec![];

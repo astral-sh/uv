@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use either::Either;
 use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace};
@@ -837,6 +838,112 @@ fn is_excluded_from_workspace(
         }
     }
     Ok(false)
+}
+
+/// A project that can be synced.
+///
+/// The project could be a package within a workspace, a real workspace root, or even a virtual
+/// workspace root.
+#[derive(Debug)]
+pub enum VirtualProject {
+    /// A project (which could be within a workspace, or an implicit workspace root).
+    Project(ProjectWorkspace),
+    /// A virtual workspace root.
+    Virtual(Workspace),
+}
+
+impl VirtualProject {
+    /// Find the current project or virtual workspace root, given the current directory.
+    ///
+    /// Similar to calling [`ProjectWorkspace::discover`] with a fallback to [`Workspace::discover`],
+    /// but avoids rereading the `pyproject.toml` (and relying on error-handling as control flow).
+    pub async fn discover(
+        path: &Path,
+        stop_discovery_at: Option<&Path>,
+    ) -> Result<Self, WorkspaceError> {
+        let project_root = path
+            .ancestors()
+            .take_while(|path| {
+                // Only walk up the given directory, if any.
+                stop_discovery_at
+                    .map(|stop_discovery_at| stop_discovery_at != *path)
+                    .unwrap_or(true)
+            })
+            .find(|path| path.join("pyproject.toml").is_file())
+            .ok_or(WorkspaceError::MissingPyprojectToml)?;
+
+        debug!(
+            "Found project root: `{}`",
+            project_root.simplified_display()
+        );
+
+        // Read the current `pyproject.toml`.
+        let pyproject_path = project_root.join("pyproject.toml");
+        let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+        if let Some(project) = pyproject_toml.project.as_ref() {
+            // If the `pyproject.toml` contains a `[project]` table, it's a project.
+            let project = ProjectWorkspace::from_project(
+                project_root,
+                project,
+                &pyproject_toml,
+                stop_discovery_at,
+            )
+            .await?;
+            Ok(Self::Project(project))
+        } else if let Some(workspace) = pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+        {
+            // Otherwise, if it contains a `tool.uv.workspace` table, it's a virtual workspace.
+            let project_path = absolutize_path(project_root)
+                .map_err(WorkspaceError::Normalize)?
+                .to_path_buf();
+
+            let workspace = Workspace::collect_members(
+                project_path,
+                workspace.clone(),
+                pyproject_toml,
+                None,
+                stop_discovery_at,
+            )
+            .await?;
+
+            Ok(Self::Virtual(workspace))
+        } else {
+            Err(WorkspaceError::MissingProject(pyproject_path))
+        }
+    }
+
+    /// Return the [`Workspace`] of the project.
+    pub fn workspace(&self) -> &Workspace {
+        match self {
+            VirtualProject::Project(project) => project.workspace(),
+            VirtualProject::Virtual(workspace) => workspace,
+        }
+    }
+
+    /// Return the [`PackageName`] of the project.
+    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
+        match self {
+            VirtualProject::Project(project) => {
+                Either::Left(std::iter::once(project.project_name()))
+            }
+            VirtualProject::Virtual(workspace) => Either::Right(workspace.packages().keys()),
+        }
+    }
+
+    /// Return the [`PackageName`] of the project, if it's not a virtual workspace.
+    pub fn project_name(&self) -> Option<&PackageName> {
+        match self {
+            VirtualProject::Project(project) => Some(project.project_name()),
+            VirtualProject::Virtual(_) => None,
+        }
+    }
 }
 
 #[cfg(test)]

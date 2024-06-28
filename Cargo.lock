@@ -4738,6 +4738,7 @@ dependencies = [
  "anyhow",
  "distribution-filename",
  "distribution-types",
+ "either",
  "fs-err",
  "futures",
  "glob",
