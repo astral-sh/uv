@@ -50,14 +50,14 @@ pub(crate) async fn remove(
             DependencyType::Production => {
                 let deps = pyproject.remove_dependency(&req)?;
                 if deps.is_empty() {
-                    warn_dependency_types(&req, &pyproject);
+                    warn_if_present(&req, &pyproject);
                     anyhow::bail!("The dependency `{req}` could not be found in `dependencies`");
                 }
             }
             DependencyType::Dev => {
                 let deps = pyproject.remove_dev_dependency(&req)?;
                 if deps.is_empty() {
-                    warn_dependency_types(&req, &pyproject);
+                    warn_if_present(&req, &pyproject);
                     anyhow::bail!(
                         "The dependency `{req}` could not be found in `dev-dependencies`"
                     );
@@ -66,7 +66,7 @@ pub(crate) async fn remove(
             DependencyType::Optional(ref group) => {
                 let deps = pyproject.remove_optional_dependency(&req, group)?;
                 if deps.is_empty() {
-                    warn_dependency_types(&req, &pyproject);
+                    warn_if_present(&req, &pyproject);
                     anyhow::bail!(
                         "The dependency `{req}` could not be found in `optional-dependencies`"
                     );
@@ -138,7 +138,10 @@ pub(crate) async fn remove(
 }
 
 /// Emit a warning if a dependency with the given name is present as any dependency type.
-fn warn_dependency_types(name: &PackageName, pyproject: &PyProjectTomlMut) {
+///
+/// This is useful when a dependency of the user-specified type was not found, but it may be present
+/// elsewhere.
+fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
     for dep_ty in pyproject.find_dependency(name) {
         match dep_ty {
             DependencyType::Production => {
