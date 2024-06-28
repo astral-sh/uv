@@ -325,6 +325,7 @@ impl Lock {
         dev: &[GroupName],
     ) -> Result<Resolution, LockError> {
         let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
+        let mut seen = FxHashSet::default();
 
         // Add the root distribution to the queue.
         let root = self
@@ -362,16 +363,17 @@ impl Lock {
                         }),
                     ))
                 };
-
             for dep in deps {
                 if dep
                     .marker
                     .as_ref()
                     .map_or(true, |marker| marker.evaluate(marker_env, &[]))
                 {
-                    let dep_dist = self.find_by_id(&dep.distribution_id);
-                    let dep_extra = dep.extra.as_ref();
-                    queue.push_back((dep_dist, dep_extra));
+                    if seen.insert((&dep.distribution_id, dep.extra.as_ref())) {
+                        let dep_dist = self.find_by_id(&dep.distribution_id);
+                        let dep_extra = dep.extra.as_ref();
+                        queue.push_back((dep_dist, dep_extra));
+                    }
                 }
             }
             let name = dist.id.name.clone();
