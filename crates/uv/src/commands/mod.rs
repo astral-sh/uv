@@ -25,7 +25,7 @@ pub(crate) use project::sync::sync;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::install::install as tool_install;
-pub(crate) use tool::run::run as run_tool;
+pub(crate) use tool::run::run as tool_run;
 pub(crate) use toolchain::find::find as toolchain_find;
 pub(crate) use toolchain::install::install as toolchain_install;
 pub(crate) use toolchain::list::list as toolchain_list;
