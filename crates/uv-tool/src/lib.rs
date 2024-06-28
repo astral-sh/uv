@@ -14,7 +14,7 @@ use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_warnings::warn_user_once;
 
 pub use receipt::ToolReceipt;
-pub use tool::Tool;
+pub use tool::{Tool, ToolEntrypoint};
 
 use uv_state::{StateBucket, StateStore};
 mod receipt;
