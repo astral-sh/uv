@@ -171,6 +171,55 @@ fn nested_dependencies() {
 }
 
 #[test]
+fn invert() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("scikit-learn==1.4.1.post1")
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + joblib==1.3.2
+     + numpy==1.26.4
+     + scikit-learn==1.4.1.post1
+     + scipy==1.12.0
+     + threadpoolctl==3.4.0
+    "###
+    );
+
+    uv_snapshot!(context.filters(), tree_command(&context).arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    joblib v1.3.2
+    └── scikit-learn v1.4.1.post1
+    numpy v1.26.4
+    ├── scikit-learn v1.4.1.post1 (*)
+    └── scipy v1.12.0
+        └── scikit-learn v1.4.1.post1 (*)
+    threadpoolctl v3.4.0
+    └── scikit-learn v1.4.1.post1 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
 fn depth() {
     let context = TestContext::new("3.12");
 
