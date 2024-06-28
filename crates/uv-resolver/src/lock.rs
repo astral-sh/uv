@@ -2376,4 +2376,60 @@ wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
+
+    #[test]
+    fn source_direct_no_subdir() {
+        let data = r#"
+version = 1
+
+[[distribution]]
+name = "anyio"
+version = "4.3.0"
+source = { url = "https://burntsushi.net" }
+"#;
+        let result: Result<Lock, _> = toml::from_str(data);
+        insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn source_direct_has_subdir() {
+        let data = r#"
+version = 1
+
+[[distribution]]
+name = "anyio"
+version = "4.3.0"
+source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
+"#;
+        let result: Result<Lock, _> = toml::from_str(data);
+        insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn source_directory() {
+        let data = r#"
+version = 1
+
+[[distribution]]
+name = "anyio"
+version = "4.3.0"
+source = { directory = "path/to/dir" }
+"#;
+        let result: Result<Lock, _> = toml::from_str(data);
+        insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn source_editable() {
+        let data = r#"
+version = 1
+
+[[distribution]]
+name = "anyio"
+version = "4.3.0"
+source = { editable = "path/to/dir" }
+"#;
+        let result: Result<Lock, _> = toml::from_str(data);
+        insta::assert_debug_snapshot!(result);
+    }
 }
