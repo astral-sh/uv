@@ -301,7 +301,7 @@ jobs:
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: |
           rustup target add x86_64-pc-windows-msvc
-          rustup component add clippy rust-src --toolchain nightly-2024-05-27-x86_64-pc-windows-msvc
+          rustup component add clippy rust-src --toolchain nightly-2024-06-08-x86_64-pc-windows-msvc
 
       - uses: rui314/setup-mold@v1
 

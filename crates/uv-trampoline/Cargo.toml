@@ -6,46 +6,48 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 autotests = false
 
-
 # Need to optimize etc. or else build fails
 [profile.dev]
 lto = true
-codegen-units = 1
 opt-level = 1
 panic = "abort"
-debug-assertions = false
-overflow-checks = false
 debug = true
 
 [profile.release]
+# Enable Link Time Optimization.
 lto = true
+# Reduce number of codegen units to increase optimizations.
 codegen-units = 1
+# Optimize for size.
 opt-level = "z"
+# Abort on panic.
 panic = "abort"
+# Automatically strip symbols from the binary.
+strip = true
 debug = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 windows-sys = { version = "0.52.0", features = [
-    "Win32_Foundation",
-    "Win32_Security",
-    "Win32_Storage_FileSystem",
-    "Win32_System_Console",
-    "Win32_System_Diagnostics_Debug",
-    "Win32_System_Environment",
-    "Win32_System_IO",
-    "Win32_System_JobObjects",
-    "Win32_System_JobObjects",
-    "Win32_System_LibraryLoader",
-    "Win32_System_Memory",
-    "Win32_System_Threading",
-    "Win32_System_WindowsProgramming",
-    "Win32_UI_WindowsAndMessaging",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Console",
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_Environment",
+  "Win32_System_IO",
+  "Win32_System_JobObjects",
+  "Win32_System_JobObjects",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Memory",
+  "Win32_System_Threading",
+  "Win32_System_WindowsProgramming",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 ufmt-write = "0.1.0"
-ufmt = "0.2.0"
+ufmt = { version = "0.2.0", features = ["std"] }
 
 [build-dependencies]
 embed-manifest = "1.4.0"

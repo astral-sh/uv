@@ -1,11 +1,9 @@
-use alloc::string::String;
-use alloc::{ffi::CString, vec, vec::Vec};
-use core::mem::MaybeUninit;
-use core::{
+use std::mem::MaybeUninit;
+use std::{
     ffi::CStr,
-    mem,
     ptr::{addr_of, addr_of_mut, null, null_mut},
 };
+use std::{ffi::CString, string::String, vec, vec::Vec};
 
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileA, GetFileSizeEx, ReadFile, SetFilePointerEx, FILE_ATTRIBUTE_NORMAL, FILE_BEGIN,
@@ -27,7 +25,7 @@ use crate::helpers::SizeOf;
 use crate::{eprintln, format};
 
 const MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
-const PATH_LEN_SIZE: usize = mem::size_of::<u32>();
+const PATH_LEN_SIZE: usize = std::mem::size_of::<u32>();
 const MAX_PATH_LEN: u32 = 32 * 1024;
 
 fn getenv(name: &CStr) -> Option<CString> {
@@ -69,8 +67,8 @@ fn make_child_cmdline() -> CString {
     // Helpful when debugging trampoline issues
     // eprintln!(
     //     "executable_name: '{}'\nnew_cmdline: {}",
-    //     core::str::from_utf8(executable_name.to_bytes()).unwrap(),
-    //     core::str::from_utf8(child_cmdline.as_slice()).unwrap()
+    //     std::str::from_utf8(executable_name.to_bytes()).unwrap(),
+    //     std::str::from_utf8(child_cmdline.as_slice()).unwrap()
     // );
 
     CString::from_vec_with_nul(child_cmdline).unwrap_or_else(|_| {
@@ -558,7 +556,7 @@ fn print_last_error_and_exit(message: &str) -> ! {
 
     let err = unsafe { GetLastError() };
     eprintln!("Received error code: {}", err);
-    let mut msg_ptr: *mut u8 = core::ptr::null_mut();
+    let mut msg_ptr: *mut u8 = std::ptr::null_mut();
     let size = unsafe {
         FormatMessageA(
             FORMAT_MESSAGE_ALLOCATE_BUFFER
@@ -571,9 +569,9 @@ fn print_last_error_and_exit(message: &str) -> ! {
             // but if you pass FORMAT_MESSAGE_ALLOCATE_BUFFER then you have to
             // *actually* pass in a *mut *mut u16 and just lie about the type.
             // Getting Rust to do this requires some convincing.
-            core::ptr::addr_of_mut!(msg_ptr) as *mut _ as _,
+            std::ptr::addr_of_mut!(msg_ptr) as *mut _ as _,
             0,
-            core::ptr::null(),
+            std::ptr::null(),
         )
     };
 
@@ -584,7 +582,7 @@ fn print_last_error_and_exit(message: &str) -> ! {
         );
     } else {
         let reason = unsafe {
-            let reason = core::slice::from_raw_parts(msg_ptr, size as usize + 1);
+            let reason = std::slice::from_raw_parts(msg_ptr, size as usize + 1);
             CStr::from_bytes_with_nul_unchecked(reason)
         };
         eprintln!(
