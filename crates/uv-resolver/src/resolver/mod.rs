@@ -444,56 +444,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let version = match version {
                     ResolverVersion::Available(version) => version,
                     ResolverVersion::Unavailable(version, reason) => {
-                        // Incompatible requires-python versions are special in that we track
-                        // them as incompatible dependencies instead of marking the package version
-                        // as unavailable directly
-                        if let UnavailableVersion::IncompatibleDist(
-                            IncompatibleDist::Source(IncompatibleSource::RequiresPython(
-                                requires_python,
-                                kind,
-                            ))
-                            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
-                                requires_python,
-                                kind,
-                            )),
-                        ) = reason
-                        {
-                            let python_version: Range<Version> =
-                                PubGrubSpecifier::try_from(&requires_python)?.into();
-
-                            let package = &state.next;
-                            state
-                                .pubgrub
-                                .add_incompatibility(Incompatibility::from_dependency(
-                                    package.clone(),
-                                    Range::singleton(version.clone()),
-                                    (
-                                        PubGrubPackage::from(PubGrubPackageInner::Python(
-                                            match kind {
-                                                PythonRequirementKind::Installed => {
-                                                    PubGrubPython::Installed
-                                                }
-                                                PythonRequirementKind::Target => {
-                                                    PubGrubPython::Target
-                                                }
-                                            },
-                                        )),
-                                        python_version.clone(),
-                                    ),
-                                ));
-                            state
-                                .pubgrub
-                                .partial_solution
-                                .add_decision(state.next.clone(), version);
-                            continue;
-                        };
-                        state
-                            .pubgrub
-                            .add_incompatibility(Incompatibility::custom_version(
-                                state.next.clone(),
-                                version.clone(),
-                                UnavailableReason::Version(reason),
-                            ));
+                        state.add_incompatible_version(version, reason)?;
                         continue;
                     }
                 };
@@ -1777,6 +1728,49 @@ impl SolveState {
                 (package, version)
             }),
         );
+        Ok(())
+    }
+
+    fn add_incompatible_version(
+        &mut self,
+        version: Version,
+        reason: UnavailableVersion,
+    ) -> Result<(), ResolveError> {
+        // Incompatible requires-python versions are special in that we track
+        // them as incompatible dependencies instead of marking the package version
+        // as unavailable directly
+        if let UnavailableVersion::IncompatibleDist(
+            IncompatibleDist::Source(IncompatibleSource::RequiresPython(requires_python, kind))
+            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python, kind)),
+        ) = reason
+        {
+            let python_version: Range<Version> =
+                PubGrubSpecifier::try_from(&requires_python)?.into();
+
+            let package = &self.next;
+            self.pubgrub
+                .add_incompatibility(Incompatibility::from_dependency(
+                    package.clone(),
+                    Range::singleton(version.clone()),
+                    (
+                        PubGrubPackage::from(PubGrubPackageInner::Python(match kind {
+                            PythonRequirementKind::Installed => PubGrubPython::Installed,
+                            PythonRequirementKind::Target => PubGrubPython::Target,
+                        })),
+                        python_version.clone(),
+                    ),
+                ));
+            self.pubgrub
+                .partial_solution
+                .add_decision(self.next.clone(), version);
+            return Ok(());
+        };
+        self.pubgrub
+            .add_incompatibility(Incompatibility::custom_version(
+                self.next.clone(),
+                version.clone(),
+                UnavailableReason::Version(reason),
+            ));
         Ok(())
     }
 
