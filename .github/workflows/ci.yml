@@ -675,11 +675,19 @@ jobs:
     name: "check system | python on opensuse"
     runs-on: ubuntu-latest
     container: opensuse/tumbleweed
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
       - name: "Install Python"
-        run: zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3
+        run: >
+          until
+          zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3;
+          do sleep 10;
+          done
+
+          # We retry because `zypper` can fail during remote repository updates
+          # The above will not sleep forever due to the job level timeout
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
