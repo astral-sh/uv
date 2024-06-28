@@ -19,6 +19,7 @@ use crate::printer::Printer;
 
 /// Display the installed packages in the current environment as a dependency tree.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_tree(
     depth: u8,
     prune: Vec<PackageName>,
@@ -117,10 +118,6 @@ struct DisplayDependencyGraph<'a> {
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
 
-    /// Show the reverse dependencies for the given package.
-    /// This flag will invert the tree and display the packages that depend on the given package.
-    invert: bool,
-
     /// Map from package name to the list of required (reversed if --invert is given) packages.
     requires_map: HashMap<PackageName, Vec<PackageName>>,
 }
@@ -163,7 +160,6 @@ impl<'a> DisplayDependencyGraph<'a> {
             depth,
             prune,
             no_dedupe,
-            invert,
             requires_map,
         }
     }
@@ -204,7 +200,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             .requires_map
             .get(installed_dist.name())
             .unwrap_or(&empty_vec)
-            .into_iter()
+            .iter()
             .filter(|required_package| {
                 // Skip if the current package is not one of the installed distributions.
                 self.dist_by_package_name.contains_key(required_package)
@@ -261,8 +257,9 @@ impl<'a> DisplayDependencyGraph<'a> {
     // Depth-first traverse the nodes to render the tree.
     // The starting nodes are the ones without incoming edges.
     fn render(&self) -> Vec<String> {
+        // The starting nodes are those that are not required by any other package.
         let mut non_starting_nodes = HashSet::new();
-        for (_, children) in self.requires_map.iter() {
+        for children in self.requires_map.values() {
             non_starting_nodes.extend(children);
         }
 
