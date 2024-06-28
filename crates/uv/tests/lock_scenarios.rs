@@ -1381,7 +1381,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 /// This tests that markers which provoked a fork in the universal resolver are used
 /// to ignore dependencies which cannot possibly be installed by a resolution
 /// produced by that fork.  In this example, the `a<2` dependency is only active on
-/// Darwin platforms. But the `a==1.0.0` distribution has a dependency on on `b`
+/// Darwin platforms. But the `a==1.0.0` distribution has a dependency on `b`
 /// that is only active on Linux, where as `a==2.0.0` does not. Therefore, when the
 /// fork provoked by the `a<2` dependency considers `b`, it should ignore it because
 /// it isn't possible for `sys_platform == 'linux'` and `sys_platform == 'darwin'`
