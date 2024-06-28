@@ -412,6 +412,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv tool list` command with options shared across scenarios.
+    pub fn tool_list(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command.arg("tool").arg("list");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv add` command for the given requirements.
     pub fn add(&self, reqs: &[&str]) -> Command {
         let mut command = Command::new(get_bin());

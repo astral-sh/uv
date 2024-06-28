@@ -1873,6 +1873,8 @@ pub enum ToolCommand {
     Run(ToolRunArgs),
     /// Install a tool
     Install(ToolInstallArgs),
+    /// List installed tools.
+    List(ToolListArgs),
 }
 
 #[derive(Args)]
@@ -1968,6 +1970,10 @@ pub struct ToolInstallArgs {
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
 }
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ToolListArgs;
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
