@@ -75,6 +75,53 @@ fn single_package() {
     );
 }
 
+// `pandas` requires `numpy` with markers on Python version.
+#[test]
+fn python_version_marker() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("pandas").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + numpy==1.26.4
+     + pandas==2.2.1
+     + python-dateutil==2.9.0.post0
+     + pytz==2024.1
+     + six==1.16.0
+     + tzdata==2024.1
+
+    "###
+    );
+
+    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pandas v2.2.1
+    ├── numpy v1.26.4
+    ├── python-dateutil v2.9.0.post0
+    │   └── six v1.16.0
+    ├── pytz v2024.1
+    └── tzdata v2024.1
+
+    ----- stderr -----
+    "###
+    );
+}
+
 #[test]
 fn nested_dependencies() {
     let context = TestContext::new("3.12");
@@ -746,17 +793,17 @@ fn multiple_packages_shared_descendant() {
     boto3 v1.34.69
     ├── botocore v1.34.69
     │   ├── jmespath v1.0.1
-    │   └── python-dateutil v2.9.0.post0
-    │       └── six v1.16.0
+    │   ├── python-dateutil v2.9.0.post0
+    │   │   └── six v1.16.0
+    │   └── urllib3 v2.2.1
     ├── jmespath v1.0.1 (*)
     └── s3transfer v0.10.1
         └── botocore v1.34.69 (*)
     pendulum v3.0.0
     ├── python-dateutil v2.9.0.post0 (*)
-    └── tzdata v2024.1
-    time-machine v2.14.1
-    └── python-dateutil v2.9.0.post0 (*)
-    urllib3 v2.2.1
+    ├── tzdata v2024.1
+    └── time-machine v2.14.1
+        └── python-dateutil v2.9.0.post0 (*)
     (*) Package tree already displayed
 
     ----- stderr -----
@@ -838,22 +885,23 @@ fn no_dedupe_and_cycle() {
     boto3 v1.34.69
     ├── botocore v1.34.69
     │   ├── jmespath v1.0.1
-    │   └── python-dateutil v2.9.0.post0
-    │       └── six v1.16.0
+    │   ├── python-dateutil v2.9.0.post0
+    │   │   └── six v1.16.0
+    │   └── urllib3 v2.2.1
     ├── jmespath v1.0.1
     └── s3transfer v0.10.1
         └── botocore v1.34.69
             ├── jmespath v1.0.1
-            └── python-dateutil v2.9.0.post0
-                └── six v1.16.0
+            ├── python-dateutil v2.9.0.post0
+            │   └── six v1.16.0
+            └── urllib3 v2.2.1
     pendulum v3.0.0
     ├── python-dateutil v2.9.0.post0
     │   └── six v1.16.0
-    └── tzdata v2024.1
-    time-machine v2.14.1
-    └── python-dateutil v2.9.0.post0
-        └── six v1.16.0
-    urllib3 v2.2.1
+    ├── tzdata v2024.1
+    └── time-machine v2.14.1
+        └── python-dateutil v2.9.0.post0
+            └── six v1.16.0
     uv-cyclic-dependencies-c v0.1.0
     └── uv-cyclic-dependencies-a v0.1.0
         └── uv-cyclic-dependencies-b v0.1.0
@@ -915,22 +963,23 @@ fn no_dedupe() {
     boto3 v1.34.69
     ├── botocore v1.34.69
     │   ├── jmespath v1.0.1
-    │   └── python-dateutil v2.9.0.post0
-    │       └── six v1.16.0
+    │   ├── python-dateutil v2.9.0.post0
+    │   │   └── six v1.16.0
+    │   └── urllib3 v2.2.1
     ├── jmespath v1.0.1
     └── s3transfer v0.10.1
         └── botocore v1.34.69
             ├── jmespath v1.0.1
-            └── python-dateutil v2.9.0.post0
-                └── six v1.16.0
+            ├── python-dateutil v2.9.0.post0
+            │   └── six v1.16.0
+            └── urllib3 v2.2.1
     pendulum v3.0.0
     ├── python-dateutil v2.9.0.post0
     │   └── six v1.16.0
-    └── tzdata v2024.1
-    time-machine v2.14.1
-    └── python-dateutil v2.9.0.post0
-        └── six v1.16.0
-    urllib3 v2.2.1
+    ├── tzdata v2024.1
+    └── time-machine v2.14.1
+        └── python-dateutil v2.9.0.post0
+            └── six v1.16.0
 
     ----- stderr -----
     "###

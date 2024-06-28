@@ -1596,6 +1596,18 @@ impl MarkerTree {
         self.evaluate_optional_environment(Some(env), extras)
     }
 
+    /// Does this marker contain an extra?
+    pub fn has_extra(&self) -> bool {
+        match self {
+            Self::Expression(expression) => match expression {
+                MarkerExpression::Extra { .. } => true,
+                _ => false,
+            },
+            Self::And(expressions) => expressions.iter().any(|x| x.has_extra()),
+            Self::Or(expressions) => expressions.iter().any(|x| x.has_extra()),
+        }
+    }
+
     /// Evaluates this marker tree against an optional environment and a
     /// possibly empty sequence of extras.
     ///
