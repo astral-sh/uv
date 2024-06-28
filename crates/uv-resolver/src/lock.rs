@@ -1000,7 +1000,8 @@ impl From<DistributionId> for DistributionIdForDependency {
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lock file to have a different
 /// canonical ordering of distributions.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(try_from = "SourceWire")]
 enum Source {
     Registry(Url),
     Git(Url, GitSource),
@@ -1139,58 +1140,40 @@ impl Source {
     }
 
     fn to_toml(&self, table: &mut Table) {
-        table.insert("source", value(self.to_string()));
-    }
-}
-
-impl std::str::FromStr for Source {
-    type Err = SourceParseError;
-
-    fn from_str(s: &str) -> Result<Source, SourceParseError> {
-        let (kind, url_or_path) = s.split_once('+').ok_or_else(|| SourceParseError::NoPlus {
-            given: s.to_string(),
-        })?;
-        match kind {
-            "registry" => {
-                let url = Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
-                    given: s.to_string(),
-                    err,
-                })?;
-                Ok(Source::Registry(url))
+        let mut source_table = InlineTable::new();
+        match *self {
+            Source::Registry(ref url) => {
+                source_table.insert("registry", Value::from(url.as_str()));
             }
-            "git" => {
-                let mut url =
-                    Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
-                        given: s.to_string(),
-                        err,
-                    })?;
-                let git_source = GitSource::from_url(&mut url).map_err(|err| match err {
-                    GitSourceError::InvalidSha => SourceParseError::InvalidSha {
-                        given: s.to_string(),
-                    },
-                    GitSourceError::MissingSha => SourceParseError::MissingSha {
-                        given: s.to_string(),
-                    },
-                })?;
-                Ok(Source::Git(url, git_source))
+            Source::Git(ref url, _) => {
+                source_table.insert("git", Value::from(url.as_str()));
             }
-            "direct" => {
-                let mut url =
-                    Url::parse(url_or_path).map_err(|err| SourceParseError::InvalidUrl {
-                        given: s.to_string(),
-                        err,
-                    })?;
-                let direct_source = DirectSource::from_url(&mut url);
-                Ok(Source::Direct(url, direct_source))
+            Source::Direct(ref url, DirectSource { ref subdirectory }) => {
+                source_table.insert("url", Value::from(url.as_str()));
+                if let Some(ref subdirectory) = *subdirectory {
+                    source_table.insert("subdirectory", Value::from(subdirectory));
+                }
             }
-            "path" => Ok(Source::Path(PathBuf::from(url_or_path))),
-            "directory" => Ok(Source::Directory(PathBuf::from(url_or_path))),
-            "editable" => Ok(Source::Editable(PathBuf::from(url_or_path))),
-            name => Err(SourceParseError::UnrecognizedSourceName {
-                given: s.to_string(),
-                name: name.to_string(),
-            }),
+            Source::Path(ref path) => {
+                source_table.insert(
+                    "path",
+                    Value::from(serialize_path_with_dot(path).into_owned()),
+                );
+            }
+            Source::Directory(ref path) => {
+                source_table.insert(
+                    "directory",
+                    Value::from(serialize_path_with_dot(path).into_owned()),
+                );
+            }
+            Source::Editable(ref path) => {
+                source_table.insert(
+                    "editable",
+                    Value::from(serialize_path_with_dot(path).into_owned()),
+                );
+            }
         }
+        table.insert("source", value(source_table));
     }
 }
 
@@ -1204,16 +1187,6 @@ impl std::fmt::Display for Source {
                 write!(f, "{}+{}", self.name(), serialize_path_with_dot(path))
             }
         }
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for Source {
-    fn deserialize<D>(d: D) -> Result<Source, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        let string = String::deserialize(d)?;
-        string.parse().map_err(serde::de::Error::custom)
     }
 }
 
@@ -1241,28 +1214,70 @@ impl Source {
     }
 }
 
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum SourceWire {
+    Registry {
+        registry: Url,
+    },
+    Git {
+        git: String,
+    },
+    Direct {
+        url: Url,
+        #[serde(default)]
+        subdirectory: Option<String>,
+    },
+    Path {
+        path: PathBuf,
+    },
+    Directory {
+        directory: PathBuf,
+    },
+    Editable {
+        editable: PathBuf,
+    },
+}
+
+impl TryFrom<SourceWire> for Source {
+    type Error = LockError;
+
+    fn try_from(wire: SourceWire) -> Result<Source, LockError> {
+        #[allow(clippy::enum_glob_use)]
+        use self::SourceWire::*;
+
+        match wire {
+            Registry { registry } => Ok(Source::Registry(registry)),
+            Git { git } => {
+                let mut url = Url::parse(&git)
+                    .map_err(|err| SourceParseError::InvalidUrl {
+                        given: git.to_string(),
+                        err,
+                    })
+                    .map_err(LockErrorKind::InvalidGitSourceUrl)?;
+                let git_source = GitSource::from_url(&mut url)
+                    .map_err(|err| match err {
+                        GitSourceError::InvalidSha => SourceParseError::InvalidSha {
+                            given: git.to_string(),
+                        },
+                        GitSourceError::MissingSha => SourceParseError::MissingSha {
+                            given: git.to_string(),
+                        },
+                    })
+                    .map_err(LockErrorKind::InvalidGitSourceUrl)?;
+                Ok(Source::Git(url, git_source))
+            }
+            Direct { url, subdirectory } => Ok(Source::Direct(url, DirectSource { subdirectory })),
+            Path { path } => Ok(Source::Path(path)),
+            Directory { directory } => Ok(Source::Directory(directory)),
+            Editable { editable } => Ok(Source::Editable(editable)),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct DirectSource {
     subdirectory: Option<String>,
-}
-
-impl DirectSource {
-    /// Extracts a direct source reference from the query pairs in the given URL.
-    ///
-    /// This also removes the query pairs and hash fragment from the given
-    /// URL in place.
-    fn from_url(url: &mut Url) -> DirectSource {
-        let subdirectory = url.query_pairs().find_map(|(key, val)| {
-            if key == "subdirectory" {
-                Some(val.into_owned())
-            } else {
-                None
-            }
-        });
-        url.set_query(None);
-        url.set_fragment(None);
-        DirectSource { subdirectory }
-    }
 }
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
@@ -1985,6 +2000,14 @@ enum LockErrorKind {
         #[source]
         ToUrlError,
     ),
+    /// Failed to parse a git source URL.
+    #[error("failed to parse source git URL")]
+    InvalidGitSourceUrl(
+        /// The underlying error that occurred. This includes the
+        /// errant URL in the message.
+        #[source]
+        SourceParseError,
+    ),
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a distribution that isn't in the lock file.
@@ -2093,20 +2116,6 @@ enum LockErrorKind {
 /// An error that occurs when a source string could not be parsed.
 #[derive(Clone, Debug, thiserror::Error)]
 enum SourceParseError {
-    /// An error that occurs when no '+' could be found.
-    #[error("could not find `+` in source `{given}`")]
-    NoPlus {
-        /// The source string given.
-        given: String,
-    },
-    /// An error that occurs when the source name was unrecognized.
-    #[error("unrecognized name `{name}` in source `{given}`")]
-    UnrecognizedSourceName {
-        /// The source string given.
-        given: String,
-        /// The unrecognized name.
-        name: String,
-    },
     /// An error that occurs when the URL in the source is invalid.
     #[error("invalid URL in source `{given}`")]
     InvalidUrl {
@@ -2180,13 +2189,13 @@ version = 1
 [[distribution]]
 name = "a"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "b"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution.dependencies]]
@@ -2205,18 +2214,18 @@ version = 1
 [[distribution]]
 name = "a"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "b"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution.dependencies]]
 name = "a"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
@@ -2230,13 +2239,13 @@ version = 1
 [[distribution]]
 name = "a"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "b"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution.dependencies]]
@@ -2254,19 +2263,19 @@ version = 1
 [[distribution]]
 name = "a"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "a"
 version = "0.1.1"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "b"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution.dependencies]]
@@ -2285,24 +2294,24 @@ version = 1
 [[distribution]]
 name = "a"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "a"
 version = "0.1.1"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "b"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution.dependencies]]
 name = "a"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
@@ -2316,19 +2325,19 @@ version = 1
 [[distribution]]
 name = "a"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "a"
 version = "0.1.1"
-source = "registry+https://pypi.org/simple"
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution]]
 name = "b"
 version = "0.1.0"
-source = "registry+https://pypi.org/simple"
+source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[distribution.dependencies]]
@@ -2346,7 +2355,7 @@ version = 1
 [[distribution]]
 name = "anyio"
 version = "4.3.0"
-source = "registry+https://pypi.org/simple"
+source = { registry = "https://pypi.org/simple" }
 wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
@@ -2361,7 +2370,7 @@ version = 1
 [[distribution]]
 name = "anyio"
 version = "4.3.0"
-source = "path+file:///foo/bar"
+source = { path = "file:///foo/bar" }
 wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
