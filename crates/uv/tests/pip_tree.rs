@@ -907,7 +907,7 @@ fn no_dedupe_and_cycle() {
     └── uv-cyclic-dependencies-a v0.1.0
         └── uv-cyclic-dependencies-b v0.1.0
             └── uv-cyclic-dependencies-a v0.1.0 (*)
-    (*) Dependency cycle
+    (*) Package tree is a cycle and cannot be shown
 
     ----- stderr -----
     "###

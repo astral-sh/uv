@@ -58,7 +58,7 @@ pub(crate) fn pip_tree(
     writeln!(printer.stdout(), "{rendered_tree}").unwrap();
     if rendered_tree.contains('*') {
         let message = if no_dedupe {
-            "(*) Dependency cycle".italic()
+            "(*) Package tree is a cycle and cannot be shown".italic()
         } else {
             "(*) Package tree already displayed".italic()
         };
