@@ -98,9 +98,7 @@ fn required_with_no_extra(
         .requires_dist
         .into_iter()
         .filter(|r| {
-            r.marker.is_none()
-                || (r.marker.as_ref().unwrap().evaluate(marker_environment, &[])
-                    && !r.marker.as_ref().unwrap().has_extra())
+            r.marker.is_none() || r.marker.as_ref().unwrap().evaluate(marker_environment, &[])
         })
         .collect::<Vec<_>>();
 }
