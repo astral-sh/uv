@@ -43,6 +43,7 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::error::ResolveError;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
+use crate::marker::normalize;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
@@ -548,6 +549,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     cur_state = Some(forked_state.clone());
                                 }
                                 forked_state.markers.and(fork.markers);
+                                forked_state.markers = normalize(forked_state.markers)
+                                    .unwrap_or(MarkerTree::And(Vec::new()));
 
                                 forked_state.add_package_version_dependencies(
                                     for_package.as_deref(),
@@ -1719,14 +1722,7 @@ impl SolveState {
             }
 
             if let Some(for_package) = for_package {
-                if self.markers == MarkerTree::And(Vec::new()) {
-                    debug!("Adding transitive dependency for {for_package}: {package}{version}",);
-                } else {
-                    debug!(
-                        "Adding transitive dependency for {for_package}{{{}}}: {package}{version}",
-                        self.markers
-                    );
-                }
+                debug!("Adding transitive dependency for {for_package}: {package}{version}");
             } else {
                 // A dependency from the root package or requirements.txt.
                 debug!("Adding direct dependency: {package}{version}");
