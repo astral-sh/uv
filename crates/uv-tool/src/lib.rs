@@ -14,7 +14,7 @@ use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_warnings::warn_user_once;
 
 pub use receipt::ToolReceipt;
-pub use tool::Tool;
+pub use tool::{Tool, ToolEntrypoint};
 
 use uv_state::{StateBucket, StateStore};
 mod receipt;
@@ -135,10 +135,9 @@ impl InstalledTools {
             path.user_display()
         );
 
-        let doc = toml::to_string(&tool_receipt)
-            .map_err(|err| Error::ReceiptWrite(path.clone(), Box::new(err)))?;
+        let doc = tool_receipt.to_toml();
 
-        // Save the modified `tools.toml`.
+        // Save the modified `uv-receipt.toml`.
         fs_err::write(&path, doc)?;
 
         Ok(())

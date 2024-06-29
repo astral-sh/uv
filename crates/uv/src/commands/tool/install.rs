@@ -18,7 +18,7 @@ use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_requirements::RequirementsSource;
-use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool};
+use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_toolchain::{EnvironmentPreference, Toolchain, ToolchainPreference, ToolchainRequest};
 use uv_warnings::warn_user_once;
 
@@ -115,7 +115,6 @@ pub(crate) async fn install(
     let Some(from) = requirements.first().cloned() else {
         bail!("Expected at least one requirement")
     };
-    let tool = Tool::new(requirements, python.clone());
 
     let interpreter = Toolchain::find(
         &python
@@ -176,7 +175,7 @@ pub(crate) async fn install(
         executable_directory.user_display()
     );
 
-    let entrypoints = entrypoint_paths(
+    let entry_points = entrypoint_paths(
         &environment,
         installed_dist.name(),
         installed_dist.version(),
@@ -184,68 +183,79 @@ pub(crate) async fn install(
 
     // Determine the entry points targets
     // Use a sorted collection for deterministic output
-    let targets = entrypoints
+    let target_entry_points = entry_points
         .into_iter()
-        .map(|(name, path)| {
-            let target = executable_directory.join(
-                path.file_name()
+        .map(|(name, source_path)| {
+            let target_path = executable_directory.join(
+                source_path
+                    .file_name()
                     .map(std::borrow::ToOwned::to_owned)
                     .unwrap_or_else(|| OsString::from(name.clone())),
             );
-            (name, path, target)
+            (name, source_path, target_path)
         })
         .collect::<BTreeSet<_>>();
 
     // Check if they exist, before installing
-    let mut existing_targets = targets
+    let mut existing_entry_points = target_entry_points
         .iter()
-        .filter(|(_, _, target)| target.exists())
+        .filter(|(_, _, target_path)| target_path.exists())
         .peekable();
 
     // Note we use `reinstall_entry_points` here instead of `reinstall`; requesting reinstall
     // will _not_ remove existing entry points when they are not managed by uv.
     if force || reinstall_entry_points {
-        for (name, _, target) in existing_targets {
+        for (name, _, target) in existing_entry_points {
             debug!("Removing existing entry point `{name}`");
             fs_err::remove_file(target)?;
         }
-    } else if existing_targets.peek().is_some() {
+    } else if existing_entry_points.peek().is_some() {
         // Clean up the environment we just created
         installed_tools.remove_environment(&name)?;
 
-        let existing_targets = existing_targets
+        let existing_entry_points = existing_entry_points
             // SAFETY: We know the target has a filename because we just constructed it above
             .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
             .collect::<Vec<_>>();
-        let (s, exists) = if existing_targets.len() == 1 {
+        let (s, exists) = if existing_entry_points.len() == 1 {
             ("", "exists")
         } else {
             ("s", "exist")
         };
         bail!(
             "Entry point{s} for tool already {exists}: {} (use `--force` to overwrite)",
-            existing_targets.iter().join(", ")
+            existing_entry_points.iter().join(", ")
         )
     }
 
     // TODO(zanieb): Handle the case where there are no entrypoints
-    for (name, path, target) in &targets {
+    for (name, source_path, target_path) in &target_entry_points {
         debug!("Installing `{name}`");
         #[cfg(unix)]
-        replace_symlink(path, target).context("Failed to install entrypoint")?;
+        replace_symlink(source_path, target_path).context("Failed to install entrypoint")?;
         #[cfg(windows)]
-        fs_err::copy(path, target).context("Failed to install entrypoint")?;
+        fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
     }
-
-    debug!("Adding receipt for tool `{name}`",);
-    let installed_tools = installed_tools.init()?;
-    installed_tools.add_tool_receipt(&name, tool)?;
 
     writeln!(
         printer.stderr(),
         "Installed: {}",
-        targets.iter().map(|(name, _, _)| name).join(", ")
+        target_entry_points
+            .iter()
+            .map(|(name, _, _)| name)
+            .join(", ")
     )?;
+
+    debug!("Adding receipt for tool `{name}`",);
+    let installed_tools = installed_tools.init()?;
+    let tool = Tool::new(
+        requirements,
+        python,
+        target_entry_points
+            .into_iter()
+            .map(|(name, _, target_path)| ToolEntrypoint::new(name, target_path)),
+    );
+    installed_tools.add_tool_receipt(&name, tool)?;
 
     Ok(ExitStatus::Success)
 }

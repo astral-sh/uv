@@ -15,7 +15,9 @@ mod common;
 /// Test installing a tool with `uv tool install`
 #[test]
 fn tool_install() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -77,6 +79,10 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -154,6 +160,9 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["flask"]
+        entrypoints = [
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+        ]
         "###);
     });
 }
@@ -161,7 +170,7 @@ fn tool_install() {
 /// Test installing a tool at a version
 #[test]
 fn tool_install_version() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -223,6 +232,10 @@ fn tool_install_version() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black==24.2.0"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -240,7 +253,7 @@ fn tool_install_version() {
 /// Test installing a tool with `uv tool install --from`
 #[test]
 fn tool_install_from() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -305,7 +318,9 @@ fn tool_install_from() {
 /// Test installing and reinstalling an already installed tool
 #[test]
 fn tool_install_already_installed() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -367,6 +382,10 @@ fn tool_install_already_installed() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -396,6 +415,10 @@ fn tool_install_already_installed() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -613,6 +636,10 @@ fn tool_install_entry_point_exists() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -642,6 +669,10 @@ fn tool_install_entry_point_exists() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = ["black"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
         "###);
     });
 
@@ -662,7 +693,7 @@ fn tool_install_entry_point_exists() {
 #[cfg(unix)]
 #[test]
 fn tool_install_home() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
 
     // Install `black`
@@ -694,7 +725,7 @@ fn tool_install_home() {
 /// Test `uv tool install` when the bin directory is inferred from `$XDG_DATA_HOME`
 #[test]
 fn tool_install_xdg_data_home() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let data_home = context.temp_dir.child("data/home");
 
@@ -730,7 +761,7 @@ fn tool_install_xdg_data_home() {
 /// Test `uv tool install` when the bin directory is set by `$XDG_BIN_HOME`
 #[test]
 fn tool_install_xdg_bin_home() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
