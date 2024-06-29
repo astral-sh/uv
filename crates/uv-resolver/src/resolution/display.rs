@@ -1,10 +1,10 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
-use petgraph::algo::greedy_feedback_arc_set;
-use petgraph::visit::{EdgeRef, Topo};
+use petgraph::algo::kosaraju_scc;
+use petgraph::visit::EdgeRef;
 use petgraph::Direction;
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use pep508_rs::MarkerEnvironment;
@@ -349,36 +349,24 @@ fn to_requirements_txt_graph(graph: &ResolutionPetGraph) -> IntermediatePetGraph
 /// The graph is directed, so if any edge contains a marker, we need to propagate it to all
 /// downstream nodes.
 fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
-    // Remove any cycles. By absorption, it should be fine to ignore cycles.
-    //
-    // Imagine a graph: `A -> B -> C -> A`. Assume that `A` has weight `1`, `B` has weight `2`,
-    // and `C` has weight `3`. The weights are the marker trees.
-    //
-    // When propagating, we'd return to `A` when we hit the cycle, to create `1 or (1 and 2 and 3)`,
-    // which resolves to `1`.
-    //
-    // TODO(charlie): The above reasoning could be incorrect. Consider using a graph algorithm that
-    // can handle weight propagation with cycles.
-    let edges = {
-        let mut fas = greedy_feedback_arc_set(&graph)
-            .map(|edge| edge.id())
-            .collect::<Vec<_>>();
-        let mut edges = Vec::with_capacity(fas.len());
-        // remove edges in reverse order, only safe way to remove from Graph.
-        fas.sort_unstable();
-        for &edge_id in fas.iter().rev() {
-            edges.push(graph.edge_endpoints(edge_id).unwrap());
-            graph.remove_edge(edge_id);
-        }
-        edges
-    };
+    // Visit the graph in topological order (nodes before any of their descendants).
+    // Use strongly connected components to get a topo order where each cyclic subgraph (each strongly
+    // connected component) is separated out.
+    let sccs = kosaraju_scc(&graph);
 
-    let mut topo = Topo::new(&graph);
-    while let Some(index) = topo.next(&graph) {
+    // kosaraju_scc outputs sccs in postorder; visit in reverse postorder
+    for component in sccs.iter().rev() {
+        // Inside a component, all nodes are reachable from all other; combine markers of
+        // all incoming edges (from outside the component) and all edges inside the component
+        let mut incoming_edges = Vec::new();
+        for &index in component {
+            incoming_edges.extend(graph.edges_directed(index, Direction::Incoming));
+        }
+
         let marker_tree: Option<MarkerTree> = {
             // Fold over the edges to combine the marker trees. If any edge is `None`, then
             // the combined marker tree is `None`.
-            let mut edges = graph.edges_directed(index, Direction::Incoming);
+            let mut edges = incoming_edges.iter();
             edges
                 .next()
                 .and_then(|edge| graph.edge_weight(edge.id()).cloned().flatten())
@@ -390,31 +378,41 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
                 })
         };
 
-        // Propagate the marker tree to all downstream nodes.
-        if let Some(marker_tree) = marker_tree.as_ref() {
-            let mut walker = graph
-                .neighbors_directed(index, Direction::Outgoing)
-                .detach();
-            while let Some((outgoing, _)) = walker.next(&graph) {
-                if let Some(weight) = graph.edge_weight_mut(outgoing) {
-                    if let Some(weight) = weight {
-                        weight.and(marker_tree.clone());
-                    } else {
-                        *weight = Some(marker_tree.clone());
+        #[allow(clippy::from_iter_instead_of_collect)]
+        let component_set = if component.len() > 1 {
+            Some(FxHashSet::from_iter(component.iter().copied()))
+        } else {
+            None
+        };
+
+        for &index in component {
+            // Propagate the marker tree to all downstream nodes - only to edges pointing outside the
+            // component
+            if let Some(marker_tree) = marker_tree.as_ref() {
+                let mut walker = graph
+                    .neighbors_directed(index, Direction::Outgoing)
+                    .detach();
+                while let Some((outgoing, target)) = walker.next(&graph) {
+                    if let Some(cnodes) = component_set.as_ref() {
+                        if cnodes.contains(&target) {
+                            continue;
+                        }
+                    }
+                    if let Some(weight) = graph.edge_weight_mut(outgoing) {
+                        if let Some(weight) = weight {
+                            weight.and(marker_tree.clone());
+                        } else {
+                            *weight = Some(marker_tree.clone());
+                        }
                     }
                 }
             }
+
+            // Update the marker tree on each node in the component
+            if let DisplayResolutionGraphNode::Dist(node) = &mut graph[index] {
+                node.markers = marker_tree.clone().and_then(marker::normalize);
+            };
         }
-
-        if let DisplayResolutionGraphNode::Dist(node) = &mut graph[index] {
-            node.markers = marker_tree.and_then(marker::normalize);
-        };
-    }
-
-    // Re-add the removed edges. We no longer care about the edge _weights_, but we do want the
-    // edges to be present, to power the `# via` annotations.
-    for (source, target) in edges {
-        graph.add_edge(source, target, None);
     }
 
     graph
