@@ -269,7 +269,7 @@ impl<'a> DisplayDependencyGraph<'a> {
         } else {
             for (index, package) in self.package.iter().enumerate() {
                 if index != 0 {
-                    lines.push("".to_string());
+                    lines.push(String::new());
                 }
                 if let Some(installed_dist) = self.dist_by_package_name.get(&package) {
                     lines.extend(self.visit(installed_dist, &mut visited, &mut Vec::new()));
