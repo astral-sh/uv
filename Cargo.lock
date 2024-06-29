@@ -2073,9 +2073,9 @@ dependencies = [
 
 [[package]]
 name = "memchr"
-version = "2.7.2"
+version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
+checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "memmap2"
@@ -4487,6 +4487,7 @@ dependencies = [
  "uv-normalize",
  "uv-requirements",
  "uv-resolver",
+ "uv-scripts",
  "uv-settings",
  "uv-tool",
  "uv-toolchain",
@@ -4978,6 +4979,22 @@ dependencies = [
  "uv-toolchain",
  "uv-types",
  "uv-warnings",
+]
+
+[[package]]
+name = "uv-scripts"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "indoc",
+ "memchr",
+ "once_cell",
+ "pep440_rs",
+ "pep508_rs",
+ "pypi-types",
+ "serde",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]

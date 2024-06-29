@@ -43,6 +43,7 @@ uv-macros = { path = "crates/uv-macros" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
+uv-scripts = { path = "crates/uv-scripts" }
 uv-settings = { path = "crates/uv-settings" }
 uv-state = { path = "crates/uv-state" }
 uv-tool = { path = "crates/uv-tool" }
@@ -94,6 +95,7 @@ itertools = { version = "0.13.0" }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }
+memchr = { version = "2.7.4" }
 miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }

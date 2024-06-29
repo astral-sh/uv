@@ -15,7 +15,7 @@ use uv_distribution::Workspace;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::RequirementsSpecification;
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, RequiresPython};
 use uv_toolchain::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
@@ -281,7 +281,7 @@ pub(crate) async fn init_environment(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
-    requirements: &[RequirementsSource],
+    spec: RequirementsSpecification,
     settings: &ResolverInstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -305,17 +305,6 @@ pub(crate) async fn update_environment(
         reinstall,
         build_options,
     } = settings;
-
-    let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .keyring(*keyring_provider);
-
-    // Read all requirements from the provided sources.
-    // TODO(zanieb): Consider allowing constraints and extras
-    // TODO(zanieb): Allow specifying extras somehow
-    let spec =
-        RequirementsSpecification::from_sources(requirements, &[], &[], &client_builder).await?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
