@@ -165,11 +165,6 @@ impl<'a> DisplayDependencyGraph<'a> {
             return Vec::new();
         }
 
-        // Short-circuit if the current package is given in the prune list.
-        if self.prune.contains(installed_dist.name()) {
-            return Vec::new();
-        }
-
         let package_name = installed_dist.name().to_string();
         let is_visited = visited.contains(&package_name);
         let line = format!("{} v{}", package_name, installed_dist.version());
@@ -185,7 +180,10 @@ impl<'a> DisplayDependencyGraph<'a> {
 
         path.push(package_name.clone());
         visited.insert(package_name.clone());
-        let required_packages = required_with_no_extra(installed_dist, self.markers);
+        let required_packages = required_with_no_extra(installed_dist, self.markers)
+            .into_iter()
+            .filter(|p| !self.prune.contains(&p.name))
+            .collect::<Vec<_>>();
         for (index, required_package) in required_packages.iter().enumerate() {
             // Skip if the current package is not one of the installed distributions.
             if !self
