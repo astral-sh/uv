@@ -28,6 +28,9 @@ pub(crate) async fn uninstall(
         bail!("Tool `{}` is not installed", name);
     };
 
+    // Remove the tool itself.
+    installed_tools.remove_environment(&name)?;
+
     // Remove the tool's entrypoints.
     let entrypoints = receipt.entrypoints();
     for entrypoint in entrypoints {
@@ -48,9 +51,6 @@ pub(crate) async fn uninstall(
             }
         }
     }
-
-    // Remove the tool itself.
-    installed_tools.remove_environment(&name)?;
 
     writeln!(
         printer.stderr(),
