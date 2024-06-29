@@ -32,6 +32,18 @@ fn tool_uninstall() {
     warning: `uv tool uninstall` is experimental and may change without warning.
     Uninstalled: black, blackd
     "###);
+
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool list` is experimental and may change without warning.
+    No tools installed
+    "###);
 }
 
 #[test]
