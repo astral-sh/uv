@@ -22,6 +22,7 @@ use crate::printer::Printer;
 pub(crate) fn pip_tree(
     depth: u8,
     prune: Vec<PackageName>,
+    package: Vec<PackageName>,
     no_dedupe: bool,
     strict: bool,
     python: Option<&str>,
@@ -50,6 +51,7 @@ pub(crate) fn pip_tree(
         &site_packages,
         depth.into(),
         prune,
+        package,
         no_dedupe,
         environment.interpreter().markers(),
     )
@@ -116,6 +118,8 @@ struct DisplayDependencyGraph<'a> {
     depth: usize,
     /// Prune the given package from the display of the dependency tree.
     prune: Vec<PackageName>,
+    /// Display only the specified packages.
+    package: Vec<PackageName>,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
     /// The marker environment for the current interpreter.
@@ -128,6 +132,7 @@ impl<'a> DisplayDependencyGraph<'a> {
         site_packages: &'a SitePackages,
         depth: usize,
         prune: Vec<PackageName>,
+        package: Vec<PackageName>,
         no_dedupe: bool,
         markers: &'a MarkerEnvironment,
     ) -> DisplayDependencyGraph<'a> {
@@ -148,6 +153,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             required_packages,
             depth,
             prune,
+            package,
             no_dedupe,
             markers,
         }
@@ -251,11 +257,23 @@ impl<'a> DisplayDependencyGraph<'a> {
     fn render(&self) -> Vec<String> {
         let mut visited: HashSet<String> = HashSet::new();
         let mut lines: Vec<String> = Vec::new();
-        for site_package in self.site_packages.iter() {
-            // If the current package is not required by any other package, start the traversal
-            // with the current package as the root.
-            if !self.required_packages.contains(site_package.name()) {
-                lines.extend(self.visit(site_package, &mut visited, &mut Vec::new()));
+
+        if self.package.is_empty() {
+            for site_package in self.site_packages.iter() {
+                // If the current package is not required by any other package, start the traversal
+                // with the current package as the root.
+                if !self.required_packages.contains(site_package.name()) {
+                    lines.extend(self.visit(site_package, &mut visited, &mut Vec::new()));
+                }
+            }
+        } else {
+            for (index, package) in self.package.iter().enumerate() {
+                if index != 0 {
+                    lines.push("".to_string());
+                }
+                if let Some(installed_dist) = self.dist_by_package_name.get(&package) {
+                    lines.extend(self.visit(installed_dist, &mut visited, &mut Vec::new()));
+                }
             }
         }
         lines

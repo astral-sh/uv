@@ -1419,6 +1419,11 @@ pub struct PipTreeArgs {
     /// Prune the given package from the display of the dependency tree.
     #[arg(long)]
     pub prune: Vec<PackageName>,
+
+    /// Display only the specified packages.
+    #[arg(long)]
+    pub package: Vec<PackageName>,
+
     /// Do not de-duplicate repeated dependencies.
     /// Usually, when a package has already displayed its dependencies,
     /// further occurrences will not re-display its dependencies,
