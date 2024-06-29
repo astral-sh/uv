@@ -360,11 +360,12 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
     // TODO(charlie): The above reasoning could be incorrect. Consider using a graph algorithm that
     // can handle weight propagation with cycles.
     let edges = {
-        let fas = greedy_feedback_arc_set(&graph)
+        let mut fas = greedy_feedback_arc_set(&graph)
             .map(|edge| edge.id())
             .collect::<Vec<_>>();
+        fas.sort_unstable();
         let mut edges = Vec::with_capacity(fas.len());
-        for edge_id in fas {
+        for edge_id in fas.into_iter().rev() {
             edges.push(graph.edge_endpoints(edge_id).unwrap());
             graph.remove_edge(edge_id);
         }
