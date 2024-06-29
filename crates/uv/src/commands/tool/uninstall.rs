@@ -34,7 +34,18 @@ pub(crate) async fn uninstall(
             "Removing entrypoint: {}",
             entrypoint.install_path.user_display()
         );
-        fs_err::remove_file(&entrypoint.install_path)?;
+        match fs_err::tokio::remove_file(&entrypoint.install_path).await {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                debug!(
+                    "Entrypoint not found: {}",
+                    entrypoint.install_path.user_display()
+                );
+            }
+            Err(err) => {
+                return Err(err.into());
+            }
+        }
     }
 
     writeln!(
