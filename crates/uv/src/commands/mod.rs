@@ -27,6 +27,7 @@ pub(crate) use self_update::self_update;
 pub(crate) use tool::install::install as tool_install;
 pub(crate) use tool::list::list as tool_list;
 pub(crate) use tool::run::run as tool_run;
+pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use toolchain::find::find as toolchain_find;
 pub(crate) use toolchain::install::install as toolchain_install;
 pub(crate) use toolchain::list::list as toolchain_list;

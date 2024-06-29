@@ -25,8 +25,8 @@ pub struct Tool {
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ToolEntrypoint {
-    name: String,
-    install_path: PathBuf,
+    pub name: String,
+    pub install_path: PathBuf,
 }
 
 /// Format an array so that each element is on its own line and has a trailing comma.
@@ -104,6 +104,10 @@ impl Tool {
         });
 
         table
+    }
+
+    pub fn entrypoints(&self) -> &[ToolEntrypoint] {
+        &self.entrypoints
     }
 }
 
