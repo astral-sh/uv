@@ -14,8 +14,8 @@ use uv_cli::{
     AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs,
-    ToolListArgs, ToolRunArgs, ToolchainFindArgs, ToolchainInstallArgs, ToolchainListArgs,
-    VenvArgs,
+    ToolListArgs, ToolRunArgs, ToolUninstallArgs, ToolchainFindArgs, ToolchainInstallArgs,
+    ToolchainListArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -288,6 +288,23 @@ impl ToolListSettings {
         let ToolListArgs {} = args;
 
         Self {}
+    }
+}
+
+/// The resolved settings to use for a `tool uninstall` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolUninstallSettings {
+    pub(crate) name: String,
+}
+
+impl ToolUninstallSettings {
+    /// Resolve the [`ToolUninstallSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolUninstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let ToolUninstallArgs { name } = args;
+
+        Self { name }
     }
 }
 

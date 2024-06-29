@@ -830,7 +830,6 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-
         Commands::Tool(ToolNamespace {
             command: ToolCommand::List(args),
         }) => {
@@ -839,6 +838,15 @@ async fn run() -> Result<ExitStatus> {
             show_settings!(args);
 
             commands::tool_list(globals.preview, printer).await
+        }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Uninstall(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolUninstallSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::tool_uninstall(args.name, globals.preview, printer).await
         }
         Commands::Toolchain(ToolchainNamespace {
             command: ToolchainCommand::List(args),
