@@ -1,15 +1,12 @@
-use std::path::Path;
-
 use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
+use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
 use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
 use uv_toolchain::{PythonEnvironment, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
@@ -41,8 +38,8 @@ pub(crate) async fn sync(
         warn_user_once!("`uv sync` is experimental and may change without warning.");
     }
 
-    // Find the project requirements.
-    let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
+    // Identify the project
+    let project = VirtualProject::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
     let venv = project::init_environment(
@@ -65,8 +62,7 @@ pub(crate) async fn sync(
 
     // Perform the sync operation.
     do_sync(
-        project.project_name(),
-        project.workspace().root(),
+        &project,
         &venv,
         &lock,
         extras,
@@ -88,8 +84,7 @@ pub(crate) async fn sync(
 /// Sync a lockfile with an environment.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn do_sync(
-    project_name: &PackageName,
-    workspace_root: &Path,
+    project: &VirtualProject,
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: ExtrasSpecification,
@@ -136,8 +131,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution =
-        lock.to_resolution(workspace_root, markers, tags, project_name, &extras, &dev)?;
+    let resolution = lock.to_resolution(project, markers, tags, &extras, &dev)?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

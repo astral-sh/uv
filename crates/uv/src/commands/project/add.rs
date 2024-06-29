@@ -7,7 +7,7 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStr
 use uv_dispatch::BuildDispatch;
 use uv_distribution::pyproject::{DependencyType, Source, SourceError};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
-use uv_distribution::{DistributionDatabase, ProjectWorkspace, Workspace};
+use uv_distribution::{DistributionDatabase, ProjectWorkspace, VirtualProject, Workspace};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -225,8 +225,7 @@ pub(crate) async fn add(
     let dev = true;
 
     project::sync::do_sync(
-        project.project_name(),
-        project.workspace().root(),
+        &VirtualProject::Project(project),
         &venv,
         &lock,
         extras,

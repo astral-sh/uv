@@ -4,7 +4,7 @@ pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use metadata::{ArchiveMetadata, Metadata, RequiresDist, DEV_DEPENDENCIES};
 pub use reporter::Reporter;
-pub use workspace::{ProjectWorkspace, Workspace, WorkspaceError, WorkspaceMember};
+pub use workspace::{ProjectWorkspace, VirtualProject, Workspace, WorkspaceError, WorkspaceMember};
 
 mod archive;
 mod distribution_database;

@@ -31,6 +31,7 @@ uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
+either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 glob = { workspace = true }

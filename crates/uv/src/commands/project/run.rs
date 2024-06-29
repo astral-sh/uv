@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_distribution::{ProjectWorkspace, Workspace, WorkspaceError};
+use uv_distribution::{VirtualProject, Workspace, WorkspaceError};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSource;
 use uv_toolchain::{
@@ -56,14 +56,14 @@ pub(crate) async fn run(
         let project = if let Some(package) = package {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
-            Some(
+            Some(VirtualProject::Project(
                 Workspace::discover(&std::env::current_dir()?, None)
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
-            )
+            ))
         } else {
-            match ProjectWorkspace::discover(&std::env::current_dir()?, None).await {
+            match VirtualProject::discover(&std::env::current_dir()?, None).await {
                 Ok(project) => Some(project),
                 Err(WorkspaceError::MissingPyprojectToml) => None,
                 Err(err) => return Err(err.into()),
@@ -71,11 +71,17 @@ pub(crate) async fn run(
         };
 
         let interpreter = if let Some(project) = project {
-            debug!(
-                "Discovered project `{}` at: {}",
-                project.project_name(),
-                project.workspace().root().display()
-            );
+            if let Some(project_name) = project.project_name() {
+                debug!(
+                    "Discovered project `{project_name}` at: {}",
+                    project.workspace().root().display()
+                );
+            } else {
+                debug!(
+                    "Discovered virtual workspace at: {}",
+                    project.workspace().root().display()
+                );
+            }
 
             let venv = project::init_environment(
                 project.workspace(),
@@ -102,8 +108,7 @@ pub(crate) async fn run(
             )
             .await?;
             project::sync::do_sync(
-                project.project_name(),
-                project.workspace().root(),
+                &project,
                 &venv,
                 &lock,
                 extras,

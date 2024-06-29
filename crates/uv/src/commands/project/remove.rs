@@ -6,7 +6,7 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::pyproject::DependencyType;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
-use uv_distribution::{ProjectWorkspace, Workspace};
+use uv_distribution::{ProjectWorkspace, VirtualProject, Workspace};
 use uv_toolchain::{ToolchainPreference, ToolchainRequest};
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -117,8 +117,7 @@ pub(crate) async fn remove(
     let dev = true;
 
     project::sync::do_sync(
-        project.project_name(),
-        project.workspace().root(),
+        &VirtualProject::Project(project),
         &venv,
         &lock,
         extras,
