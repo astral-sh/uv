@@ -983,6 +983,81 @@ fn multiple_packages_shared_descendant() {
     );
 }
 
+// Test the interaction between `--no-dedupe` and `--invert`.
+#[test]
+#[cfg(not(windows))]
+fn no_dedupe_and_invert() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(
+            r"
+        pendulum==3.0.0
+        boto3==1.34.69
+    ",
+        )
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 10 packages in [TIME]
+    Installed 10 packages in [TIME]
+     + boto3==1.34.69
+     + botocore==1.34.69
+     + jmespath==1.0.1
+     + pendulum==3.0.0
+     + python-dateutil==2.9.0.post0
+     + s3transfer==0.10.1
+     + six==1.16.0
+     + time-machine==2.14.1
+     + tzdata==2024.1
+     + urllib3==2.2.1
+
+    "###
+    );
+
+    uv_snapshot!(context.filters(), tree_command(&context).arg("--no-dedupe").arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    jmespath v1.0.1
+    ├── boto3 v1.34.69
+    └── botocore v1.34.69
+        ├── boto3 v1.34.69
+        └── s3transfer v0.10.1
+            └── boto3 v1.34.69
+    six v1.16.0
+    └── python-dateutil v2.9.0.post0
+        ├── botocore v1.34.69
+        │   ├── boto3 v1.34.69
+        │   └── s3transfer v0.10.1
+        │       └── boto3 v1.34.69
+        ├── pendulum v3.0.0
+        └── time-machine v2.14.1
+            └── pendulum v3.0.0
+    tzdata v2024.1
+    └── pendulum v3.0.0
+    urllib3 v2.2.1
+    └── botocore v1.34.69
+        ├── boto3 v1.34.69
+        └── s3transfer v0.10.1
+            └── boto3 v1.34.69
+
+    ----- stderr -----
+    "###
+    );
+}
+
 // Ensure that --no-dedupe behaves as expected
 // in the presence of dependency cycles.
 #[test]
