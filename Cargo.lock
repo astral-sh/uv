@@ -5019,6 +5019,7 @@ dependencies = [
  "dirs-sys",
  "fs-err",
  "install-wheel-rs",
+ "path-slash",
  "pep440_rs",
  "pep508_rs",
  "pypi-types",
