@@ -41,7 +41,7 @@ pub(crate) async fn sync(
     let project = VirtualProject::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(
+    let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
@@ -111,7 +111,7 @@ pub(super) async fn do_sync(
     // Validate that the Python version is supported by the lockfile.
     if let Some(requires_python) = lock.requires_python() {
         if !requires_python.contains(venv.interpreter().python_version()) {
-            return Err(ProjectError::PythonIncompatibility(
+            return Err(ProjectError::LockedPythonIncompatibility(
                 venv.interpreter().python_version().clone(),
                 requires_python.clone(),
             ));
