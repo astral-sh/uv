@@ -554,7 +554,6 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
-                globals.preview,
                 &cache,
                 printer,
             )

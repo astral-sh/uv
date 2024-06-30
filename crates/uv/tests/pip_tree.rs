@@ -203,10 +203,9 @@ fn nested_dependencies() {
     scikit-learn v1.4.1.post1
     ├── numpy v1.26.4
     ├── scipy v1.12.0
-    │   └── numpy v1.26.4 (*)
+    │   └── numpy v1.26.4
     ├── joblib v1.3.2
     └── threadpoolctl v3.4.0
-    (*) Package tree already displayed
 
     ----- stderr -----
     "###
@@ -302,13 +301,11 @@ fn depth() {
     scikit-learn v1.4.1.post1
     ├── numpy v1.26.4
     ├── scipy v1.12.0
-    │   └── numpy v1.26.4 (*)
+    │   └── numpy v1.26.4
     ├── joblib v1.3.2
     └── threadpoolctl v3.4.0
-    (*) Package tree already displayed
 
     ----- stderr -----
-
     "###
     );
 }
@@ -495,20 +492,20 @@ fn nested_dependencies_more_complex() {
         │   └── certifi v2024.2.2
         ├── requests-toolbelt v1.0.0
         │   └── requests v2.31.0 (*)
-        ├── urllib3 v2.2.1 (*)
+        ├── urllib3 v2.2.1
         ├── importlib-metadata v7.1.0
         │   └── zipp v3.18.1
         ├── keyring v25.0.0
         │   ├── jaraco-classes v3.3.1
         │   │   └── more-itertools v10.2.0
         │   ├── jaraco-functools v4.0.0
-        │   │   └── more-itertools v10.2.0 (*)
+        │   │   └── more-itertools v10.2.0
         │   └── jaraco-context v4.3.0
         ├── rfc3986 v2.0.0
         └── rich v13.7.1
             ├── markdown-it-py v3.0.0
             │   └── mdurl v0.1.2
-            └── pygments v2.17.2 (*)
+            └── pygments v2.17.2
     (*) Package tree already displayed
 
     ----- stderr -----
@@ -601,20 +598,20 @@ fn prune_big_tree() {
         │   └── certifi v2024.2.2
         ├── requests-toolbelt v1.0.0
         │   └── requests v2.31.0 (*)
-        ├── urllib3 v2.2.1 (*)
+        ├── urllib3 v2.2.1
         ├── importlib-metadata v7.1.0
         │   └── zipp v3.18.1
         ├── keyring v25.0.0
         │   ├── jaraco-classes v3.3.1
         │   │   └── more-itertools v10.2.0
         │   ├── jaraco-functools v4.0.0
-        │   │   └── more-itertools v10.2.0 (*)
+        │   │   └── more-itertools v10.2.0
         │   └── jaraco-context v4.3.0
         ├── rfc3986 v2.0.0
         └── rich v13.7.1
             ├── markdown-it-py v3.0.0
             │   └── mdurl v0.1.2
-            └── pygments v2.17.2 (*)
+            └── pygments v2.17.2
     (*) Package tree already displayed
 
     ----- stderr -----
@@ -840,7 +837,7 @@ fn multiple_packages_shared_descendant() {
     │   ├── python-dateutil v2.9.0.post0
     │   │   └── six v1.16.0
     │   └── urllib3 v2.2.1
-    ├── jmespath v1.0.1 (*)
+    ├── jmespath v1.0.1
     └── s3transfer v0.10.1
         └── botocore v1.34.69 (*)
     pendulum v3.0.0
