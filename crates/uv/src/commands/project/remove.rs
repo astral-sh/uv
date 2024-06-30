@@ -16,7 +16,6 @@ use crate::printer::Printer;
 use crate::settings::{InstallerSettings, ResolverSettings};
 
 /// Remove one or more packages from the project requirements.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn remove(
     requirements: Vec<PackageName>,
     dependency_type: DependencyType,

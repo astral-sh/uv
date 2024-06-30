@@ -18,7 +18,6 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Display the installed packages in the current environment as a dependency tree.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn pip_tree(
     depth: u8,
     prune: Vec<PackageName>,

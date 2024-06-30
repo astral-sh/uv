@@ -73,7 +73,6 @@ pub(crate) async fn read_requirements(
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<Requirement>,
@@ -278,7 +277,6 @@ pub(crate) enum Modifications {
 }
 
 /// Install a set of requirements into the current environment.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,

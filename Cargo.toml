@@ -179,6 +179,7 @@ module_name_repetitions = "allow"
 must_use_candidate = "allow"
 similar_names = "allow"
 too_many_lines = "allow"
+too_many_arguments = "allow"
 # Disallowed restriction lints
 print_stdout = "warn"
 print_stderr = "warn"

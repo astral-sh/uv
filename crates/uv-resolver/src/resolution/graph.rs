@@ -52,7 +52,6 @@ pub(crate) enum ResolutionGraphNode {
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
         requirements: &[Requirement],
         constraints: &Constraints,
