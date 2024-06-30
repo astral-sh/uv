@@ -23,7 +23,6 @@ use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
 /// Resolve the project requirements into a lockfile.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
     python: Option<String>,
     settings: ResolverSettings,
@@ -82,7 +81,6 @@ pub(crate) async fn lock(
 }
 
 /// Lock the project requirements into a lockfile.
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,

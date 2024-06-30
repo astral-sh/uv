@@ -86,7 +86,6 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,

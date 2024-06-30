@@ -137,7 +137,6 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
     /// When a marker environment is provided, the resolver is in
     /// "non-universal" mode, which corresponds to standard `pip` behavior that
     /// works only for a specific marker environment.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         manifest: Manifest,
         options: Options,
@@ -180,7 +179,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     Resolver<Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
-    #[allow(clippy::too_many_arguments)]
     pub fn new_custom_io(
         manifest: Manifest,
         options: Options,

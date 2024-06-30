@@ -54,7 +54,6 @@ pub struct BuildDispatch<'a> {
 }
 
 impl<'a> BuildDispatch<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,

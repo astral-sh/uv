@@ -398,7 +398,6 @@ impl SourceBuild {
     /// contents from an archive if necessary.
     ///
     /// `source_dist` is for error reporting only.
-    #[allow(clippy::too_many_arguments)]
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
@@ -901,7 +900,6 @@ fn escape_path_for_python(path: &Path) -> String {
 }
 
 /// Not a method because we call it before the builder is completely initialized
-#[allow(clippy::too_many_arguments)]
 async fn create_pep517_build_environment(
     runner: &PythonRunner,
     source_tree: &Path,
