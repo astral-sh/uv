@@ -30,6 +30,7 @@ fn tool_list() {
     black
         black
         blackd
+    
     ----- stderr -----
     warning: `uv tool list` is experimental and may change without warning.
     "###);
