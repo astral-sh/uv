@@ -28,7 +28,6 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Install a tool.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     package: String,
     from: Option<String>,

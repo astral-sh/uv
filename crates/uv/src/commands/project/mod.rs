@@ -278,7 +278,6 @@ pub(crate) async fn init_environment(
 }
 
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     requirements: &[RequirementsSource],

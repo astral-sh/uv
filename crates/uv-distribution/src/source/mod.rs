@@ -433,7 +433,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Build a source distribution from a remote URL.
-    #[allow(clippy::too_many_arguments)]
     async fn url<'data>(
         &self,
         source: &BuildableSource<'data>,
@@ -505,7 +504,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ///
     /// If the build backend supports `prepare_metadata_for_build_wheel`, this method will avoid
     /// building the wheel.
-    #[allow(clippy::too_many_arguments)]
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,

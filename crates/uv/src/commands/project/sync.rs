@@ -19,7 +19,6 @@ use crate::printer::Printer;
 use crate::settings::{InstallerSettings, InstallerSettingsRef};
 
 /// Sync the project environment.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync(
     extras: ExtrasSpecification,
     dev: bool,
@@ -82,7 +81,6 @@ pub(crate) async fn sync(
 }
 
 /// Sync a lockfile with an environment.
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn do_sync(
     project: &VirtualProject,
     venv: &PythonEnvironment,

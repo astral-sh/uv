@@ -13,7 +13,6 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Uninstall a tool.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn uninstall(
     name: String,
     preview: PreviewMode,

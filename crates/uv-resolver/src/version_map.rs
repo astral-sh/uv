@@ -40,7 +40,6 @@ impl VersionMap {
     ///
     /// PEP 592: <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
     #[instrument(skip_all, fields(package_name))]
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_metadata(
         simple_metadata: OwnedArchive<SimpleMetadata>,
         package_name: &PackageName,
@@ -489,7 +488,6 @@ impl VersionMapLazy {
         SourceDistCompatibility::Compatible(hash)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn wheel_compatibility(
         &self,
         filename: &WheelFilename,
