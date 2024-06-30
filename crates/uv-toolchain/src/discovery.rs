@@ -641,6 +641,9 @@ pub fn find_toolchains<'a>(
                 debug!("Checking for Python interpreter at {request}");
                 Box::new(
                     python_interpreters_with_executable_name(name, cache)
+                        .filter(move |result| {
+                            result_satisfies_environment_preference(result, environments)
+                        })
                         .map(|result| result.map(Toolchain::from_tuple).map(ToolchainResult::Ok)),
                 )
             } else {
