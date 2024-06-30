@@ -38,7 +38,7 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
             .map(|entry| entry.name.clone())
             .collect::<Vec<String>>()
         {
-            writeln!(printer.stdout(), "  {entrypoint}")?;
+            writeln!(printer.stdout(), "\t{entrypoint}")?;
         }
     }
 
