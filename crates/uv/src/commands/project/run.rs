@@ -3,7 +3,6 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use itertools::Itertools;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -47,6 +46,9 @@ pub(crate) async fn run(
     if preview.is_disabled() {
         warn_user_once!("`uv run` is experimental and may change without warning.");
     }
+
+    // Parse the input command.
+    let command = RunCommand::from(command);
 
     // Discover and sync the base environment.
     let base_interpreter = if isolated {
@@ -215,25 +217,8 @@ pub(crate) async fn run(
         )
     };
 
-    let (target, args) = command.split();
-    let (command, prefix_args) = if let Some(target) = target {
-        let target_path = PathBuf::from(&target);
-        if target_path
-            .extension()
-            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
-            && target_path.exists()
-        {
-            (OsString::from("python"), vec![target_path])
-        } else {
-            (target.clone(), vec![])
-        }
-    } else {
-        (OsString::from("python"), vec![])
-    };
-
-    let mut process = Command::new(&command);
-    process.args(prefix_args);
-    process.args(args);
+    debug!("Running `{command}`");
+    let mut process = Command::from(&command);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -285,15 +270,12 @@ pub(crate) async fn run(
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    let space = if args.is_empty() { "" } else { " " };
-    debug!(
-        "Running `{}{space}{}`",
-        command.to_string_lossy(),
-        args.iter().map(|arg| arg.to_string_lossy()).join(" ")
-    );
-    let mut handle = process
-        .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
+    let mut handle = process.spawn().with_context(|| {
+        format!(
+            "Failed to spawn: `{}`",
+            command.executable().to_string_lossy()
+        )
+    })?;
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
@@ -302,5 +284,93 @@ pub(crate) async fn run(
         Ok(ExitStatus::Success)
     } else {
         Ok(ExitStatus::Failure)
+    }
+}
+
+#[derive(Debug)]
+enum RunCommand {
+    /// Execute a `python` script.
+    Python(PathBuf, Vec<OsString>),
+    /// Execute an external command.
+    External(OsString, Vec<OsString>),
+    /// Execute an empty command (in practice, `python` with no arguments).
+    Empty,
+}
+
+impl RunCommand {
+    /// Return the name of the target executable.
+    fn executable(&self) -> Cow<'_, OsString> {
+        match self {
+            Self::Python(_, _) | Self::Empty => Cow::Owned(OsString::from("python")),
+            Self::External(executable, _) => Cow::Borrowed(executable),
+        }
+    }
+}
+
+impl std::fmt::Display for RunCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Python(target, args) => {
+                write!(f, "python {}", target.display())?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
+            Self::External(command, args) => {
+                write!(f, "{}", command.to_string_lossy())?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
+            Self::Empty => {
+                write!(f, "python")?;
+                Ok(())
+            }
+        }
+    }
+}
+
+impl From<ExternalCommand> for RunCommand {
+    fn from(command: ExternalCommand) -> Self {
+        let (target, args) = command.split();
+
+        let Some(target) = target else {
+            return Self::Empty;
+        };
+
+        let target_path = PathBuf::from(&target);
+        if target_path
+            .extension()
+            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
+            && target_path.exists()
+        {
+            Self::Python(target_path, args.to_vec())
+        } else {
+            Self::External(
+                target.clone(),
+                args.iter().map(std::clone::Clone::clone).collect(),
+            )
+        }
+    }
+}
+
+impl From<&RunCommand> for Command {
+    fn from(command: &RunCommand) -> Self {
+        match command {
+            RunCommand::Python(target, args) => {
+                let mut process = Command::new("python");
+                process.arg(target);
+                process.args(args);
+                process
+            }
+            RunCommand::External(executable, args) => {
+                let mut process = Command::new(executable);
+                process.args(args);
+                process
+            }
+            RunCommand::Empty => Command::new("python"),
+        }
     }
 }
