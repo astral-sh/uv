@@ -27,8 +27,19 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
     }
 
     // TODO(zanieb): Track and display additional metadata, like entry points
-    for (name, _tool) in tools {
+    for (name, tool) in tools {
+        // Output tool name
         writeln!(printer.stdout(), "{name}")?;
+
+        // Output tool entrypoints
+        for entrypoint in tool
+            .entrypoints()
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect::<Vec<String>>()
+        {
+            writeln!(printer.stdout(), "  {entrypoint}")?;
+        }
     }
 
     Ok(ExitStatus::Success)
