@@ -32,6 +32,49 @@ fn no_package() {
 }
 
 #[test]
+fn prune_last_in_the_subgroup() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==2.31.0").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###
+    );
+
+    context.assert_command("import requests").success();
+    uv_snapshot!(context.filters(), tree_command(&context).arg("--prune").arg("certifi"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    requests v2.31.0
+    ├── charset-normalizer v3.3.2
+    ├── idna v3.6
+    └── urllib3 v2.2.1
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
 fn single_package() {
     let context = TestContext::new("3.12");
 

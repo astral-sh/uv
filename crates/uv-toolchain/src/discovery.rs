@@ -19,7 +19,7 @@ use crate::downloads::PythonDownloadRequest;
 use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::InstalledToolchains;
-use crate::py_launcher::py_list_paths;
+use crate::py_launcher::{self, py_list_paths};
 use crate::toolchain::Toolchain;
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
@@ -538,6 +538,11 @@ impl Error {
                     false
                 }
             },
+            // Ignore `py` if it's not installed
+            Error::PyLauncher(py_launcher::Error::NotFound) => {
+                debug!("The `py` launcher could not be found to query for Python versions");
+                false
+            }
             _ => true,
         }
     }

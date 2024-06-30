@@ -1,10 +1,25 @@
 # Changelog
 
+## 0.2.18
+
+### Preview features
+
+- Add `uv tool list` ([#4630](https://github.com/astral-sh/uv/pull/4630))
+- Add `uv tool uninstall` ([#4641](https://github.com/astral-sh/uv/pull/4641))
+- Add support for specifying `name@version` in `uv tool run` ([#4572](https://github.com/astral-sh/uv/pull/4572))
+- Allow `uv add` to specify optional dependency groups ([#4607](https://github.com/astral-sh/uv/pull/4607))
+- Allow the package spec to be passed positionally in `uv tool install` ([#4564](https://github.com/astral-sh/uv/pull/4564))
+- Avoid infinite loop for cyclic installs ([#4633](https://github.com/astral-sh/uv/pull/4633))
+- Indent wheels like dependencies in the lockfile ([#4582](https://github.com/astral-sh/uv/pull/4582))
+- Sync all packages in a virtual workspace ([#4636](https://github.com/astral-sh/uv/pull/4636))
+- Use inline table for dependencies in lockfile ([#4581](https://github.com/astral-sh/uv/pull/4581))
+- Make `source` field in lock file more structured ([#4627](https://github.com/astral-sh/uv/pull/4627))
+
 ## 0.2.17
 
 ### Preview features
 
-- Add `--extra` to `uv add` and enable fine grained updates ([#4566](https://github.com/astral-sh/uv/pull/4566))
+- Add `--extra` to `uv add` and enable fine-grained updates ([#4566](https://github.com/astral-sh/uv/pull/4566))
 
 ## 0.2.16
 

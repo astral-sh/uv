@@ -1879,6 +1879,8 @@ pub enum ToolCommand {
     Install(ToolInstallArgs),
     /// List installed tools.
     List(ToolListArgs),
+    /// Uninstall a tool.
+    Uninstall(ToolUninstallArgs),
 }
 
 #[derive(Args)]
@@ -1978,6 +1980,12 @@ pub struct ToolInstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolListArgs;
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ToolUninstallArgs {
+    pub name: String,
+}
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]

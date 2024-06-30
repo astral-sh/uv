@@ -1218,7 +1218,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
         markers: &'a MarkerTree,
-    ) -> Vec<&'a Requirement> {
+    ) -> Vec<Cow<'a, Requirement>> {
         // Start with the requirements for the current extra of the package (for an extra
         // requirement) or the non-extra (regular) dependencies (if extra is None), plus
         // the constraints for the current package.
@@ -1227,9 +1227,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         } else {
             Either::Right(dependencies.iter())
         };
-        let mut requirements: Vec<&Requirement> = self
+        let mut requirements = self
             .requirements_for_extra(regular_and_dev_dependencies, extra, markers)
-            .collect();
+            .collect::<Vec<_>>();
 
         // Check if there are recursive self inclusions and we need to go into the expensive branch.
         if !requirements
@@ -1245,21 +1245,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut queue: VecDeque<_> = requirements
             .iter()
             .filter(|req| name == Some(&req.name))
-            .flat_map(|req| &req.extras)
+            .flat_map(|req| req.extras.iter().cloned())
             .collect();
         while let Some(extra) = queue.pop_front() {
-            if !seen.insert(extra) {
+            if !seen.insert(extra.clone()) {
                 continue;
             }
-            // Add each transitively included extra.
-            queue.extend(
-                self.requirements_for_extra(dependencies, Some(extra), markers)
-                    .filter(|req| name == Some(&req.name))
-                    .flat_map(|req| &req.extras),
-            );
-            // Add the requirements for that extra
-            requirements.extend(self.requirements_for_extra(dependencies, Some(extra), markers));
+            for requirement in self.requirements_for_extra(dependencies, Some(&extra), markers) {
+                if name == Some(&requirement.name) {
+                    // Add each transitively included extra.
+                    queue.extend(requirement.extras.iter().cloned());
+                } else {
+                    // Add the requirements for that extra.
+                    requirements.push(requirement);
+                }
+            }
         }
+
         // Drop all the self-requirements now that we flattened them out.
         requirements.retain(|req| name != Some(&req.name));
 
@@ -1268,12 +1270,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     /// The set of the regular and dev dependencies, filtered by Python version,
     /// the markers of this fork and the requested extra.
-    fn requirements_for_extra<'a>(
-        &'a self,
-        dependencies: impl IntoIterator<Item = &'a Requirement>,
-        extra: Option<&'a ExtraName>,
-        markers: &'a MarkerTree,
-    ) -> impl Iterator<Item = &'a Requirement> {
+    fn requirements_for_extra<'data, 'parameters>(
+        &'data self,
+        dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
+        extra: Option<&'parameters ExtraName>,
+        markers: &'parameters MarkerTree,
+    ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
+    where
+        'data: 'parameters,
+    {
         self.overrides
             .apply(dependencies)
             .filter(move |requirement| {
@@ -1322,7 +1327,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 true
             })
             .flat_map(move |requirement| {
-                iter::once(requirement).chain(
+                iter::once(Cow::Borrowed(requirement)).chain(
                     self.constraints
                         .get(&requirement.name)
                         .into_iter()
@@ -1359,7 +1364,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
 
                             true
-                        }),
+                        })
+                        .map(move |constraint| {
+                            // If the requirement is `requests ; sys_platform == 'darwin'` and the
+                            // constraint is `requests ; python_version == '3.6'`, the constraint
+                            // should only apply when _both_ markers are true.
+                            if let Some(marker) = requirement.marker.as_ref() {
+                                let marker = constraint.marker.as_ref().map(|m| {
+                                    MarkerTree::And(vec![marker.clone(), m.clone()])
+                                }).or_else(|| Some(marker.clone()));
+
+                                Cow::Owned(Requirement {
+                                    name: constraint.name.clone(),
+                                    extras: constraint.extras.clone(),
+                                    source: constraint.source.clone(),
+                                    origin: constraint.origin.clone(),
+                                    marker
+                                })
+                            } else {
+                                Cow::Borrowed(constraint)
+                            }
+                        })
                 )
             })
     }

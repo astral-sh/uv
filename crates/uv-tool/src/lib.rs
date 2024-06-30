@@ -143,6 +143,9 @@ impl InstalledTools {
         Ok(())
     }
 
+    /// Remove the environment for a tool.
+    ///
+    /// Does not remove the tool's entrypoints.
     pub fn remove_environment(&self, name: &str) -> Result<(), Error> {
         let _lock = self.acquire_lock();
         let environment_path = self.root.join(name);
