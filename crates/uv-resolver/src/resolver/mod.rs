@@ -1,6 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
@@ -323,6 +324,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
             markers: MarkerTree::And(vec![]),
+            preferences: self.preferences.clone(),
         };
         let mut forked_states = vec![state];
         let mut resolutions = vec![];
@@ -370,7 +372,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state.markers,
                         start.elapsed().as_secs_f32()
                     );
-                    resolutions.push(state.into_resolution());
+
+                    let resolution = state.into_resolution();
+
+                    // Walk over the selected versions, and mark them as preferences.
+                    for state in &mut forked_states {
+                        for (package, versions) in &resolution.packages {
+                            if let Entry::Vacant(entry) =
+                                state.preferences.entry(package.name.clone())
+                            {
+                                if let Some(version) = versions.iter().next() {
+                                    entry.insert(version.clone().into());
+                                }
+                            }
+                        }
+                    }
+
+                    resolutions.push(resolution);
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
@@ -407,6 +425,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.next,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
+                    &state.preferences,
                     &state.fork_urls,
                     visited,
                     &request_sink,
@@ -708,6 +727,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
+        fork_preferences: &Preferences,
         fork_urls: &ForkUrls,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -731,7 +751,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
                     self.choose_version_url(name, range, url)
                 } else {
-                    self.choose_version_registry(name, range, package, pins, visited, request_sink)
+                    self.choose_version_registry(
+                        name,
+                        range,
+                        package,
+                        fork_preferences,
+                        pins,
+                        visited,
+                        request_sink,
+                    )
                 }
             }
         }
@@ -838,6 +866,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         range: &Range<Version>,
         package: &PubGrubPackage,
+        fork_preferences: &Preferences,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -876,7 +905,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             name,
             range,
             version_maps,
-            &self.preferences,
+            fork_preferences,
             &self.installed_packages,
             &self.exclusions,
         ) else {
@@ -1696,6 +1725,8 @@ struct SolveState {
     /// that the marker expression that provoked the fork is true), then that
     /// dependency is completely ignored.
     markers: MarkerTree,
+    /// The preferences to respect for the fork.
+    preferences: Preferences,
 }
 
 impl SolveState {
