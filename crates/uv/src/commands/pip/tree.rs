@@ -1,12 +1,15 @@
-use distribution_types::{Diagnostic, InstalledDist, Name};
-use owo_colors::OwoColorize;
-use pep508_rs::MarkerEnvironment;
-use pypi_types::VerbatimParsedUrl;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
+
+use anyhow::Result;
+use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
 use tracing::debug;
+
+use distribution_types::{Diagnostic, InstalledDist, Name};
+use pep508_rs::{MarkerEnvironment, Requirement};
+use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
@@ -25,10 +28,9 @@ pub(crate) fn pip_tree(
     strict: bool,
     python: Option<&str>,
     system: bool,
-    _preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<ExitStatus> {
+) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(ToolchainRequest::parse).unwrap_or_default(),
@@ -51,10 +53,12 @@ pub(crate) fn pip_tree(
         prune,
         no_dedupe,
         environment.interpreter().markers(),
-    )
-    .render()
+    )?
+    .render()?
     .join("\n");
-    writeln!(printer.stdout(), "{rendered_tree}").unwrap();
+
+    writeln!(printer.stdout(), "{rendered_tree}")?;
+
     if rendered_tree.contains('*') {
         let message = if no_dedupe {
             "(*) Package tree is a cycle and cannot be shown".italic()
@@ -76,6 +80,7 @@ pub(crate) fn pip_tree(
             )?;
         }
     }
+
     Ok(ExitStatus::Success)
 }
 
@@ -85,12 +90,12 @@ pub(crate) fn pip_tree(
 /// For example, `requests==2.32.3` requires `charset-normalizer`, `idna`, `urllib`, and `certifi` at
 /// all times, `PySocks` on `socks` extra and `chardet` on `use_chardet_on_py3` extra.
 /// This function will return `["charset-normalizer", "idna", "urllib", "certifi"]` for `requests`.
-fn required_with_no_extra(
+fn filtered_requirements(
     dist: &InstalledDist,
     markers: &MarkerEnvironment,
-) -> Vec<pep508_rs::Requirement<VerbatimParsedUrl>> {
-    let metadata = dist.metadata().unwrap();
-    return metadata
+) -> Result<Vec<Requirement<VerbatimParsedUrl>>> {
+    Ok(dist
+        .metadata()?
         .requires_dist
         .into_iter()
         .filter(|requirement| {
@@ -99,7 +104,7 @@ fn required_with_no_extra(
                 .as_ref()
                 .map_or(true, |m| m.evaluate(markers, &[]))
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<_>>())
 }
 
 #[derive(Debug)]
@@ -129,19 +134,19 @@ impl<'a> DisplayDependencyGraph<'a> {
         prune: Vec<PackageName>,
         no_dedupe: bool,
         markers: &'a MarkerEnvironment,
-    ) -> DisplayDependencyGraph<'a> {
+    ) -> Result<DisplayDependencyGraph<'a>> {
         let mut dist_by_package_name = HashMap::new();
         let mut required_packages = HashSet::new();
         for site_package in site_packages.iter() {
             dist_by_package_name.insert(site_package.name(), site_package);
         }
         for site_package in site_packages.iter() {
-            for required in required_with_no_extra(site_package, markers) {
+            for required in filtered_requirements(site_package, markers)? {
                 required_packages.insert(required.name.clone());
             }
         }
 
-        Self {
+        Ok(Self {
             site_packages,
             dist_by_package_name,
             required_packages,
@@ -149,46 +154,49 @@ impl<'a> DisplayDependencyGraph<'a> {
             prune,
             no_dedupe,
             markers,
-        }
+        })
     }
 
     /// Perform a depth-first traversal of the given distribution and its dependencies.
     fn visit(
         &self,
         installed_dist: &InstalledDist,
-        visited: &mut HashSet<String>,
-        path: &mut Vec<String>,
-    ) -> Vec<String> {
+        visited: &mut FxHashMap<PackageName, Vec<Requirement<VerbatimParsedUrl>>>,
+        path: &mut Vec<PackageName>,
+    ) -> Result<Vec<String>> {
         // Short-circuit if the current path is longer than the provided depth.
         if path.len() > self.depth {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
-        let package_name = installed_dist.name().to_string();
-        let is_visited = visited.contains(&package_name);
+        let package_name = installed_dist.name();
         let line = format!("{} v{}", package_name, installed_dist.version());
 
-        // Skip the traversal if
-        // 1. the package is in the current traversal path (i.e. a dependency cycle)
-        // 2. if the package has been visited and de-duplication is enabled (default)
-        if path.contains(&package_name) || (is_visited && !self.no_dedupe) {
-            return vec![format!("{} (*)", line)];
+        // Skip the traversal if:
+        // 1. The package is in the current traversal path (i.e., a dependency cycle).
+        // 2. The package has been visited and de-duplication is enabled (default).
+        if let Some(requirements) = visited.get(package_name) {
+            if !self.no_dedupe || path.contains(package_name) {
+                return Ok(if requirements.is_empty() {
+                    vec![line]
+                } else {
+                    vec![format!("{} (*)", line)]
+                });
+            }
         }
+
+        let requirements = filtered_requirements(installed_dist, self.markers)?
+            .into_iter()
+            .filter(|req| !self.prune.contains(&req.name))
+            .collect::<Vec<_>>();
 
         let mut lines = vec![line];
 
+        visited.insert(package_name.clone(), requirements.clone());
         path.push(package_name.clone());
-        visited.insert(package_name.clone());
-        let required_packages = required_with_no_extra(installed_dist, self.markers)
-            .into_iter()
-            .filter(|p| !self.prune.contains(&p.name))
-            .collect::<Vec<_>>();
-        for (index, required_package) in required_packages.iter().enumerate() {
+        for (index, req) in requirements.iter().enumerate() {
             // Skip if the current package is not one of the installed distributions.
-            if !self
-                .dist_by_package_name
-                .contains_key(&required_package.name)
-            {
+            if !self.dist_by_package_name.contains_key(&req.name) {
                 continue;
             }
 
@@ -211,7 +219,7 @@ impl<'a> DisplayDependencyGraph<'a> {
             // those in Group 3 have `└── ` at the top and `    ` at the rest.
             // This observation is true recursively even when looking at the subtree rooted
             // at `level_1_0`.
-            let (prefix_top, prefix_rest) = if required_packages.len() - 1 == index {
+            let (prefix_top, prefix_rest) = if requirements.len() - 1 == index {
                 ("└── ", "    ")
             } else {
                 ("├── ", "│   ")
@@ -219,11 +227,7 @@ impl<'a> DisplayDependencyGraph<'a> {
 
             let mut prefixed_lines = Vec::new();
             for (visited_index, visited_line) in self
-                .visit(
-                    self.dist_by_package_name[&required_package.name],
-                    visited,
-                    path,
-                )
+                .visit(self.dist_by_package_name[&req.name], visited, path)?
                 .iter()
                 .enumerate()
             {
@@ -240,21 +244,26 @@ impl<'a> DisplayDependencyGraph<'a> {
             lines.extend(prefixed_lines);
         }
         path.pop();
-        lines
+
+        Ok(lines)
     }
 
-    // Depth-first traverse the nodes to render the tree.
-    // The starting nodes are the ones without incoming edges.
-    fn render(&self) -> Vec<String> {
-        let mut visited: HashSet<String> = HashSet::new();
+    /// Depth-first traverse the nodes to render the tree.
+    fn render(&self) -> Result<Vec<String>> {
+        let mut visited: FxHashMap<PackageName, Vec<Requirement<VerbatimParsedUrl>>> =
+            FxHashMap::default();
+        let mut path: Vec<PackageName> = Vec::new();
         let mut lines: Vec<String> = Vec::new();
+
+        // The starting nodes are the ones without incoming edges.
         for site_package in self.site_packages.iter() {
             // If the current package is not required by any other package, start the traversal
             // with the current package as the root.
             if !self.required_packages.contains(site_package.name()) {
-                lines.extend(self.visit(site_package, &mut visited, &mut Vec::new()));
+                lines.extend(self.visit(site_package, &mut visited, &mut path)?);
             }
         }
-        lines
+
+        Ok(lines)
     }
 }
