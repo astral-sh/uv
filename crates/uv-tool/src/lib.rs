@@ -297,7 +297,11 @@ fn find_dist_info(
     package_name: &PackageName,
     package_version: &Version,
 ) -> Result<PathBuf, Error> {
-    let dist_info_prefix = format!("{package_name}-{package_version}.dist-info");
+    let dist_info_prefix = format!(
+        "{}-{}.dist-info",
+        package_name.as_dist_info_name(),
+        package_version
+    );
     environment
         .interpreter()
         .site_packages()
