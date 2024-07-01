@@ -316,7 +316,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let mut prefetcher = BatchPrefetcher::default();
-        let state = SolveState {
+        let state = ForkState {
             pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
             next: root,
             pins: FilePins::default(),
@@ -1673,7 +1673,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
-struct SolveState {
+struct ForkState {
     /// The internal state used by the resolver.
     ///
     /// Note that not all parts of this state are strictly internal. For
@@ -1726,7 +1726,7 @@ struct SolveState {
     markers: MarkerTree,
 }
 
-impl SolveState {
+impl ForkState {
     /// Add the dependencies for the selected version of the current package, checking for
     /// self-dependencies, and handling URLs.
     fn add_package_version_dependencies(
