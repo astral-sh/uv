@@ -1,4 +1,3 @@
-use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -17,9 +16,9 @@ impl Deref for PubGrubPackage {
     }
 }
 
-impl Display for PubGrubPackage {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
+impl std::fmt::Display for PubGrubPackage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
     }
 }
 

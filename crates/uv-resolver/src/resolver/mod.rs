@@ -25,7 +25,7 @@ use tracing::{debug, enabled, instrument, trace, warn, Level};
 use distribution_types::{
     BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
     IncompatibleWheel, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    ResolvedDistRef, SourceDist, VersionOrUrlRef, WheelCompatibility,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -44,7 +44,7 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::error::ResolveError;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
-use crate::marker::normalize;
+use crate::marker::{normalize, requires_python_marker};
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
@@ -312,6 +312,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         visited: &mut FxHashSet<PackageName>,
         request_sink: Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
+        debug!(
+            "Solving with installed Python version: {}",
+            self.python_requirement.installed()
+        );
+        if let Some(target) = self.python_requirement.target() {
+            debug!("Solving with target Python version: {}", target);
+        }
+
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let mut prefetcher = BatchPrefetcher::default();
         let state = ForkState {
@@ -322,22 +330,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
             markers: MarkerTree::And(vec![]),
+            python_requirement: self.python_requirement.clone(),
+            requires_python: self.requires_python.clone(),
         };
         let mut preferences = self.preferences.clone();
         let mut forked_states = vec![state];
         let mut resolutions = vec![];
 
-        debug!(
-            "Solving with installed Python version: {}",
-            self.python_requirement.installed()
-        );
-        if let Some(target) = self.python_requirement.target() {
-            debug!("Solving with target Python version: {}", target);
-        }
-
         'FORK: while let Some(mut state) = forked_states.pop() {
             if !state.markers.is_universal() {
-                debug!("Solving split {}", state.markers);
+                if let Some(requires_python) = state.requires_python.as_ref() {
+                    debug!("Solving split {} ({})", state.markers, requires_python);
+                } else {
+                    debug!("Solving split {}", state.markers);
+                }
             }
             let start = Instant::now();
             loop {
@@ -406,6 +412,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 prefetcher.version_tried(state.next.clone());
 
+                // Narrow the Python requirement, if possible.
+                let (python_requirement, requires_python) = if let Some(python_requirement) = state
+                    .next
+                    .marker()
+                    .and_then(requires_python_marker)
+                    .and_then(|marker| state.python_requirement.narrow(marker))
+                {
+                    let requires_python = if state.requires_python.is_some() {
+                        python_requirement.to_marker_tree()
+                    } else {
+                        None
+                    };
+                    debug!("requires-python: {:?}", requires_python);
+                    (Cow::Owned(python_requirement), Cow::Owned(requires_python))
+                } else {
+                    (
+                        Cow::Borrowed(&state.python_requirement),
+                        Cow::Borrowed(&state.requires_python),
+                    )
+                };
+
                 let term_intersection = state
                     .pubgrub
                     .partial_solution
@@ -424,6 +451,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &mut state.pins,
                     &preferences,
                     &state.fork_urls,
+                    &python_requirement,
                     visited,
                     &request_sink,
                 )?;
@@ -502,6 +530,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &version,
                         &state.fork_urls,
                         &state.markers,
+                        requires_python.as_ref().as_ref(),
                     )?;
                     match forked_deps {
                         ForkedDependencies::Unavailable(reason) => {
@@ -547,7 +576,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     .map(ToString::to_string)
                                     .join(", ")
                             );
-                            assert!(forks.len() >= 2);
+                            // assert!(forks.len() >= 2);
                             // This is a somewhat tortured technique to ensure
                             // that our resolver state is only cloned as much
                             // as it needs to be. We basically move the state
@@ -562,9 +591,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 if !is_last {
                                     cur_state = Some(forked_state.clone());
                                 }
+
                                 forked_state.markers.and(fork.markers);
                                 forked_state.markers = normalize(forked_state.markers)
                                     .unwrap_or(MarkerTree::And(Vec::new()));
+
+                                // If the fork contains a narrowed Python requirement, apply it.
+                                if let Some(python_version) =
+                                    requires_python_marker(&forked_state.markers)
+                                {
+                                    debug!("Found `requires-python` bound for fork: {python_version:?}");
+
+                                    if let Some(python_requirement) =
+                                        forked_state.python_requirement.narrow(python_version)
+                                    {
+                                        debug!("Narrowed `requires-python` bound to: {python_requirement:?}");
+
+                                        forked_state.requires_python =
+                                            if forked_state.requires_python.is_some() {
+                                                python_requirement.to_marker_tree()
+                                            } else {
+                                                None
+                                            };
+                                        forked_state.python_requirement = python_requirement;
+                                    }
+                                }
 
                                 forked_state.add_package_version_dependencies(
                                     for_package.as_deref(),
@@ -726,6 +777,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins,
         preferences: &Preferences,
         fork_urls: &ForkUrls,
+        python_requirement: &PythonRequirement,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
@@ -746,13 +798,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | PubGrubPackageInner::Dev { name, .. }
             | PubGrubPackageInner::Package { name, .. } => {
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
-                    self.choose_version_url(name, range, url)
+                    self.choose_version_url(name, range, url, python_requirement)
                 } else {
                     self.choose_version_registry(
                         name,
                         range,
                         package,
                         preferences,
+                        python_requirement,
                         pins,
                         visited,
                         request_sink,
@@ -769,6 +822,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         range: &Range<Version>,
         url: &VerbatimParsedUrl,
+        python_requirement: &PythonRequirement,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
             "Searching for a compatible version of {name} @ {} ({range})",
@@ -826,8 +880,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         // The version is incompatible due to its Python requirement.
+        // STOPSHIP(charlie): Merge markers into `python_requirement`.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
-            if let Some(target) = self.python_requirement.target() {
+            if let Some(target) = python_requirement.target() {
                 if !target.is_compatible_with(requires_python) {
                     return Ok(Some(ResolverVersion::Unavailable(
                         version.clone(),
@@ -840,7 +895,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )));
                 }
             }
-            if !requires_python.contains(self.python_requirement.installed()) {
+            if !requires_python.contains(python_requirement.installed()) {
                 return Ok(Some(ResolverVersion::Unavailable(
                     version.clone(),
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
@@ -864,6 +919,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         range: &Range<Version>,
         package: &PubGrubPackage,
         preferences: &Preferences,
+        python_requirement: &PythonRequirement,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -932,7 +988,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .requires_python
                     .as_ref()
                     .and_then(|requires_python| {
-                        if let Some(target) = self.python_requirement.target() {
+                        if let Some(target) = python_requirement.target() {
                             if !target.is_compatible_with(requires_python) {
                                 return Some(IncompatibleDist::Source(
                                     IncompatibleSource::RequiresPython(
@@ -942,7 +998,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 ));
                             }
                         }
-                        if !requires_python.contains(self.python_requirement.installed()) {
+                        if !requires_python.contains(python_requirement.installed()) {
                             return Some(IncompatibleDist::Source(
                                 IncompatibleSource::RequiresPython(
                                     requires_python.clone(),
@@ -960,7 +1016,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .requires_python
                     .as_ref()
                     .and_then(|requires_python| {
-                        if let Some(target) = self.python_requirement.target() {
+                        if let Some(target) = python_requirement.target() {
                             if !target.is_compatible_with(requires_python) {
                                 return Some(IncompatibleDist::Wheel(
                                     IncompatibleWheel::RequiresPython(
@@ -970,7 +1026,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 ));
                             }
                         } else {
-                            if !requires_python.contains(self.python_requirement.installed()) {
+                            if !requires_python.contains(python_requirement.installed()) {
                                 return Some(IncompatibleDist::Wheel(
                                     IncompatibleWheel::RequiresPython(
                                         requires_python.clone(),
@@ -1034,8 +1090,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         fork_urls: &ForkUrls,
         markers: &MarkerTree,
+        requires_python: Option<&MarkerTree>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let result = self.get_dependencies(package, version, fork_urls, markers);
+        let result = self.get_dependencies(package, version, fork_urls, markers, requires_python);
         if self.markers.is_some() {
             return result.map(|deps| match deps {
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
@@ -1053,6 +1110,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         fork_urls: &ForkUrls,
         markers: &MarkerTree,
+        requires_python: Option<&MarkerTree>,
     ) -> Result<Dependencies, ResolveError> {
         let url = package.name().and_then(|name| fork_urls.get(name));
         let dependencies = match &**package {
@@ -1065,6 +1123,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     None,
                     markers,
+                    requires_python,
                 );
 
                 requirements
@@ -1193,6 +1252,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dev.as_ref(),
                     Some(name),
                     markers,
+                    requires_python,
                 );
 
                 let mut dependencies = requirements
@@ -1313,6 +1373,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
         markers: &'a MarkerTree,
+        requires_python: Option<&'a MarkerTree>,
     ) -> Vec<Cow<'a, Requirement>> {
         // Start with the requirements for the current extra of the package (for an extra
         // requirement) or the non-extra (regular) dependencies (if extra is None), plus
@@ -1323,7 +1384,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Right(dependencies.iter())
         };
         let mut requirements = self
-            .requirements_for_extra(regular_and_dev_dependencies, extra, markers)
+            .requirements_for_extra(
+                regular_and_dev_dependencies,
+                extra,
+                markers,
+                requires_python,
+            )
             .collect::<Vec<_>>();
 
         // Check if there are recursive self inclusions and we need to go into the expensive branch.
@@ -1346,7 +1412,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if !seen.insert(extra.clone()) {
                 continue;
             }
-            for requirement in self.requirements_for_extra(dependencies, Some(&extra), markers) {
+            for requirement in
+                self.requirements_for_extra(dependencies, Some(&extra), markers, requires_python)
+            {
                 if name == Some(&requirement.name) {
                     // Add each transitively included extra.
                     queue.extend(requirement.extras.iter().cloned());
@@ -1370,6 +1438,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
         markers: &'parameters MarkerTree,
+        requires_python: Option<&'parameters MarkerTree>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
         'data: 'parameters,
@@ -1379,12 +1448,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .filter(move |requirement| {
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
-                if !satisfies_requires_python(self.requires_python.as_ref(), requirement) {
+                if !satisfies_requires_python(requires_python, requirement) {
                     trace!(
                         "skipping {requirement} because of Requires-Python {requires_python}",
                         // OK because this filter only applies when there is a present
                         // Requires-Python specifier.
-                        requires_python = self.requires_python.as_ref().unwrap()
+                        requires_python = requires_python.unwrap()
                     );
                     return false;
                 }
@@ -1428,10 +1497,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .into_iter()
                         .flatten()
                         .filter(move |constraint| {
-                            if !satisfies_requires_python(self.requires_python.as_ref(), constraint) {
+                            if !satisfies_requires_python(requires_python, constraint) {
                                 trace!(
                                     "skipping {constraint} because of Requires-Python {requires_python}",
-                                    requires_python = self.requires_python.as_ref().unwrap()
+                                    requires_python = requires_python.unwrap()
                                 );
                                 return false;
                             }
@@ -1793,6 +1862,9 @@ struct ForkState {
     /// that the marker expression that provoked the fork is true), then that
     /// dependency is completely ignored.
     markers: MarkerTree,
+    /// The Python requirement for this state.
+    python_requirement: PythonRequirement,
+    requires_python: Option<MarkerTree>,
 }
 
 impl ForkState {
@@ -2362,7 +2434,7 @@ impl Dependencies {
                     continue;
                 }
             };
-            assert!(fork_groups.forks.len() >= 2, "expected definitive fork");
+            // assert!(fork_groups.forks.len() >= 2, "expected definitive fork");
             let mut new_forks: Vec<Fork> = vec![];
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
@@ -2540,7 +2612,18 @@ impl<'a> PossibleForks<'a> {
         let PossibleForks::PossiblyForking(ref fork_groups) = *self else {
             return false;
         };
-        fork_groups.forks.len() > 1
+        if fork_groups.forks.len() > 1 {
+            return true;
+        }
+        if fork_groups.forks.iter().any(|fork_groups| {
+            fork_groups
+                .packages
+                .iter()
+                .any(|(index, markers)| requires_python_marker(markers).is_some())
+        }) {
+            return true;
+        };
+        false
     }
 
     /// Consumes this possible set of forks and converts a "possibly forking"
@@ -2553,7 +2636,14 @@ impl<'a> PossibleForks<'a> {
         let PossibleForks::PossiblyForking(ref fork_groups) = self else {
             return self;
         };
-        if fork_groups.forks.len() == 1 {
+        if fork_groups.forks.len() == 1
+            && !fork_groups.forks.iter().any(|fork_groups| {
+                fork_groups
+                    .packages
+                    .iter()
+                    .any(|(index, markers)| requires_python_marker(markers).is_some())
+            })
+        {
             self.make_no_forks_possible();
             return self;
         }
