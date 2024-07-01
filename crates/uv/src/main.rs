@@ -772,6 +772,33 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Project(ProjectCommand::Tree(args)) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::TreeSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::tree(
+                args.depth,
+                args.prune,
+                args.package,
+                args.no_dedupe,
+                args.invert,
+                args.python,
+                args.resolver,
+                globals.toolchain_preference,
+                globals.toolchain_fetch,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command: SelfCommand::Update,

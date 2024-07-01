@@ -284,6 +284,9 @@ pub enum ProjectCommand {
     /// Remove one or more packages from the project requirements.
     #[clap(hide = true)]
     Remove(RemoveArgs),
+    /// Display the dependency tree for the project.
+    #[clap(hide = true)]
+    Tree(TreeArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -1426,29 +1429,8 @@ pub struct PipShowArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipTreeArgs {
-    /// Maximum display depth of the dependency tree
-    #[arg(long, short, default_value_t = 255)]
-    pub depth: u8,
-
-    /// Prune the given package from the display of the dependency tree.
-    #[arg(long)]
-    pub prune: Vec<PackageName>,
-
-    /// Display only the specified packages.
-    #[arg(long)]
-    pub package: Vec<PackageName>,
-
-    /// Do not de-duplicate repeated dependencies.
-    /// Usually, when a package has already displayed its dependencies,
-    /// further occurrences will not re-display its dependencies,
-    /// and will include a (*) to indicate it has already been shown.
-    /// This flag will cause those duplicates to be repeated.
-    #[arg(long)]
-    pub no_dedupe: bool,
-
-    #[arg(long, alias = "reverse")]
-    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
-    pub invert: bool,
+    #[command(flatten)]
+    pub tree: DisplayTreeArgs,
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
@@ -1871,6 +1853,34 @@ pub struct RemoveArgs {
     pub package: Option<PackageName>,
 
     /// The Python interpreter into which packages should be installed.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    pub python: Option<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct TreeArgs {
+    #[command(flatten)]
+    pub tree: DisplayTreeArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    /// The Python interpreter for which packages should be listed.
     ///
     /// By default, `uv` installs into the virtual environment in the current working directory or
     /// any parent directory. The `--python` option allows you to specify a different interpreter,
@@ -2435,4 +2445,31 @@ pub struct ResolverInstallerArgs {
         hide = true
     )]
     pub no_compile_bytecode: bool,
+}
+
+#[derive(Args)]
+pub struct DisplayTreeArgs {
+    /// Maximum display depth of the dependency tree
+    #[arg(long, short, default_value_t = 255)]
+    pub depth: u8,
+
+    /// Prune the given package from the display of the dependency tree.
+    #[arg(long)]
+    pub prune: Vec<PackageName>,
+
+    /// Display only the specified packages.
+    #[arg(long)]
+    pub package: Vec<PackageName>,
+
+    /// Do not de-duplicate repeated dependencies.
+    /// Usually, when a package has already displayed its dependencies,
+    /// further occurrences will not re-display its dependencies,
+    /// and will include a (*) to indicate it has already been shown.
+    /// This flag will cause those duplicates to be repeated.
+    #[arg(long)]
+    pub no_dedupe: bool,
+
+    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
+    #[arg(long, alias = "reverse")]
+    pub invert: bool,
 }

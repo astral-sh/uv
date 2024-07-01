@@ -15,7 +15,7 @@ use uv_cli::{
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, VenvArgs,
+    ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -596,6 +596,40 @@ impl RemoveSettings {
     }
 }
 
+/// The resolved settings to use for a `tree` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct TreeSettings {
+    pub(crate) depth: u8,
+    pub(crate) prune: Vec<PackageName>,
+    pub(crate) package: Vec<PackageName>,
+    pub(crate) no_dedupe: bool,
+    pub(crate) invert: bool,
+    pub(crate) python: Option<String>,
+    pub(crate) resolver: ResolverSettings,
+}
+
+impl TreeSettings {
+    /// Resolve the [`TreeSettings`] from the CLI and workspace configuration.
+    pub(crate) fn resolve(args: TreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let TreeArgs {
+            tree,
+            build,
+            resolver,
+            python,
+        } = args;
+
+        Self {
+            python,
+            depth: tree.depth,
+            prune: tree.prune,
+            package: tree.package,
+            no_dedupe: tree.no_dedupe,
+            invert: tree.invert,
+            resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+        }
+    }
+}
 /// The resolved settings to use for a `pip compile` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
@@ -1086,7 +1120,7 @@ impl PipShowSettings {
     }
 }
 
-/// The resolved settings to use for a `pip show` invocation.
+/// The resolved settings to use for a `pip tree` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipTreeSettings {
@@ -1103,11 +1137,7 @@ impl PipTreeSettings {
     /// Resolve the [`PipTreeSettings`] from the CLI and workspace configuration.
     pub(crate) fn resolve(args: PipTreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipTreeArgs {
-            depth,
-            prune,
-            package,
-            no_dedupe,
-            invert,
+            tree,
             strict,
             no_strict,
             python,
@@ -1117,11 +1147,11 @@ impl PipTreeSettings {
         } = args;
 
         Self {
-            depth,
-            prune,
-            package,
-            no_dedupe,
-            invert,
+            depth: tree.depth,
+            prune: tree.prune,
+            no_dedupe: tree.no_dedupe,
+            invert: tree.invert,
+            package: tree.package,
             // Shared settings.
             shared: PipSettings::combine(
                 PipOptions {
