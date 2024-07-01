@@ -21,10 +21,12 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Display the installed packages in the current environment as a dependency tree.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_tree(
     depth: u8,
     prune: Vec<PackageName>,
     no_dedupe: bool,
+    invert: bool,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -52,6 +54,7 @@ pub(crate) fn pip_tree(
         depth.into(),
         prune,
         no_dedupe,
+        invert,
         environment.interpreter().markers(),
     )?
     .render()?
@@ -112,18 +115,14 @@ struct DisplayDependencyGraph<'a> {
     site_packages: &'a SitePackages,
     /// Map from package name to the installed distribution.
     dist_by_package_name: HashMap<&'a PackageName, &'a InstalledDist>,
-    /// Set of package names that are required by at least one installed distribution.
-    /// It is used to determine the starting nodes when recursing the
-    /// dependency graph.
-    required_packages: HashSet<PackageName>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Prune the given package from the display of the dependency tree.
     prune: Vec<PackageName>,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
-    /// The marker environment for the current interpreter.
-    markers: &'a MarkerEnvironment,
+    /// Map from package name to the list of required (reversed if --invert is given) packages.
+    requires_map: HashMap<PackageName, Vec<PackageName>>,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
@@ -133,27 +132,37 @@ impl<'a> DisplayDependencyGraph<'a> {
         depth: usize,
         prune: Vec<PackageName>,
         no_dedupe: bool,
+        invert: bool,
         markers: &'a MarkerEnvironment,
     ) -> Result<DisplayDependencyGraph<'a>> {
         let mut dist_by_package_name = HashMap::new();
-        let mut required_packages = HashSet::new();
+        let mut requires_map = HashMap::new();
         for site_package in site_packages.iter() {
             dist_by_package_name.insert(site_package.name(), site_package);
         }
         for site_package in site_packages.iter() {
             for required in filtered_requirements(site_package, markers)? {
-                required_packages.insert(required.name.clone());
+                if invert {
+                    requires_map
+                        .entry(required.name.clone())
+                        .or_insert_with(Vec::new)
+                        .push(site_package.name().clone());
+                } else {
+                    requires_map
+                        .entry(site_package.name().clone())
+                        .or_insert_with(Vec::new)
+                        .push(required.name.clone());
+                }
             }
         }
 
         Ok(Self {
             site_packages,
             dist_by_package_name,
-            required_packages,
             depth,
             prune,
             no_dedupe,
-            markers,
+            requires_map,
         })
     }
 
@@ -161,7 +170,7 @@ impl<'a> DisplayDependencyGraph<'a> {
     fn visit(
         &self,
         installed_dist: &InstalledDist,
-        visited: &mut FxHashMap<PackageName, Vec<Requirement<VerbatimParsedUrl>>>,
+        visited: &mut FxHashMap<PackageName, Vec<PackageName>>,
         path: &mut Vec<PackageName>,
     ) -> Result<Vec<String>> {
         // Short-circuit if the current path is longer than the provided depth.
@@ -185,21 +194,22 @@ impl<'a> DisplayDependencyGraph<'a> {
             }
         }
 
-        let requirements = filtered_requirements(installed_dist, self.markers)?
-            .into_iter()
-            .filter(|req| !self.prune.contains(&req.name))
-            .collect::<Vec<_>>();
-
+        let requirements_before_filtering = self.requires_map.get(installed_dist.name());
+        let requirements = match requirements_before_filtering {
+            Some(requirements) => requirements
+                .iter()
+                .filter(|req| {
+                    // Skip if the current package is not one of the installed distributions.
+                    !self.prune.contains(req) && self.dist_by_package_name.contains_key(req)
+                })
+                .cloned()
+                .collect(),
+            None => Vec::new(),
+        };
         let mut lines = vec![line];
-
         visited.insert(package_name.clone(), requirements.clone());
         path.push(package_name.clone());
         for (index, req) in requirements.iter().enumerate() {
-            // Skip if the current package is not one of the installed distributions.
-            if !self.dist_by_package_name.contains_key(&req.name) {
-                continue;
-            }
-
             // For sub-visited packages, add the prefix to make the tree display user-friendly.
             // The key observation here is you can group the tree as follows when you're at the
             // root of the tree:
@@ -227,7 +237,7 @@ impl<'a> DisplayDependencyGraph<'a> {
 
             let mut prefixed_lines = Vec::new();
             for (visited_index, visited_line) in self
-                .visit(self.dist_by_package_name[&req.name], visited, path)?
+                .visit(self.dist_by_package_name[req], visited, path)?
                 .iter()
                 .enumerate()
             {
@@ -250,16 +260,19 @@ impl<'a> DisplayDependencyGraph<'a> {
 
     /// Depth-first traverse the nodes to render the tree.
     fn render(&self) -> Result<Vec<String>> {
-        let mut visited: FxHashMap<PackageName, Vec<Requirement<VerbatimParsedUrl>>> =
-            FxHashMap::default();
+        let mut visited: FxHashMap<PackageName, Vec<PackageName>> = FxHashMap::default();
         let mut path: Vec<PackageName> = Vec::new();
         let mut lines: Vec<String> = Vec::new();
 
-        // The starting nodes are the ones without incoming edges.
+        // The starting nodes are those that are not required by any other package.
+        let mut non_starting_nodes = HashSet::new();
+        for children in self.requires_map.values() {
+            non_starting_nodes.extend(children);
+        }
         for site_package in self.site_packages.iter() {
             // If the current package is not required by any other package, start the traversal
             // with the current package as the root.
-            if !self.required_packages.contains(site_package.name()) {
+            if !non_starting_nodes.contains(site_package.name()) {
                 lines.extend(self.visit(site_package, &mut visited, &mut path)?);
             }
         }
