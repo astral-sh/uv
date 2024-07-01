@@ -1,22 +1,23 @@
 use core::fmt;
-use fs_err as fs;
-use install_wheel_rs::linker::entrypoint_path;
-use install_wheel_rs::{scripts_from_ini, Script};
-use pep440_rs::Version;
-use pep508_rs::PackageName;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+
+use fs_err as fs;
+use fs_err::File;
 use thiserror::Error;
 use tracing::debug;
+
+use install_wheel_rs::read_record_file;
+use pep440_rs::Version;
+use pep508_rs::PackageName;
+pub use receipt::ToolReceipt;
+pub use tool::{Tool, ToolEntrypoint};
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
+use uv_state::{StateBucket, StateStore};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_warnings::warn_user_once;
 
-pub use receipt::ToolReceipt;
-pub use tool::{Tool, ToolEntrypoint};
-
-use uv_state::{StateBucket, StateStore};
 mod receipt;
 mod tool;
 
@@ -291,7 +292,7 @@ pub fn find_executable_directory() -> Result<PathBuf, Error> {
         .ok_or(Error::NoExecutableDirectory)
 }
 
-/// Find the dist-info directory for a package in an environment.
+/// Find the `.dist-info` directory for a package in an environment.
 fn find_dist_info(
     environment: &PythonEnvironment,
     package_name: &PackageName,
@@ -306,32 +307,14 @@ fn find_dist_info(
         .interpreter()
         .site_packages()
         .map(|path| path.join(&dist_info_prefix))
-        .find(|path| path.exists())
+        .find(|path| path.is_dir())
         .ok_or_else(|| Error::DistInfoMissing(dist_info_prefix, environment.root().to_path_buf()))
 }
 
-/// Parses the `entry_points.txt` entry for console scripts
-///
-/// Returns (`script_name`, module, function)
-fn parse_scripts(
-    dist_info_path: &Path,
-    python_minor: u8,
-) -> Result<(Vec<Script>, Vec<Script>), Error> {
-    let entry_points_path = dist_info_path.join("entry_points.txt");
-
-    // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let Ok(ini) = fs::read_to_string(&entry_points_path) else {
-        debug!(
-            "Failed to read entry points at {}",
-            entry_points_path.user_display()
-        );
-        return Ok((Vec::new(), Vec::new()));
-    };
-
-    Ok(scripts_from_ini(None, python_minor, ini)?)
-}
-
 /// Find the paths to the entry points provided by a package in an environment.
+///
+/// Entry points can either be true Python entrypoints (defined in `entrypoints.txt`) or scripts in
+/// the `.data` directory.
 ///
 /// Returns a list of `(name, path)` tuples.
 pub fn entrypoint_paths(
@@ -339,20 +322,46 @@ pub fn entrypoint_paths(
     package_name: &PackageName,
     package_version: &Version,
 ) -> Result<Vec<(String, PathBuf)>, Error> {
+    // Find the `.dist-info` directory in the installed environment.
     let dist_info_path = find_dist_info(environment, package_name, package_version)?;
-    debug!("Looking at dist-info at {}", dist_info_path.user_display());
+    debug!(
+        "Looking at `.dist-info` at: {}",
+        dist_info_path.user_display()
+    );
 
-    let (console_scripts, gui_scripts) =
-        parse_scripts(&dist_info_path, environment.interpreter().python_minor())?;
+    // Read the RECORD file.
+    let record = read_record_file(&mut File::open(dist_info_path.join("RECORD"))?)?;
 
+    // The RECORD file uses relative paths, so we're looking for the relative path to be a prefix.
     let layout = environment.interpreter().layout();
+    let script_relative = pathdiff::diff_paths(&layout.scheme.scripts, &layout.scheme.purelib)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Could not find relative path for: {}",
+                    layout.scheme.scripts.simplified_display()
+                ),
+            )
+        })?;
 
-    Ok(console_scripts
-        .into_iter()
-        .chain(gui_scripts)
-        .map(|entrypoint| {
-            let path = entrypoint_path(&entrypoint, &layout);
-            (entrypoint.name, path)
-        })
-        .collect())
+    // Identify any installed binaries (both entrypoints and scripts from the `.data` directory).
+    let mut entrypoints = vec![];
+    for entry in record {
+        let relative_path = PathBuf::from(&entry.path);
+        let Ok(path_in_scripts) = relative_path.strip_prefix(&script_relative) else {
+            continue;
+        };
+
+        let absolute_path = layout.scheme.scripts.join(path_in_scripts);
+        let script_name = entry
+            .path
+            .rsplit(std::path::MAIN_SEPARATOR)
+            .next()
+            .unwrap_or(&entry.path)
+            .to_string();
+        entrypoints.push((script_name, absolute_path));
+    }
+
+    Ok(entrypoints)
 }

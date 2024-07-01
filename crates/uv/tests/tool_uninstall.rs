@@ -8,7 +8,7 @@ mod common;
 
 #[test]
 fn tool_uninstall() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -71,7 +71,7 @@ fn tool_uninstall() {
 
 #[test]
 fn tool_uninstall_not_installed() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -90,7 +90,7 @@ fn tool_uninstall_not_installed() {
 
 #[test]
 fn tool_uninstall_missing_receipt() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
