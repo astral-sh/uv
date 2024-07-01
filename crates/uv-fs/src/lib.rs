@@ -201,11 +201,7 @@ pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
                 None
             }
         })
-        .filter(|entry| {
-            entry
-                .file_type()
-                .map_or(false, |file_type| file_type.is_dir())
-        })
+        .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_dir()))
         .map(|entry| entry.path())
 }
 
@@ -228,7 +224,7 @@ pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
         .filter(|entry| {
             entry
                 .file_type()
-                .map_or(false, |file_type| file_type.is_symlink())
+                .is_ok_and(|file_type| file_type.is_symlink())
         })
         .map(|entry| entry.path())
 }
@@ -249,11 +245,7 @@ pub fn files(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
                 None
             }
         })
-        .filter(|entry| {
-            entry
-                .file_type()
-                .map_or(false, |file_type| file_type.is_file())
-        })
+        .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_file()))
         .map(|entry| entry.path())
 }
 
