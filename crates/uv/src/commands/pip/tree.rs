@@ -21,6 +21,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Display the installed packages in the current environment as a dependency tree.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_tree(
     depth: u8,
     prune: Vec<PackageName>,
@@ -122,8 +123,6 @@ struct DisplayDependencyGraph<'a> {
     no_dedupe: bool,
     /// Map from package name to the list of required (reversed if --invert is given) packages.
     requires_map: HashMap<PackageName, Vec<PackageName>>,
-
-    markers: &'a MarkerEnvironment,
 }
 
 impl<'a> DisplayDependencyGraph<'a> {
@@ -164,7 +163,6 @@ impl<'a> DisplayDependencyGraph<'a> {
             prune,
             no_dedupe,
             requires_map,
-            markers,
         })
     }
 
