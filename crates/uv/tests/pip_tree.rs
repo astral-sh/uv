@@ -1354,3 +1354,153 @@ fn with_editable() {
     "###
     );
 }
+
+#[test]
+#[cfg(target_os = "macos")]
+fn package_flag_complex() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("packse").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 32 packages in [TIME]
+    Prepared 32 packages in [TIME]
+    Installed 32 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + chevron-blue==0.2.1
+     + docutils==0.20.1
+     + hatchling==1.22.4
+     + idna==3.6
+     + importlib-metadata==7.1.0
+     + jaraco-classes==3.3.1
+     + jaraco-context==4.3.0
+     + jaraco-functools==4.0.0
+     + keyring==25.0.0
+     + markdown-it-py==3.0.0
+     + mdurl==0.1.2
+     + more-itertools==10.2.0
+     + msgspec==0.18.6
+     + nh3==0.2.15
+     + packaging==24.0
+     + packse==0.3.12
+     + pathspec==0.12.1
+     + pkginfo==1.10.0
+     + pluggy==1.4.0
+     + pygments==2.17.2
+     + readme-renderer==43.0
+     + requests==2.31.0
+     + requests-toolbelt==1.0.0
+     + rfc3986==2.0.0
+     + rich==13.7.1
+     + setuptools==69.2.0
+     + trove-classifiers==2024.3.3
+     + twine==4.0.2
+     + urllib3==2.2.1
+     + zipp==3.18.1
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree()
+        .arg("--package")
+        .arg("hatchling")
+        .arg("--package")
+        .arg("keyring"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hatchling v1.22.4
+    ├── packaging v24.0
+    ├── pathspec v0.12.1
+    ├── pluggy v1.4.0
+    └── trove-classifiers v2024.3.3
+
+    keyring v25.0.0
+    ├── jaraco-classes v3.3.1
+    │   └── more-itertools v10.2.0
+    ├── jaraco-functools v4.0.0
+    │   └── more-itertools v10.2.0
+    └── jaraco-context v4.3.0
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn package_flag() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("scikit-learn==1.4.1.post1")
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + joblib==1.3.2
+     + numpy==1.26.4
+     + scikit-learn==1.4.1.post1
+     + scipy==1.12.0
+     + threadpoolctl==3.4.0
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree()
+        .arg("--package")
+        .arg("numpy"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    numpy v1.26.4
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree()
+        .arg("--package")
+        .arg("scipy")
+        .arg("--package")
+        .arg("joblib"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    scipy v1.12.0
+    └── numpy v1.26.4
+
+    joblib v1.3.2
+
+    ----- stderr -----
+    "###
+    );
+}

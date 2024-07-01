@@ -550,6 +550,7 @@ async fn run() -> Result<ExitStatus> {
             commands::pip_tree(
                 args.depth,
                 args.prune,
+                args.package,
                 args.no_dedupe,
                 args.invert,
                 args.shared.strict,

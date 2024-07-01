@@ -1066,6 +1066,7 @@ impl PipShowSettings {
 pub(crate) struct PipTreeSettings {
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
+    pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
     // CLI-only settings.
@@ -1078,6 +1079,7 @@ impl PipTreeSettings {
         let PipTreeArgs {
             depth,
             prune,
+            package,
             no_dedupe,
             invert,
             strict,
@@ -1091,6 +1093,7 @@ impl PipTreeSettings {
         Self {
             depth,
             prune,
+            package,
             no_dedupe,
             invert,
             // Shared settings.
