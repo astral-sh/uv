@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::Bound;
+use std::ops::Deref;
 
 use itertools::Itertools;
 use pubgrub::range::Range;
@@ -29,16 +30,6 @@ pub struct RequiresPython {
 }
 
 impl RequiresPython {
-    /// Narrow the [`RequiresPython`] to the given version, if it's stricter than the current
-    /// target.
-    pub fn narrow(&self, target: RequiresPythonBound) -> Option<Self> {
-        let target = VersionSpecifiers::from(VersionSpecifier::from_lower_bound(&target.0)?);
-        Self::union(std::iter::once(&target))
-            .ok()
-            .flatten()
-            .filter(|next| next.bound > self.bound)
-    }
-
     /// Returns a [`RequiresPython`] to express `>=` equality with the given version.
     pub fn greater_than_equal_version(version: Version) -> Self {
         Self {
@@ -87,6 +78,16 @@ impl RequiresPython {
             .collect();
 
         Ok(Some(Self { specifiers, bound }))
+    }
+
+    /// Narrow the [`RequiresPython`] to the given version, if it's stricter (i.e., greater) than
+    /// the current target.
+    pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
+        let target = VersionSpecifiers::from(VersionSpecifier::from_lower_bound(target)?);
+        Self::union(std::iter::once(&target))
+            .ok()
+            .flatten()
+            .filter(|next| next.bound > self.bound)
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version.
@@ -153,7 +154,7 @@ impl RequiresPython {
         // Alternatively, we could vary the semantics depending on whether or not the user included
         // a pre-release in their specifier, enforcing pre-release compatibility only if the user
         // explicitly requested it.
-        match (target, &self.bound.0) {
+        match (target, self.bound.as_ref()) {
             (Bound::Included(target_lower), Bound::Included(requires_python_lower)) => {
                 target_lower.release() <= requires_python_lower.release()
             }
@@ -179,9 +180,9 @@ impl RequiresPython {
         &self.specifiers
     }
 
-    /// Returns the lower [`Bound`] for the `Requires-Python` specifier.
-    pub fn bound(&self) -> &Bound<Version> {
-        &self.bound.0
+    /// Returns `true` if the `Requires-Python` specifier is unbounded.
+    pub fn is_unbounded(&self) -> bool {
+        self.bound.as_ref() == Bound::Unbounded
     }
 
     /// Returns this `Requires-Python` specifier as an equivalent marker
@@ -197,16 +198,14 @@ impl RequiresPython {
     /// returns a marker tree that evaluates to `true` for all possible marker
     /// environments.
     pub fn to_marker_tree(&self) -> MarkerTree {
-        let (op, version) = match self.bound.0 {
+        let (op, version) = match self.bound.as_ref() {
             // If we see this anywhere, then it implies the marker
             // tree we would generate would always evaluate to
             // `true` because every possible Python version would
             // satisfy it.
             Bound::Unbounded => return MarkerTree::And(vec![]),
-            Bound::Excluded(ref version) => {
-                (Operator::GreaterThan, version.clone().without_local())
-            }
-            Bound::Included(ref version) => {
+            Bound::Excluded(version) => (Operator::GreaterThan, version.clone().without_local()),
+            Bound::Included(version) => {
                 (Operator::GreaterThanEqual, version.clone().without_local())
             }
         };
@@ -281,6 +280,14 @@ impl RequiresPythonBound {
     }
 }
 
+impl Deref for RequiresPythonBound {
+    type Target = Bound<Version>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl PartialOrd for RequiresPythonBound {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -289,7 +296,7 @@ impl PartialOrd for RequiresPythonBound {
 
 impl Ord for RequiresPythonBound {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (&self.0, &other.0) {
+        match (self.as_ref(), other.as_ref()) {
             (Bound::Included(a), Bound::Included(b)) => a.cmp(b),
             (Bound::Included(_), Bound::Excluded(_)) => Ordering::Less,
             (Bound::Excluded(_), Bound::Included(_)) => Ordering::Greater,

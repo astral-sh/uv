@@ -1,5 +1,3 @@
-use std::collections::Bound;
-
 use anstream::eprint;
 
 use distribution_types::UnresolvedRequirementSpecification;
@@ -127,7 +125,7 @@ pub(super) async fn do_lock(
     let requires_python = find_requires_python(workspace)?;
 
     let requires_python = if let Some(requires_python) = requires_python {
-        if matches!(requires_python.bound(), Bound::Unbounded) {
+        if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(interpreter.python_minor_version());
             warn_user!("The workspace `requires-python` field does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");

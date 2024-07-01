@@ -25,7 +25,7 @@ use tracing::{debug, enabled, instrument, trace, warn, Level};
 use distribution_types::{
     BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
     IncompatibleWheel, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, WheelCompatibility,
+    ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -412,27 +412,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 prefetcher.version_tried(state.next.clone());
 
-                // Narrow the Python requirement, if possible.
-                let (python_requirement, requires_python) = if let Some(python_requirement) = state
-                    .next
-                    .marker()
-                    .and_then(requires_python_marker)
-                    .and_then(|marker| state.python_requirement.narrow(marker))
-                {
-                    let requires_python = if state.requires_python.is_some() {
-                        python_requirement.to_marker_tree()
-                    } else {
-                        None
-                    };
-                    debug!("requires-python: {:?}", requires_python);
-                    (Cow::Owned(python_requirement), Cow::Owned(requires_python))
-                } else {
-                    (
-                        Cow::Borrowed(&state.python_requirement),
-                        Cow::Borrowed(&state.requires_python),
-                    )
-                };
-
                 let term_intersection = state
                     .pubgrub
                     .partial_solution
@@ -451,7 +430,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &mut state.pins,
                     &preferences,
                     &state.fork_urls,
-                    &python_requirement,
+                    &state.python_requirement,
                     visited,
                     &request_sink,
                 )?;
@@ -530,7 +509,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &version,
                         &state.fork_urls,
                         &state.markers,
-                        requires_python.as_ref().as_ref(),
+                        state.requires_python.as_ref(),
                     )?;
                     match forked_deps {
                         ForkedDependencies::Unavailable(reason) => {
@@ -576,7 +555,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     .map(ToString::to_string)
                                     .join(", ")
                             );
-                            // assert!(forks.len() >= 2);
+                            assert!(forks.len() >= 2);
                             // This is a somewhat tortured technique to ensure
                             // that our resolver state is only cloned as much
                             // as it needs to be. We basically move the state
@@ -597,24 +576,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     .unwrap_or(MarkerTree::And(Vec::new()));
 
                                 // If the fork contains a narrowed Python requirement, apply it.
-                                if let Some(python_version) =
-                                    requires_python_marker(&forked_state.markers)
-                                {
-                                    debug!("Found `requires-python` bound for fork: {python_version:?}");
-
-                                    if let Some(python_requirement) =
-                                        forked_state.python_requirement.narrow(python_version)
-                                    {
-                                        debug!("Narrowed `requires-python` bound to: {python_requirement:?}");
-
-                                        forked_state.requires_python =
-                                            if forked_state.requires_python.is_some() {
-                                                python_requirement.to_marker_tree()
-                                            } else {
-                                                None
-                                            };
-                                        forked_state.python_requirement = python_requirement;
+                                let python_requirement = requires_python_marker(
+                                    &forked_state.markers,
+                                )
+                                .and_then(|marker| forked_state.python_requirement.narrow(&marker));
+                                if let Some(python_requirement) = python_requirement {
+                                    if let Some(target) = python_requirement.target() {
+                                        debug!("Narrowed `requires-python` bound to: {target}");
                                     }
+                                    forked_state.requires_python =
+                                        if forked_state.requires_python.is_some() {
+                                            python_requirement.to_marker_tree()
+                                        } else {
+                                            None
+                                        };
+                                    forked_state.python_requirement = python_requirement;
                                 }
 
                                 forked_state.add_package_version_dependencies(
@@ -1862,8 +1838,20 @@ struct ForkState {
     /// that the marker expression that provoked the fork is true), then that
     /// dependency is completely ignored.
     markers: MarkerTree,
-    /// The Python requirement for this state.
+    /// The Python requirement for this fork. Defaults to the Python requirement for
+    /// the resolution, but may be narrowed if a `python_version` marker is present
+    /// in a given fork.
+    ///
+    /// For example, in:
+    /// ```text
+    /// numpy >=1.26 ; python_version >= "3.9"
+    /// numpy <1.26 ; python_version < "3.9"
+    /// ```
+    ///
+    /// The top fork has a narrower Python compatibility range, and thus can find a
+    /// solution that omits Python 3.8 support.
     python_requirement: PythonRequirement,
+    /// The [`MarkerTree`] corresponding to the [`PythonRequirement`].
     requires_python: Option<MarkerTree>,
 }
 
@@ -2434,7 +2422,7 @@ impl Dependencies {
                     continue;
                 }
             };
-            // assert!(fork_groups.forks.len() >= 2, "expected definitive fork");
+            assert!(fork_groups.forks.len() >= 2, "expected definitive fork");
             let mut new_forks: Vec<Fork> = vec![];
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
@@ -2612,18 +2600,7 @@ impl<'a> PossibleForks<'a> {
         let PossibleForks::PossiblyForking(ref fork_groups) = *self else {
             return false;
         };
-        if fork_groups.forks.len() > 1 {
-            return true;
-        }
-        if fork_groups.forks.iter().any(|fork_groups| {
-            fork_groups
-                .packages
-                .iter()
-                .any(|(index, markers)| requires_python_marker(markers).is_some())
-        }) {
-            return true;
-        };
-        false
+        fork_groups.forks.len() > 1
     }
 
     /// Consumes this possible set of forks and converts a "possibly forking"
@@ -2636,14 +2613,7 @@ impl<'a> PossibleForks<'a> {
         let PossibleForks::PossiblyForking(ref fork_groups) = self else {
             return self;
         };
-        if fork_groups.forks.len() == 1
-            && !fork_groups.forks.iter().any(|fork_groups| {
-                fork_groups
-                    .packages
-                    .iter()
-                    .any(|(index, markers)| requires_python_marker(markers).is_some())
-            })
-        {
+        if fork_groups.forks.len() == 1 {
             self.make_no_forks_possible();
             return self;
         }
