@@ -347,6 +347,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `pip tree` command for testing.
+    pub fn pip_tree(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("pip").arg("tree");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv sync` command with options shared across scenarios.
     pub fn sync(&self) -> Command {
         let mut command = Command::new(get_bin());
