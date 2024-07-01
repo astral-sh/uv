@@ -25,6 +25,8 @@ pub enum WorkspaceError {
     MissingProject(PathBuf),
     #[error("No workspace found for: `{}`", _0.simplified_display())]
     MissingWorkspace(PathBuf),
+    #[error("The project is marked as unmanaged: `{}`", _0.simplified_display())]
+    NonWorkspace(PathBuf),
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
     DynamicNotAllowed(&'static str),
     #[error("Failed to find directories for glob: `{0}`")]
@@ -82,6 +84,21 @@ impl Workspace {
         let project_path = absolutize_path(project_root)
             .map_err(WorkspaceError::Normalize)?
             .to_path_buf();
+
+        // Check if the project is explicitly marked as unmanaged.
+        if pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.managed)
+            == Some(false)
+        {
+            debug!(
+                "Project `{}` is marked as unmanaged",
+                project_path.simplified_display()
+            );
+            return Err(WorkspaceError::NonWorkspace(project_path));
+        }
 
         // Check if the current project is also an explicit workspace root.
         let explicit_root = pyproject_toml
@@ -325,6 +342,21 @@ impl Workspace {
                 let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
                 let pyproject_toml = PyProjectToml::from_string(contents)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
+
+                // Check if the current project is explicitly marked as unmanaged.
+                if pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.managed)
+                    == Some(false)
+                {
+                    debug!(
+                        "Project `{}` is marked as unmanaged; omitting from workspace members",
+                        pyproject_toml.project.as_ref().unwrap().name
+                    );
+                    continue;
+                }
 
                 // Extract the package name.
                 let Some(project) = pyproject_toml.project.clone() else {
@@ -585,6 +617,18 @@ impl ProjectWorkspace {
         let project_path = absolutize_path(project_path)
             .map_err(WorkspaceError::Normalize)?
             .to_path_buf();
+
+        // Check if workspaces are explicitly disabled for the project.
+        if project_pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.managed)
+            == Some(false)
+        {
+            debug!("Project `{}` is marked as unmanaged", project.name);
+            return Err(WorkspaceError::NonWorkspace(project_path));
+        }
 
         // Check if the current project is also an explicit workspace root.
         let mut workspace = project_pyproject_toml
