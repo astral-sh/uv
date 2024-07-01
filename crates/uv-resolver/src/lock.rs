@@ -314,6 +314,11 @@ impl Lock {
         &self.distributions
     }
 
+    /// Returns the owned [`Distribution`] entries in this lock.
+    pub fn into_distributions(self) -> Vec<Distribution> {
+        self.distributions
+    }
+
     /// Returns the supported Python version range for the lockfile, if present.
     pub fn requires_python(&self) -> Option<&RequiresPython> {
         self.requires_python.as_ref()
