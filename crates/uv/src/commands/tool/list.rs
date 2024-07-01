@@ -26,8 +26,9 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
     }
 
     // TODO(zanieb): Track and display additional metadata, like entry points
-    for (name, _tool) in tools {
-        writeln!(printer.stdout(), "{name}")?;
+    for (name, tool) in tools {
+        let version = tool.version();
+        writeln!(printer.stdout(), "{name} v{version}")?;
     }
 
     Ok(ExitStatus::Success)

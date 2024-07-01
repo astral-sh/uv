@@ -27,7 +27,7 @@ fn tool_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black
+    black v24.2.0
 
     ----- stderr -----
     warning: `uv tool list` is experimental and may change without warning.
