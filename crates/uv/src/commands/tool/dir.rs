@@ -12,6 +12,6 @@ pub(crate) fn dir(preview: PreviewMode) -> anyhow::Result<()> {
     }
     let installed_tools =
         InstalledTools::from_settings().context("Failed to initialize tools settings")?;
-    anstream::println!("{}", installed_tools.root().user_display().cyan());
+    anstream::println!("{}", installed_tools.root().simplified_display().cyan());
     Ok(())
 }

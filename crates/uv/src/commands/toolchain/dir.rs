@@ -12,6 +12,9 @@ pub(crate) fn dir(preview: PreviewMode) -> anyhow::Result<()> {
     }
     let installed_toolchains =
         InstalledToolchains::from_settings().context("Failed to initialize toolchain settings")?;
-    anstream::println!("{}", installed_toolchains.root().user_display().cyan());
+    anstream::println!(
+        "{}",
+        installed_toolchains.root().simplified_display().cyan()
+    );
     Ok(())
 }
