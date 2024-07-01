@@ -50,6 +50,7 @@ flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
+indexmap = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
 owo-colors = { workspace = true }

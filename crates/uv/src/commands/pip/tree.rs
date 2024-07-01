@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use anyhow::Result;
+use indexmap::IndexMap;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use tracing::debug;
@@ -49,7 +50,7 @@ pub(crate) fn pip_tree(
 
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;
-    let mut packages: HashMap<_, Vec<_>> = HashMap::new();
+    let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();
     for package in site_packages.iter() {
         let metadata = Metadata::from_metadata23(package.metadata()?);
         packages
@@ -99,7 +100,7 @@ pub(crate) fn pip_tree(
 
 #[derive(Debug)]
 pub(crate) struct DisplayDependencyGraph {
-    packages: HashMap<PackageName, Vec<Metadata>>,
+    packages: IndexMap<PackageName, Vec<Metadata>>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Prune the given packages from the display of the dependency tree.
@@ -123,7 +124,7 @@ impl DisplayDependencyGraph {
         no_dedupe: bool,
         invert: bool,
         markers: &MarkerEnvironment,
-        packages: HashMap<PackageName, Vec<Metadata>>,
+        packages: IndexMap<PackageName, Vec<Metadata>>,
     ) -> Self {
         let mut requirements: HashMap<_, Vec<_>> = HashMap::new();
 
@@ -193,7 +194,7 @@ impl DisplayDependencyGraph {
             .get(package_name)
             .into_iter()
             .flatten()
-            .filter(|req| {
+            .filter(|&req| {
                 // Skip if the current package is not one of the installed distributions.
                 !self.prune.contains(req) && self.packages.contains_key(req)
             })

@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use std::fmt::Write;
 
 use anyhow::Result;
 
+use indexmap::IndexMap;
 use owo_colors::OwoColorize;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
@@ -75,7 +75,7 @@ pub(crate) async fn tree(
     )
     .await?;
 
-    let mut packages: HashMap<_, Vec<_>> = HashMap::new();
+    let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();
     for dist in lock.into_distributions() {
         let name = dist.name().clone();
         let metadata = dist.into_metadata(workspace.root())?;
