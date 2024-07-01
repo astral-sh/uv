@@ -263,7 +263,7 @@ impl InstalledToolchain {
             ToolchainRequest::ExecutableName(name) => self
                 .executable()
                 .file_name()
-                .map_or(false, |filename| filename.to_string_lossy() == *name),
+                .is_some_and(|filename| filename.to_string_lossy() == *name),
             ToolchainRequest::Implementation(implementation) => {
                 implementation == self.implementation()
             }
