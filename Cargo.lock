@@ -4456,6 +4456,7 @@ dependencies = [
  "fs-err",
  "futures",
  "ignore",
+ "indexmap",
  "indicatif",
  "indoc",
  "insta",
