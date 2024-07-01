@@ -285,7 +285,7 @@ impl<'env> DisplayDependencyGraph<'env> {
                 if index != 0 {
                     lines.push(String::new());
                 }
-                for installed_dist in self.site_packages.get_packages(&package) {
+                for installed_dist in self.site_packages.get_packages(package) {
                     path.clear();
                     lines.extend(self.visit(installed_dist, &mut visited, &mut path)?);
                 }
