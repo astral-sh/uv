@@ -5040,7 +5040,6 @@ dependencies = [
  "pathdiff",
  "pep440_rs",
  "pep508_rs",
- "pypi-types",
  "serde",
  "thiserror",
  "toml",

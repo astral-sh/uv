@@ -13,6 +13,7 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
+use uv_normalize::PackageName;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_toolchain::{
     EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
@@ -27,9 +28,9 @@ use crate::settings::ResolverInstallerSettings;
 /// Run a command.
 pub(crate) async fn run(
     command: ExternalCommand,
-    python: Option<String>,
     from: Option<String>,
     with: Vec<String>,
+    python: Option<String>,
     settings: ResolverInstallerSettings,
     _isolated: bool,
     preview: PreviewMode,
@@ -190,6 +191,12 @@ fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
     // e.g. `uv@`, warn and treat the whole thing as the command
     if version.is_empty() {
         debug!("Ignoring empty version request in command");
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    }
+
+    // e.g. ignore `git+https://github.com/uv/uv.git@main`
+    if PackageName::from_str(name).is_err() {
+        debug!("Ignoring non-package name `{}` in command", name);
         return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
     }
 

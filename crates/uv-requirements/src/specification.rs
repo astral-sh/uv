@@ -314,6 +314,13 @@ impl RequirementsSpecification {
         Ok(spec)
     }
 
+    /// Parse an individual package requirement.
+    pub fn parse_package(name: &str) -> Result<UnresolvedRequirementSpecification> {
+        let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?, false)
+            .with_context(|| format!("Failed to parse: `{name}`"))?;
+        Ok(UnresolvedRequirementSpecification::from(requirement))
+    }
+
     /// Read the requirements from a set of sources.
     pub async fn from_simple_sources(
         requirements: &[RequirementsSource],

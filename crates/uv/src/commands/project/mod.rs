@@ -4,17 +4,18 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::Resolution;
+use distribution_types::{Resolution, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::Workspace;
+use uv_distribution::{DistributionDatabase, Workspace};
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_requirements::RequirementsSpecification;
+use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, RequiresPython};
 use uv_toolchain::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
@@ -23,6 +24,7 @@ use uv_toolchain::{
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip;
+use crate::commands::reporters::ResolverReporter;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -280,6 +282,89 @@ pub(crate) struct SharedState {
     git: GitResolver,
     /// The fetched package versions and metadata.
     index: InMemoryIndex,
+}
+
+/// Resolve any [`UnresolvedRequirementSpecification`] into a fully-qualified [`Requirement`].
+pub(crate) async fn resolve_names(
+    requirements: Vec<UnresolvedRequirementSpecification>,
+    interpreter: &Interpreter,
+    settings: &ResolverInstallerSettings,
+    state: &SharedState,
+    preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<Vec<Requirement>> {
+    // Extract the project settings.
+    let ResolverInstallerSettings {
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        resolution: _,
+        prerelease: _,
+        config_setting,
+        exclude_newer,
+        link_mode,
+        compile_bytecode: _,
+        upgrade: _,
+        reinstall: _,
+        build_options,
+    } = settings;
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
+        .index_urls(index_locations.index_urls())
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build();
+
+    // Initialize any shared state.
+    let in_flight = InFlight::default();
+
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let build_isolation = BuildIsolation::default();
+    let hasher = HashStrategy::default();
+    let setup_py = SetupPyStrategy::default();
+    let flat_index = FlatIndex::default();
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        interpreter,
+        index_locations,
+        &flat_index,
+        &state.index,
+        &state.git,
+        &in_flight,
+        *index_strategy,
+        setup_py,
+        config_setting,
+        build_isolation,
+        *link_mode,
+        build_options,
+        *exclude_newer,
+        concurrency,
+        preview,
+    );
+
+    // Initialize the resolver.
+    let resolver = NamedRequirementsResolver::new(
+        requirements,
+        &hasher,
+        &state.index,
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+    )
+    .with_reporter(ResolverReporter::from(printer));
+
+    Ok(resolver.resolve().await?)
 }
 
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.

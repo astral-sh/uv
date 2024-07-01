@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use path_slash::PathBufExt;
-use pypi_types::VerbatimParsedUrl;
 use serde::Deserialize;
 use toml_edit::value;
 use toml_edit::Array;
@@ -14,11 +13,11 @@ use toml_edit::Value;
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
-    // The requirements requested by the user during installation.
-    requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+    /// The requirements requested by the user during installation.
+    requirements: Vec<pep508_rs::Requirement>,
     /// The Python requested by the user during installation.
     python: Option<String>,
-    // A mapping of entry point names to their metadata.
+    /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
 }
 
@@ -59,7 +58,7 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 impl Tool {
     /// Create a new `Tool`.
     pub fn new(
-        requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+        requirements: Vec<pep508_rs::Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
     ) -> Self {
