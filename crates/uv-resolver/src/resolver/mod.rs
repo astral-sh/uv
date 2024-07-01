@@ -336,6 +336,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         'FORK: while let Some(mut state) = forked_states.pop() {
+            if !state.markers.is_universal() {
+                debug!("Solving split {}", state.markers);
+            }
             let start = Instant::now();
             loop {
                 // Run unit propagation.
