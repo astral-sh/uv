@@ -36,6 +36,7 @@ itertools = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
+rustls = { workspace = true }
 rkyv = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }

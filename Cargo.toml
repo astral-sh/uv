@@ -112,12 +112,13 @@ quote = { version = "1.0.36" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
-reqwest = { version = "0.12.3", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
+reqwest = { version = "0.12.5", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
 reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe" }
 reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }
 rust-netrc = { version = "0.1.1" }
+rustls = { version = "0.23.10", features = ["aws_lc_rs"] }
 rustc-hash = { version = "2.0.0" }
 same-file = { version = "1.0.6" }
 schemars = { version = "0.8.16", features = ["url"] }
