@@ -113,8 +113,8 @@ rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
 reqwest = { version = "0.12.3", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
-reqwest-middleware = { version = "0.3.0" }
-reqwest-retry = { version = "0.6.0" }
+reqwest-middleware = { git = "https://github.com/konstin/reqwest-middleware", rev = "21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe" }
+reqwest-retry = { git = "https://github.com/konstin/reqwest-middleware", rev = "21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }
 rust-netrc = { version = "0.1.1" }
@@ -159,6 +159,7 @@ ignored = ["flate2"]
 # For pyproject-toml
 pep440_rs = { path = "crates/pep440-rs" }
 pep508_rs = { path = "crates/pep508-rs" }
+reqwest-middleware = { git = "https://github.com/konstin/reqwest-middleware", rev = "21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"
