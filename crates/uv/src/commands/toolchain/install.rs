@@ -63,7 +63,7 @@ pub(crate) async fn install(
         {
             writeln!(
                 printer.stderr(),
-                "Found installed toolchain '{}' that satisfies {request}",
+                "Found installed toolchain `{}` that satisfies {request}",
                 toolchain.key()
             )?;
             if force {

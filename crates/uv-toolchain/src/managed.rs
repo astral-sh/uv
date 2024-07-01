@@ -204,7 +204,7 @@ Error=This toolchain is managed by uv and should not be modified.
 ";
 
 /// A uv-managed Python toolchain installed on the current system..
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct InstalledToolchain {
     /// The path to the top-level directory of the installed toolchain.
     path: PathBuf,

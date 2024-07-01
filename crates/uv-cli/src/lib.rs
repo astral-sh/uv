@@ -2022,15 +2022,18 @@ pub enum ToolchainCommand {
     /// List the available toolchains.
     List(ToolchainListArgs),
 
-    /// Download and install a specific toolchain.
+    /// Download and install toolchains.
     Install(ToolchainInstallArgs),
 
-    /// Search for a toolchain
+    /// Search for a toolchain.
     #[command(disable_version_flag = true)]
     Find(ToolchainFindArgs),
 
     /// Show the toolchains directory.
     Dir,
+
+    /// Uninstall toolchains.
+    Uninstall(ToolchainUninstallArgs),
 }
 
 #[derive(Args)]
@@ -2062,6 +2065,13 @@ pub struct ToolchainInstallArgs {
     /// Force the installation of the toolchain, even if it is already installed.
     #[arg(long, short)]
     pub force: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ToolchainUninstallArgs {
+    /// The toolchains to uninstall.
+    pub targets: Vec<String>,
 }
 
 #[derive(Args)]

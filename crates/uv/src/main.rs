@@ -907,6 +907,15 @@ async fn run() -> Result<ExitStatus> {
             .await
         }
         Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::Uninstall(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolchainUninstallSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::toolchain_uninstall(args.targets, globals.preview, printer).await
+        }
+        Commands::Toolchain(ToolchainNamespace {
             command: ToolchainCommand::Find(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
