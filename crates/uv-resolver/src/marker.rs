@@ -1,5 +1,6 @@
 #![allow(clippy::enum_glob_use)]
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
@@ -11,7 +12,8 @@ use pep508_rs::{
 };
 
 use crate::pubgrub::PubGrubSpecifier;
-use pubgrub::range::Range as PubGrubRange;
+use crate::RequiresPythonBound;
+use pubgrub::range::{Range as PubGrubRange, Range};
 
 /// Returns `true` if there is no environment in which both marker trees can both apply, i.e.
 /// the expression `first and second` is always false.
@@ -78,6 +80,42 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
     }
 
     true
+}
+
+/// Returns the minimum Python version that can satisfy the [`MarkerTree`], if it's constrained.
+pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPythonBound> {
+    match tree {
+        MarkerTree::Expression(MarkerExpression::Version {
+            key: MarkerValueVersion::PythonFullVersion | MarkerValueVersion::PythonVersion,
+            specifier,
+        }) => {
+            let specifier = PubGrubSpecifier::try_from(specifier).ok()?;
+
+            // Convert to PubGrub range and perform a union.
+            let range = Range::from(specifier);
+            let (lower, _) = range.iter().next()?;
+
+            // Extract the lower bound.
+            Some(RequiresPythonBound::new(lower.clone()))
+        }
+        MarkerTree::And(trees) => {
+            // Take the minimum of any nested expressions.
+            trees.iter().filter_map(requires_python_marker).min()
+        }
+        MarkerTree::Or(trees) => {
+            // If all subtrees have a minimum, take the maximum.
+            let mut version = None;
+            for tree in trees.iter() {
+                let next = requires_python_marker(tree)?;
+                version = match version {
+                    Some(version) => Some(std::cmp::max(version, next)),
+                    None => Some(next),
+                };
+            }
+            version
+        }
+        MarkerTree::Expression(_) => None,
+    }
 }
 
 /// Normalizes this marker tree.

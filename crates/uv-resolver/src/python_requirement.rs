@@ -2,7 +2,7 @@ use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerTree, StringVersion};
 use uv_toolchain::{Interpreter, PythonVersion};
 
-use crate::RequiresPython;
+use crate::{RequiresPython, RequiresPythonBound};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {
@@ -47,6 +47,18 @@ impl PythonRequirement {
             installed: interpreter.python_full_version().clone(),
             target: None,
         }
+    }
+
+    /// Narrow the [`PythonRequirement`] to the given version.
+    pub fn narrow(&self, target: RequiresPythonBound) -> Option<Self> {
+        let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() else {
+            return None;
+        };
+        let requires_python = requires_python.narrow(target)?;
+        Some(Self {
+            installed: self.installed.clone(),
+            target: Some(PythonTarget::RequiresPython(requires_python)),
+        })
     }
 
     /// Return the installed version of Python.
