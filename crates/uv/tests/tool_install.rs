@@ -83,7 +83,6 @@ fn tool_install() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
-        version = "24.3.0"
         "###);
     });
 
@@ -164,7 +163,6 @@ fn tool_install() {
         entrypoints = [
             { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
         ]
-        version = "3.0.2"
         "###);
     });
 }
@@ -238,7 +236,6 @@ fn tool_install_version() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
-        version = "24.2.0"
         "###);
     });
 
@@ -389,7 +386,6 @@ fn tool_install_already_installed() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
-        version = "24.3.0"
         "###);
     });
 
@@ -423,7 +419,6 @@ fn tool_install_already_installed() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
-        version = "24.3.0"
         "###);
     });
 
@@ -645,7 +640,6 @@ fn tool_install_entry_point_exists() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
-        version = "24.3.0"        
         "###);
     });
 
@@ -679,7 +673,6 @@ fn tool_install_entry_point_exists() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
-        version = "24.3.0"
         "###);
     });
 

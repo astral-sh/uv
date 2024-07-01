@@ -20,8 +20,6 @@ pub struct Tool {
     python: Option<String>,
     // A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
-    // Tool version
-    version: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
@@ -64,7 +62,6 @@ impl Tool {
         requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
-        version: String,
     ) -> Self {
         let mut entrypoints: Vec<_> = entrypoints.collect();
         entrypoints.sort();
@@ -72,7 +69,6 @@ impl Tool {
             requirements,
             python,
             entrypoints,
-            version,
         }
     }
 
@@ -107,17 +103,11 @@ impl Tool {
             value(entrypoints)
         });
 
-        table.insert("version", value(&self.version));
-
         table
     }
 
     pub fn entrypoints(&self) -> &[ToolEntrypoint] {
         &self.entrypoints
-    }
-
-    pub fn version(&self) -> &str {
-        &self.version
     }
 }
 

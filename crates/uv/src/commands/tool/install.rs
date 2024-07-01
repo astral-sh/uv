@@ -253,7 +253,6 @@ pub(crate) async fn install(
         target_entry_points
             .into_iter()
             .map(|(name, _, target_path)| ToolEntrypoint::new(name, target_path)),
-        installed_dist.version().to_string(),
     );
     installed_tools.add_tool_receipt(&name, tool)?;
 
