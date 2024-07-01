@@ -9,18 +9,11 @@ use crate::common::{get_bin, TestContext};
 
 mod common;
 
-fn tree_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command.arg("pip").arg("tree");
-    context.add_shared_args(&mut command);
-    command
-}
-
 #[test]
 fn no_package() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -60,7 +53,7 @@ fn prune_last_in_the_subgroup() {
     );
 
     context.assert_command("import requests").success();
-    uv_snapshot!(context.filters(), tree_command(&context).arg("--prune").arg("certifi"), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--prune").arg("certifi"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -103,7 +96,7 @@ fn single_package() {
     );
 
     context.assert_command("import requests").success();
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -150,7 +143,7 @@ fn python_version_marker() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -196,7 +189,7 @@ fn nested_dependencies() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -212,7 +205,7 @@ fn nested_dependencies() {
     );
 }
 
-// identical test as `--invert` since `--reverse` is simply an alias for `--invert`.
+// Identical test as `invert` since `--reverse` is simply an alias for `--invert`.
 #[test]
 fn reverse() {
     let context = TestContext::new("3.12");
@@ -243,7 +236,7 @@ fn reverse() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context).arg("--reverse"), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--reverse"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -291,7 +284,7 @@ fn invert() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context).arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--invert"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -509,7 +502,7 @@ fn prune() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn nested_dependencies_more_complex_inverted() {
+fn complex_nested_dependencies_inverted() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -563,7 +556,7 @@ fn nested_dependencies_more_complex_inverted() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context).arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--invert"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -631,7 +624,7 @@ fn nested_dependencies_more_complex_inverted() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn nested_dependencies_more_complex() {
+fn complex_nested_dependencies() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -685,7 +678,7 @@ fn nested_dependencies_more_complex() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -734,7 +727,7 @@ fn nested_dependencies_more_complex() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn prune_big_tree() {
+fn prune_large_tree() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -875,7 +868,7 @@ fn cyclic_dependency() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -932,7 +925,7 @@ fn removed_dependency() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -987,7 +980,7 @@ fn multiple_packages() {
         filters.push(("└── colorama v0.4.6\n", ""));
     }
     context.assert_command("import requests").success();
-    uv_snapshot!(filters, tree_command(&context), @r###"
+    uv_snapshot!(filters, context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1046,7 +1039,7 @@ fn multiple_packages_shared_descendant() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1114,7 +1107,7 @@ fn no_dedupe_and_invert() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context).arg("--no-dedupe").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--no-dedupe").arg("--invert"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1212,7 +1205,7 @@ fn no_dedupe_and_cycle() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context)
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--no-dedupe"), @r###"
     success: true
     exit_code: 0
@@ -1290,7 +1283,7 @@ fn no_dedupe() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context)
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--no-dedupe"), @r###"
     success: true
     exit_code: 0
@@ -1349,7 +1342,7 @@ fn with_editable() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, tree_command(&context), @r###"
+    uv_snapshot!(filters, context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

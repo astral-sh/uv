@@ -113,8 +113,6 @@ fn filtered_requirements<'env>(
 struct DisplayDependencyGraph<'env> {
     // Installed packages.
     site_packages: &'env SitePackages,
-    /// Map from package name to the installed distribution.
-    distributions: HashMap<&'env PackageName, &'env InstalledDist>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Prune the given packages from the display of the dependency tree.
@@ -137,13 +135,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         invert: bool,
         markers: &'env MarkerEnvironment,
     ) -> Result<DisplayDependencyGraph<'env>> {
-        let mut distributions = HashMap::new();
         let mut requirements: HashMap<_, Vec<_>> = HashMap::new();
-
-        // Add all installed distributions.
-        for site_package in site_packages.iter() {
-            distributions.insert(site_package.name(), site_package);
-        }
 
         // Add all transitive requirements.
         for site_package in site_packages.iter() {
@@ -164,7 +156,6 @@ impl<'env> DisplayDependencyGraph<'env> {
 
         Ok(Self {
             site_packages,
-            distributions,
             depth,
             prune,
             no_dedupe,
@@ -207,7 +198,7 @@ impl<'env> DisplayDependencyGraph<'env> {
             .flatten()
             .filter(|req| {
                 // Skip if the current package is not one of the installed distributions.
-                !self.prune.contains(req) && self.distributions.contains_key(req)
+                !self.prune.contains(req) && self.site_packages.contains_package(req)
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -244,21 +235,19 @@ impl<'env> DisplayDependencyGraph<'env> {
                 ("├── ", "│   ")
             };
 
-            let mut prefixed_lines = Vec::new();
-            for (visited_index, visited_line) in self
-                .visit(self.distributions[req], visited, path)?
-                .iter()
-                .enumerate()
-            {
-                let prefix = if visited_index == 0 {
-                    prefix_top
-                } else {
-                    prefix_rest
-                };
+            for distribution in self.site_packages.get_packages(req) {
+                for (visited_index, visited_line) in
+                    self.visit(distribution, visited, path)?.iter().enumerate()
+                {
+                    let prefix = if visited_index == 0 {
+                        prefix_top
+                    } else {
+                        prefix_rest
+                    };
 
-                prefixed_lines.push(format!("{prefix}{visited_line}"));
+                    lines.push(format!("{prefix}{visited_line}"));
+                }
             }
-            lines.extend(prefixed_lines);
         }
         path.pop();
 
