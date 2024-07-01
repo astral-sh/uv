@@ -200,6 +200,13 @@ pub(crate) async fn install(
         })
         .collect::<BTreeSet<_>>();
 
+    if target_entry_points.is_empty() {
+        // Clean up the environment we just created
+        installed_tools.remove_environment(&name)?;
+
+        bail!("No entry points found for tool `{name}`");
+    }
+
     // Check if they exist, before installing
     let mut existing_entry_points = target_entry_points
         .iter()
@@ -232,7 +239,6 @@ pub(crate) async fn install(
         )
     }
 
-    // TODO(zanieb): Handle the case where there are no entrypoints
     for (name, source_path, target_path) in &target_entry_points {
         debug!("Installing `{name}`");
         #[cfg(unix)]
@@ -250,7 +256,7 @@ pub(crate) async fn install(
             .join(", ")
     )?;
 
-    debug!("Adding receipt for tool `{name}`",);
+    debug!("Adding receipt for tool `{name}`");
     let installed_tools = installed_tools.init()?;
     let tool = Tool::new(
         requirements,
