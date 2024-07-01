@@ -49,8 +49,9 @@ impl PythonRequirement {
         }
     }
 
-    /// Narrow the [`PythonRequirement`] to the given version.
-    pub fn narrow(&self, target: RequiresPythonBound) -> Option<Self> {
+    /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
+    /// than the current `Requires-Python` minimum.
+    pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
         let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() else {
             return None;
         };

@@ -1,2 +1,0 @@
-numpy >=1.26; python_version>="3.9"
-numpy <1.26; python_version<"3.9"
