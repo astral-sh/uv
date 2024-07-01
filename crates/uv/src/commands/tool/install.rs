@@ -80,7 +80,7 @@ pub(crate) async fn install(
     let reinstall_entry_points = if existing_tool_receipt.is_some() {
         if force {
             debug!("Replacing existing tool due to `--force` flag.");
-            false
+            true
         } else {
             match settings.reinstall {
                 Reinstall::All => {
