@@ -324,8 +324,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
             markers: MarkerTree::And(vec![]),
-            preferences: self.preferences.clone(),
         };
+        let mut preferences = self.preferences.clone();
         let mut forked_states = vec![state];
         let mut resolutions = vec![];
 
@@ -379,14 +379,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let resolution = state.into_resolution();
 
                     // Walk over the selected versions, and mark them as preferences.
-                    for state in &mut forked_states {
-                        for (package, versions) in &resolution.packages {
-                            if let Entry::Vacant(entry) =
-                                state.preferences.entry(package.name.clone())
-                            {
-                                if let Some(version) = versions.iter().next() {
-                                    entry.insert(version.clone().into());
-                                }
+                    for (package, versions) in &resolution.packages {
+                        if let Entry::Vacant(entry) = preferences.entry(package.name.clone()) {
+                            if let Some(version) = versions.iter().next() {
+                                entry.insert(version.clone().into());
                             }
                         }
                     }
@@ -428,7 +424,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.next,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
-                    &state.preferences,
+                    &preferences,
                     &state.fork_urls,
                     visited,
                     &request_sink,
@@ -730,7 +726,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
-        fork_preferences: &Preferences,
+        preferences: &Preferences,
         fork_urls: &ForkUrls,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -758,7 +754,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         name,
                         range,
                         package,
-                        fork_preferences,
+                        preferences,
                         pins,
                         visited,
                         request_sink,
@@ -869,7 +865,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         range: &Range<Version>,
         package: &PubGrubPackage,
-        fork_preferences: &Preferences,
+        preferences: &Preferences,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -908,7 +904,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             name,
             range,
             version_maps,
-            fork_preferences,
+            preferences,
             &self.installed_packages,
             &self.exclusions,
         ) else {
@@ -1728,8 +1724,6 @@ struct SolveState {
     /// that the marker expression that provoked the fork is true), then that
     /// dependency is completely ignored.
     markers: MarkerTree,
-    /// The preferences to respect for the fork.
-    preferences: Preferences,
 }
 
 impl SolveState {
