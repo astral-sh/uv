@@ -22,6 +22,7 @@ pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
 pub(crate) use project::run::run;
 pub(crate) use project::sync::sync;
+pub(crate) use project::tree::tree;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::dir::dir as tool_dir;
