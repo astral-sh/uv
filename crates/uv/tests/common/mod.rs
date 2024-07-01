@@ -420,6 +420,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv tool dir` command with options shared across scenarios.
+    pub fn tool_dir(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("tool").arg("dir");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv tool uninstall` command with options shared across scenarios.
     pub fn tool_uninstall(&self) -> std::process::Command {
         let mut command = std::process::Command::new(get_bin());
