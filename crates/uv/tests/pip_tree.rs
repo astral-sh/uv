@@ -203,10 +203,9 @@ fn nested_dependencies() {
     scikit-learn v1.4.1.post1
     ├── numpy v1.26.4
     ├── scipy v1.12.0
-    │   └── numpy v1.26.4 (*)
+    │   └── numpy v1.26.4
     ├── joblib v1.3.2
     └── threadpoolctl v3.4.0
-    (*) Package tree already displayed
 
     ----- stderr -----
     "###
@@ -251,12 +250,11 @@ fn reverse() {
     joblib v1.3.2
     └── scikit-learn v1.4.1.post1
     numpy v1.26.4
-    ├── scikit-learn v1.4.1.post1 (*)
+    ├── scikit-learn v1.4.1.post1
     └── scipy v1.12.0
-        └── scikit-learn v1.4.1.post1 (*)
+        └── scikit-learn v1.4.1.post1
     threadpoolctl v3.4.0
-    └── scikit-learn v1.4.1.post1 (*)
-    (*) Package tree already displayed
+    └── scikit-learn v1.4.1.post1
 
     ----- stderr -----
     "###
@@ -300,12 +298,11 @@ fn invert() {
     joblib v1.3.2
     └── scikit-learn v1.4.1.post1
     numpy v1.26.4
-    ├── scikit-learn v1.4.1.post1 (*)
+    ├── scikit-learn v1.4.1.post1
     └── scipy v1.12.0
-        └── scikit-learn v1.4.1.post1 (*)
+        └── scikit-learn v1.4.1.post1
     threadpoolctl v3.4.0
-    └── scikit-learn v1.4.1.post1 (*)
-    (*) Package tree already displayed
+    └── scikit-learn v1.4.1.post1
 
     ----- stderr -----
     "###
@@ -401,13 +398,11 @@ fn depth() {
     scikit-learn v1.4.1.post1
     ├── numpy v1.26.4
     ├── scipy v1.12.0
-    │   └── numpy v1.26.4 (*)
+    │   └── numpy v1.26.4
     ├── joblib v1.3.2
     └── threadpoolctl v3.4.0
-    (*) Package tree already displayed
 
     ----- stderr -----
-
     "###
     );
 }
@@ -581,7 +576,7 @@ fn nested_dependencies_more_complex_inverted() {
     charset-normalizer v3.3.2
     └── requests v2.31.0 (*)
     chevron-blue v0.2.1
-    └── packse v0.3.12 (*)
+    └── packse v0.3.12
     docutils v0.20.1
     └── readme-renderer v43.0
         └── twine v4.0.2 (*)
@@ -600,12 +595,12 @@ fn nested_dependencies_more_complex_inverted() {
     └── jaraco-functools v4.0.0
         └── keyring v25.0.0 (*)
     msgspec v0.18.6
-    └── packse v0.3.12 (*)
+    └── packse v0.3.12
     nh3 v0.2.15
     └── readme-renderer v43.0 (*)
     packaging v24.0
     └── hatchling v1.22.4
-        └── packse v0.3.12 (*)
+        └── packse v0.3.12
     pathspec v0.12.1
     └── hatchling v1.22.4 (*)
     pkginfo v1.10.0
@@ -618,7 +613,7 @@ fn nested_dependencies_more_complex_inverted() {
     rfc3986 v2.0.0
     └── twine v4.0.2 (*)
     setuptools v69.2.0
-    └── packse v0.3.12 (*)
+    └── packse v0.3.12
     trove-classifiers v2024.3.3
     └── hatchling v1.22.4 (*)
     urllib3 v2.2.1
@@ -716,20 +711,20 @@ fn nested_dependencies_more_complex() {
         │   └── certifi v2024.2.2
         ├── requests-toolbelt v1.0.0
         │   └── requests v2.31.0 (*)
-        ├── urllib3 v2.2.1 (*)
+        ├── urllib3 v2.2.1
         ├── importlib-metadata v7.1.0
         │   └── zipp v3.18.1
         ├── keyring v25.0.0
         │   ├── jaraco-classes v3.3.1
         │   │   └── more-itertools v10.2.0
         │   ├── jaraco-functools v4.0.0
-        │   │   └── more-itertools v10.2.0 (*)
+        │   │   └── more-itertools v10.2.0
         │   └── jaraco-context v4.3.0
         ├── rfc3986 v2.0.0
         └── rich v13.7.1
             ├── markdown-it-py v3.0.0
             │   └── mdurl v0.1.2
-            └── pygments v2.17.2 (*)
+            └── pygments v2.17.2
     (*) Package tree already displayed
 
     ----- stderr -----
@@ -822,20 +817,20 @@ fn prune_big_tree() {
         │   └── certifi v2024.2.2
         ├── requests-toolbelt v1.0.0
         │   └── requests v2.31.0 (*)
-        ├── urllib3 v2.2.1 (*)
+        ├── urllib3 v2.2.1
         ├── importlib-metadata v7.1.0
         │   └── zipp v3.18.1
         ├── keyring v25.0.0
         │   ├── jaraco-classes v3.3.1
         │   │   └── more-itertools v10.2.0
         │   ├── jaraco-functools v4.0.0
-        │   │   └── more-itertools v10.2.0 (*)
+        │   │   └── more-itertools v10.2.0
         │   └── jaraco-context v4.3.0
         ├── rfc3986 v2.0.0
         └── rich v13.7.1
             ├── markdown-it-py v3.0.0
             │   └── mdurl v0.1.2
-            └── pygments v2.17.2 (*)
+            └── pygments v2.17.2
     (*) Package tree already displayed
 
     ----- stderr -----
@@ -1061,7 +1056,7 @@ fn multiple_packages_shared_descendant() {
     │   ├── python-dateutil v2.9.0.post0
     │   │   └── six v1.16.0
     │   └── urllib3 v2.2.1
-    ├── jmespath v1.0.1 (*)
+    ├── jmespath v1.0.1
     └── s3transfer v0.10.1
         └── botocore v1.34.69 (*)
     pendulum v3.0.0
