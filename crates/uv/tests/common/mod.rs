@@ -376,6 +376,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv toolchain dir` command with options shared across scenarios.
+    pub fn toolchain_dir(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("toolchain").arg("dir");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> Command {
         let mut command = Command::new(get_bin());

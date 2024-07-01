@@ -914,6 +914,12 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::Dir,
+        }) => {
+            commands::toolchain_dir(globals.preview)?;
+            Ok(ExitStatus::Success)
+        }
     }
 }
 
