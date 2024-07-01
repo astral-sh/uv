@@ -141,11 +141,9 @@ impl<'env> DisplayDependencyGraph<'env> {
         markers: &'env MarkerEnvironment,
     ) -> Result<DisplayDependencyGraph<'env>> {
         let mut requirements: HashMap<_, Vec<_>> = HashMap::new();
-        let mut distributions = HashMap::new();
 
         // Add all transitive requirements.
         for site_package in site_packages.iter() {
-            distributions.insert(site_package.name(), site_package);
             for required in filtered_requirements(site_package, markers)? {
                 if invert {
                     requirements
@@ -163,7 +161,6 @@ impl<'env> DisplayDependencyGraph<'env> {
 
         Ok(Self {
             site_packages,
-            distributions,
             depth,
             prune,
             package,
