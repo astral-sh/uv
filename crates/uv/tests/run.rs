@@ -11,7 +11,7 @@ mod common;
 /// Run with different python versions, which also depend on different dependency versions.
 #[test]
 fn run_with_python_version() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.11"]);
+    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.8"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -102,8 +102,8 @@ fn run_with_python_version() -> Result<()> {
     3.6.0
 
     ----- stderr -----
-    Removing virtual environment at: .venv
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed virtual environment at: .venv
     Creating virtualenv at: .venv
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -112,6 +112,27 @@ fn run_with_python_version() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
+    "###);
+
+    // This time, we target Python 3.8 instead.
+    let mut command = context.run();
+    let command_with_args = command
+        .arg("--preview")
+        .arg("-p")
+        .arg("3.8")
+        .arg("python")
+        .arg("-B")
+        .arg("main.py")
+        .env_remove("VIRTUAL_ENV");
+
+    uv_snapshot!(context.filters(), command_with_args, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.11, <4`
     "###);
 
     Ok(())
