@@ -28,7 +28,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
-    InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
+    InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, RequiresPython,
+    ResolutionMode,
 };
 use uv_toolchain::{
     EnvironmentPreference, PythonEnvironment, PythonVersion, Toolchain, ToolchainPreference,
@@ -212,7 +213,16 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the Python requirement, if the user requested a specific version.
-    let python_requirement = if let Some(python_version) = python_version.as_ref() {
+    let python_requirement = if universal {
+        let requires_python = RequiresPython::greater_than_equal_version(
+            if let Some(python_version) = python_version.as_ref() {
+                python_version.version.clone()
+            } else {
+                interpreter.python_version().clone()
+            },
+        );
+        PythonRequirement::from_requires_python(&interpreter, &requires_python)
+    } else if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(&interpreter, python_version)
     } else {
         PythonRequirement::from_interpreter(&interpreter)

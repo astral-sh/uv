@@ -1,5 +1,5 @@
-use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{MarkerExpression, MarkerTree, MarkerValueVersion, StringVersion};
+use pep440_rs::VersionSpecifiers;
+use pep508_rs::{MarkerTree, StringVersion};
 use uv_toolchain::{Interpreter, PythonVersion};
 
 use crate::RequiresPython;
@@ -62,32 +62,12 @@ impl PythonRequirement {
     /// Return a [`MarkerTree`] representing the Python requirement.
     ///
     /// See: [`RequiresPython::to_marker_tree`]
-    pub fn to_marker_tree(&self) -> MarkerTree {
-        let version = match &self.target {
-            None => self.installed.version.clone(),
-            Some(PythonTarget::Version(version)) => version.version.clone(),
-            Some(PythonTarget::RequiresPython(requires_python)) => {
-                return requires_python.to_marker_tree()
-            }
-        };
-
-        let version_major_minor_only = Version::new(version.release().iter().take(2));
-        let expr_python_version = MarkerExpression::Version {
-            key: MarkerValueVersion::PythonVersion,
-            specifier: VersionSpecifier::from_version(
-                Operator::GreaterThanEqual,
-                version_major_minor_only,
-            )
-            .unwrap(),
-        };
-        let expr_python_full_version = MarkerExpression::Version {
-            key: MarkerValueVersion::PythonFullVersion,
-            specifier: VersionSpecifier::from_version(Operator::GreaterThanEqual, version).unwrap(),
-        };
-        MarkerTree::And(vec![
-            MarkerTree::Expression(expr_python_version),
-            MarkerTree::Expression(expr_python_full_version),
-        ])
+    pub fn to_marker_tree(&self) -> Option<MarkerTree> {
+        if let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() {
+            Some(requires_python.to_marker_tree())
+        } else {
+            None
+        }
     }
 }
 

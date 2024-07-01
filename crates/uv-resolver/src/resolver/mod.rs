@@ -191,11 +191,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
-        let requires_python = if markers.is_some() {
-            None
-        } else {
-            Some(python_requirement.to_marker_tree())
-        };
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
@@ -214,8 +209,12 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
             markers: markers.cloned(),
+            requires_python: if markers.is_some() {
+                None
+            } else {
+                python_requirement.to_marker_tree()
+            },
             python_requirement: python_requirement.clone(),
-            requires_python,
             reporter: None,
             installed_packages,
         };

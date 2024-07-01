@@ -831,7 +831,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The `Requires-Python` requirement ({}) defined in your `pyproject.toml` includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `Requires-Python` requirement (like {}).",
+                    "{}{} The `Requires-Python` requirement ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `Requires-Python` requirement (like {}).",
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.bold(),
