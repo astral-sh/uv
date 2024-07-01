@@ -858,3 +858,28 @@ fn tool_install_xdg_bin_home() {
         .child(format!("black{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
 }
+
+/// Test installing a tool that lacks entrypoints
+#[test]
+fn tool_install_no_entrypoints() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("iniconfig")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    error: No entry points found for tool `iniconfig`
+    "###);
+}
