@@ -54,6 +54,7 @@ pub(crate) fn pip_tree(
         &site_packages,
         depth.into(),
         prune,
+        package,
         no_dedupe,
         invert,
         environment.interpreter().markers(),
@@ -114,10 +115,14 @@ fn filtered_requirements<'env>(
 struct DisplayDependencyGraph<'env> {
     // Installed packages.
     site_packages: &'env SitePackages,
+    /// Map from package name to the installed distribution.
+    distributions: HashMap<&'env PackageName, &'env InstalledDist>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Prune the given packages from the display of the dependency tree.
     prune: Vec<PackageName>,
+    /// Display only the specified packages.
+    package: Vec<PackageName>,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
     /// Map from package name to its requirements.
@@ -132,14 +137,17 @@ impl<'env> DisplayDependencyGraph<'env> {
         site_packages: &'env SitePackages,
         depth: usize,
         prune: Vec<PackageName>,
+        package: Vec<PackageName>,
         no_dedupe: bool,
         invert: bool,
         markers: &'env MarkerEnvironment,
     ) -> Result<DisplayDependencyGraph<'env>> {
         let mut requirements: HashMap<_, Vec<_>> = HashMap::new();
+        let mut distributions = HashMap::new();
 
         // Add all transitive requirements.
         for site_package in site_packages.iter() {
+            distributions.insert(site_package.name(), site_package);
             for required in filtered_requirements(site_package, markers)? {
                 if invert {
                     requirements
@@ -157,8 +165,10 @@ impl<'env> DisplayDependencyGraph<'env> {
 
         Ok(Self {
             site_packages,
+            distributions,
             depth,
             prune,
+            package,
             no_dedupe,
             requirements,
         })
@@ -261,17 +271,27 @@ impl<'env> DisplayDependencyGraph<'env> {
         let mut path: Vec<&PackageName> = Vec::new();
         let mut lines: Vec<String> = Vec::new();
 
-        // The root nodes are those that are not required by any other package.
-        let children: HashSet<_> = self.requirements.values().flatten().collect();
-        for site_package in self.site_packages.iter() {
-            // If the current package is not required by any other package, start the traversal
-            // with the current package as the root.
-            if !children.contains(site_package.name()) {
-                path.clear();
-                lines.extend(self.visit(site_package, &mut visited, &mut path)?);
+        if self.package.is_empty() {
+            // The root nodes are those that are not required by any other package.
+            let children: HashSet<_> = self.requirements.values().flatten().collect();
+            for site_package in self.site_packages.iter() {
+                // If the current package is not required by any other package, start the traversal
+                // with the current package as the root.
+                if !children.contains(site_package.name()) {
+                    path.clear();
+                    lines.extend(self.visit(site_package, &mut visited, &mut path)?);
+                }
+            }
+        } else {
+            for (index, package) in self.package.iter().enumerate() {
+                if index != 0 {
+                    lines.push(String::new());
+                }
+                if let Some(installed_dist) = self.distributions.get(&package) {
+                    lines.extend(self.visit(installed_dist, &mut visited, &mut Vec::new())?);
+                }
             }
         }
-
         Ok(lines)
     }
 }
