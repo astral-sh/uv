@@ -115,8 +115,6 @@ fn filtered_requirements<'env>(
 struct DisplayDependencyGraph<'env> {
     // Installed packages.
     site_packages: &'env SitePackages,
-    /// Map from package name to the installed distribution.
-    distributions: HashMap<&'env PackageName, &'env InstalledDist>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Prune the given packages from the display of the dependency tree.
