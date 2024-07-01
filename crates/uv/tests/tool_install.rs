@@ -629,6 +629,72 @@ fn tool_install_entry_point_exists() {
 
     tool_dir.child("black").assert(predicate::path::is_dir());
 
+    // Re-install `black` with `--force`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--force")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed: black, blackd
+    "###);
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+
+    // Re-install `black` without `--force`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Tool `black` is already installed
+    "###);
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+
+    // Re-install `black` with `--reinstall`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--reinstall")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed: black, blackd
+    "###);
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+
     insta::with_settings!({
         filters => context.filters(),
     }, {
