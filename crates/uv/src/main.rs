@@ -552,6 +552,7 @@ async fn run() -> Result<ExitStatus> {
                 args.prune,
                 args.package,
                 args.no_dedupe,
+                args.invert,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
@@ -848,6 +849,12 @@ async fn run() -> Result<ExitStatus> {
 
             commands::tool_uninstall(args.name, globals.preview, printer).await
         }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Dir,
+        }) => {
+            commands::tool_dir(globals.preview)?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Toolchain(ToolchainNamespace {
             command: ToolchainCommand::List(args),
         }) => {
@@ -907,6 +914,12 @@ async fn run() -> Result<ExitStatus> {
                 printer,
             )
             .await
+        }
+        Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::Dir,
+        }) => {
+            commands::toolchain_dir(globals.preview)?;
+            Ok(ExitStatus::Success)
         }
     }
 }

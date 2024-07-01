@@ -9,10 +9,10 @@ use crate::{wheel, Error};
 /// A script defining the name of the runnable entrypoint and the module and function that should be
 /// run.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct Script {
-    pub name: String,
-    pub module: String,
-    pub function: String,
+pub(crate) struct Script {
+    pub(crate) name: String,
+    pub(crate) module: String,
+    pub(crate) function: String,
 }
 
 impl Script {
@@ -64,7 +64,7 @@ impl Script {
     }
 }
 
-pub fn scripts_from_ini(
+pub(crate) fn scripts_from_ini(
     extras: Option<&[String]>,
     python_minor: u8,
     ini: String,

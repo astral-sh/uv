@@ -1,6 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
@@ -315,7 +316,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let mut prefetcher = BatchPrefetcher::default();
-        let state = SolveState {
+        let state = ForkState {
             pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
             next: root,
             pins: FilePins::default(),
@@ -324,6 +325,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             added_dependencies: FxHashMap::default(),
             markers: MarkerTree::And(vec![]),
         };
+        let mut preferences = self.preferences.clone();
         let mut forked_states = vec![state];
         let mut resolutions = vec![];
 
@@ -336,6 +338,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         'FORK: while let Some(mut state) = forked_states.pop() {
+            if !state.markers.is_universal() {
+                debug!("Solving split {}", state.markers);
+            }
             let start = Instant::now();
             loop {
                 // Run unit propagation.
@@ -370,7 +375,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state.markers,
                         start.elapsed().as_secs_f32()
                     );
-                    resolutions.push(state.into_resolution());
+
+                    let resolution = state.into_resolution();
+
+                    // Walk over the selected versions, and mark them as preferences.
+                    for (package, versions) in &resolution.packages {
+                        if let Entry::Vacant(entry) = preferences.entry(package.name.clone()) {
+                            if let Some(version) = versions.iter().next() {
+                                entry.insert(version.clone().into());
+                            }
+                        }
+                    }
+
+                    resolutions.push(resolution);
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
@@ -407,6 +424,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.next,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
+                    &preferences,
                     &state.fork_urls,
                     visited,
                     &request_sink,
@@ -708,6 +726,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
+        preferences: &Preferences,
         fork_urls: &ForkUrls,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -731,7 +750,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
                     self.choose_version_url(name, range, url)
                 } else {
-                    self.choose_version_registry(name, range, package, pins, visited, request_sink)
+                    self.choose_version_registry(
+                        name,
+                        range,
+                        package,
+                        preferences,
+                        pins,
+                        visited,
+                        request_sink,
+                    )
                 }
             }
         }
@@ -838,6 +865,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         range: &Range<Version>,
         package: &PubGrubPackage,
+        preferences: &Preferences,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -876,7 +904,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             name,
             range,
             version_maps,
-            &self.preferences,
+            preferences,
             &self.installed_packages,
             &self.exclusions,
         ) else {
@@ -1645,7 +1673,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
-struct SolveState {
+struct ForkState {
     /// The internal state used by the resolver.
     ///
     /// Note that not all parts of this state are strictly internal. For
@@ -1698,7 +1726,7 @@ struct SolveState {
     markers: MarkerTree,
 }
 
-impl SolveState {
+impl ForkState {
     /// Add the dependencies for the selected version of the current package, checking for
     /// self-dependencies, and handling URLs.
     fn add_package_version_dependencies(

@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 /// tqdm-4.62.3.dist-info/RECORD,,
 /// ```
 #[derive(Deserialize, Serialize, PartialOrd, PartialEq, Ord, Eq)]
-pub(crate) struct RecordEntry {
-    pub(crate) path: String,
-    pub(crate) hash: Option<String>,
+pub struct RecordEntry {
+    pub path: String,
+    pub hash: Option<String>,
     #[allow(dead_code)]
-    pub(crate) size: Option<u64>,
+    pub size: Option<u64>,
 }

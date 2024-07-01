@@ -1068,6 +1068,7 @@ pub(crate) struct PipTreeSettings {
     pub(crate) prune: Vec<PackageName>,
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
+    pub(crate) invert: bool,
     // CLI-only settings.
     pub(crate) shared: PipSettings,
 }
@@ -1080,6 +1081,7 @@ impl PipTreeSettings {
             prune,
             package,
             no_dedupe,
+            invert,
             strict,
             no_strict,
             python,
@@ -1093,6 +1095,7 @@ impl PipTreeSettings {
             prune,
             package,
             no_dedupe,
+            invert,
             // Shared settings.
             shared: PipSettings::combine(
                 PipOptions {

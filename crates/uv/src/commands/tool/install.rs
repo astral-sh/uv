@@ -7,7 +7,6 @@ use anyhow::{bail, Context, Result};
 use distribution_types::Name;
 use itertools::Itertools;
 
-use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use tracing::debug;
 use uv_cache::Cache;
@@ -17,7 +16,7 @@ use uv_configuration::{Concurrency, PreviewMode, Reinstall};
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_requirements::RequirementsSource;
+use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_toolchain::{EnvironmentPreference, Toolchain, ToolchainPreference, ToolchainRequest};
 use uv_warnings::warn_user_once;
@@ -48,11 +47,12 @@ pub(crate) async fn install(
     }
 
     let from = if let Some(from) = from {
-        let from_requirement = Requirement::<VerbatimParsedUrl>::from_str(&from)?;
+        let from_requirement = pep508_rs::Requirement::<VerbatimParsedUrl>::from_str(&from)?;
         // Check if the user provided more than just a name positionally or if that name conflicts with `--from`
         if from_requirement.name.to_string() != package {
             // Determine if its an entirely different package or a conflicting specification
-            let package_requirement = Requirement::<VerbatimParsedUrl>::from_str(&package)?;
+            let package_requirement =
+                pep508_rs::Requirement::<VerbatimParsedUrl>::from_str(&package)?;
             if from_requirement.name == package_requirement.name {
                 bail!(
                     "Package requirement `{}` provided with `--from` conflicts with install request `{}`",
@@ -68,7 +68,7 @@ pub(crate) async fn install(
         }
         from_requirement
     } else {
-        Requirement::<VerbatimParsedUrl>::from_str(&package)?
+        pep508_rs::Requirement::<VerbatimParsedUrl>::from_str(&package)?
     };
 
     let name = from.name.to_string();
@@ -80,7 +80,7 @@ pub(crate) async fn install(
     let reinstall_entry_points = if existing_tool_receipt.is_some() {
         if force {
             debug!("Replacing existing tool due to `--force` flag.");
-            false
+            true
         } else {
             match settings.reinstall {
                 Reinstall::All => {
@@ -102,14 +102,19 @@ pub(crate) async fn install(
 
     let requirements = [Ok(from.clone())]
         .into_iter()
-        .chain(with.iter().map(|name| Requirement::from_str(name)))
-        .collect::<Result<Vec<Requirement<VerbatimParsedUrl>>, _>>()?;
+        .chain(
+            with.iter()
+                .map(|name| pep508_rs::Requirement::from_str(name)),
+        )
+        .collect::<Result<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>, _>>()?;
 
-    // TODO(zanieb): Duplicative with the above parsing but needed for `update_environment`
-    let requirements_sources = [RequirementsSource::from_package(from.to_string())]
-        .into_iter()
-        .chain(with.into_iter().map(RequirementsSource::from_package))
-        .collect::<Vec<_>>();
+    let spec = RequirementsSpecification::from_requirements(
+        requirements
+            .iter()
+            .cloned()
+            .map(pypi_types::Requirement::from)
+            .collect(),
+    );
 
     let Some(from) = requirements.first().cloned() else {
         bail!("Expected at least one requirement")
@@ -139,7 +144,7 @@ pub(crate) async fn install(
     // Install the ephemeral requirements.
     let environment = update_environment(
         environment,
-        &requirements_sources,
+        spec,
         &settings,
         preview,
         connectivity,
@@ -195,6 +200,13 @@ pub(crate) async fn install(
         })
         .collect::<BTreeSet<_>>();
 
+    if target_entry_points.is_empty() {
+        // Clean up the environment we just created
+        installed_tools.remove_environment(&name)?;
+
+        bail!("No entry points found for tool `{name}`");
+    }
+
     // Check if they exist, before installing
     let mut existing_entry_points = target_entry_points
         .iter()
@@ -227,7 +239,6 @@ pub(crate) async fn install(
         )
     }
 
-    // TODO(zanieb): Handle the case where there are no entrypoints
     for (name, source_path, target_path) in &target_entry_points {
         debug!("Installing `{name}`");
         #[cfg(unix)]
@@ -245,7 +256,7 @@ pub(crate) async fn install(
             .join(", ")
     )?;
 
-    debug!("Adding receipt for tool `{name}`",);
+    debug!("Adding receipt for tool `{name}`");
     let installed_tools = installed_tools.init()?;
     let tool = Tool::new(
         requirements,

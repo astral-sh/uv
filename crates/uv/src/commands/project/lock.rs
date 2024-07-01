@@ -17,8 +17,8 @@ use uv_toolchain::{Interpreter, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::project::{find_requires_python, ProjectError};
-use crate::commands::{pip, project, ExitStatus};
+use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError};
+use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
@@ -42,7 +42,7 @@ pub(crate) async fn lock(
     let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
 
     // Find an interpreter for the project
-    let interpreter = project::find_interpreter(
+    let interpreter = FoundInterpreter::discover(
         &workspace,
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
@@ -51,7 +51,8 @@ pub(crate) async fn lock(
         cache,
         printer,
     )
-    .await?;
+    .await?
+    .into_interpreter();
 
     // Perform the lock operation.
     match do_lock(

@@ -1441,6 +1441,10 @@ pub struct PipTreeArgs {
     #[arg(long)]
     pub no_dedupe: bool,
 
+    #[arg(long, alias = "reverse")]
+    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
+    pub invert: bool,
+
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]
@@ -1894,6 +1898,8 @@ pub enum ToolCommand {
     List(ToolListArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
+    /// Show the tools directory.
+    Dir,
 }
 
 #[derive(Args)]
@@ -2018,6 +2024,9 @@ pub enum ToolchainCommand {
     /// Search for a toolchain
     #[command(disable_version_flag = true)]
     Find(ToolchainFindArgs),
+
+    /// Show the toolchains directory.
+    Dir,
 }
 
 #[derive(Args)]
