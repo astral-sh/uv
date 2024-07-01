@@ -287,8 +287,9 @@ impl<'env> DisplayDependencyGraph<'env> {
                 if index != 0 {
                     lines.push(String::new());
                 }
-                if let Some(installed_dist) = self.distributions.get(&package) {
-                    lines.extend(self.visit(installed_dist, &mut visited, &mut Vec::new())?);
+                for installed_dist in self.site_packages.get_packages(&package) {
+                    path.clear();
+                    lines.extend(self.visit(installed_dist, &mut visited, &mut path)?);
                 }
             }
         }
